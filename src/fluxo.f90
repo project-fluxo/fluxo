@@ -22,12 +22,12 @@ PROGRAM Fluxo
 ! MODULES
 USE MOD_Globals
 USE MOD_Commandline_Arguments
-!USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
+USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
-!USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
+USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
 !USE MOD_Eos,               ONLY:DefineParametersEos
 !USE MOD_Exactfunc,         ONLY:DefineParametersExactFunc
-!USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
+USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
 !USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
 !USE MOD_Testcase,          ONLY:DefineParametersTestcase
 !USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
@@ -36,12 +36,12 @@ USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,
 !USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 !#endif /*PARABOLIC*/
 !USE MOD_Filter,            ONLY:DefineParametersFilter,InitFilter,FinalizeFilter
-!USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
-!USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
+USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
+USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
 !USE MOD_Analyze,           ONLY:DefineParametersAnalyze,InitAnalyze,FinalizeAnalyze
 !USE MOD_RecordPoints,      ONLY:DefineParametersRecordPoints,InitRecordPoints,FinalizeRecordPoints
 !USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
-!USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
+USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if MPI
 USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
 #endif
@@ -58,7 +58,7 @@ USE MOD_StringTools  ,ONLY:STRICMP
 !! LOCAL VARIABLES
 !REAL                    :: Time                              !< Used to measure simulation time
 !!==================================================================================================================================
-!CALL InitMPI()
+CALL InitMPI()
 CALL ParseCommandlineArguments()
 !! Check if the number of arguments is correct
 !IF ((nArgs.LT.1).OR.(nArgs.GT.2)) THEN
@@ -66,12 +66,12 @@ CALL ParseCommandlineArguments()
 !  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: flexi parameter.ini [restart.h5] or flexi --help'// &
 !  '[option/section name] to print help for a single parameter, parameter sections or all parameters.')
 !END IF
-!CALL DefineParametersMPI()
-!CALL DefineParametersIO_HDF5()
+CALL DefineParametersMPI()
+CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
-!CALL DefineParametersRestart()
-!CALL DefineParametersOutput()
-!CALL DefineParametersMesh()
+CALL DefineParametersRestart()
+CALL DefineParametersOutput()
+CALL DefineParametersMesh()
 !CALL DefineParametersEos()
 !CALL DefineParametersEquation()
 !CALL DefineParametersExactFunc()
@@ -96,7 +96,7 @@ IF (doPrintHelp.GT.0) THEN
 END IF
 CALL prms%read_options(ParameterFile)
 !
-!CALL InitIOHDF5()
+CALL InitIOHDF5()
 !SWRITE(UNIT_stdOut,'(132("="))')
 !SWRITE(UNIT_stdOut,'(A)') &
 !"           __________________   _______              __________________   ______      ______   __________________ "
@@ -131,10 +131,10 @@ StartTime=FLUXOTIME()
 !
 ! Initialization
 CALL InitInterpolation()
-!CALL InitMortar()
-!CALL InitRestart()
-!CALL InitOutput()
-!CALL InitMesh()
+CALL InitMortar()
+CALL InitRestart()
+CALL InitOutput()
+CALL InitMesh()
 !CALL InitFilter()
 !CALL InitIndicator()
 #if MPI
@@ -151,7 +151,7 @@ CALL InitMPIvars()
 !CALL InitAnalyze()
 !CALL InitRecordpoints()
 CALL IgnoredParameters()
-!CALL Restart()
+CALL Restart()
 !
 ! Measure init duration
 Time=FLUXOTIME()
@@ -167,7 +167,7 @@ SWRITE(UNIT_stdOut,'(132("="))')
 !END IF
 !
 !!Finalize
-!CALL FinalizeOutput()
+CALL FinalizeOutput()
 !CALL FinalizeRecordPoints()
 !CALL FinalizeAnalyze()
 !#if PARABOLIC
@@ -178,9 +178,9 @@ SWRITE(UNIT_stdOut,'(132("="))')
 !CALL FinalizeBC()
 CALL FinalizeInterpolation()
 !CALL FinalizeTimeDisc()
-!CALL FinalizeRestart()
-!CALL FinalizeMesh()
-!CALL FinalizeMortar()
+CALL FinalizeRestart()
+CALL FinalizeMesh()
+CALL FinalizeMortar()
 !CALL FinalizeSponge()
 !CALL FinalizeFilter()
 !CALL FinalizeIndicator()

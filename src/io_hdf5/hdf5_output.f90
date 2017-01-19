@@ -653,7 +653,7 @@ INTEGER(HID_T),INTENT(IN)                :: File_ID       !< HDF5 file id
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-! Write a small file header to identify a Flexi HDF5 files
+! Write a small file header to identify a Fluxo HDF5 files
 ! Attributes are program name, file type identifier, project name and version number
 CALL WriteAttribute(File_ID,'Program'     ,1,StrScalar=(/TRIM(ProgramName)/))
 CALL WriteAttribute(File_ID,'File_Type'   ,1,StrScalar=(/TRIM(FileType_in)/))

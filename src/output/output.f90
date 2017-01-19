@@ -18,30 +18,30 @@
 MODULE MOD_Output
 ! MODULES
 USE MOD_ReadInTools
-USE ISO_C_BINDING
+!USE ISO_C_BINDING
 IMPLICIT NONE
 
-INTERFACE
-  FUNCTION get_userblock_size()
-      INTEGER :: get_userblock_size
-  END FUNCTION 
-END INTERFACE
-
-INTERFACE
-  FUNCTION get_inifile_size(filename) BIND(C)
-      USE ISO_C_BINDING, ONLY: C_CHAR,C_INT
-      CHARACTER(KIND=C_CHAR) :: filename(*)
-      INTEGER(KIND=C_INT)    :: get_inifile_size
-  END FUNCTION get_inifile_size
-END INTERFACE
-
-INTERFACE
-  SUBROUTINE insert_userblock(filename,inifilename) BIND(C)
-      USE ISO_C_BINDING, ONLY: C_CHAR
-      CHARACTER(KIND=C_CHAR) :: filename(*)
-      CHARACTER(KIND=C_CHAR) :: inifilename(*)
-  END SUBROUTINE insert_userblock
-END INTERFACE
+!INTERFACE
+!  FUNCTION get_userblock_size()
+!      INTEGER :: get_userblock_size
+!  END FUNCTION 
+!END INTERFACE
+!
+!INTERFACE
+!  FUNCTION get_inifile_size(filename) BIND(C)
+!      USE ISO_C_BINDING, ONLY: C_CHAR,C_INT
+!      CHARACTER(KIND=C_CHAR) :: filename(*)
+!      INTEGER(KIND=C_INT)    :: get_inifile_size
+!  END FUNCTION get_inifile_size
+!END INTERFACE
+!
+!INTERFACE
+!  SUBROUTINE insert_userblock(filename,inifilename) BIND(C)
+!      USE ISO_C_BINDING, ONLY: C_CHAR
+!      CHARACTER(KIND=C_CHAR) :: filename(*)
+!      CHARACTER(KIND=C_CHAR) :: inifilename(*)
+!  END SUBROUTINE insert_userblock
+!END INTERFACE
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
@@ -131,7 +131,7 @@ USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT,GETINTFROMSTR
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone,NodeTypeVISU,NodeType
-USE ISO_C_BINDING,         ONLY: C_NULL_CHAR
+!USE ISO_C_BINDING,         ONLY: C_NULL_CHAR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -164,14 +164,14 @@ ErrorFiles =GETLOGICAL('ErrorFiles')
 doPrintStatusLine=GETLOGICAL("doPrintStatusLine")
 
 
-IF (MPIRoot) THEN
-  ! read userblock length in bytes from data section of flexi-executable
-  userblock_len = get_userblock_size()
-  inifile_len = get_inifile_size(TRIM(ParameterFile)//C_NULL_CHAR)
-  ! prepare userblock file
-  CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(ParameterFile)//C_NULL_CHAR)
-  INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
-END IF
+!IF (MPIRoot) THEN
+!  ! read userblock length in bytes from data section of Fluxo-executable
+!  userblock_len = get_userblock_size()
+!  inifile_len = get_inifile_size(TRIM(ParameterFile)//C_NULL_CHAR)
+!  ! prepare userblock file
+!  CALL insert_userblock(TRIM(UserBlockTmpFile)//C_NULL_CHAR,TRIM(ParameterFile)//C_NULL_CHAR)
+!  INQUIRE(FILE=TRIM(UserBlockTmpFile),SIZE=userblock_total_len)
+!END IF
 
 WRITE(ErrorFileName,'(A,A8,I6.6,A4)')TRIM(ProjectName),'_ERRORS_',myRank,'.out'
 
