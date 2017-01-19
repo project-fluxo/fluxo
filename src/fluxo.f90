@@ -42,9 +42,9 @@ USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,
 !USE MOD_RecordPoints,      ONLY:DefineParametersRecordPoints,InitRecordPoints,FinalizeRecordPoints
 !USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
 !USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
-!#if MPI
-!USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
-!#endif
+#if MPI
+USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
+#endif
 !USE MOD_Sponge,            ONLY:DefineParametersSponge,InitSponge,FinalizeSponge
 !USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator,FinalizeIndicator
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
@@ -137,9 +137,9 @@ CALL InitInterpolation()
 !CALL InitMesh()
 !CALL InitFilter()
 !CALL InitIndicator()
-!#if MPI
-!CALL InitMPIvars()
-!#endif
+#if MPI
+CALL InitMPIvars()
+#endif
 !CALL InitEquation()
 !CALL InitBC()
 !CALL InitDG()
@@ -187,11 +187,11 @@ CALL FinalizeInterpolation()
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()
-!#if MPI
-!CALL MPI_FINALIZE(iError)
-!IF(iError .NE. 0) STOP 'MPI finalize error'
-!CALL FinalizeMPI()
-!#endif
+#if MPI
+CALL MPI_FINALIZE(iError)
+IF(iError .NE. 0) STOP 'MPI finalize error'
+CALL FinalizeMPI()
+#endif
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' FLUXO FINISHED! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
