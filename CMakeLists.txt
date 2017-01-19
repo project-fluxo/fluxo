@@ -415,25 +415,22 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/src)
 #...#                            ./src/readintools/*.f90
 #...#                            ./src/mortar/*.f90
 #...#                            ./src/mesh/*.f90
-#...#                            ./src/indicator/*.f90
 #...#                            ./src/mpi/*.f90
 #...#                            ./src/globals/*.f90
 #...#                            ./src/analyze/*.f90
-#...#                            ./src/recordpoints/*.f90
 #...#                            ./src/restart/*.f90
 #...#                            ./src/output/*.f90
-#...#                            ./src/sponge/*.f90
-#...#                            ./src/filter/*.f90
 #...#                            ./src/io_hdf5/*.f90
 #...#                            ./src/timedisc/*.f90
-#...#                            ./src/testcase/${FLUXO_TESTCASE}/*.f90
-#...#                            ./unitTests/generateunittestreferencedata.f90)
+#...#                            ./src/testcase/${FLUXO_TESTCASE}/*.f90 )
 
 FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/readintools/*.f90
                            ./src/interpolation/*.f90
                            ./src/mpi/*.f90
-                           ./src/restart/*.f90            )
+                           ./src/restart/*.f90
+                           ./src/io_hdf5/io_hdf5.f90 
+                           ./src/io_hdf5/hdf5_input.f90            )
 
 FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
 #...# 
