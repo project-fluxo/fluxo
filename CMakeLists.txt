@@ -429,13 +429,15 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/interpolation/*.f90
                            ./src/mpi/*.f90
                            ./src/restart/*.f90
-                           ./src/io_hdf5/io_hdf5.f90 
-                           ./src/io_hdf5/hdf5_input.f90            )
+                           ./src/io_hdf5/*.f90 
+                           ./src/equation/linearscalaradvection/equation_vars.f90 
+                           ./src/output/*.f90
+                           ./src/mesh/*.f90            )
 
 FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
-#...# 
-#...# 
-#...# FILE(GLOB dgF90            ./src/dg/*.f90)
+
+
+FILE(GLOB dgF90            ./src/dg/*.f90)
 #...# IF (FLUXO_PARABOLIC)
 #...#   FILE(GLOB liftingF90     ./src/dg/${FLUXO_LIFTING}/*.f90)
 #...#   LIST(APPEND dgF90 ${liftingF90})
@@ -443,8 +445,7 @@ FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
 
 
 # define libs
-#...# ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${dgF90} ${eqnsysF90})
-ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${eqnsysF90})
+ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${eqnsysF90} ${dgF90})
 
 
 SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS}) 

@@ -25,9 +25,9 @@ USE MOD_Globals,ONLY: iError
 IMPLICIT NONE
 
 ABSTRACT INTERFACE
-  SUBROUTINE EvalElemInt(nElems_in,ElemData)
-  INTEGER,INTENT(IN) :: nElems_in
-  REAL,INTENT(OUT) :: ElemData(nElems_in)
+  SUBROUTINE EvalElemInt(ElemData)
+  USE MOD_Mesh_Vars,ONLY:nElems
+  REAL,INTENT(OUT) :: ElemData(nElems)
   END SUBROUTINE
 END INTERFACE
 
@@ -249,17 +249,17 @@ END SUBROUTINE CloseDataFile
 !==================================================================================================================================
 !> Set pointers to element-wise scalar arrays which will be gathered and written out
 !==================================================================================================================================
-SUBROUTINE AddToElemData(VarName,nElems_in,RealArray,RealScalar,IntArray,IntScalar,Eval)
+SUBROUTINE AddToElemData(VarName,RealArray,RealScalar,IntArray,IntScalar,Eval)
 ! MODULES
 USE MOD_Globals
+USE MOD_Mesh_Vars,ONLY:nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 CHARACTER(LEN=*),INTENT(IN)        :: VarName
-INTEGER,INTENT(IN)                 :: nElems_in
-REAL,INTENT(IN),TARGET,OPTIONAL    :: RealArray(nElems_in)
+REAL,INTENT(IN),TARGET,OPTIONAL    :: RealArray(nElems)
 REAL,INTENT(IN),TARGET,OPTIONAL    :: RealScalar
-INTEGER,INTENT(IN),TARGET,OPTIONAL :: IntArray(nElems_in)
+INTEGER,INTENT(IN),TARGET,OPTIONAL :: IntArray(nElems)
 INTEGER,INTENT(IN),TARGET,OPTIONAL :: IntScalar
 PROCEDURE(EvalElemInt),POINTER,OPTIONAL :: Eval
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -314,17 +314,17 @@ END SUBROUTINE AddToElemData
 !==================================================================================================================================
 !> Set pointers to node-wise arrays for output
 !==================================================================================================================================
-SUBROUTINE AddToFieldData(nVal,nElems_in,DataSetName,VarNames,RealArray,Eval)
+SUBROUTINE AddToFieldData(nVal,DataSetName,VarNames,RealArray,Eval)
 ! MODULES
 USE MOD_Globals
+USE MOD_Mesh_Vars,ONLY:nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)                 :: nVal(4)
-INTEGER,INTENT(IN)                 :: nElems_in
 CHARACTER(LEN=*),INTENT(IN)        :: DataSetName
 CHARACTER(LEN=*),INTENT(IN)        :: VarNames(nVal(1))
-REAL,INTENT(IN),TARGET,OPTIONAL    :: RealArray(nVal(1),nVal(2),nVal(3),nVal(4),nElems_in)
+REAL,INTENT(IN),TARGET,OPTIONAL    :: RealArray(nVal(1),nVal(2),nVal(3),nVal(4),nElems)
 PROCEDURE(EvalFieldInt),POINTER,OPTIONAL :: Eval
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
