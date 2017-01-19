@@ -23,7 +23,7 @@ PROGRAM Fluxo
 USE MOD_Globals
 USE MOD_Commandline_Arguments
 !USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
-!USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
+USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 !USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
 !USE MOD_Eos,               ONLY:DefineParametersEos
 !USE MOD_Exactfunc,         ONLY:DefineParametersExactFunc
@@ -59,7 +59,7 @@ USE MOD_StringTools  ,ONLY:STRICMP
 !REAL                    :: Time                              !< Used to measure simulation time
 !!==================================================================================================================================
 !CALL InitMPI()
-!CALL ParseCommandlineArguments()
+CALL ParseCommandlineArguments()
 !! Check if the number of arguments is correct
 !IF ((nArgs.LT.1).OR.(nArgs.GT.2)) THEN
 !  ! Print out error message containing valid syntax
@@ -68,7 +68,7 @@ USE MOD_StringTools  ,ONLY:STRICMP
 !END IF
 !CALL DefineParametersMPI()
 !CALL DefineParametersIO_HDF5()
-!CALL DefineParametersInterpolation()
+CALL DefineParametersInterpolation()
 !CALL DefineParametersRestart()
 !CALL DefineParametersOutput()
 !CALL DefineParametersMesh()
@@ -89,12 +89,12 @@ USE MOD_StringTools  ,ONLY:STRICMP
 !CALL DefineParametersAnalyze()
 !CALL DefineParametersRecordPoints()
 !
-!! check for command line argument --help or --markdown
-!IF (doPrintHelp.GT.0) THEN
-!  CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, ParameterFile)
-!  STOP
-!END IF
-!CALL prms%read_options(ParameterFile)
+! check for command line argument --help or --markdown
+IF (doPrintHelp.GT.0) THEN
+  CALL PrintDefaultParameterFile(doPrintHelp.EQ.2, ParameterFile)
+  STOP
+END IF
+CALL prms%read_options(ParameterFile)
 !
 !CALL InitIOHDF5()
 !SWRITE(UNIT_stdOut,'(132("="))')
@@ -129,8 +129,8 @@ USE MOD_StringTools  ,ONLY:STRICMP
 ! Measure init duration
 StartTime=FLUXOTIME()
 !
-!! Initialization
-!CALL InitInterpolation()
+! Initialization
+CALL InitInterpolation()
 !CALL InitMortar()
 !CALL InitRestart()
 !CALL InitOutput()
@@ -150,7 +150,7 @@ StartTime=FLUXOTIME()
 !CALL InitTimeDisc()
 !CALL InitAnalyze()
 !CALL InitRecordpoints()
-!CALL IgnoredParameters()
+CALL IgnoredParameters()
 !CALL Restart()
 !
 ! Measure init duration
@@ -176,7 +176,7 @@ SWRITE(UNIT_stdOut,'(132("="))')
 !CALL FinalizeDG()
 !CALL FinalizeEquation()
 !CALL FinalizeBC()
-!CALL FinalizeInterpolation()
+CALL FinalizeInterpolation()
 !CALL FinalizeTimeDisc()
 !CALL FinalizeRestart()
 !CALL FinalizeMesh()
@@ -186,7 +186,7 @@ SWRITE(UNIT_stdOut,'(132("="))')
 !CALL FinalizeIndicator()
 ! Measure simulation duration
 Time=FLUXOTIME()
-!CALL FinalizeParameters()
+CALL FinalizeParameters()
 !#if MPI
 !CALL MPI_FINALIZE(iError)
 !IF(iError .NE. 0) STOP 'MPI finalize error'
