@@ -21,7 +21,7 @@
 PROGRAM Fluxo
 ! MODULES
 USE MOD_Globals
-!USE MOD_Commandline_Arguments
+USE MOD_Commandline_Arguments
 !USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 !USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 !USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
@@ -47,12 +47,12 @@ USE MOD_Globals
 !#endif
 !USE MOD_Sponge,            ONLY:DefineParametersSponge,InitSponge,FinalizeSponge
 !USE MOD_Indicator,         ONLY:DefineParametersIndicator,InitIndicator,FinalizeIndicator
-!USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
+USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
 !#ifdef EDDYVISCOSITY
 !USE MOD_EddyVisc,          ONLY:DefineParametersEddyVisc
 !#endif
 !USE MOD_GenerateUnittestReferenceData
-!USE MOD_StringTools  ,ONLY:STRICMP
+USE MOD_StringTools  ,ONLY:STRICMP
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
