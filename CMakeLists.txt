@@ -432,6 +432,7 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/io_hdf5/*.f90 
                            ./src/equation/linearscalaradvection/equation_vars.f90 
                            ./src/output/*.f90
+                           ./src/mortar/*.f90
                            ./src/mesh/*.f90            )
 
 FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
