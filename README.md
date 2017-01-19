@@ -16,13 +16,15 @@ FLUXO is a spin-off of the FLEXI code (https://github.com/flexi-framework/flexi)
 that is developed at the Institute for Aero- and Gasdynamics at University Stuttgart 
 in the group of Claus-Dieter Munz.
 
-## Installation / Documentation
+If you use FLUXO, please cite one of the articles mentioned in [REFERENCES.md](REFERENCES.md)
 
-For installation instructions see ...
+## Installation
 
-#License 
+For installation instructions see [INSTALL.md](INSTALL.md)
+
+##License 
 FLUXO is released under the terms of the GNU General Public License v3.0. 
-For the full license terms see the included license file [LICENSE](LICENSE).
+For the full license terms see the included license file [LICENSE.md](LICENSE.md).
 
 ## Used libraries
 
@@ -33,6 +35,6 @@ FLUXO uses several external libraries as well as auxilliary functions from open 
 
 ## List of Contributors
 
-Numerous people have worked on the code and here is the full list of contributors: ...
+Numerous people have worked and are working on the code and here is the full list of contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
 We would like to thank all for their effort.
