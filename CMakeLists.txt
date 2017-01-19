@@ -64,7 +64,7 @@ ENDMACRO()
 
 #generate lists of subfolders to be used as choices for the variables of the configuration
 
-#...# SUBDIRLIST(TESTCASES  ${CMAKE_CURRENT_SOURCE_DIR}/src/testcase/)
+SUBDIRLIST(TESTCASES  ${CMAKE_CURRENT_SOURCE_DIR}/src/testcase/)
 SUBDIRLIST(EQNSYSTEMS ${CMAKE_CURRENT_SOURCE_DIR}/src/equations/)
 #...# SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
@@ -77,10 +77,10 @@ SET(   FLUXO_BUILD_HDF5 ON  CACHE BOOL "Compile and build hdf5 library")
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
                         "Used equation system (navierstokes/linearscalaradvection/mhd/maxwell)")
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME  PROPERTY STRINGS ${EQNSYSTEMS})
-#...# 
-#...# SET(   FLUXO_TESTCASE   "default"      CACHE STRING
-#...#                         "Name of testcase which is used. Must be identical to directory name in testcase folder.")
-#...# SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
+
+SET(   FLUXO_TESTCASE   "default"      CACHE STRING
+                        "Name of testcase which is used. Must be identical to directory name in testcase folder.")
+SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
@@ -185,7 +185,7 @@ ENDIF()
 # =========================================================================
 # make sure that the default is a RELEASE
 IF (NOT CMAKE_BUILD_TYPE)
-  SET (CMAKE_BUILD_TYPE Release CACHE STRING
+  SET (CMAKE_BUILD_TYPE Debug CACHE STRING
       "Choose the type of build, options are: Debug / Release / Profile."
       FORCE)
   SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile)
@@ -430,10 +430,13 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/mpi/*.f90
                            ./src/restart/*.f90
                            ./src/io_hdf5/*.f90 
-                           ./src/equation/linearscalaradvection/equation_vars.f90 
+                           ./src/equation/linearscalaradvection/*.f90 
+                           ./src/testcase/default/*.f90
+                           ./src/analyze/*.f90
                            ./src/output/*.f90
                            ./src/mortar/*.f90
-                           ./src/mesh/*.f90            )
+                           ./src/mesh/*.f90
+                           ./src/timedisc/*.f90            )
 
 FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
 
