@@ -1,4 +1,7 @@
 !=====================================================================================================================================
+! Copyright (c) 2016 Gregor Gassner
+! Copyright (c) 2016 Florian Hindenlang
+! Copyright (c) 2016 Andrew Winters
 ! Copyright (c) 2010 - 2016  Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -68,8 +71,8 @@ INTERFACE TIMESTAMP
   MODULE PROCEDURE TIMESTAMP
 END INTERFACE
 
-INTERFACE FLEXITIME
-  MODULE PROCEDURE FLEXITIME
+INTERFACE FLUXOTIME
+  MODULE PROCEDURE FLUXOTIME
 END INTERFACE
 
 INTERFACE GETFREEUNIT
@@ -93,7 +96,7 @@ CONTAINS
 !> Safely terminate program using a soft MPI_FINALIZE in the MPI case and write the error message only on the root.
 !> Terminate program using a soft MPI_FINALIZE in the MPI case and write the error message only on the root.
 !> This routine can only be used if ALL processes are guaranteed to generate the same error at the same time!
-!> Prime use is to exit FLEXI without MPI errors and with a single error message if some parameters are not set in the init
+!> Prime use is to exit FLUXO without MPI errors and with a single error message if some parameters are not set in the init
 !> routines or a file is not found.
 !>
 !> Criteria where CollectiveStop may be used:
@@ -144,7 +147,7 @@ END SUBROUTINE CollectiveStop
 
 !==================================================================================================================================
 !> Terminate program correctly if an error has occurred (important in MPI mode!).
-!> Uses a MPI_ABORT which terminates FLEXI if a single proc calls this routine.
+!> Uses a MPI_ABORT which terminates FLUXO if a single proc calls this routine.
 !==================================================================================================================================
 SUBROUTINE Abort(SourceFile,SourceLine,CompDate,CompTime,ErrorMessage,IntInfo,RealInfo,ErrorCode)
 ! MODULES
@@ -231,7 +234,7 @@ END SUBROUTINE CreateErrFile
 
 
 !==================================================================================================================================
-!> Creates an integer stamp that will afterwards be given to the SUBROUTINE timestamp
+!> Creates an integer stamp that will afterwards be given to the SOUBRUTINE timestamp
 !==================================================================================================================================
 FUNCTION INTSTAMP(Nam,Num)
 ! MODULES
@@ -277,13 +280,13 @@ END FUNCTION TIMESTAMP
 !==================================================================================================================================
 !> Calculates current time (own function because of a laterMPI implementation)
 !==================================================================================================================================
-FUNCTION FLEXITIME(Comm)
+FUNCTION FLUXOTIME(Comm)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER, INTENT(IN),OPTIONAL    :: Comm                                       !< global mpi communicator
-REAL                            :: FlexiTime                                  !< output time
+REAL                            :: FluxoTime                                  !< output time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
@@ -294,8 +297,8 @@ ELSE
   CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 END IF
 #endif
-GETTIME(FlexiTime)
-END FUNCTION FLEXITIME
+GETTIME(FluxoTime)
+END FUNCTION FLUXOTIME
 
 
 !==================================================================================================================================
