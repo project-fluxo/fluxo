@@ -1,4 +1,7 @@
-!==================================================================================================================================
+!=====================================================================================================================================
+! Copyright (c) 2016 - 2017 Gregor Gassner
+! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2017 Andrew Winters
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -34,7 +37,6 @@ INTEGER,ALLOCATABLE :: MPIRequest_gradU(:,:,:)  !< communication handle for the 
 INTEGER             :: nSendVal                
 INTEGER             :: nRecVal
 INTEGER             :: DataSizeSide             !< datasize of one face, =PP_nVar*(PP_N+1)**2
-INTEGER             :: DataSizeSidePrim         !< datasize of one face for (primitive) gradients, =PP_nVarPrim*(PP_N+1)**2
 
 INTEGER             :: SideID_start,SideID_end
 INTEGER             :: nNbProcs                 !< number of neighbor procs, is set in ReadMesh

@@ -154,7 +154,6 @@ MPIRequest_gradU = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
 
 DataSizeSide      =PP_nVar*(PP_N+1)**2
-DataSizeSidePrim  =PP_nVarPrim*(PP_N+1)**2
 
 ! split communicator into smaller groups (e.g. for local nodes)
 GroupSize=GETINT('GroupSize','0')
