@@ -125,7 +125,7 @@ USE MOD_Mesh_Vars    ,ONLY: nBCSides,nSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master
 #if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_Minus,gradUy_Minus,gradUz_Minus
+USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -162,9 +162,9 @@ DO iBC=1,nBCs
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -178,9 +178,9 @@ DO iBC=1,nBCs
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -232,7 +232,7 @@ USE MOD_PreProc
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCsideID
-USE MOD_Mesh_Vars    ,ONLY: nBCSides,nSidesnBCs,BoundaryType
+USE MOD_Mesh_Vars    ,ONLY: nBCSides,nSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master
 IMPLICIT NONE
