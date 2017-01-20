@@ -39,7 +39,13 @@ REAL,ALLOCATABLE                      :: D_Hat(:,:)             !< Differentiati
 
 REAL,ALLOCATABLE                      :: D_Hat_T(:,:)           !< Transpose of differentiation matrix premultiplied by 
                                                                 !< mass matrix, size [0..N,0..N].
- 
+#if (PP_DiscType==2)
+REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D matrix for volint with flux differencing
+                                                                !< 2 from flux difference and the inner surface fluxes
+                                                                !< Dvolsurf = 2*D  but
+                                                                !< Dvolsurf(0,0)=2*sWGP(0)*Q(0,0)+swGP(0)=swGP(0)*(2*(-0.5)+1)=0
+                                                                !< Dvolsurf(N,N)=2*sWGP(N)*Q(N,N)-sWGP(N)=swGP(N)*(2*  0.5 -1)=0
+#endif /*PP_DiscType==2*/
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \f$\xi=-1\f$
                                                                 !< premultiplied by mass matrix
 
@@ -57,18 +63,23 @@ REAL,ALLOCATABLE                      :: Ut(:,:,:,:,:)          !< Residual/time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! auxilliary counters: number of entries in U, Ut, gradUx, gradUy, gradUz, used of optimization 
 INTEGER                               :: nTotalU                !< Total number of entries in U / size of U. 
+                                                                !< $ ntotalU=PP_nVar*(N+1)^3*nElems $.  
 
 INTEGER                               :: nDOFElem               !< Degrees of freedom in single element(per equation) 
                                                                 !< $ nDOFElem=(N+1)^3 $.  
 
+INTEGER                               :: nTotal_IP              !< $ nTotalIP =(N+1)^3*nElems $
+INTEGER                               :: nTotal_vol             !< $ nTotal_vol=(N+1)^3  (loop i,j,k) $
+INTEGER                               :: nTotal_face            !< $ nTotal_face =(N+1)^2 (loop i,j) $
 !----------------------------------------------------------------------------------------------------------------------------------
 ! interior face values for all elements
 REAL,ALLOCATABLE                      :: U_master(:,:,:,:)      !< 2D Solution on face nodes for the master sides, 
                                                                 !< size [1..NVar,0..N,0..N,all_master_sides] 
 
 REAL,ALLOCATABLE                      :: U_slave(:,:,:,:)       !< 2D Solution on face nodes for the slave sides, 
-REAL,ALLOCATABLE                      :: Flux_master(:,:,:,:)    !< Fluxes on face, size [1..NVar,0..N,0..N,allsides]. 
-REAL,ALLOCATABLE                      :: Flux_slave (:,:,:,:)    !< Fluxes on face, size [1..NVar,0..N,0..N,allsides]. 
+REAL,ALLOCATABLE                      :: Flux(:,:,:,:)          !< Fluxes computed with U_master, U_slave,
+                                                                !< on the processor that has the master sides
+                                                                !< size [1..NVar,0..N,0..N,allsides]. 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 LOGICAL                               :: DGInitIsDone=.FALSE.   !< Switch to check DGInit status
