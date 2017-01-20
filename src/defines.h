@@ -64,8 +64,13 @@
 #define SDEALLOCATE(A) IF(ALLOCATED(A)) DEALLOCATE(A)
 
 ! Loop variables
+#ifdef OPTIMIZED
+#define PP_IJK     i,0,0
+#define PP_ij      i,0
+#else
 #define PP_IJK     i,j,k
 #define PP_ij      i,j
+#endif
 
 ! Predefined "PARAMETER-like" variables
 #define XI_MINUS   5
