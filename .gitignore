@@ -31,5 +31,6 @@
 # others
 build
 share
-doc
+doc/ford/out
+.DS_*
 *~
