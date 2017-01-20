@@ -1,10 +1,11 @@
 #Fluxo
-FLUXO is a numerical tool to solve PDEs, for example the compressible Navier-Stokes equations, 
-magneto-hydrodynamic equations and others. 
+FLUXO is a numerical tool to solve nonlinear advection diffusion equations, for example the compressible Navier-Stokes equations, 
+the resistive magneto-hydrodynamic equations and others. 
 
-FLUXO is based on the Discontinuous Galerkin Spectral Element
+FLUXO is based on a novel Discontinuous Galerkin Spectral Element
 Method (DGSEM), which allows for high-order of accuracy 
-and fully unstructured hexahedral meshes.
+and fully unstructured hexahedral meshes. The volume terms are formulated in a specific subcell flux based form, which allows the construction of 
+entropy stable as well as kinetic energy preserving discretisations. 
 The solver is parallelized very efficiently and scales up
 to hundreds of thousand cores.
 
