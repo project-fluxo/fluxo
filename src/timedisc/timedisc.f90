@@ -16,7 +16,7 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Module for the GTS Temporal discretization
+!> Module for the global time stepping temporal discretization
 !==================================================================================================================================
 MODULE MOD_TimeDisc
 ! MODULES
@@ -35,11 +35,12 @@ INTERFACE FinalizeTimeDisc
   MODULE PROCEDURE FinalizeTimeDisc
 END INTERFACE
 
-PUBLIC :: InitTimeDisc,FinalizeTimeDisc
-PUBLIC :: TimeDisc
+PUBLIC:: InitTimeDisc
+PUBLIC:: TimeDisc
+PUBLIC:: FinalizeTimeDisc
+PUBLIC:: DefineParametersTimeDisc
 !==================================================================================================================================
 
-PUBLIC::DefineParametersTimeDisc
 CONTAINS
 
 !==================================================================================================================================
@@ -71,10 +72,10 @@ SUBROUTINE InitTimeDisc()
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_TimeDisc_Vars
-USE MOD_ReadInTools         ,ONLY:GETREAL,GETINT,GETSTR
-USE MOD_StringTools         ,ONLY:LowCase,StripSpaces
-USE MOD_Mesh_Vars           ,ONLY:nElems
-USE MOD_IO_HDF5             ,ONLY:AddToElemData
+USE MOD_ReadInTools    ,ONLY:GETREAL,GETINT,GETSTR
+USE MOD_StringTools    ,ONLY:LowCase,StripSpaces
+USE MOD_Mesh_Vars      ,ONLY:nElems
+USE MOD_IO_HDF5        ,ONLY:AddToElemData
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -115,6 +116,7 @@ dt=HUGE(1.)
 ! Read max number of iterations to perform
 maxIter = GETINT('maxIter','-1')
 nCalcTimeStepMax = GETINT('nCalcTimeStepMax','1')
+
 SWRITE(UNIT_stdOut,'(A)') ' Method of time integration: '//TRIM(TimeDiscName)
 ALLOCATE(dtElem(nElems))
 dtElem=0.
@@ -135,17 +137,17 @@ SUBROUTINE TimeDisc()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_TimeDisc_Vars       ,ONLY: TEnd,t,dt,tAnalyze,ViscousTimeStep,maxIter,Timestep,nRKStages,nCalcTimeStepMax
+USE MOD_TimeDisc_Vars       ,ONLY: TEnd,t,dt,tAnalyze,ViscousTimeStep,maxIter,Timestep,nRKStages,nCalcTimeStepMax,PID
 USE MOD_Analyze_Vars        ,ONLY: Analyze_dt,WriteData_dt,tWriteData,nWriteData
 USE MOD_Analyze             ,ONLY: Analyze
-USE MOD_TestCase            ,ONLY: AnalyzeTestCase,CalcForcing
-USE MOD_TestCase_Vars       ,ONLY: nAnalyzeTestCase,doTCSource
+USE MOD_Testcase_vars       ,ONLY: doTCpreTimeStep
+USE MOD_Testcase_Pre        ,ONLY: CalcPreTimeStep
 USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
 USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
-USE MOD_HDF5_Output         ,ONLY: WriteState,WriteBaseFlow
+USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems
-USE MOD_DG                  ,ONLY: DGTimeDerivative_weakForm
+USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -182,7 +184,7 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 ! --- Perform some preparational steps ---
 
 ! Do first RK stage of first timestep to fill gradients
-CALL DGTimeDerivative_weakForm(t)
+CALL DGTimeDerivative(t)
 
 ! Write the state at time=0, i.e. the initial condition
 CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
@@ -207,10 +209,8 @@ IF(errType.NE.0) CALL abort(__STAMP__,&
 
 ! Run initial analyze
 SWRITE(UNIT_StdOut,'(132("-"))')
-SWRITE(UNIT_StdOut,*) 'Errors of initial solution:' 
+SWRITE(UNIT_StdOut,*) 'Analyze of initial solution:' 
 CALL Analyze(t,iter)
-! fill recordpoints buffer (initialization/restart)
-IF(RP_onProc) CALL RecordPoints(iter,t,.TRUE.)
 
 IF(MPIroot)THEN
   WRITE(UNIT_StdOut,'(132("-"))')
@@ -224,18 +224,23 @@ END IF ! MPIroot
 tStart = t
 CalcTimeStart=FLUXOTIME()
 DO
-  IF(nCalcTimestep.LT.1)THEN
+  IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
-    nCalcTimestep=MIN(FLOOR(ABS(LOG10(ABS(dt_MinOld/dt_Min-1.)**2.*100.+1.e-16))),nCalcTimeStepMax)
-    dt_MinOld=dt_Min
-    IF(errType.NE.0)THEN
-      CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
-                            FutureTime=tWriteData,isErrorFile=.TRUE.)
-      CALL abort(__STAMP__,&
-     'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
+  ELSE
+    ! be careful, this is using an estimator, when to recompute the timestep
+    IF(nCalcTimestep.LT.1)THEN
+      dt_Min=CALCTIMESTEP(errType)
+      nCalcTimestep=nCalcTimeStepMax
+      dt_MinOld=dt_Min
     END IF
+    nCalcTimestep=nCalcTimestep-1
+  END IF !nCalcTimeStepMax <>1
+  IF(errType.NE.0)THEN !error in time step computation
+    CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
+                          FutureTime=tWriteData,isErrorFile=.TRUE.)
+    CALL abort(__STAMP__,&
+   'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
   END IF
-  nCalcTimestep=nCalcTimestep-1
 
   dt=dt_Min
   dtAnalyze=HUGE(1.)
@@ -250,7 +255,7 @@ DO
   END IF
   dt=MIN(dt,dtEnd)
 
-  IF(doTCSource) CALL CalcForcing(t,dt)
+  IF(doTCpreTimeStep) CALL CalcPreTimeStep(t,dt)
 
 
   CALL PrintStatusLine(t,dt,tStart,tEnd)
@@ -270,26 +275,21 @@ DO
     doAnalyze=.TRUE.; doFinalize=.TRUE.
   END IF
 
-  ! Call DG operator to fill face data, fluxes, gradients for analyze
-  IF(doAnalyze) CALL DGTimeDerivative_weakForm(t)
-
-  ! Call your Analysis Routine for your Testcase here.
-  IF((MOD(iter,nAnalyzeTestCase).EQ.0).OR.doAnalyze) CALL AnalyzeTestCase(t)
-  ! evaluate recordpoints
-  IF(RP_onProc) CALL RecordPoints(iter,t,doAnalyze)
-
   ! Analyze and output now
   IF(doAnalyze) THEN
+    ! Call DG operator to fill face data, fluxes, gradients for analyze
+    CALL DGTimeDerivative(t)
+
     CalcTimeEnd=FLUXOTIME()
 
     IF(MPIroot)THEN
       ! Get calculation time per DOF
-      CalcTimeEnd=(CalcTimeEnd-CalcTimeStart)*REAL(nProcessors)/(REAL(nGlobalElems)*REAL((PP_N+1)**3)*REAL(iter_loc))
+      PID=(CalcTimeEnd-CalcTimeStart)*REAL(nProcessors)/(REAL(nGlobalElems)*REAL((PP_N+1)**3)*REAL(iter_loc))
       CALL DATE_AND_TIME(values=TimeArray) ! get System time
       WRITE(UNIT_StdOut,'(132("-"))')
       WRITE(UNIT_stdOut,'(A,I2.2,A1,I2.2,A1,I4.4,A1,I2.2,A1,I2.2,A1,I2.2)') &
         ' Sys date   :    ',timeArray(3),'.',timeArray(2),'.',timeArray(1),' ',timeArray(5),':',timeArray(6),':',timeArray(7)
-      WRITE(UNIT_stdOut,'(A,ES12.5,A,I4)')' CALCULATION TIME PER TIMESTEP/DOF: [',CalcTimeEnd,' sec ], #Stages=',nRKstages
+      WRITE(UNIT_stdOut,'(A,ES12.5,A,I4)')' CALCULATION TIME PER TSTEP/DOF: [',PID,' sec ], nRKstages:',nRKstages
       WRITE(UNIT_StdOut,'(A,ES16.7)')' Timestep   : ',dt_Min
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
       WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps  : ',REAL(iter)
@@ -303,7 +303,6 @@ DO
       ! Write state to file
       CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
                             FutureTime=tWriteData,isErrorFile=.FALSE.)
-      IF(RP_onProc)         CALL WriteRP(t,.TRUE.)
       writeCounter=0
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
     END IF
@@ -332,7 +331,7 @@ SUBROUTINE TimeStepByLSERKW2(t)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Vector
-USE MOD_DG           ,ONLY: DGTimeDerivative_weakForm
+USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
@@ -352,7 +351,7 @@ b_dt=RKb*dt
 ! First evaluation of DG operator already done in timedisc
 CurrentStage=1
 tStage=t
-CALL DGTimeDerivative_weakForm(tStage)
+CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
 
@@ -361,7 +360,7 @@ CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
 DO iStage=2,nRKStages
   CurrentStage=iStage
   tStage=t+dt*RKc(iStage)
-  CALL DGTimeDerivative_weakForm(tStage)
+  CALL DGTimeDerivative(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
 
@@ -381,7 +380,7 @@ SUBROUTINE TimeStepByLSERKK3(t)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Vector
-USE MOD_DG           ,ONLY: DGTimeDerivative_weakForm
+USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
@@ -407,13 +406,13 @@ CurrentStage=1
 tStage=t
 CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
 CALL VCopy(nTotalU,S2,U)                       !S2=U
-CALL DGTimeDerivative_weakForm(t)
+CALL DGTimeDerivative(t)
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
   tStage=t+dt*RKc(iStage)
-  CALL DGTimeDerivative_weakForm(tStage)
+  CALL DGTimeDerivative(tStage)
   CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)
   CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
   CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
@@ -445,9 +444,6 @@ INTEGER,INTENT(IN) :: Nin !< input polynomial degree for
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL               :: alpha
-#if !(PARABOLIC)
-INTEGER            :: dummy
-#endif
 !===================================================================================================================================
 ! CFL in DG depends on the polynomial degree
 ! Runge-Kutta methods

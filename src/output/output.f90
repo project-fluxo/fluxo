@@ -94,7 +94,7 @@ CALL prms%CreateIntFromStringOption('ASCIIOutputFormat',"File format for ASCII f
 CALL addStrListEntry('ASCIIOutputFormat','csv',    ASCIIOUTPUTFORMAT_CSV)
 CALL addStrListEntry('ASCIIOutputFormat','tecplot',ASCIIOUTPUTFORMAT_TECPLOT)
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
-CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.TRUE.')
+CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
 END SUBROUTINE DefineParametersOutput
 
 !==================================================================================================================================
@@ -138,7 +138,7 @@ ProjectName=GETSTR('ProjectName')
 Logging    =GETLOGICAL('Logging')
 ErrorFiles =GETLOGICAL('ErrorFiles')
 
-doPrintStatusLine=GETLOGICAL("doPrintStatusLine")
+doPrintStatusLine=GETLOGICAL("doPrintStatusLine",".FALSE.")
 
 WRITE(ErrorFileName,'(A,A8,I6.6,A4)')TRIM(ProjectName),'_ERRORS_',myRank,'.out'
 

@@ -428,7 +428,6 @@ SUBROUTINE CalcMeanFlux(Time,MeanFlux)
 USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Analyze_Vars,      ONLY: wGPSurf
-USE MOD_DG,                ONLY: DGTimeDerivative
 USE MOD_DG_Vars,           ONLY: Flux
 USE MOD_Mesh_Vars,         ONLY: nSides,nBCs,AnalyzeSide
 ! IMPLICIT VARIABLE HANDLING
@@ -444,7 +443,7 @@ REAL,INTENT(OUT)               :: MeanFlux(PP_nVar,nBCs)
 INTEGER                        :: iSurf,iSide,i,j
 !===================================================================================================================================
 ! Compute one DG stage for the current time to have the right fluxes
-CALL DGTimeDerivative(Time)
+!CALL DGTimeDerivative(Time) !already called in timedisc
 MeanFlux=0.
 
 DO iSide=1,nSides

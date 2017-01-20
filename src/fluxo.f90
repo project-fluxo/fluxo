@@ -36,14 +36,13 @@ USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
 #endif
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
 USE MOD_StringTools,       ONLY:STRICMP
-!USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
+USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
 !USE MOD_Testcase,          ONLY:DefineParametersTestcase
-!USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
+USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
-!#if PARABOLIC
+#if PARABOLIC
 !USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
-!#endif /*PARABOLIC*/
-!USE MOD_Filter,            ONLY:DefineParametersFilter,InitFilter,FinalizeFilter
+#endif /*PARABOLIC*/
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -65,11 +64,10 @@ CALL DefineParametersOutput()
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 !CALL DefineParametersTestcase()
-!CALL DefineParametersFilter()
 !#if PARABOLIC
 !CALL DefineParametersLifting ()
 !#endif /*PARABOLIC*/
-!CALL DefineParametersTimedisc()
+CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
 ! check for command line argument --help or --markdown
@@ -118,17 +116,16 @@ CALL InitMortar()
 CALL InitRestart()
 CALL InitOutput()
 CALL InitMesh()
-!CALL InitFilter()
 #if MPI
 CALL InitMPIvars()
 #endif
 CALL InitEquation()
-!CALL InitBC()
+CALL InitBC()
 CALL InitDG()
 !#if PARABOLIC
 !CALL InitLifting()
 !#endif /*PARABOLIC*/
-!CALL InitTimeDisc()
+CALL InitTimeDisc()
 CALL InitAnalyze()
 CALL IgnoredParameters()
 CALL Restart()
@@ -138,10 +135,10 @@ Time=FLUXOTIME()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
-!
+
 !! Run Simulation
-!CALL TimeDisc()
-!
+CALL TimeDisc()
+
 !!Finalize
 CALL FinalizeOutput()
 CALL FinalizeAnalyze()
@@ -150,16 +147,16 @@ CALL FinalizeAnalyze()
 !#endif /*PARABOLIC*/
 CALL FinalizeDG()
 CALL FinalizeEquation()
-!CALL FinalizeBC()
+CALL FinalizeBC()
 CALL FinalizeInterpolation()
-!CALL FinalizeTimeDisc()
+CALL FinalizeTimeDisc()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
-!CALL FinalizeFilter()
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()
+
 #if MPI
 CALL MPI_FINALIZE(iError)
 IF(iError .NE. 0) STOP 'MPI finalize error'
