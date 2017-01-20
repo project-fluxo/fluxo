@@ -25,6 +25,7 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
+LOGICAL           :: doCalcSource               !< logical to define if a source term (e.g. exactfunc) is added
 REAL              :: AdvVel(3)                  !< Advection velocity
 REAL              :: DiffC                      !< Diffusion constant
 REAL              :: IniWavenumber(3)           !< wavenumbers in 3 directions (sinus periodic with exactfunc=6) 

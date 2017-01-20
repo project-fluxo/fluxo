@@ -214,14 +214,15 @@ USE MOD_DG_Vars             ,ONLY: nTotalU
 USE MOD_VolInt              ,ONLY: VolInt
 USE MOD_SurfInt             ,ONLY: SurfInt
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
-USE MOD_ApplyJacobian       ,ONLY: ApplyJacobian
+USE MOD_ApplyJacobianCons   ,ONLY: ApplyJacobianCons
 USE MOD_Interpolation_Vars  ,ONLY: L_Minus,L_Plus
-USE MOD_Testcase            ,ONLY: TestcaseSource
+USE MOD_Testcase_Source     ,ONLY: TestcaseSource
 USE MOD_Testcase_Vars       ,ONLY: doTCSource
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_Mesh_Vars           ,ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
-USE MOD_Exactfunc           ,ONLY: CalcSource
+USE MOD_Equation            ,ONLY: CalcSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
 USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 #if PARABOLIC
@@ -274,14 +275,14 @@ CALL VNullify(nTotalU,Ut)
 ! Step 1 for all slave MPI sides
 ! 1.1)
 CALL StartReceiveMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE / U_slave: slave -> master
-CALL ProlongToFaceCons(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.TRUE.)
+CALL ProlongToFace(U,U_master,U_slave,doMPISides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR / U_slave: slave -> master
 #endif /* MPI */
 
 ! Step 1 for all remaining sides
 ! 1.1)
-CALL ProlongToFace(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.FALSE.)
+CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 
 
@@ -336,14 +337,14 @@ CALL FillFlux(Flux,doMPISides=.FALSE.)
 ! 8.4)
 CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
 ! 8.5)
-CALL SurfInt(PP_N,Flux_master,Flux_slave,Ut,.FALSE.,L_HatMinus,L_hatPlus)
+CALL SurfInt(Flux,Ut,.FALSE.)
 
 #if MPI
 ! 8.4)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )                                        ! Flux_slave: master -> slave 
 CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
 ! 8.5)
-CALL SurfInt(PP_N,Flux,Ut,.TRUE.,L_HatMinus,L_HatPlus)
+CALL SurfInt(Flux,Ut,.TRUE.)
 #endif /*MPI*/
 
 
@@ -352,10 +353,10 @@ Ut=-Ut
 
 !  Compute source terms and sponge (in physical space, conversion to reference space inside routines)
 IF(doCalcSource) CALL CalcSource(Ut,t)
-IF(doTCSource)   CALL TestcaseSource(Ut)
+IF(doTCSource)   CALL TestcaseSource(Ut,t)
 
 ! Apply Jacobian 
-CALL ApplyJacobian(Ut,toPhysical=.TRUE.)
+CALL ApplyJacobianCons(Ut,toPhysical=.TRUE.)
 
 END SUBROUTINE DGTimeDerivative_weakForm
 
