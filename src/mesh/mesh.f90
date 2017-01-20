@@ -109,7 +109,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL              :: x(3),meshScale
-INTEGER           :: iElem,i,j,k,nElemsLoc
+INTEGER           :: iElem,i,j,k
 LOGICAL           :: validMesh
 INTEGER           :: firstMasterSide     !< lower side ID of array U_master/gradUx_master...
 INTEGER           :: lastMasterSide      !< upper side ID of array U_master/gradUx_master...
@@ -232,7 +232,7 @@ IF(ABS(meshScale-1.).GT.1e-14)&
   NodeCoords = NodeCoords*meshScale
 
 IF(GETLOGICAL('meshdeform','.FALSE.'))THEN
-  DO iElem=1,nElemsLoc
+  DO iElem=1,nElems
     DO k=0,NGeo; DO j=0,NGeo; DO i=0,NGeo
       x(:)=NodeCoords(:,i,j,k,iElem)
       NodeCoords(:,i,j,k,iElem) = x+ 0.1*SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3))

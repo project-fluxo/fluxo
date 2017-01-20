@@ -37,8 +37,10 @@ CHARACTER(LEN=255),PARAMETER :: StrVarNames(1)=(/'Solution'/) !< Variable names 
 
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
-INTEGER             :: WhichVolumeFlux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec
+#if (PP_DiscType==3)
+INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
+PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*PP_DiscType==3*/
 
 !===================================================================================================================================
 END MODULE MOD_Equation_Vars

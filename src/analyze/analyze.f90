@@ -38,10 +38,12 @@ INTERFACE FinalizeAnalyze
 END INTERFACE
 
 
-PUBLIC:: Analyze, InitAnalyze, FinalizeAnalyze
+PUBLIC:: DefineParametersAnalyze
+PUBLIC:: InitAnalyze
+PUBLIC:: Analyze
+PUBLIC:: FinalizeAnalyze
 !==================================================================================================================================
 
-PUBLIC::DefineParametersAnalyze
 CONTAINS
 
 !==================================================================================================================================
@@ -426,7 +428,7 @@ USE MOD_Globals
 USE MOD_Analyze_Vars,      ONLY: wGPSurf
 !TODO  USE MOD_DG,                ONLY: DGTimeDerivative
 USE MOD_DG_Vars,           ONLY: Flux_master
-USE MOD_Mesh_Vars,         ONLY: nSides,BC,nBCs,AnalyzeSide
+USE MOD_Mesh_Vars,         ONLY: nSides,nBCs,AnalyzeSide
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------

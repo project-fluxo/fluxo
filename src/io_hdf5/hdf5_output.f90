@@ -51,14 +51,6 @@ INTERFACE WriteAttribute
   MODULE PROCEDURE WriteAttribute
 END INTERFACE
 
-INTERFACE
-  SUBROUTINE copy_userblock(outfilename,infilename) BIND(C)
-      USE ISO_C_BINDING, ONLY: C_CHAR
-      CHARACTER(KIND=C_CHAR) :: outfilename(*)
-      CHARACTER(KIND=C_CHAR) :: infilename(*)
-  END SUBROUTINE copy_userblock
-END INTERFACE
-
 
 PUBLIC :: WriteState,FlushFiles,WriteHeader,WriteTimeAverage
 PUBLIC :: WriteArray,WriteAttribute
@@ -517,7 +509,7 @@ SUBROUTINE GenerateFileSkeleton(FileName,TypeString,nVar,NData,StrVarNames,MeshF
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_Output_Vars  ,ONLY: ProjectName,UserBlockTmpFile,userblock_total_len
+USE MOD_Output_Vars  ,ONLY: ProjectName
 USE MOD_Mesh_Vars  ,ONLY: nGlobalElems
 USE MOD_Interpolation_Vars,ONLY: NodeType
 IMPLICIT NONE
@@ -538,7 +530,7 @@ INTEGER(HSIZE_T)               :: Dimsf(5)
 CHARACTER(LEN=255)             :: MeshFile255
 !==================================================================================================================================
 ! Create file
-CALL OpenDataFile(TRIM(FileName),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.,userblockSize=userblock_total_len)
+CALL OpenDataFile(TRIM(FileName),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
 
 ! Write file header
 CALL WriteHeader(TRIM(TypeString),File_ID)
@@ -567,9 +559,6 @@ CALL WriteAttribute(File_ID,'VarNames',nVar,StrArray=StrVarNames)
 CALL WriteAttribute(File_ID,'NComputation',1,IntScalar=PP_N)
 
 CALL CloseDataFile()
-
-! Add userblock to hdf5-file
-!CALL copy_userblock(TRIM(FileName)//C_NULL_CHAR,TRIM(UserblockTmpFile)//C_NULL_CHAR)
 
 END SUBROUTINE GenerateFileSkeleton
 
