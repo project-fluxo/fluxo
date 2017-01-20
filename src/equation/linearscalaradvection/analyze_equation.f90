@@ -46,6 +46,8 @@ CONTAINS
 !==================================================================================================================================
 SUBROUTINE DefineParametersAnalyzeEquation()
 ! MODULES
+USE MOD_Globals
+USE MOD_ReadInTools ,ONLY: prms
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

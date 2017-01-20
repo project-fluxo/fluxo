@@ -65,6 +65,8 @@ CALL prms%CreateRealOption(   'Analyze_dt',      "Specifies time intervall at wh
 CALL prms%CreateIntOption(    'nWriteData' ,     "Intervall as multiple of Analyze_dt at which HDF5 files "//&
                                                  "(e.g. State,TimeAvg,Fluc) are written.",&
                                                  '1')
+CALL prms%CreateIntOption(    'AnalyzeExactFunc',"possible to chosse another Exact for Analyis purposes ")
+CALL prms%CreateLogicalOption('CalcMeanFlux',"Computes the integral of the flux over a boundary", '.FALSE.')
 CALL prms%CreateIntOption(    'NAnalyze'   ,     "Polynomial degree at which analysis is performed (e.g. for L2 errors). "//&
                                                  "Default: 2*N.")
 CALL DefineParametersAnalyzeEquation()
