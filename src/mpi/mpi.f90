@@ -143,10 +143,6 @@ ALLOCATE(MPIRequest_U(nNbProcs,2)    )
 ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
 MPIRequest_U      = MPI_REQUEST_NULL
 MPIRequest_Flux   = MPI_REQUEST_NULL
-#ifdef EDDYVISCOSITY
-ALLOCATE(MPIRequest_DeltaS(nNbProcs,2) )
-MPIRequest_DeltaS = MPI_REQUEST_NULL
-#endif
 
 #if PARABOLIC
 ALLOCATE(MPIRequest_gradU(nNbProcs,3,2))
@@ -189,6 +185,7 @@ END SUBROUTINE InitMPIvars
 
 !==================================================================================================================================
 !> Subroutine that controls the receive operations for the face data that has to be exchanged between processors.
+!>  (1:PP_nVar,0:PP_N,0:PP_N,LowerBound:upperBound) to an array (1:DataSize,LowerBound:upperBound)
 !==================================================================================================================================
 SUBROUTINE StartReceiveMPIData(FaceData,DataSize,LowerBound,UpperBound,MPIRequest,SendID)
 ! MODULES
@@ -226,6 +223,8 @@ END SUBROUTINE StartReceiveMPIData
 
 !==================================================================================================================================
 !> Subroutine that performs the send operations for the face data that has to be exchanged between processors.
+!> this routine has no interface, since the FaceData is cast from an array
+!>  (1:PP_nVar,0:PP_N,0:PP_N,LowerBound:upperBound) to an array (1:DataSize,LowerBound:upperBound)
 !==================================================================================================================================
 SUBROUTINE StartSendMPIData(FaceData,DataSize,LowerBound,UpperBound,MPIRequest,SendID)
 ! MODULES

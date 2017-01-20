@@ -36,17 +36,19 @@ CONTAINS
 
 
 !===================================================================================================================================
-!>Fills the inner, periodic and bc fluxes
+!>Fills the inner, periodic fluxes
 !===================================================================================================================================
 SUBROUTINE FillFlux(Flux,doMPISides)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars,         ONLY: U_Master,U_Slave
 USE MOD_Mesh_Vars,       ONLY: NormVec,TangVec1,TangVec2,SurfElem
-USE MOD_Mesh_Vars,       ONLY: nSides,nBCSides,nInnerSides,nMPISides_MINE
+USE MOD_Mesh_Vars,       ONLY: nSides
+USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,lastMPISide_MINE
 USE MOD_Riemann,         ONLY: Riemann
 #if PARABOLIC
-USE MOD_Lifting_Vars,    ONLY: gradUx_Slave,gradUx_Master,gradUy_Slave,gradUy_Master,gradUz_Slave,gradUz_Master
+USE MOD_Lifting_Vars,    ONLY: gradUx_Master,gradUy_Master,gradUz_Master
+USE MOD_Lifting_Vars,    ONLY: gradUx_Slave ,gradUy_Slave ,gradUz_Slave
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -55,7 +57,7 @@ IMPLICIT NONE
 LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only MINE MPISides are filled, =.FALSE. InnerSides  
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: Flux(1:PP_nVar,0:PP_N,0:PP_N,nSides)
+REAL,INTENT(OUT)   :: Flux(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: SideID,p,q,firstSideID,lastSideID
@@ -63,15 +65,14 @@ INTEGER            :: SideID,p,q,firstSideID,lastSideID
 ! fill flux for sides ranging between firstSideID and lastSideID using Riemann solver
 IF(doMPISides)THEN 
   ! fill only flux for MINE MPISides
-  firstSideID = nBCSides+nInnerSides+1
-  lastSideID  = firstSideID-1+nMPISides_MINE 
+  firstSideID = firstMPISide_MINE
+  lastSideID  = lastMPISide_MINE
 ELSE
   ! fill only InnerSides
-  firstSideID = nBCSides+1
-  lastSideID  = firstSideID-1+nInnerSides 
+  firstSideID = firstInnerSide
+  lastSideID  = lastInnerSide
 END IF
-!firstSideID=nBCSides+1
-!lastSideID  =nBCSides+nInnerSides+nMPISides_MINE
+
 DO SideID=firstSideID,lastSideID
   CALL Riemann(Flux(:,:,:,SideID),     U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID), &
 #if PARABOLIC

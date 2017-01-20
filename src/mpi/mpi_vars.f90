@@ -28,9 +28,6 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 INTEGER,ALLOCATABLE :: MPIRequest_U(:,:)        !< communication handle for the surface solution
 INTEGER,ALLOCATABLE :: MPIRequest_Flux(:,:)     !< communication handle for the surface flux
-#ifdef EDDYVISCOSITY
-INTEGER,ALLOCATABLE :: MPIRequest_DeltaS(:,:)   !< communication handle for the surface flux used for overintegration
-#endif
 #if PARABOLIC
 INTEGER,ALLOCATABLE :: MPIRequest_gradU(:,:,:)  !< communication handle for the surface gradients
 #endif /*PARABOLIC*/
