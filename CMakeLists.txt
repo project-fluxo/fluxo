@@ -69,7 +69,7 @@ SUBDIRLIST(EQNSYSTEMS ${CMAKE_CURRENT_SOURCE_DIR}/src/equations/)
 #...# SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
 OPTION(FLUXO_MPI "Compile SINGLE or MPI version" ON)
-OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" ON)
+OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 OPTION(FLUXO_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 SET(   FLUXO_BUILD_HDF5 ON  CACHE BOOL "Compile and build hdf5 library")
@@ -145,39 +145,39 @@ ELSE()
 ENDIF()
 
 
-#...# IF (FLUXO_PARABOLIC)
-#...#   ADD_DEFINITIONS(-DPARABOLIC=1)
-#...# 
-#...#   #### Set the lifting
-#...#   SET(FLUXO_LIFTING "br1" CACHE STRING "Lifting method used for PARABOLIC")
-#...#   SET_PROPERTY(CACHE FLUXO_LIFTING PROPERTY STRINGS ${LIFTINGS})
-#...# 
-#...#   IF(FLUXO_LIFTING STREQUAL "br1")
-#...#     ADD_DEFINITIONS(-DPP_Lifting=1)
-#...#   ELSEIF(FLUXO_LIFTING STREQUAL "br2")
-#...#     ADD_DEFINITIONS(-DPP_Lifting=2)
-#...#   ELSE()
-#...#     MESSAGE(ERROR "No such LIFTING known.")
-#...#   ENDIF()
-#...# 
-#...#   #### Set the lifting
-#...#   IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
-#...#     SET(FLUXO_VISCOSITY "constant" CACHE STRING 
-#...#                       "Method to calculate viscosity (constant/sutherland/powerlaw)")
-#...#     SET_PROPERTY(CACHE FLUXO_VISCOSITY PROPERTY STRINGS constant sutherland powerlaw)
-#...#     IF(FLUXO_VISCOSITY STREQUAL "constant")
-#...#       ADD_DEFINITIONS(-DPP_VISC=0)
-#...#     ELSEIF(FLUXO_VISCOSITY STREQUAL "sutherland")
-#...#       ADD_DEFINITIONS(-DPP_VISC=1)
-#...#     ELSEIF(FLUXO_VISCOSITY STREQUAL "powerlaw")
-#...#       ADD_DEFINITIONS(-DPP_VISC=2)
-#...#     ELSE()
-#...#       MESSAGE(ERROR "No such VISCOSITY known.")
-#...#     ENDIF()
-#...#   ENDIF()
-#...# ELSE()
-#...#   ADD_DEFINITIONS(-DPARABOLIC=0)
-#...# ENDIF()
+IF (FLUXO_PARABOLIC)
+  ADD_DEFINITIONS(-DPARABOLIC=1)
+
+  #### Set the lifting
+  SET(FLUXO_LIFTING "br1" CACHE STRING "Lifting method used for PARABOLIC")
+  SET_PROPERTY(CACHE FLUXO_LIFTING PROPERTY STRINGS ${LIFTINGS})
+
+  IF(FLUXO_LIFTING STREQUAL "br1")
+    ADD_DEFINITIONS(-DPP_Lifting=1)
+  ELSEIF(FLUXO_LIFTING STREQUAL "br2")
+    ADD_DEFINITIONS(-DPP_Lifting=2)
+  ELSE()
+    MESSAGE(ERROR "No such LIFTING known.")
+  ENDIF()
+
+  #### Set the viscosity
+  IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
+    SET(FLUXO_VISCOSITY "constant" CACHE STRING 
+                      "Method to calculate viscosity (constant/sutherland/powerlaw)")
+    SET_PROPERTY(CACHE FLUXO_VISCOSITY PROPERTY STRINGS constant sutherland powerlaw)
+    IF(FLUXO_VISCOSITY STREQUAL "constant")
+      ADD_DEFINITIONS(-DPP_VISC=0)
+    ELSEIF(FLUXO_VISCOSITY STREQUAL "sutherland")
+      ADD_DEFINITIONS(-DPP_VISC=1)
+    ELSEIF(FLUXO_VISCOSITY STREQUAL "powerlaw")
+      ADD_DEFINITIONS(-DPP_VISC=2)
+    ELSE()
+      MESSAGE(ERROR "No such VISCOSITY known.")
+    ENDIF()
+  ENDIF()
+ELSE()
+  ADD_DEFINITIONS(-DPARABOLIC=0)
+ENDIF()
 
 
 
@@ -411,20 +411,6 @@ endfunction()
 # include defines.h 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/src) 
 
-# collect all F90 files needed for fluxolib
-#...# FILE(GLOB_RECURSE fluxoF90 ./src/interpolation/*.f90
-#...#                            ./src/readintools/*.f90
-#...#                            ./src/mortar/*.f90
-#...#                            ./src/mesh/*.f90
-#...#                            ./src/mpi/*.f90
-#...#                            ./src/globals/*.f90
-#...#                            ./src/analyze/*.f90
-#...#                            ./src/restart/*.f90
-#...#                            ./src/output/*.f90
-#...#                            ./src/io_hdf5/*.f90
-#...#                            ./src/timedisc/*.f90
-#...#                            ./src/testcase/${FLUXO_TESTCASE}/*.f90 )
-
 FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/readintools/*.f90
                            ./src/interpolation/*.f90
@@ -443,10 +429,10 @@ FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
 
 
 FILE(GLOB dgF90            ./src/dg/*.f90)
-#...# IF (FLUXO_PARABOLIC)
-#...#   FILE(GLOB liftingF90     ./src/dg/${FLUXO_LIFTING}/*.f90)
-#...#   LIST(APPEND dgF90 ${liftingF90})
-#...# ENDIF()
+IF (FLUXO_PARABOLIC)
+  FILE(GLOB liftingF90     ./src/dg/${FLUXO_LIFTING}/*.f90)
+  LIST(APPEND dgF90 ${liftingF90})
+ENDIF()
 
 
 # define libs
