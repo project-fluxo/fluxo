@@ -29,16 +29,16 @@ SAVE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! DG basis, contains the differentiation and interpolation operators
-REAL,ALLOCATABLE                      :: D(:,:)                 !< Differentiation matrix of size [0..N,0..N], contains the 
+REAL,ALLOCATABLE                      :: D(:,:)                 !< Differentiation matrix of size \([0..N,0..N]\), contains the 
                                                                 !< first derivative of each Lagrange polynomial at each node. 
 
-REAL,ALLOCATABLE                      :: D_T(:,:)               !< Transpose of differentiation matrix, size [0..N,0..N]. 
+REAL,ALLOCATABLE                      :: D_T(:,:)               !< Transpose of differentiation matrix, size \([0..N,0..N]\). 
 
 REAL,ALLOCATABLE                      :: D_Hat(:,:)             !< Differentiation matrix premultiplied by
-                                                                !< mass matrix, \f$ \hat{D} = M^{-1} D^T M \f$, size [0..N,0..N].  
+                                                                !< mass matrix, \(\hat{D} = M^{-1} D^T M\), size \([0..N,0..N]\).  
 
 REAL,ALLOCATABLE                      :: D_Hat_T(:,:)           !< Transpose of differentiation matrix premultiplied by 
-                                                                !< mass matrix, size [0..N,0..N].
+                                                                !< mass matrix, size \([0..N,0..N]\).
 #if (PP_DiscType==2)
 REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D matrix for volint with flux differencing
                                                                 !< 2 from flux difference and the inner surface fluxes
@@ -46,40 +46,40 @@ REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D ma
                                                                 !< Dvolsurf(0,0)=2*sWGP(0)*Q(0,0)+swGP(0)=swGP(0)*(2*(-0.5)+1)=0
                                                                 !< Dvolsurf(N,N)=2*sWGP(N)*Q(N,N)-sWGP(N)=swGP(N)*(2*  0.5 -1)=0
 #endif /*PP_DiscType==2*/
-REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \f$\xi=-1\f$
+REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)
                                                                 !< premultiplied by mass matrix
 
-REAL,ALLOCATABLE                      :: L_HatPlus(:)           !< Lagrange polynomials evaluated at \f$\xi=+1\f$
+REAL,ALLOCATABLE                      :: L_HatPlus(:)           !< Lagrange polynomials evaluated at \(\xi=+1\)
                                                                 !< premultiplied by mass matrix
 !----------------------------------------------------------------------------------------------------------------------------------
 ! DG solution (JU or U) vectors)
 REAL,ALLOCATABLE,TARGET               :: U(:,:,:,:,:)           !< Solution variable for each equation, node and element, 
-                                                                !< size [1..NVar,0..N,0..N,0..N,nElems]. 
+                                                                !< size \([1..nVar,0..N,0..N,0..N,nElems]\). 
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! DG time derivative or Residual U_t
-REAL,ALLOCATABLE                      :: Ut(:,:,:,:,:)          !< Residual/time derivative, size [1..NVar,0..N,0..N,0..N,nElems]. 
+REAL,ALLOCATABLE                      :: Ut(:,:,:,:,:)          !< Residual/time derivative, size \([1..nVar,0..N,0..N,0..N,nElems]\). 
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! auxilliary counters: number of entries in U, Ut, gradUx, gradUy, gradUz, used of optimization 
 INTEGER                               :: nTotalU                !< Total number of entries in U / size of U. 
-                                                                !< $ ntotalU=PP_nVar*(N+1)^3*nElems $.  
+                                                                !< ntotalU\(=nVar(N+1)^3nElems\).  
 
 INTEGER                               :: nDOFElem               !< Degrees of freedom in single element(per equation) 
-                                                                !< $ nDOFElem=(N+1)^3 $.  
+                                                                !< nDOFElem\(=(N+1)^3\).  
 
-INTEGER                               :: nTotal_IP              !< $ nTotalIP =(N+1)^3*nElems $
-INTEGER                               :: nTotal_vol             !< $ nTotal_vol=(N+1)^3  (loop i,j,k) $
-INTEGER                               :: nTotal_face            !< $ nTotal_face =(N+1)^2 (loop i,j) $
+INTEGER                               :: nTotal_IP              !< nTotalIP\(=(N+1)^3nElems\)
+INTEGER                               :: nTotal_vol             !< nTotal_vol\(=(N+1)^3\)  (loop i,j,k)
+INTEGER                               :: nTotal_face            !< nTotal_face\(=(N+1)^2\) (loop i,j)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! interior face values for all elements
 REAL,ALLOCATABLE                      :: U_master(:,:,:,:)      !< 2D Solution on face nodes for the master sides, 
-                                                                !< size [1..NVar,0..N,0..N,all_master_sides] 
+                                                                !< size \([1..nVar,0..N,0..N,all\_master\_sides]\) 
 
 REAL,ALLOCATABLE                      :: U_slave(:,:,:,:)       !< 2D Solution on face nodes for the slave sides, 
 REAL,ALLOCATABLE                      :: Flux(:,:,:,:)          !< Fluxes computed with U_master, U_slave,
                                                                 !< on the processor that has the master sides
-                                                                !< size [1..NVar,0..N,0..N,allsides]. 
+                                                                !< size \([1..nVar,0..N,0..N,allsides]\). 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 LOGICAL                               :: DGInitIsDone=.FALSE.   !< Switch to check DGInit status
