@@ -206,15 +206,158 @@ SUBROUTINE DGTimeDerivative_weakForm(t)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Vector
+USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux,L_HatPlus,L_HatMinus
+USE MOD_DG_Vars             ,ONLY: D_Hat_T,nDOFElem
+USE MOD_DG_Vars             ,ONLY: nTotalU
+USE MOD_VolInt              ,ONLY: VolInt
+USE MOD_SurfInt             ,ONLY: SurfInt
+USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+USE MOD_FillFlux            ,ONLY: FillFlux
+USE MOD_ApplyJacobian       ,ONLY: ApplyJacobian
+USE MOD_Interpolation_Vars  ,ONLY: L_Minus,L_Plus
+USE MOD_Testcase            ,ONLY: TestcaseSource
+USE MOD_Testcase_Vars       ,ONLY: doTCSource
+USE MOD_Mesh_Vars           ,ONLY: nElems
+USE MOD_Mesh_Vars           ,ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
+USE MOD_Exactfunc           ,ONLY: CalcSource
+USE MOD_Equation_Vars       ,ONLY: doCalcSource
+USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
+#if PARABOLIC
+USE MOD_Lifting             ,ONLY: Lifting
+USE MOD_Lifting_Vars
+#endif /*PARABOLIC*/
+#if MPI
+USE MOD_MPI_Vars
+USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
+USE MOD_Mesh_Vars,           ONLY: nSides
+#endif /*MPI*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN) :: t
+REAL,INTENT(IN)                 :: t                      !< Current time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-WRITE(*,*)'BUMMMMMER!!!!'
+
+! -----------------------------------------------------------------------------
+! MAIN STEPS       
+! -----------------------------------------------------------------------------
+! 0.  Convert volume solution to primitive 
+! 1.  Pronlong to face (fill U_master/slave)
+! 3.  ConsToPrim of face data (U_master/slave)
+! 5.  Lifting
+! 6.  Viscous volume integral (DG only)
+! 7.  Fill flux (Riemann solver) + surface integral
+! 8. Ut = -Ut
+! 9. Sponge and source terms
+! 10. apply Jacobian
+! -----------------------------------------------------------------------------
+
+! Nullify arrays
+! TODO fix!
+! NOTE: UT and U are nullified in DGInit, and Ut is set directly in the volume integral, so in this implementation, 
+!       ARRAYS DO NOT NEED TO BE NULLIFIED, OTHERWISE THEY HAVE TO!
+CALL VNullify(nTotalU,Ut)
+
+! 1. Prolong the solution to the face integration points for flux computation (and do overlapping communication)
+! -----------------------------------------------------------------------------------------------------------
+! General idea: The slave sends its surface data to the master, where the flux is computed and sent back to the slaves.
+! Steps:
+! * (these steps are done for all slave MPI sides first and then for all remaining sides): 
+! 1.1)  Prolong solution to faces and store in U_master/slave. Use them to build mortar data (split into 2/4 smaller sides).
+!       Then U_slave can be communicated from the slave to master MPI side.
+! 1.2)  Finish all started MPI communications (after step 2. due to latency hiding) 
+
+#if MPI
+! Step 1 for all slave MPI sides
+! 1.1)
+CALL StartReceiveMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE / U_slave: slave -> master
+CALL ProlongToFaceCons(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.TRUE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
+CALL StartSendMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR / U_slave: slave -> master
+#endif /* MPI */
+
+! Step 1 for all remaining sides
+! 1.1)
+CALL ProlongToFace(PP_N,U,U_master,U_slave,L_Minus,L_Plus,doMPISides=.FALSE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+
+
+#if MPI
+! 1.4) complete send / receive of side data from step 1.
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)        ! U_slave: slave -> master 
+#endif
+
+#if PARABOLIC
+! 5. Lifting 
+! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
+! The communication of the gradients is initialized within the lifting routines
+CALL Lifting(U,U_master,U_slave,t)
+#endif /*PARABOLIC*/
+
+! 6. Compute volume integral contribution and add to Ut
+CALL VolInt(Ut)
+
+
+#if PARABOLIC && MPI
+! Complete send / receive for gradUx, gradUy, gradUz, started in the lifting routines
+CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_gradU) ! gradUx,y,z: slave -> master
+#endif /*PARABOLIC && MPI*/
+
+
+! 7. Fill flux and Surface integral
+! General idea: U_master/slave and gradUx,y,z_master/slave are filled and can be used to compute the Riemann solver
+!               and viscous flux at the faces. This is done for the MPI master sides first, to start communication early
+!               and then for all other sides.
+!               After communication from master to slave the flux can be integrated over the faces.
+! Steps:
+! * (step 8.2 is done for all MPI master sides first and then for all remaining sides)
+! * (step 8.3 and 8.4 are done for all other sides first and then for the MPI master sides) 
+! 8.3)  Fill flux (Riemann solver + viscous flux)
+! 8.4)  Combine fluxes from the 2/4 small mortar sides to the flux on the big mortar side (when communication finished)
+! 8.5)  Compute surface integral 
+
+#if MPI
+! 8.3)
+CALL StartReceiveMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,SEND),SendID=1)
+                                                                              ! Receive YOUR / Flux_slave: master -> slave
+CALL FillFlux(Flux,doMPISides=.TRUE.)
+CALL StartSendMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),SendID=1)
+                                                                              ! Send MINE  /   Flux_slave: master -> slave
+#endif /* MPI*/
+
+! 8.3)
+CALL FillFlux(Flux,doMPISides=.FALSE.)
+! 8.4)
+CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
+! 8.5)
+CALL SurfInt(PP_N,Flux_master,Flux_slave,Ut,.FALSE.,L_HatMinus,L_hatPlus)
+
+#if MPI
+! 8.4)
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )                                        ! Flux_slave: master -> slave 
+CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
+! 8.5)
+CALL SurfInt(PP_N,Flux,Ut,.TRUE.,L_HatMinus,L_HatPlus)
+#endif /*MPI*/
+
+
+! 10. Swap to right sign :) 
+Ut=-Ut
+
+!  Compute source terms and sponge (in physical space, conversion to reference space inside routines)
+IF(doCalcSource) CALL CalcSource(Ut,t)
+IF(doTCSource)   CALL TestcaseSource(Ut)
+
+! Apply Jacobian 
+CALL ApplyJacobian(Ut,toPhysical=.TRUE.)
+
 END SUBROUTINE DGTimeDerivative_weakForm
+
+
+
 
 !==================================================================================================================================
 !> Finalizes global variables of the module.
