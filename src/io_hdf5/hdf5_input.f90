@@ -173,6 +173,12 @@ END IF
 
 ! Open HDF5 file
 CALL H5FOPEN_F(TRIM(MeshFileName), H5F_ACC_RDONLY_F, File_ID, iError,access_prp = Plist_ID)
+IF(iError.NE.0) THEN
+  CALL abort(__STAMP__,'ERROR: Mesh file '//TRIM(MeshFileName)//' cannot be opened, problem with HDF5.')
+  isValidMeshFile = .FALSE.
+  RETURN
+END IF
+
 IF(iError.EQ.0) THEN
   isValidMeshFile=.TRUE.
 

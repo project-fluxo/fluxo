@@ -49,6 +49,8 @@ REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D ma
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)
                                                                 !< premultiplied by mass matrix
 
+REAL                                  :: L_HatMinus0            !<  = LHat_Minus(0)
+
 REAL,ALLOCATABLE                      :: L_HatPlus(:)           !< Lagrange polynomials evaluated at \(\xi=+1\)
                                                                 !< premultiplied by mass matrix
 !----------------------------------------------------------------------------------------------------------------------------------

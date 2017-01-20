@@ -39,7 +39,7 @@ USE MOD_StringTools,       ONLY:STRICMP
 !USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
 !USE MOD_Testcase,          ONLY:DefineParametersTestcase
 !USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
-!USE MOD_DG,                ONLY:InitDG,FinalizeDG
+USE MOD_DG,                ONLY:InitDG,FinalizeDG
 !#if PARABOLIC
 !USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 !#endif /*PARABOLIC*/
@@ -124,7 +124,7 @@ CALL InitMPIvars()
 #endif
 CALL InitEquation()
 !CALL InitBC()
-!CALL InitDG()
+CALL InitDG()
 !#if PARABOLIC
 !CALL InitLifting()
 !#endif /*PARABOLIC*/
@@ -148,7 +148,7 @@ CALL FinalizeAnalyze()
 !#if PARABOLIC
 !CALL FinalizeLifting()
 !#endif /*PARABOLIC*/
-!CALL FinalizeDG()
+CALL FinalizeDG()
 CALL FinalizeEquation()
 !CALL FinalizeBC()
 CALL FinalizeInterpolation()
