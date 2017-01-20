@@ -65,9 +65,9 @@ CALL prms%CreateRealArrayOption('AdvVel',       "Advection velocity for advectio
 CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.")
 CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
-#if (PP_DiscType==3)
+#if (PP_DiscType==2)
 CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form DG volume integral ")
-#endif /*PP_DiscType*/
+#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -103,7 +103,7 @@ IniWavenumber     = GETREALARRAY('IniWavenumber',3,'1.,1.,1.')
 ! Read in boundary parameters
 IniExactFunc = GETINT('IniExactFunc')
 
-#if (PP_DiscType==3)
+#if (PP_DiscType==2)
 WhichVolumeFlux = GETINT('VolumeFlux','0')
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
@@ -113,7 +113,7 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
-#endif /*PP_DiscType==3*/
+#endif /*PP_DiscType==2*/
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT LINADV DONE!'

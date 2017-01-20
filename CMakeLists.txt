@@ -89,7 +89,8 @@ ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
 # =========================================================================
 # PREPROCESSOR FLAGS
 # =========================================================================
-SET(FLUXO_DISCTYPE "1" CACHE STRING "disc type for volint. 1: standard form, 3: flux-average form")
+SET(FLUXO_DISCTYPE "2" CACHE STRING "disc type for volint. 1: standard form, 2: flux-average form")
+SET_PROPERTY(CACHE FLUXO_DISCTYPE  PROPERTY STRINGS "1" "2")
 ADD_DEFINITIONS(-DPP_DiscType=${FLUXO_DISCTYPE})
 
 SET(FLUXO_CARTESIANFLUX  OFF  CACHE BOOL "switch on only if cartesian meshes are used.")

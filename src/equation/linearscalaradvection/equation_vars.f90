@@ -36,11 +36,11 @@ INTEGER,ALLOCATABLE  :: BCSideID(:,:)           !< SideIDs for BC types
 CHARACTER(LEN=255),PARAMETER :: StrVarNames(1)=(/'Solution'/) !< Variable names for output
 
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
-!procedure pointers
-#if (PP_DiscType==3)
+#if (PP_DiscType==2)
+!procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
 PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
-#endif /*PP_DiscType==3*/
+#endif /*PP_DiscType==2*/
 
 !===================================================================================================================================
 END MODULE MOD_Equation_Vars
