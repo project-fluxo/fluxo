@@ -137,7 +137,6 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_TimeDisc_Vars       ,ONLY: TEnd,t,dt,tAnalyze,ViscousTimeStep,maxIter,Timestep,nRKStages,nCalcTimeStepMax
 USE MOD_Analyze_Vars        ,ONLY: Analyze_dt,WriteData_dt,tWriteData,nWriteData
-USE MOD_AnalyzeEquation_Vars,ONLY: doCalcTimeAverage
 USE MOD_Analyze             ,ONLY: Analyze
 USE MOD_TestCase            ,ONLY: AnalyzeTestCase,CalcForcing
 USE MOD_TestCase_Vars       ,ONLY: nAnalyzeTestCase,doTCSource
@@ -304,9 +303,7 @@ DO
       ! Write state to file
       CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
                             FutureTime=tWriteData,isErrorFile=.FALSE.)
-      IF(doCalcTimeAverage) CALL CalcTimeAverage(.TRUE.,dt,t)
       IF(RP_onProc)         CALL WriteRP(t,.TRUE.)
-      IF(CalcPruettDamping) CALL WriteBaseflow(TRIM(MeshFile),t)
       writeCounter=0
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
     END IF
