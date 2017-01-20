@@ -329,6 +329,9 @@ CALL StartSendMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),Send
 #endif /* MPI*/
 
 ! 8.3)
+! fill physical BC
+CALL GetBoundaryFlux(t,Flux)
+! fill inner sides
 CALL FillFlux(Flux,doMPISides=.FALSE.)
 ! 8.4)
 CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
