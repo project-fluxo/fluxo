@@ -161,8 +161,7 @@ REAL,DIMENSION(0:N_in,0:N_in)              :: M,Minv
 REAL,DIMENSION(0:N_in)                     :: L_Minus,L_Plus
 INTEGER                                    :: iMass         
 !===================================================================================================================================
-ALLOCATE(D_Hat(0:N_in,0:N_in), L_HatMinus(0:N_in), L_HatPlus(0:N_in))
-ALLOCATE(D(0:N_in,0:N_in))
+ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
