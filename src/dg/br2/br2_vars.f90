@@ -27,9 +27,9 @@ SAVE
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! interior face gradients for all elements
-REAL,ALLOCATABLE                      :: gradUx_Plus(:,:,:,:),gradUx_Minus(:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUy_Plus(:,:,:,:),gradUy_Minus(:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUz_Plus(:,:,:,:),gradUz_Minus(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradUx_Slave(:,:,:,:),gradUx_Master(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradUy_Slave(:,:,:,:),gradUy_Master(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradUz_Slave(:,:,:,:),gradUz_Master(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxX(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxY(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxZ(:,:,:,:)
