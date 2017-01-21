@@ -79,6 +79,9 @@ DO iElem=1,nElems
     END DO; END DO; END DO ! i,j,k
   END DO ! l
 END DO ! iElem
+!PRINT*,'inside volint: ftilde', ftilde
+!PRINT*,'inside volint: gtilde', gtilde
+!PRINT*,'inside volint: htilde', htilde
 END SUBROUTINE VolInt_weakForm
 #endif /*PP_DISCTYPE==1*/
 
