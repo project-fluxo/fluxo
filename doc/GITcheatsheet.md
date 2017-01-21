@@ -1,15 +1,37 @@
 #GIT cheatsheet
-to clone the code, just type
+##GIT clone and push
+To copy the code to your local machine, so-called `clone`, just type
 ```
  git clone https://github.com/project-fluxo/fluxo.git fluxo
 ```
-this will copy the repository to the directory fluxo. Then doing a 
+this will copy the full git repository to the directory fluxo. Change to the fluxo directory.
+
+Doing a 
 ```
  git status
 ```
 should tell you something like
+```
 On branch master
 Your branch is up-to-date with 'origin/master'.
+```
+
+If you want to work on an existing branch instead of the master, just type
+```
+ git checkout branchname
+ git status
+```
+
+The list of all local and remote branches is displayed with
+```
+ git branch -rvv
+```
+
+If you want to create a new branch (only locally, must be pushed to add it to the remote)
+```
+ git checkout -b new-branchname
+```
+this will copy all files of the branch you were before into the new branch.
 
 ##How to commit local changes:
 First check if you are up-to-date with the repository
@@ -42,11 +64,19 @@ where the branchname should the one you are currently working on, use `git statu
 
 
 
+##Situations: "I want to update my local repo with the github remote..."
 
-
-##Situations:
+###A) ... and I have no local changes...
+Check if you really have to changes
+```
+ git status 
+```
+and update with 
+```
+ git pull origin currentbranchname
+```
  
-###A) I want to do a git pull but I already modified locally without adding or committing anything...
+###B) ... but I already modified locally without adding or committing anything?!?
 
 You can do a 
 ```
@@ -57,10 +87,10 @@ this will save the local modifications, then pull and then add the modifications
  git stash apply
 ```
 
-###B) I want to do a git pull but I already added files locally...
-You should commit your changes and then continue with **C)** 
+###C) ... but I already added files locally?!?
+You should commit your changes and then continue with **D)** 
 
-###C) I want to do a git pull but I already committed files locally...
+###D) ... but I already committed files locally?!?
 Then, first you do a 
 ```
  git fetch 
@@ -81,16 +111,17 @@ If a conflict arises ('both modified'), look into the file and resolve it (marke
  git rebase --continue
 ```
 and then you should be ready to push.
- git pull --rebase
+```
+ git push origin branchname
 ```
 
-
 ##GIT supporting plugins for the command line
-One addition to your bashrc is the command completion (if needed), found for example [here:git-completion.bash](https://github.com/git/git/blob/master/contrib/completion/git-completion.bash)
-and you copy this to your home folder and add your `.bashrc` the line
+One addition to your bashrc is the git command completion (if needed), found for example here [git-completion.bash](https://github.com/git/git/blob/master/contrib/completion/git-completion.bash)
+Just copy the file to your home folder and add your `.bashrc` the line
 ```
 source git-completion.bash
 ```
+
 A more sophisticated tool is the [bash-git-prompt](https://github.com/magicmonty/bash-git-prompt), it helps to keep the overview.
 Just copy the directory to your home folder and add to your `.bashrc`
 ```
