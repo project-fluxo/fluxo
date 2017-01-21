@@ -243,9 +243,9 @@ USE MOD_Testcase_Vars       ,ONLY: doTCSource
 USE MOD_Testcase_Source     ,ONLY: TestcaseSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
 USE MOD_Equation            ,ONLY: CalcSource
-!TODO #if PARABOLIC
-!TODO USE MOD_Lifting             ,ONLY: Lifting
-!TODO #endif /*PARABOLIC*/
+#if PARABOLIC
+USE MOD_Lifting             ,ONLY: Lifting
+#endif /*PARABOLIC*/
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
@@ -289,12 +289,12 @@ CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
 #endif
 
-!TODO #if PARABOLIC
-!TODO ! Lifting 
-!TODO ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
-!TODO ! The communication of the gradients is started within the lifting routines
-!TODO CALL Lifting(U,U_master,U_slave,t)
-!TODO #endif /*PARABOLIC*/
+#if PARABOLIC
+! Lifting 
+! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
+! The communication of the gradients is started within the lifting routines
+CALL Lifting(t)
+#endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
 CALL VolInt(Ut)

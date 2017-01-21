@@ -13,7 +13,7 @@
 !
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
-#ifdef PARABOLIC
+#if PARABOLIC
 !===================================================================================================================================
 !>Contains global variables used by the DG modules.
 !===================================================================================================================================
@@ -37,7 +37,7 @@ REAL,ALLOCATABLE                      :: FluxZ(:,:,:,:)
 REAL,ALLOCATABLE                      :: gradUx(:,:,:,:,:)
 REAL,ALLOCATABLE                      :: gradUy(:,:,:,:,:)
 REAL,ALLOCATABLE                      :: gradUz(:,:,:,:,:)
-REAL                                  :: etaBR2
+REAL                                  :: etaBR2              !<stabilization constant, the higher the stiffer (timestep!)
 LOGICAL                               :: LiftingInitIsDone=.FALSE.
 !===================================================================================================================================
 END MODULE MOD_Lifting_Vars
