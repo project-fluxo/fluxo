@@ -28,14 +28,36 @@ INTERFACE InitTestcase
   MODULE PROCEDURE InitTestcase
 END INTERFACE
 
+INTERFACE DefineParametersTestcase
+  MODULE PROCEDURE DefineParametersTestcase
+END INTERFACE
+
 INTERFACE FinalizeTestcase
   MODULE PROCEDURE FinalizeTestcase
 END INTERFACE
 
 PUBLIC:: InitTestcase
+PUBLIC:: DefineParametersTestcase
 PUBLIC:: FinalizeTestcase
 
 CONTAINS
+
+!==================================================================================================================================
+!> Define parameters 
+!==================================================================================================================================
+SUBROUTINE DefineParametersLifting()
+! MODULES
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+!==================================================================================================================================
+CALL prms%SetSection("Testcase")
+
+END SUBROUTINE DefineParametersLifting
+
 
 !==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
