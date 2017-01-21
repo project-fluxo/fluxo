@@ -234,7 +234,7 @@ CASE(106) !sinus steadystate in xy
 
 
 CASE(2) !sinus
-  Frequency=0.5
+  Frequency=1.0
   Amplitude=1.
   Omega=2.*PP_Pi*Frequency
   Resu=Amplitude*SIN(Omega*SUM(Cent))

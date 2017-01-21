@@ -286,7 +286,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         Flux(:,p,q,MortarSideID)=    M1(0,q)*Flux_tmp(:,p,0,1)+M2(0,q)*Flux_tmp(:,p,0,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
+          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID) &
                                    + M1(l,q)*Flux_tmp(:,p,l,1)+M2(l,q)*Flux_tmp(:,p,l,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
@@ -299,7 +299,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         Flux(:,p,q,MortarSideID)=    M1(0,q)*Flux_master(:,p,0,1)+M2(0,q)*Flux_master(:,p,0,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
+          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID) &
                                    + M1(l,q)*Flux_master(:,p,l,1)+M2(l,q)*Flux_master(:,p,l,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
@@ -312,7 +312,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       DO p=0,PP_N
         Flux(:,p,q,MortarSideID)=    M1(0,p)*Flux_master(:,0,q,1)+M2(0,p)*Flux_master(:,0,q,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)  &
+          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID)  &
                                    + M1(l,p)*Flux_master(:,l,q,1)+M2(l,p)*Flux_master(:,l,q,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
