@@ -202,7 +202,7 @@ CASE(21) !linear
     Resu_t=-SUM(Advvel)
     Resu_tt=0.
 CASE(101) !constant
-    Resu=1.
+    Resu=3.5
     Resu_t=0.
     Resu_tt=0.
 CASE(102) !linear steadystate in xy

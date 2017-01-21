@@ -66,9 +66,9 @@ USE MOD_DG_Vars
 USE MOD_Restart_Vars,       ONLY: DoRestart,RestartInitIsDone
 USE MOD_Interpolation_Vars, ONLY: xGP,wGP,wBary,InterpolationInitIsDone
 USE MOD_Mesh_Vars,          ONLY: nElems,nSides,MeshInitIsDone
-USE MOD_Equation_Vars,      ONLY:IniExactFunc
-USE MOD_Equation_Vars,      ONLY:EquationInitIsDone
-USE MOD_Equation,           ONLY:FillIni
+USE MOD_Equation_Vars,      ONLY: IniExactFunc
+USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
+USE MOD_Equation,           ONLY: FillIni
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -144,7 +144,9 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 USE MOD_Basis,ONLY:LegendreGaussNodesAndWeights,LegGaussLobNodesAndWeights,BarycentricWeights
 USE MOD_Basis,ONLY:PolynomialDerivativeMatrix,LagrangeInterpolationPolys
 USE MOD_DG_Vars,ONLY:D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+#if DISCTYPE==2
 USE MOD_DG_Vars,ONLY:DvolSurf
+#endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -162,7 +164,9 @@ REAL,DIMENSION(0:N_in)                     :: L_Minus,L_Plus
 INTEGER                                    :: iMass         
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
+#if DISCTYPE==2
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
+#endif
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
 ! Compute Differentiation matrix D for given Gausspoints
@@ -179,10 +183,12 @@ END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
+#if DISCTYPE==2
 !modified D matrix for fluxdifference volint
 Dvolsurf=2.*D
 Dvolsurf(0,0)=2*D(0,0)+1./wGP(0)
 Dvolsurf(N_in,N_in)=2*D(N_in,N_in)-1./wGP(N_in)
+#endif
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
 CALL LagrangeInterpolationPolys(1.,N_in,xGP,wBary,L_Plus)
@@ -272,6 +278,10 @@ CALL StartSendMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,RECV),SendID=
 #endif /* MPI */
 
 ! for all remaining sides (buffer routine for latency hiding!)
+!!write(*,*)'u in dgtimederivative', U
+!!write(*,*)'u_slave before prolong', u_slave
+!!write(*,*)'u_master before prolong', u_master
+
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 
@@ -314,6 +324,7 @@ CALL FillFlux(Flux,doMPISides=.FALSE.)
 CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
 ! add inner and BC side surface contibutions to time derivative 
 CALL SurfInt(Flux,Ut,doMPISides=.FALSE.)
+write(*,*)'ut after surfint 1', Ut
 
 #if MPI
 ! Complete send / receive for  Flux array
@@ -323,6 +334,7 @@ CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux,Ut,.TRUE.)
 #endif /*MPI*/
+write(*,*)'ut after surfint 2', Ut
 
 
 ! We have to take the inverse of the Jacobians into account and directly swap the sign
@@ -332,6 +344,7 @@ CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)
 IF(doCalcSource) CALL CalcSource(Ut,t)
 IF(doTCSource)   CALL TestcaseSource(Ut,t)
 
+write(*,*)'ut after sources', Ut
 END SUBROUTINE DGTimeDerivative_weakForm
 
 

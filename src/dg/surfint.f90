@@ -69,7 +69,7 @@ INTEGER                         :: l
 #endif /*PP_NodeType*/ 
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
-INTEGER                         :: nbElemID,nblocSide
+INTEGER                         :: nbElemID,nblocSide,nbflip
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstSideID = firstMPISide_YOUR
@@ -81,7 +81,6 @@ END IF
 
 DO SideID=firstSideID,lastSideID
   ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
 
   !master sides(ElemID,locSide and flip =-1 if not existing)
   IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
@@ -107,23 +106,24 @@ DO SideID=firstSideID,lastSideID
   END IF !master ElemID > 0
 
   !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
   IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
     nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
-    flip      = SideToElem(S2E_FLIP,SideID)
+    nbflip      = SideToElem(S2E_FLIP,SideID)
 #if (PP_NodeType==1)
     !gauss nodes
     DO q=0,PP_N; DO p=0,PP_N
       DO l=0,PP_N
-        ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
-        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
+        ijk(:)=S2V(:,l,p,q,nbflip,nblocSide) !0: flip=0
+        Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) &
                                           - Flux(:,p,q,SideID)*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
-      ijk(:)=S2V(:,0,p,q,flip,locSide)
-      Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID)  &
+      ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
+      Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
                                         - Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO !p,q=0,PP_N
 #endif /*PP_NodeType*/
