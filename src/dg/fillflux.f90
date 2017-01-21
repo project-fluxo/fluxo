@@ -36,7 +36,7 @@ CONTAINS
 
 
 !===================================================================================================================================
-!>Fills the inner, periodic fluxes
+!>Fills the inner and the mpi sides fluxes, BC fluxes are separately called in dg
 !===================================================================================================================================
 SUBROUTINE FillFlux(Flux,doMPISides)
 ! MODULES

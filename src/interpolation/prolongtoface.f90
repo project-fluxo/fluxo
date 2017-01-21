@@ -64,7 +64,7 @@ INTEGER                         :: l
 #endif /*PP_NodeType*/ 
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
-INTEGER                         :: nbElemID,nblocSide
+INTEGER                         :: nbElemID,nblocSide,nbFlip
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstSideID = firstMPISide_YOUR
@@ -76,7 +76,6 @@ END IF
 
 DO SideID=firstSideID,lastSideID
   ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
 
   !master sides(ElemID,locSide and flip =-1 if not existing)
   IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
@@ -102,17 +101,18 @@ DO SideID=firstSideID,lastSideID
 #endif /*PP_NodeType*/
   END IF !master ElemID > 0
 
+  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
   !slave side (nbElemID,nblocSide and flip =-1 if not existing)
   IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
     nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
-    flip      = SideToElem(S2E_FLIP,SideID)
+    nbFlip      = SideToElem(S2E_FLIP,SideID)
 #if (PP_NodeType==1)
     !gauss nodes
     DO q=0,PP_N; DO p=0,PP_N
-      ijk(:)=S2V(:,0,p,q,flip,nblocSide)
+      ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
       Uface_slave(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),nbElemID)*L_Minus(0)
       DO l=1,PP_N
-        ijk(:)=S2V(:,l,p,q,flip,nblocSide)
+        ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
         Uface_slave(:,p,q,SideID)=Uface_slave(:,p,q,SideID) + &
                                    Uvol(:,ijk(1),ijk(2),ijk(3),nbElemID)*L_Minus(l)
       END DO !l=1,PP_N
@@ -120,7 +120,7 @@ DO SideID=firstSideID,lastSideID
 #elif (PP_NodeType==2)
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
-      ijk(:)=S2V(:,0,p,q,flip,nblocSide)
+      ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
       Uface_slave(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),nbElemID)
     END DO; END DO !p,q=0,PP_N
 #endif /*PP_NodeType*/
