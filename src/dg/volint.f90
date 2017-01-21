@@ -83,7 +83,7 @@ END DO ! iElem
 !PRINT*,'inside volint: gtilde', gtilde
 !PRINT*,'inside volint: htilde', htilde
 END SUBROUTINE VolInt_weakForm
-#endif /*PP_DISCTYPE==1*/
+#endif /*PP_DiscType==1*/
 
 
 
@@ -477,6 +477,6 @@ Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
 END DO ! iElem
 END SUBROUTINE VolInt_SplitForm3
 
-#endif /*PP_DISCTYPE==2*/
+#endif /*PP_DiscType==2*/
 
 END MODULE MOD_VolInt

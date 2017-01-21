@@ -144,7 +144,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 USE MOD_Basis,ONLY:LegendreGaussNodesAndWeights,LegGaussLobNodesAndWeights,BarycentricWeights
 USE MOD_Basis,ONLY:PolynomialDerivativeMatrix,LagrangeInterpolationPolys
 USE MOD_DG_Vars,ONLY:D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
-#if DISCTYPE==2
+#if PP_DiscType==2
 USE MOD_DG_Vars,ONLY:DvolSurf
 #endif
 ! IMPLICIT VARIABLE HANDLING
@@ -164,9 +164,6 @@ REAL,DIMENSION(0:N_in)                     :: L_Minus,L_Plus
 INTEGER                                    :: iMass         
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
-#if DISCTYPE==2
-ALLOCATE(Dvolsurf(0:N_in,0:N_in))
-#endif
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
 ! Compute Differentiation matrix D for given Gausspoints
@@ -183,12 +180,13 @@ END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
-#if DISCTYPE==2
+#if PP_DiscType==2
+ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
 Dvolsurf=2.*D
 Dvolsurf(0,0)=2*D(0,0)+1./wGP(0)
 Dvolsurf(N_in,N_in)=2*D(N_in,N_in)-1./wGP(N_in)
-#endif
+#endif /*PP_DiscType==2*/
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
 CALL LagrangeInterpolationPolys(1.,N_in,xGP,wBary,L_Plus)
