@@ -322,7 +322,6 @@ CALL FillFlux(Flux,doMPISides=.FALSE.)
 CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
 ! add inner and BC side surface contibutions to time derivative 
 CALL SurfInt(Flux,Ut,doMPISides=.FALSE.)
-write(*,*)'ut after surfint 1', Ut
 
 #if MPI
 ! Complete send / receive for  Flux array
@@ -332,7 +331,6 @@ CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux,Ut,.TRUE.)
 #endif /*MPI*/
-write(*,*)'ut after surfint 2', Ut
 
 
 ! We have to take the inverse of the Jacobians into account and directly swap the sign
@@ -342,7 +340,6 @@ CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)
 IF(doCalcSource) CALL CalcSource(Ut,t)
 IF(doTCSource)   CALL TestcaseSource(Ut,t)
 
-write(*,*)'ut after sources', Ut
 END SUBROUTINE DGTimeDerivative_weakForm
 
 

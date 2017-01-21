@@ -34,3 +34,6 @@ share
 doc/ford/out
 .DS_*
 *~
+*State*
+*vtu
+*.dat

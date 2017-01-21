@@ -114,7 +114,7 @@ CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         nVal=      (/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/),&
                         offset=    (/0,      0,     0,     0,     offsetElem/),&
                         collective=.TRUE.,RealArray=UOut)
-DEALLOCATE(UOut)
+NULLIFY(Uout)
 
 CALL WriteAdditionalElemData(FileName,ElementOut)
 CALL WriteAdditionalFieldData(FileName,FieldOut)
