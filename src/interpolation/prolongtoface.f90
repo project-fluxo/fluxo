@@ -46,6 +46,7 @@ USE MOD_Preproc
 USE MOD_Mesh_Vars,          ONLY: nElems
 USE MOD_Mesh_Vars,          ONLY: SideToElem
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR, lastMPISide_MINE, nSides
+USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Mesh_Vars,          ONLY: S2V  !magic mapping of side to volume
 #if (PP_NodeType==1)
 USE MOD_Interpolation_Vars, ONLY: L_Minus
@@ -53,18 +54,18 @@ USE MOD_Interpolation_Vars, ONLY: L_Minus
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-LOGICAL,INTENT(IN)              :: doMPISides  !< either fill MPI sides (=.true.) or local sides (=.false.)
-REAL,INTENT(IN)                 :: Uvol(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< input volume data
-REAL,INTENT(INOUT)              :: Uface_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)!< output master side data
-REAL,INTENT(INOUT)              :: Uface_slave( PP_nVar,0:PP_N,0:PP_N,1:nSides)!< output slave side data
+LOGICAL,INTENT(IN)    :: doMPISides  !< either fill MPI sides (=.true.) or local sides (=.false.)
+REAL,INTENT(IN)       :: Uvol(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< input volume data
+REAL,INTENT(INOUT)    :: Uface_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)!< output master side data
+REAL,INTENT(INOUT)    :: Uface_slave( PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)!< output slave side data
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)
-INTEGER                         :: l
-#endif /*PP_NodeType*/ 
-INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
-INTEGER                         :: ElemID,locSide,SideID,flip
-INTEGER                         :: nbElemID,nblocSide,nbFlip
+INTEGER               :: l
+#endif /*PP_NodeType*/
+INTEGER               :: ijk(3),p,q,firstSideID,lastSideID
+INTEGER               :: ElemID,locSide,SideID,flip
+INTEGER               :: nbElemID,nblocSide,nbFlip
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstSideID = firstMPISide_YOUR

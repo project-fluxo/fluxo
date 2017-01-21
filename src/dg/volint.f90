@@ -162,7 +162,6 @@ SUBROUTINE EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars        ,ONLY:U
-USE MOD_Mesh_Vars      ,ONLY:nElems
 USE MOD_Mesh_Vars      ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 USE MOD_Equation_Vars  ,ONLY:nAuxVar

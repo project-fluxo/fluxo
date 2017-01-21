@@ -41,7 +41,8 @@ PUBLIC::Lifting_FillFlux_BC
 CONTAINS
 
 !===================================================================================================================================
-!> Computes the BR2 Surface Fluxes at inner faces for all x,y,z directions, since the flux is in strong form, 
+!> Computes the BR1 Surface Fluxes at inner faces for all x,y,z directions, since the flux is in strong form, 
+!> because of a more efficient volume integral.
 !>  ( 1/2(U_outer+U_inner) - U_inner) *sHat * nvec_x/y/z .
 !> Note that for both slave and master updates, the sign of this flux does not change!
 !===================================================================================================================================
@@ -82,7 +83,7 @@ DO SideID = firstSideID,lastSideID
   ! BR1/BR2 uses arithmetic mean value of states for the Riemann flux
   DO q=0,PP_N; DO p=0,PP_N
     !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_slave( :,p,q,SideID))*NormVec(dir,p,q,SideID)*SurfElem(p,q,SideID)
-    !BR2, 1/2(UR+UL)-UL=1/2(UR-UL)
+    ! 1/2(UR+UL)-UL=1/2(UR-UL)
     F_loc(:)=0.5*(U_slave(:,p,q,SideID)-U_master( :,p,q,SideID))*SurfElem(p,q,SideID)
     FluxX(:,p,q,SideID)=F_loc(:)*NormVec(1,p,q,SideID)
     FluxY(:,p,q,SideID)=F_loc(:)*NormVec(2,p,q,SideID)
@@ -95,8 +96,8 @@ END SUBROUTINE Lifting_FillFlux
 
 
 !===================================================================================================================================
-!> Computes the BR2 Surface Fluxes at boundary faces for all x,y,z directions
-!> boundary flux must always be computed in strong form
+!> Computes the BR1 Surface Fluxes at boundary faces for all x,y,z directions
+!> boundary flux are also computed in strong form 
 !> surfelem contribution is considered as well
 !===================================================================================================================================
 SUBROUTINE Lifting_FillFlux_BC(t,FluxX,FluxY,FluxZ)

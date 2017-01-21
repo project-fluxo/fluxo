@@ -36,6 +36,9 @@ REAL,ALLOCATABLE :: gradUz_master(:,:,:,:)        !< master side gradients in x-
 REAL,ALLOCATABLE :: gradUx(:,:,:,:,:)             !< gradients in x-dir at degree N
 REAL,ALLOCATABLE :: gradUy(:,:,:,:,:)             !< gradients in y-dir at degree N
 REAL,ALLOCATABLE :: gradUz(:,:,:,:,:)             !< gradients in z-dir at degree N
+REAL,ALLOCATABLE :: FluxX(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_x
+REAL,ALLOCATABLE :: FluxY(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_y
+REAL,ALLOCATABLE :: FluxZ(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_z
 LOGICAL          :: LiftingInitIsDone=.FALSE.     !< marks whether the lifting init routines are complete
 !==================================================================================================================================
 END MODULE MOD_Lifting_Vars

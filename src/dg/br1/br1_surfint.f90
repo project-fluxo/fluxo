@@ -17,7 +17,7 @@
 #include "defines.h"
 
 !===================================================================================================================================
-!> Contains the Surface integral for the BR2 lifting scheme
+!> Contains the Surface integral for the BR1 lifting scheme
 !===================================================================================================================================
 MODULE MOD_Lifting_SurfInt
 ! MODULES
@@ -28,7 +28,7 @@ PRIVATE
 ! GLOBAL VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 INTERFACE Lifting_SurfInt
-  MODULE PROCEDURE BR2_SurfInt
+  MODULE PROCEDURE BR1_SurfInt
 END INTERFACE
 
 PUBLIC::Lifting_SurfInt
@@ -36,11 +36,10 @@ PUBLIC::Lifting_SurfInt
 CONTAINS
 
 !===================================================================================================================================
-!> specific implementation of the BR2 Lifting: 
+!> specific implementation of the BR1 Lifting: 
 !> input volume and surface gradients are only the local gradients, but already transformed to x,y,z gradients, 
-!> including the Jacobian, see volint!
-!> Both the volume and the surface gradient must be updated with the surface flux (1/2(U_outer-U_inner)*nvec_x/y/z) 
-!> but only the surface gradient get the penalization with etaBR2 stability constant (etaBR2 is an input parameter!
+!> without the Jacobian and updates only the volume gradient. Note that because of the strong volume integral, slave and master
+!> updates have both a positive sign.
 !>
 !> It uses a specific side to volume mapping (S2V) built in mesh/mappings.f90
 !> where the side index (p,q) is mapped to the 1D line (i,j,k) in the volume with an additional index l. for l=0, its the point 
@@ -50,7 +49,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !===================================================================================================================================
-SUBROUTINE BR2_SurfInt(Flux,gradU,gradU_master,gradU_slave,doMPISides)
+SUBROUTINE BR1_SurfInt(Flux,gradU,doMPISides)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -60,14 +59,9 @@ USE MOD_DG_Vars,            ONLY: L_HatMinus
 USE MOD_DG_Vars,            ONLY: L_HatMinus0 
 #endif /*PP_NodeType*/
 USE MOD_Mesh_Vars,          ONLY: SideToElem
-USE MOD_Mesh_Vars,          ONLY: nElems,nSides,sJ
+USE MOD_Mesh_Vars,          ONLY: nElems,nSides
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,lastMPISide_MINE 
-USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Mesh_Vars,          ONLY: S2V !Side To volume
-USE MOD_Lifting_Vars,       ONLY: etaBR2
-#if (PP_NodeType==1)
-USE MOD_Interpolation_Vars, ONLY: L_Minus
-#endif  
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -77,11 +71,8 @@ REAL,INTENT(IN)    :: Flux(1:PP_nVar,0:PP_N,0:PP_N,nSides)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(INOUT)   :: gradU(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
-REAL,INTENT(INOUT)   :: gradU_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)
-REAL,INTENT(INOUT)   :: gradU_slave( PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                   :: F_loc(PP_nVar)
 #if (PP_NodeType==1)
 INTEGER                :: l
 #endif /*PP_NodeType*/ 
@@ -109,16 +100,12 @@ DO SideID=firstSideID,lastSideID
 #if (PP_NodeType==1)
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,flip,locSide) !flip=0
-      F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),ElemID)*L_hatMinus(l)*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
-      gradU_master(:,p,q,SideID)           = gradU_master(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
+      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide) !flip=0, l=0
-      F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),ElemID)*L_hatMinus0*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
-      gradU_master(:,p,q,SideID)           = gradU_master(:,p,q,SideID) + etaBR2*F_loc(:)
+      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !master ElemID .NE. 1
@@ -131,21 +118,17 @@ DO SideID=firstSideID,lastSideID
 #if (PP_NodeType==1)
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
-      F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),nbElemID)*L_hatMinus(l)*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
-      gradU_slave(:,p,q,SideID)              = gradU_slave(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
+      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide) !l=0 
-      F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),nbElemID)*L_hatMinus0*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
-      gradU_slave(:,p,q,SideID)              = gradU_slave(:,p,q,SideID) + etaBR2*F_loc(:)
+      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !nbElemID.NE.-1
 END DO ! SideID=1,nSides
-END SUBROUTINE BR2_SurfInt
+END SUBROUTINE BR1_SurfInt
 
 END MODULE MOD_Lifting_SurfInt
 #endif /*PARABOLIC*/

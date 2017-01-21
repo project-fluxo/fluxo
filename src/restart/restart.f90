@@ -149,14 +149,14 @@ SUBROUTINE Restart()
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Restart_Vars
-USE MOD_DG_Vars,            ONLY: U
+USE MOD_Vector,             ONLY: V2D_M_V1D
+USE MOD_DG_Vars,            ONLY: U,nTotal_IP
 USE MOD_Mesh_Vars,          ONLY: offsetElem,detJac_Ref,Ngeo
-USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_Mesh_Vars,          ONLY: nElems,sJ
 USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
 USE MOD_HDF5_input,         ONLY: OpenDataFile,CloseDataFile,ReadArray
 USE MOD_HDF5_Output,        ONLY: FlushFiles
 USE MOD_Interpolation,      ONLY: GetVandermonde
-USE MOD_ApplyJacobianCons,  ONLY: ApplyJacobianCons
 USE MOD_Interpolation_Vars, ONLY: NodeType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -201,8 +201,8 @@ IF(DoRestart)THEN
         END DO; END DO; END DO
         CALL ChangeBasis3D(PP_nVar,N_Restart,PP_N,Vdm_NRestart_N,U_local(:,:,:,:,iElem),U(:,:,:,:,iElem))
       END DO
-      ! Transform back
-      CALL ApplyJacobianCons(U,toPhysical=.TRUE.)
+      ! Transform back Jacobian
+      CALL V2D_M_V1D(PP_nVar,nTotal_IP,U,sJ) !U(:,i)=U(:,i)*sJ(i)
     ELSE
       DO iElem=1,nElems
         CALL ChangeBasis3D(PP_nVar,N_Restart,PP_N,Vdm_NRestart_N,U_local(:,:,:,:,iElem),U(:,:,:,:,iElem))

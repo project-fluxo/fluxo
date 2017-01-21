@@ -65,12 +65,13 @@ USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
+USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
 USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Uface_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
-REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
+REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide) !< (INOUT) can be U or Grad_Ux/y/z_master
 LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES

@@ -29,7 +29,7 @@ SAVE
 INTEGER,ALLOCATABLE :: MPIRequest_U(:,:)        !< communication handle for the surface solution
 INTEGER,ALLOCATABLE :: MPIRequest_Flux(:,:)     !< communication handle for the surface flux
 #if PARABOLIC
-INTEGER,ALLOCATABLE :: MPIRequest_gradU(:,:,:)  !< communication handle for the surface gradients
+INTEGER,ALLOCATABLE :: MPIRequest_Lifting(:,:,:)!< communication handle for the lifting flux and the lifting surface gradients
 #endif /*PARABOLIC*/
 INTEGER             :: nSendVal                
 INTEGER             :: nRecVal

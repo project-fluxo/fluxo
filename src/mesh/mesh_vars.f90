@@ -111,6 +111,7 @@ INTEGER             :: nUserBCs=0              !< number of BC in inifile
 INTEGER             :: firstBCSide             !< First SideID of BCs (in general 1)
 INTEGER             :: firstMortarInnerSide    !< First SideID of Mortars (in general nBCs+1)
 INTEGER             :: firstInnerSide          !< First SideID of inner sides
+INTEGER             :: firstSlaveSide           !< First SideID of slave array
 INTEGER             :: firstMPISide_MINE       !< First SideID of MINE MPI sides (on local processor)
 INTEGER             :: firstMPISide_YOUR       !< First SideID of YOUR MPI sides (on neighbour processor)
 INTEGER             :: firstMortarMPISide      !< First SideID of Mortar MPI sides
@@ -119,6 +120,7 @@ INTEGER             :: lastMortarInnerSide     !< Last  SideID of Mortars (in ge
 INTEGER             :: lastInnerSide           !< Last  SideID of inner sides
 INTEGER             :: lastMPISide_MINE        !< Last  SideID of MINE MPI sides (on local processor)
 INTEGER             :: lastMPISide_YOUR        !< Last  SideID of YOUR MPI sides (on neighbour processor)
+INTEGER             :: LastSlaveSide           !< Last SideID of slave array
 INTEGER             :: lastMortarMPISide       !< Last  SideID of Mortar MPI sides (in general nSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 INTEGER             :: nMortarSides=0          !< total number of mortar sides

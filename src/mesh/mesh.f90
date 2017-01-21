@@ -113,8 +113,6 @@ INTEGER           :: iElem,i,j,k
 LOGICAL           :: validMesh
 INTEGER           :: firstMasterSide     !< lower side ID of array U_master/gradUx_master...
 INTEGER           :: lastMasterSide      !< upper side ID of array U_master/gradUx_master...
-INTEGER           :: firstSlaveSide      !< lower side ID of array U_slave/gradUx_slave...
-INTEGER           :: lastSlaveSide       !< upper side ID of array U_slave/gradUx_slave...
 !==================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.MeshInitIsDone) THEN
   CALL CollectiveStop(__STAMP__,&
@@ -151,17 +149,18 @@ SWRITE(UNIT_stdOut,'(A)') "NOW CALLING exchangeFlip..."
 CALL exchangeFlip()
 #endif
 
-!RANGES
+! Side Datastructure: RANGES
 !-----------------|-----------------|-------------------|
-!    U_master     | U_slave         |    FLUX           |
+!    U_master     | U_slave         |    Flux           |
 !-----------------|-----------------|-------------------|
 !  BCsides        |                 |    BCSides        |
-!  InnerMortars   |                 |    InnerMortars   |
+!  InnerMortars   |                 |    InnerMortars   | < only the big mortar sides
 !  InnerSides     | InnerSides      |    InnerSides     |
 !  MPI_MINE sides | MPI_MINE sides  |    MPI_MINE sides |
 !                 | MPI_YOUR sides  |    MPI_YOUR sides |
-!  MPIMortars     |                 |    MPIMortars     |
+!  MPIMortars     |                 |    MPIMortars     | < only the big mortar sides 
 !-----------------|-----------------|-------------------|
+!   ...small mortar sides are treated like normal inner or MPI sides
 
 firstBCSide          = 1
 firstMortarInnerSide = firstBCSide         +nBCSides

@@ -66,6 +66,7 @@ USE MOD_DG_Vars
 USE MOD_Restart_Vars,       ONLY: DoRestart,RestartInitIsDone
 USE MOD_Interpolation_Vars, ONLY: xGP,wGP,wBary,InterpolationInitIsDone
 USE MOD_Mesh_Vars,          ONLY: nElems,nSides,MeshInitIsDone
+USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide 
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
@@ -107,7 +108,7 @@ nTotalU=PP_nVar*nTotal_vol*nElems
 ! Allocate the 2D solution vectors on the sides, one array for the data belonging to the proc (the master) 
 ! and one for the sides which belong to another proc (slaves): side-based
 ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,1:nSides))
+ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 U_master=0.
 U_slave=0.
 
@@ -249,7 +250,8 @@ USE MOD_Lifting             ,ONLY: Lifting
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
-USE MOD_Mesh_Vars,           ONLY: nSides
+USE MOD_Mesh_Vars           ,ONLY: nSides
+USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide 
 #endif /*MPI*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -267,12 +269,14 @@ CALL VNullify(nTotalU,Ut)
 #if MPI
 ! Solution is always communicated on the U_Slave array
 ! start off with the receive command
-CALL StartReceiveMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
+CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                         MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
-CALL StartSendMPIData(U_slave,DataSizeSide,1,nSides,MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
+CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                      MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
 ! for all remaining sides (buffer routine for latency hiding!)
@@ -302,7 +306,7 @@ CALL VolInt(Ut)
 
 #if PARABOLIC && MPI
 ! Complete send / receive for gradUx, gradUy, gradUz, started in the lifting routines
-CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_gradU) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
+CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
 #endif /*PARABOLIC && MPI*/
 
 
@@ -329,7 +333,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
 CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
 ! update time derivative with contribution of MPI sides 
-CALL SurfInt(Flux,Ut,.TRUE.)
+CALL SurfInt(Flux,Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
 
 

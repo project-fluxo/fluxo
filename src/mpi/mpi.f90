@@ -145,8 +145,8 @@ MPIRequest_U      = MPI_REQUEST_NULL
 MPIRequest_Flux   = MPI_REQUEST_NULL
 
 #if PARABOLIC
-ALLOCATE(MPIRequest_gradU(nNbProcs,3,2))
-MPIRequest_gradU = MPI_REQUEST_NULL
+ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
+MPIRequest_Lifting = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
 
 DataSizeSide      =PP_nVar*(PP_N+1)**2
@@ -291,7 +291,7 @@ SDEALLOCATE(OffsetMPISides_send)
 SDEALLOCATE(nMPISides_rec)
 SDEALLOCATE(OffsetMPISides_rec)
 #if PARABOLIC
-SDEALLOCATE(MPIRequest_gradU)
+SDEALLOCATE(MPIRequest_Lifting)
 #endif
 END SUBROUTINE FinalizeMPI
 
