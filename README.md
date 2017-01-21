@@ -39,3 +39,6 @@ FLUXO uses several external libraries as well as auxilliary functions from open 
 Numerous people have worked and are working on the code and here is the full list of contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
 We would like to thank all for their effort.
+
+## GIT cheatsheet
+You find some help with git in [doc/GITcheatsheet.md](doc/GITcheatsheet.md)
