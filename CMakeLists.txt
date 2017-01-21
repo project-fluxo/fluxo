@@ -114,6 +114,12 @@ ELSE()
   MESSAGE(ERROR "No such node type known.")
 ENDIF()
 
+IF(FLUXO_NODETYPE STREQUAL "GAUSS")
+  IF(FLUXO_DISCTYPE EQUAL 2)
+    MESSAGE(ERROR "You fool!!! The configuration of split form discretization (DiscType 2) and Gauss nodes is not possible!")
+  ENDIF()
+ENDIF()
+
 # Enable or disable unit tests
 #OPTION(FLUXO_UNITTESTS "Enable unit tests after build" ON)
 #MARK_AS_ADVANCED(FLUXO_UNITTESTS)
