@@ -73,9 +73,9 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux                
 Uaux=0.
 #ifdef CARTESIANFLUX
 !for cartesian meshes, metric tensor is constant and diagonal:
-ftilde(1,:,:,:) = AdvVel(1)*Metrics_fTilde(1,0,0,0,iElem)*U(:,:,:,:,iElem)
-gtilde(1,:,:,:) = AdvVel(2)*Metrics_gTilde(2,0,0,0,iElem)*U(:,:,:,:,iElem)
-htilde(1,:,:,:) = AdvVel(3)*Metrics_hTilde(3,0,0,0,iElem)*U(:,:,:,:,iElem)
+ftilde(1,:,:,:) = AdvVel(1)*Metrics_fTilde(1,0,0,0,iElem)*U(1,:,:,:,iElem)
+gtilde(1,:,:,:) = AdvVel(2)*Metrics_gTilde(2,0,0,0,iElem)*U(1,:,:,:,iElem)
+htilde(1,:,:,:) = AdvVel(3)*Metrics_hTilde(3,0,0,0,iElem)*U(1,:,:,:,iElem)
 #else /* CURVED FLUX*/
 ftilde(1,:,:,:) = ( AdvVel(1)*Metrics_fTilde(1,:,:,:,iElem) &
                    +AdvVel(2)*Metrics_fTilde(2,:,:,:,iElem) &
