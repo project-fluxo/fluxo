@@ -37,11 +37,11 @@ USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
 USE MOD_StringTools,       ONLY:STRICMP
 USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
-!USE MOD_Testcase,          ONLY:DefineParametersTestcase
+USE MOD_Testcase,          ONLY:DefineParametersTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if PARABOLIC
-!USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
+USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
@@ -63,10 +63,10 @@ CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
-!CALL DefineParametersTestcase()
-!#if PARABOLIC
-!CALL DefineParametersLifting ()
-!#endif /*PARABOLIC*/
+CALL DefineParametersTestcase()
+#if PARABOLIC
+CALL DefineParametersLifting ()
+#endif /*PARABOLIC*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
@@ -80,29 +80,29 @@ CALL prms%read_options(ParameterFile)
 CALL InitIOHDF5()
 SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A)') &
-"               __________________   _______              _______     ______   ______      ______   __________________ "
+"                  __________________   _______              _______     ______   ______      ______   __________________ "
 SWRITE(UNIT_stdOut,'(A)') &
-"              /                 /) /      /)            /      /)   /     /) /      |   _/     /) /                 /)"
+"                 /                 /) /      /)            /      /)   /     /) /      |   _/     /) /                 /)"
 SWRITE(UNIT_stdOut,'(A)') &
-"             /       __________// /      //            /      //   /     // /__     |_/´     _// /      _____      // "
+"                /       __________// /      //            /      //   /     // /__     |_/´     _// /      _____      // "
 SWRITE(UNIT_stdOut,'(A)') &
-"            /      /)__________) /      //            /      //   /     //  (__|          _/´_) /      /)___/     //  "
+"               /      /)__________) /      //            /      //   /     //  (__|          _/´_) /      /)___/     //  "
 SWRITE(UNIT_stdOut,'(A)') &
-"           /      //___         /      //            /      //   /     //      |       _/´_/´  /      //   /     //   "
+"              /      //___         /      //            /      //   /     //      |       _/´_/´  /      //   /     //   "
 SWRITE(UNIT_stdOut,'(A)') &
-"          /           /)       /      //            /      //   /     //       |     /´ /´    /      //   /     //    "
+"             /           /)       /      //            /      //   /     //       |     /´ /´    /      //   /     //    "
 SWRITE(UNIT_stdOut,'(A)') &
-"         /      _____//       /      //            /      //   /     //      _/´     |/´     /      //   /     //     "
+"            /      _____//       /      //            /      //   /     //      _/´     |/´     /      //   /     //     "
 SWRITE(UNIT_stdOut,'(A)') &
-"        /      /)____)       /      //            /      //   /     //    _/´        |      /      //   /     //      "
+"           /      /)____)       /      //            /      //   /     //    _/´        |      /      //   /     //      "
 SWRITE(UNIT_stdOut,'(A)') &
-"       /      //            /      //_________   /      //___/     // __/´     _     |__   /      //___/     //       "
+"          /      //            /      //_________   /      //___/     // __/´     _     |__   /      //___/     //       "
 SWRITE(UNIT_stdOut,'(A)') &
-"      /      //            /                 /) /                 // /      _/´ |      /) /                 //        "
+"         /      //            /                 /) /                 // /      _/´ |      /) /                 //        "
 SWRITE(UNIT_stdOut,'(A)') &
-"     /______//            /_________________// /_________________// /_____/` _/´|_____// /_________________//         "
+"        /______//            /_________________// /_________________// /_____/` _/´|_____// /_________________//         "
 SWRITE(UNIT_stdOut,'(A)') &
-"     )______)             )_________________)  )_________________)  )_____)/´   )_____)  )_________________)          "
+"        )______)             )_________________)  )_________________)  )_____)/´   )_____)  )_________________)          "
 SWRITE(UNIT_stdOut,'(A)')
 SWRITE(UNIT_stdOut,'(132("="))')
 ! Measure init duration
@@ -120,9 +120,9 @@ CALL InitMPIvars()
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
-!#if PARABOLIC
-!CALL InitLifting()
-!#endif /*PARABOLIC*/
+#if PARABOLIC
+CALL InitLifting()
+#endif /*PARABOLIC*/
 CALL InitTimeDisc()
 CALL InitAnalyze()
 CALL IgnoredParameters()
@@ -134,15 +134,15 @@ SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
 
-!! Run Simulation
+! Run Simulation
 CALL TimeDisc()
 
-!!Finalize
+!Finalize
 CALL FinalizeOutput()
 CALL FinalizeAnalyze()
-!#if PARABOLIC
-!CALL FinalizeLifting()
-!#endif /*PARABOLIC*/
+#if PARABOLIC
+CALL FinalizeLifting()
+#endif /*PARABOLIC*/
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeBC()

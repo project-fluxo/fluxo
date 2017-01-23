@@ -40,6 +40,10 @@ INTERFACE InitLifting
   MODULE PROCEDURE InitLifting
 END INTERFACE
 
+INTERFACE DefineParametersLifting
+  MODULE PROCEDURE DefineParametersLifting
+END INTERFACE
+
 INTERFACE Lifting
   MODULE PROCEDURE Lifting
 END INTERFACE
@@ -48,7 +52,10 @@ INTERFACE FinalizeLifting
   MODULE PROCEDURE FinalizeLifting
 END INTERFACE
 
-PUBLIC::DefineParametersLifting,InitLifting,Lifting,FinalizeLifting
+PUBLIC::DefineParametersLifting
+PUBLIC::InitLifting
+PUBLIC::Lifting
+PUBLIC::FinalizeLifting
 !==================================================================================================================================
 
 CONTAINS

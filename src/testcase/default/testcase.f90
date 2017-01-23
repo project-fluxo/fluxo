@@ -45,7 +45,7 @@ CONTAINS
 !==================================================================================================================================
 !> Define parameters 
 !==================================================================================================================================
-SUBROUTINE DefineParametersLifting()
+SUBROUTINE DefineParametersTestcase()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
@@ -56,7 +56,7 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Testcase")
 
-END SUBROUTINE DefineParametersLifting
+END SUBROUTINE DefineParametersTestcase
 
 
 !==================================================================================================================================
