@@ -46,6 +46,7 @@ SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   SET(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Prefix prepended to install directories" FORCE)
 ENDIF()
+MARK_AS_ADVANCED(CMAKE_INSTALL_PREFIX)
 
 # =========================================================================
 # Options
@@ -64,19 +65,21 @@ ENDMACRO()
 
 #generate lists of subfolders to be used as choices for the variables of the configuration
 
+SUBDIRLIST(EQNSYSTEMS ${CMAKE_CURRENT_SOURCE_DIR}/src/equation/)
 SUBDIRLIST(TESTCASES  ${CMAKE_CURRENT_SOURCE_DIR}/src/testcase/)
-SUBDIRLIST(EQNSYSTEMS ${CMAKE_CURRENT_SOURCE_DIR}/src/equations/)
 SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
-OPTION(FLUXO_MPI "Compile SINGLE or MPI version" ON)
-OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
-OPTION(FLUXO_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
-OPTION(FLUXO_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
+
+OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
+OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
+OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 SET(   FLUXO_BUILD_HDF5 ON  CACHE BOOL "Compile and build hdf5 library")
+
+OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
                         "Used equation system (navierstokes/linearscalaradvection/mhd/maxwell)")
-SET_PROPERTY(CACHE FLUXO_EQNSYSNAME  PROPERTY STRINGS ${EQNSYSTEMS})
+SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
 SET(   FLUXO_TESTCASE   "default"      CACHE STRING
                         "Name of testcase which is used. Must be identical to directory name in testcase folder.")
@@ -85,6 +88,7 @@ SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
+MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
 # =========================================================================
 # PREPROCESSOR FLAGS
@@ -93,28 +97,30 @@ SET(FLUXO_DISCTYPE "2" CACHE STRING "disc type for volint. 1: standard form, 2: 
 SET_PROPERTY(CACHE FLUXO_DISCTYPE  PROPERTY STRINGS "1" "2")
 ADD_DEFINITIONS(-DPP_DiscType=${FLUXO_DISCTYPE})
 
-SET(FLUXO_CARTESIANFLUX  OFF  CACHE BOOL "switch on only if cartesian meshes are used.")
-IF(FLUXO_CARTESIANFLUX)
-  ADD_DEFINITIONS(-DCARTESIANFLUX=${FLUXO_CARTESIANFLUX} )
-ENDIF()
-IF (NOT CMAKE_BUILD_TYPE MATCHES "Debug")
-  SET(FLUXO_OPTIMIZED  ON  CACHE BOOL "switch on/off some optimized implementations.")
-  IF(FLUXO_OPTIMIZED)
-    ADD_DEFINITIONS(-DOPTIMIZED)
-  ENDIF()
+SET(FLUXO_DISC_CARTESIANFLUX  OFF  CACHE BOOL "switch on only if cartesian meshes are used.")
+IF(FLUXO_DISC_CARTESIANFLUX)
+  ADD_DEFINITIONS(-DCARTESIANFLUX=${FLUXO_DISC_CARTESIANFLUX} )
 ENDIF()
 
-SET(FLUXO_NODETYPE "GAUSS-LOBATTO" CACHE STRING "Set of nodes used for representing the solution (GAUSS/GAUSS-LOBATTO).")
-SET_PROPERTY(CACHE FLUXO_NODETYPE PROPERTY STRINGS "GAUSS" "GAUSS-LOBATTO")
-IF(FLUXO_NODETYPE STREQUAL "GAUSS")
+UNSET(FLUXO_OPTIMIZED CACHE) # unset by default (set in if statement)
+IF (NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+  SET(FLUXO_OPTIMIZED  ON  CACHE BOOL "switch on/off some optimized implementations.")
+ENDIF()
+IF(FLUXO_OPTIMIZED)
+  ADD_DEFINITIONS(-DOPTIMIZED)
+ENDIF()
+
+SET(FLUXO_DISC_NODETYPE "GAUSS-LOBATTO" CACHE STRING "Set of nodes used for representing the solution (GAUSS/GAUSS-LOBATTO).")
+SET_PROPERTY(CACHE FLUXO_DISC_NODETYPE PROPERTY STRINGS GAUSS GAUSS-LOBATTO)
+IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   ADD_DEFINITIONS(-DPP_NodeType=1)
-ELSEIF(FLUXO_NODETYPE STREQUAL "GAUSS-LOBATTO")
+ELSEIF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS-LOBATTO")
   ADD_DEFINITIONS(-DPP_NodeType=2)
 ELSE()
   MESSAGE(ERROR "No such node type known.")
 ENDIF()
 
-IF(FLUXO_NODETYPE STREQUAL "GAUSS")
+IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   IF(FLUXO_DISCTYPE EQUAL 2)
     MESSAGE(ERROR "You fool!!! The configuration of split form discretization (DiscType 2) and Gauss nodes is not possible!")
   ENDIF()
@@ -127,6 +133,9 @@ ENDIF()
 # =========================================================================
 # Equation system
 # =========================================================================
+# variables set in an if clause needs to be unset by default
+UNSET(FLUXO_EQN_GLM CACHE ) # if mhd
+UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if mhd
 
 IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
   ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes)
@@ -134,33 +143,40 @@ ELSEIF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
   ADD_DEFINITIONS(-DPP_nVar=1 -Dlinearscalaradvection)
 ELSEIF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   ADD_DEFINITIONS( -Dmhd)
-  SET(FLUXO_GLM  ON  CACHE BOOL "switch on/off divergence cleaing for mhd.")
-  IF(FLUXO_GLM)
+  SET(FLUXO_EQN_GLM  ON  CACHE BOOL "switch on/off divergence cleaing for mhd.")
+  IF(FLUXO_EQN_GLM)
     ADD_DEFINITIONS(-DPP_GLM=T -DPP_nVar=9)
   ELSE()
     ADD_DEFINITIONS( -DPP_nVar=8)
   ENDIF()
-  SET(FLUXO_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
-  IF(FLUXO_ANISODIFF)
+  SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
+  IF(FLUXO_EQN_ANISO_HEAT)
     ADD_DEFINITIONS(-DPP_ANISO_HEAT=T)
   ENDIF()
 ELSEIF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
   ADD_DEFINITIONS(-DPP_nVar=8 -Dmaxwell)
+  IF (FLUXO_PARABOLIC)
+    MESSAGE(ERROR "Do not use parabolic flag with maxwell equation system!")
+  ENDIF()
 ELSE()
   MESSAGE(ERROR "Unknown equation system.")
 ENDIF()
 
 
+# variables set in an if clause needs to be unset by default
+UNSET(FLUXO_PARABOLIC_LIFTING CACHE ) #if parabolic
+UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if parabolic & navierstokes
+
 IF (FLUXO_PARABOLIC)
   ADD_DEFINITIONS(-DPARABOLIC=1)
 
   #### Set the lifting
-  SET(FLUXO_LIFTING "br2" CACHE STRING "Lifting method used for PARABOLIC")
-  SET_PROPERTY(CACHE FLUXO_LIFTING PROPERTY STRINGS ${LIFTINGS})
+  SET(FLUXO_PARABOLIC_LIFTING "br2" CACHE STRING "Lifting method used for PARABOLIC")
+  SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING PROPERTY STRINGS ${LIFTINGS})
 
-  IF(FLUXO_LIFTING STREQUAL "br1")
+  IF(FLUXO_PARABOLIC_LIFTING STREQUAL "br1")
     ADD_DEFINITIONS(-DPP_Lifting=1)
-  ELSEIF(FLUXO_LIFTING STREQUAL "br2")
+  ELSEIF(FLUXO_PARABOLIC_LIFTING STREQUAL "br2")
     ADD_DEFINITIONS(-DPP_Lifting=2)
   ELSE()
     MESSAGE(ERROR "No such LIFTING known.")
@@ -168,14 +184,14 @@ IF (FLUXO_PARABOLIC)
 
   #### Set the viscosity
   IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
-    SET(FLUXO_VISCOSITY "constant" CACHE STRING 
+    SET(FLUXO_EQN_VISCOSITY "constant" CACHE STRING 
                       "Method to calculate viscosity (constant/sutherland/powerlaw)")
-    SET_PROPERTY(CACHE FLUXO_VISCOSITY PROPERTY STRINGS constant sutherland powerlaw)
-    IF(FLUXO_VISCOSITY STREQUAL "constant")
+    SET_PROPERTY(CACHE FLUXO_EQN_VISCOSITY PROPERTY STRINGS constant sutherland powerlaw)
+    IF(FLUXO_EQN_VISCOSITY STREQUAL "constant")
       ADD_DEFINITIONS(-DPP_VISC=0)
-    ELSEIF(FLUXO_VISCOSITY STREQUAL "sutherland")
+    ELSEIF(FLUXO_EQN_VISCOSITY STREQUAL "sutherland")
       ADD_DEFINITIONS(-DPP_VISC=1)
-    ELSEIF(FLUXO_VISCOSITY STREQUAL "powerlaw")
+    ELSEIF(FLUXO_EQN_VISCOSITY STREQUAL "powerlaw")
       ADD_DEFINITIONS(-DPP_VISC=2)
     ELSE()
       MESSAGE(ERROR "No such VISCOSITY known.")
@@ -218,6 +234,7 @@ SET(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -D__FILENAME__='\"$(subst ${CMAK
 
 # FFLAGS depend on the compiler
 GET_FILENAME_COMPONENT (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
+
 
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   #environment specific variables
@@ -266,7 +283,7 @@ ENDIF()
 # Add the libraries
 # =========================================================================
 
-IF(FLUXO_MPI)
+IF(FLUXO_BUILD_MPI)
   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
 ELSE()
   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
@@ -280,11 +297,11 @@ MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
 IF(NOT FLUXO_BUILD_HDF5)
   FIND_PACKAGE(HDF5 COMPONENTS C Fortran QUIET) #if built with configure script
   IF (HDF5_FOUND)
-    SET(FLUXO_HDF5_CMAKE FALSE)
+    SET(FLUXO_BUILD_HDF5_CMAKE FALSE)
   ELSE()
     FIND_PACKAGE(HDF5 COMPONENTS C Fortran static NO_MODULE QUIET PATH_SUFFIXES share/cmake )
     IF (HDF5_FOUND)
-      SET(FLUXO_HDF5_CMAKE TRUE)
+      SET(FLUXO_BUILD_HDF5_CMAKE TRUE)
       MESSAGE (STATUS "HDF5 C libs:${HDF5_FOUND} static:${HDF5_static_C_FOUND} and shared:${HDF5_shared_C_FOUND}")
       MESSAGE (STATUS "HDF5 Fortran libs: static:${HDF5_static_Fortran_FOUND} and shared:${HDF5_shared_Fortran_FOUND}")
       MESSAGE (STATUS "h5diff found:${HDF5_DIFF_EXECUTABLE}")
@@ -298,7 +315,7 @@ SET (HDF5TAG "hdf5-1_10_0-patch1" CACHE STRING "HDF5 version tag")
   SET(FLUXO_HDF5_DLDIR ${FLUXO_EXTERNAL_LIB_DIR}/HDF5)
   SET(FLUXO_HDF5_DIR  ${FLUXO_HDF5_DLDIR}/build)
   IF (NOT EXISTS "${FLUXO_HDF5_DIR}/lib/libhdf5.a")
-    IF(FLUXO_MPI)
+    IF(FLUXO_BUILD_MPI)
       SET(FLUXO_HDF5PARALLEL --enable-parallel)
       SET(FLUXO_HDF5FC ${MPI_Fortran_COMPILER})
       SET(FLUXO_HDF5CC ${MPI_C_COMPILER})
@@ -342,7 +359,7 @@ SET (HDF5TAG "hdf5-1_10_0-patch1" CACHE STRING "HDF5 version tag")
   LIST(APPEND HDF5_LIBRARIES ${HDF5_hdf5_fortran_LIBRARY_RELEASE} ${HDF5_hdf5_LIBRARY_RELEASE} ${HDF5_z_LIBRARY_RELEASE} -ldl)
 ENDIF()
 
-IF(FLUXO_HDF5_CMAKE)
+IF(FLUXO_BUILD_HDF5_CMAKE)
   INCLUDE_DIRECTORIES (${HDF5_INCLUDE_DIR_FORTRAN} ${HDF5_INCLUDE_DIR})
   LIST(APPEND linkedlibs ${HDF5_FORTRAN_STATIC_LIBRARY} ${HDF5_LIBRARIES})
 ELSE()
@@ -358,7 +375,7 @@ ENDIF()
 # =========================================================================
 # use Lapack/Blas for GNU
 MESSAGE(STATUS "Using BLAS/Lapack library")
-IF (FLUXO_MKL)
+IF (FLUXO_BUILD_MKL)
   SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
 ENDIF()
 FIND_PACKAGE(LAPACK QUIET)
@@ -369,7 +386,7 @@ ENDIF()
 # =========================================================================
 # MPI
 # =========================================================================
-IF(FLUXO_MPI)
+IF(FLUXO_BUILD_MPI)
   FIND_PACKAGE(MPI REQUIRED)
   IF (NOT MPI_Fortran_NO_INTERROGATE)
     FOREACH(DIR ${MPI_INCLUDE_PATH})
@@ -391,7 +408,7 @@ ENDIF()
 # ========================================================================= 
 # PAPI library 
 # ========================================================================= 
-IF(FLUXO_PAPI)
+IF(FLUXO_BUILD_PAPI)
   FIND_PACKAGE(PAPI REQUIRED)
   ADD_DEFINITIONS(-DPAPI) 
   LIST(APPEND linkedlibs ${PAPI_LIBRARIES})
@@ -418,31 +435,30 @@ endfunction()
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/src) 
 
 FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
+                           ./src/equation/${FLUXO_EQNSYSNAME}/*.f90
+                           ./src/testcase/${FLUXO_TESTCASE}/*.f90
                            ./src/readintools/*.f90
                            ./src/interpolation/*.f90
                            ./src/mpi/*.f90
                            ./src/restart/*.f90
                            ./src/io_hdf5/*.f90 
-                           ./src/equation/linearscalaradvection/*.f90 
-                           ./src/testcase/default/*.f90
                            ./src/analyze/*.f90
                            ./src/output/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
                            ./src/timedisc/*.f90            )
 
-FILE(GLOB eqnsysF90        ./src/equations/${FLUXO_EQNSYSNAME}/*.f90)
 
 
 FILE(GLOB dgF90            ./src/dg/*.f90)
 IF (FLUXO_PARABOLIC)
-  FILE(GLOB liftingF90     ./src/dg/${FLUXO_LIFTING}/*.f90)
+  FILE(GLOB liftingF90     ./src/dg/${FLUXO_PARABOLIC_LIFTING}/*.f90)
   LIST(APPEND dgF90 ${liftingF90})
 ENDIF()
 
 
 # define libs
-ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${eqnsysF90} ${dgF90})
+ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${dgF90})
 
 
 SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS}) 
@@ -477,6 +493,7 @@ ADD_CUSTOM_TARGET(preproc_defines COMMAND echo ${comp_defs_str})
 # Install
 # =========================================================================
 INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATION bin)
+
 #INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/userblock.txt DESTINATION bin)
 
 
@@ -539,7 +556,7 @@ INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATI
 #   SET(EXLUDES "--exclude=src/equations/${item}/*" ${EXLUDES})
 #ENDFOREACH()
 #SET(LIFTINGS_WO_ACTUAL ${LIFTINGS})
-#LIST(REMOVE_ITEM LIFTINGS_WO_ACTUAL ${FLUXO_LIFTING})
+#LIST(REMOVE_ITEM LIFTINGS_WO_ACTUAL ${FLUXO_PARABOLIC_LIFTING})
 #FOREACH(item ${LIFTINGS_WO_ACTUAL})
 #   SET(EXLUDES "--exclude=src/dg/${item}/*" ${EXLUDES})
 #ENDFOREACH()
