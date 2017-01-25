@@ -1,6 +1,7 @@
 !==================================================================================================================================
-! Copyright (c) 2016 Gregor Gassner
-! Copyright (c) 2016 Florian Hindenlang
+! Copyright (c) 2016 - 2017 Gregor Gassner
+! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2017 Andrew Winters
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
