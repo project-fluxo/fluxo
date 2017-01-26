@@ -117,12 +117,12 @@ IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
 ELSEIF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS-LOBATTO")
   ADD_DEFINITIONS(-DPP_NodeType=2)
 ELSE()
-  MESSAGE(ERROR "No such node type known.")
+  MESSAGE(ERROR " No such node type known.")
 ENDIF()
 
 IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   IF(FLUXO_DISCTYPE EQUAL 2)
-    MESSAGE(ERROR "You fool!!! The configuration of split form discretization (DiscType 2) and Gauss nodes is not possible!")
+    MESSAGE(ERROR " You fool!!! The configuration of split form discretization (DiscType 2) and Gauss nodes is not possible!")
   ENDIF()
 ENDIF()
 
@@ -156,10 +156,10 @@ ELSEIF(FLUXO_EQNSYSNAME STREQUAL "mhd")
 ELSEIF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
   ADD_DEFINITIONS(-DPP_nVar=8 -Dmaxwell)
   IF (FLUXO_PARABOLIC)
-    MESSAGE(ERROR "Do not use parabolic flag with maxwell equation system!")
+    MESSAGE(ERROR " Do not use parabolic flag with maxwell equation system!")
   ENDIF()
 ELSE()
-  MESSAGE(ERROR "Unknown equation system.")
+  MESSAGE(ERROR " Unknown equation system.")
 ENDIF()
 
 
@@ -179,7 +179,7 @@ IF (FLUXO_PARABOLIC)
   ELSEIF(FLUXO_PARABOLIC_LIFTING STREQUAL "br2")
     ADD_DEFINITIONS(-DPP_Lifting=2)
   ELSE()
-    MESSAGE(ERROR "No such LIFTING known.")
+    MESSAGE(ERROR " No such LIFTING known.")
   ENDIF()
 
   #### Set the viscosity
@@ -194,7 +194,7 @@ IF (FLUXO_PARABOLIC)
     ELSEIF(FLUXO_EQN_VISCOSITY STREQUAL "powerlaw")
       ADD_DEFINITIONS(-DPP_VISC=2)
     ELSE()
-      MESSAGE(ERROR "No such VISCOSITY known.")
+      MESSAGE(ERROR " No such VISCOSITY known.")
     ENDIF()
   ENDIF()
 ELSE()
@@ -276,7 +276,7 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   SET (FLUXO_COMPILE_FLAGS "-F")
 
 ELSE()
-   MESSAGE(ERROR "Unknown compiler")
+   MESSAGE(ERROR " Unknown compiler")
 ENDIF()
 
 # =========================================================================
@@ -514,7 +514,7 @@ INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATI
 #GETLISTOFVARSSTARTINGWITH("FLUXO_" fluxoVars)
 #FOREACH (_var IN LISTS fluxoVars)
 #  GET_PROPERTY(currentHelpString CACHE "${_var}" PROPERTY HELPSTRING)
-#  SET(boolian (${${_var}} STREQUAL "ON" OR ${${_var}} STREQUAL "OFF")) 
+#  SET(boolian (${${_var}} STREQUAL "ON" OR ${${_var}} STREQUAL "OFF"))
 #  IF(${boolian})
 #    FILE(APPEND ${configuration} "OPTION(${_var} \"${currentHelpString}\" ${${_var}})\n")
 #  ELSE()
@@ -524,7 +524,7 @@ INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATI
 #    FILE(APPEND ${configuration} "SET(${_var} \"${${_var}}\" CACHE STRING \"${currentHelpString}\")\n")
 #  ENDIF()
 #ENDFOREACH()
-#ADD_CUSTOM_COMMAND(TARGET fluxolib PRE_BUILD COMMAND 
+#ADD_CUSTOM_COMMAND(TARGET fluxolib PRE_BUILD COMMAND
 #  sh ${CMAKE_CURRENT_SOURCE_DIR}/tools/userblock/generateuserblock.sh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 
 # =========================================================================
@@ -536,11 +536,11 @@ INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATI
 # =========================================================================
 # RegressionCheck tool && Examples
 # =========================================================================
-#add_exec(regressioncheck ./regressioncheck/regressioncheck.f90 
-#                         ./regressioncheck/regressioncheck_vars.f90 
-#                         ./regressioncheck/regressioncheck_build.f90 
-#                         ./regressioncheck/regressioncheck_compare.f90 
-#                         ./regressioncheck/regressioncheck_run.f90 
+#add_exec(regressioncheck ./regressioncheck/regressioncheck.f90
+#                         ./regressioncheck/regressioncheck_vars.f90
+#                         ./regressioncheck/regressioncheck_build.f90
+#                         ./regressioncheck/regressioncheck_compare.f90
+#                         ./regressioncheck/regressioncheck_run.f90
 #                         ./regressioncheck/regressioncheck_tools.f90 )
 #ADD_DEFINITIONS(-DH5DIFF="${HDF5_DIFF_EXECUTABLE}")
 #SET(FLUXO_REGRESSIONCHECK_EXAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/regressioncheck/examples")

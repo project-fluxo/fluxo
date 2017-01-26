@@ -26,14 +26,14 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL           :: doCalcSource               !< logical to define if a source term (e.g. exactfunc) is added
-REAL              :: AdvVel(3)                  !< Advection velocity
-REAL              :: DiffC                      !< Diffusion constant
-REAL              :: IniWavenumber(3)           !< wavenumbers in 3 directions (sinus periodic with exactfunc=6) 
-INTEGER           :: IniExactFunc               !< Exact Function for initialization
-INTEGER,PARAMETER :: nAuxVar=1                  !< Auxiliary variable for DiscType=3 
-INTEGER,ALLOCATABLE  :: nBCByType(:)            !< Number of sides for each boundary
-INTEGER,ALLOCATABLE  :: BCSideID(:,:)           !< SideIDs for BC types
+LOGICAL             :: doCalcSource            !< logical to define if a source term (e.g. exactfunc) is added
+REAL                :: AdvVel(3)               !< Advection velocity
+REAL                :: DiffC                   !< Diffusion constant
+REAL                :: IniWavenumber(3)        !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
+INTEGER             :: IniExactFunc            !< Exact Function for initialization
+INTEGER,PARAMETER   :: nAuxVar=1               !< Auxiliary variable for DiscType=3
+INTEGER,ALLOCATABLE :: nBCByType(:)            !< Number of sides for each boundary
+INTEGER,ALLOCATABLE :: BCSideID(:,:)           !< SideIDs for BC types
 
 CHARACTER(LEN=255),PARAMETER :: StrVarNames(1)=(/'Solution'/) !< Variable names for output
 
