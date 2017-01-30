@@ -43,9 +43,9 @@ args.procs = 1
 
 
 # this generates 3 meshes
-nElemsX = ['01','02','04' ]
-nElemsY = ['01','02','04' ]
-nElemsZ = ['01','02','04' ]
+nElemsX = ['02','04','08' ]
+nElemsY = ['02','04','08' ]
+nElemsZ = ['02','04','08' ]
 
 projectname = read_prm(args.prm,'ProjectName')
 
@@ -59,9 +59,9 @@ for i in range(0,len(nElemsX)) :
     print "               "
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
-    modify_prm(args.prm, {'DEFVAR=(INT):ne_x' : nElemsX[i]})
-    modify_prm(args.prm, {'DEFVAR=(INT):ne_y' : nElemsY[i]})
-    modify_prm(args.prm, {'DEFVAR=(INT):ne_z' : nElemsZ[i]})
+    modify_prm(args.prm, {'DEFVAR=(INT):ne_x  ' : nElemsX[i]})
+    modify_prm(args.prm, {'DEFVAR=(INT):ne_y  ' : nElemsY[i]})
+    modify_prm(args.prm, {'DEFVAR=(INT):ne_z  ' : nElemsZ[i]})
 
 
     # execute hopr 
@@ -70,6 +70,7 @@ for i in range(0,len(nElemsX)) :
         execute(args.exe, args.prm, projectnameX, log = True, ntail = args.ntail ,\
                 mpi_procs = args.procs)
     except :
+        print " crashed... "
         shutil.rmtree(tmp_dir)
         exit(1)
     end_time = time.time()

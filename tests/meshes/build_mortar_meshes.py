@@ -42,22 +42,24 @@ args.procs = 1
 
 
 # this generates 3 meshes
-Level = ['01','02','04' ]
+Level1 = ['01','02','04' ]
+Level2 = ['02','04','08' ]
+nLevel = len(Level1)
 
 projectname = read_prm(args.prm,'ProjectName')
 
 # loop over meshes
-for i in range(0,len(Level)) :
+for i in range(0,nLevel) :
 
-    projectnameX = projectname+'_Level_'+Level[i]
+    projectnameX = projectname+'_Level_'+Level1[i]
     modify_prm(args.prm, {'ProjectName' : projectnameX})
     print "               "
     print "%03.0i === > ProjectName: %s" % (i,projectnameX)
     print "               "
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
-    modify_prm(args.prm, {'DEFVAR=(INT):n_1' : Level[i]     })
-    modify_prm(args.prm, {'DEFVAR=(INT):n_2' : 2*(Level[i]) })
+    modify_prm(args.prm, {'DEFVAR=(INT):n_1' : Level1[i] })
+    modify_prm(args.prm, {'DEFVAR=(INT):n_2' : Level2[i] })
 
 
     # execute hopr 
