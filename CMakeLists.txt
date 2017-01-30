@@ -247,7 +247,7 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -fdefault-real-8 -fdefault-double-8 -fbackslash -ffree-line-length-0 -DGNU")
   SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} -finline-functions ") #gives segfault: -fstack-arrays
   SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -finline-functions ") #gives segfault: -fstack-arrays
-  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -fbounds-check -finit-real=snan -fbacktrace -Wall -Wextra")
+  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -ffpe-trap=invalid -fbounds-check -finit-real=snan -fbacktrace -Wall -Wextra")
   # add flags only for compiling not linking!
   SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input")
 

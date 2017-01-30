@@ -1,8 +1,7 @@
 ## running tests
-
-first build the meshes you want with the buildmesh python script, you need to have hopr installed:
+after having built the meshes (in ../meshes) execute the tests:
+If you have compiled with linearscalaradvection equation, use:
 ```
-python build_conform_meshes.py <pathToHOPRexec> parameter_hopr.ini
-python build_mortar_meshes.py <pathToHOPRexec> parameter_mortar_hopr.ini
+python runtest.py ../../build/bin/fluxo parameter_linadv.ini
 ```
 
