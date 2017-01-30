@@ -66,13 +66,14 @@ REAL                         :: MaxLambda_v
 !==================================================================================================================================
 errType=0
 maxLambda=1.0E-10
+TimeStepConv=HUGE(1.)
+TimeStepVisc=HUGE(1.)
 #if PARABOLIC
 MaxLambda_v=1.0E-10  ! Viscous
 Lambda_v1=1.0E-10
 Lambda_v2=1.0E-10
 Lambda_v3=1.0E-10
 #endif /*PARABOLIC*/
-TimeStep=HUGE(1.)
 DO iElem=1,nElems
   DO k=0,PP_N
     DO j=0,PP_N

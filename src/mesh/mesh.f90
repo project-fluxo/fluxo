@@ -53,7 +53,9 @@ IMPLICIT NONE
 CALL prms%SetSection("Mesh")
 CALL prms%CreateStringOption(  'MeshFile',            "(relative) path to meshfile (mandatory).")
 CALL prms%CreateLogicalOption( 'useCurveds',          "Controls usage of high-order information in mesh. Turn off to discard "//&
-                                                      "high-order data and treat curved meshes as linear meshes.", '.TRUE.')
+                                                      "high-order data and treat curved meshes as linear meshes." //&
+                                                      "With mortar meshes, it should always be true!(watertight constraint)" &
+                                                      , '.TRUE.')
 CALL prms%CreateLogicalOption( 'interpolateFromTree', "For non-conforming meshes, built by refinement from a tree structure, "//&
                                                       "the metrics can be built from the tree geometry if it is contained "//&
                                                       "in the mesh. Can improve free-stream preservation.",&
