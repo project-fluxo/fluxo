@@ -27,9 +27,7 @@ IMPLICIT NONE
 
 ! Output format for state visualization
 INTEGER,PARAMETER :: OUTPUTFORMAT_NONE         = 0
-INTEGER,PARAMETER :: OUTPUTFORMAT_TECPLOT      = 1
-INTEGER,PARAMETER :: OUTPUTFORMAT_TECPLOTASCII = 2
-INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW     = 3
+INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW     = 1
 
 ! Output format for ASCII data files
 INTEGER,PARAMETER :: ASCIIOUTPUTFORMAT_CSV     = 0
@@ -79,20 +77,11 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Output")
 CALL prms%CreateIntOption(          'NVisu',       "Polynomial degree at which solution is sampled for visualization.")
-CALL prms%CreateIntOption(          'NOut',        "Polynomial degree at which solution is written. -1: NOut=N, >0: NOut", '-1')
 CALL prms%CreateStringOption(       'ProjectName', "Name of the current simulation (mandatory).")
 CALL prms%CreateLogicalOption(      'Logging',     "Write log files containing debug output.", '.FALSE.')
 CALL prms%CreateLogicalOption(      'ErrorFiles',  "Write error files containing error output.", '.TRUE.')
-CALL prms%CreateIntFromStringOption('OutputFormat',"File format for visualization: None, Tecplot, TecplotASCII, ParaView. "//&
-                                                 " Note: Tecplot output is currently unavailable due to licensing issues.", 'None')
-CALL addStrListEntry('OutputFormat','none',        OUTPUTFORMAT_NONE)
-CALL addStrListEntry('OutputFormat','tecplot',     OUTPUTFORMAT_TECPLOT)
-CALL addStrListEntry('OutputFormat','tecplotascii',OUTPUTFORMAT_TECPLOTASCII)
-CALL addStrListEntry('OutputFormat','paraview',    OUTPUTFORMAT_PARAVIEW)
-CALL prms%CreateIntFromStringOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: CSV, Tecplot."&
-                                                       , 'CSV')
-CALL addStrListEntry('ASCIIOutputFormat','csv',    ASCIIOUTPUTFORMAT_CSV)
-CALL addStrListEntry('ASCIIOutputFormat','tecplot',ASCIIOUTPUTFORMAT_TECPLOT)
+CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None, 1: ParaView. " , '1')
+CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: 0: CSV, 1: Tecplot." , '0')
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
 CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
 END SUBROUTINE DefineParametersOutput
@@ -105,7 +94,7 @@ SUBROUTINE InitOutput()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Output_Vars
-USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT,GETINTFROMSTR
+USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone,NodeTypeVISU,NodeType
@@ -143,9 +132,9 @@ doPrintStatusLine=GETLOGICAL("doPrintStatusLine",".FALSE.")
 WRITE(ErrorFileName,'(A,A8,I6.6,A4)')TRIM(ProjectName),'_ERRORS_',myRank,'.out'
 
 ! Get output format for state visualization
-OutputFormat = GETINTFROMSTR('OutputFormat')
+OutputFormat = GETINT('OutputFormat','0')
 ! Get output format for ASCII data files
-ASCIIOutputFormat = GETINTFROMSTR('ASCIIOutputFormat')
+ASCIIOutputFormat = GETINT('ASCIIOutputFormat','0')
 
 ! Open file for logging
 IF(Logging)THEN
@@ -260,10 +249,6 @@ END DO ! iVar=1,PP_nVar
 
 ! Visualize data
 SELECT CASE(OutputFormat)
-CASE(OUTPUTFORMAT_TECPLOT)
-  STOP 'Tecplot output removed due to license issues (possible GPL incompatibility).'
-CASE(OUTPUTFORMAT_TECPLOTASCII)
-  STOP 'Tecplot output removed due to license issues (possible GPL incompatibility).'
 CASE(OUTPUTFORMAT_PARAVIEW)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName),OutputTime))//'.vtu'
   CALL WriteDataToVTK3D(        NVisu,nElems,PP_nVar_loc,StrVarNames_loc,Coords_NVisu(1:3,:,:,:,:), &

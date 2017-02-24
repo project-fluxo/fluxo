@@ -42,16 +42,19 @@ args.procs = 1
 
 
 # this generates 3 meshes
-Level1 = ['01','02','04' ]
-Level2 = ['02','04','08' ]
+Ngeo   = ['1','2']
+nNgeo  = len(Ngeo)
+Level1 = ['01','02','04','08' ]
+Level2 = ['02','04','08','16' ]
 nLevel = len(Level1)
 
 projectname = read_prm(args.prm,'ProjectName')
 
 # loop over meshes
-for i in range(0,nLevel) :
+for j in range(0,nNgeo) :
+  for i in range(0,nLevel) :
 
-    projectnameX = projectname+'_Level_'+Level1[i]
+    projectnameX = projectname+'_Ngeo_'+Ngeo[j]+'_Level_'+Level1[i]
     modify_prm(args.prm, {'ProjectName' : projectnameX})
     print "               "
     print "%03.0i === > ProjectName: %s" % (i,projectnameX)
@@ -60,6 +63,8 @@ for i in range(0,nLevel) :
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
     modify_prm(args.prm, {'DEFVAR=(INT):n_1' : Level1[i] })
     modify_prm(args.prm, {'DEFVAR=(INT):n_2' : Level2[i] })
+    bo=str(int(Ngeo[j])+1)
+    modify_prm(args.prm, {'BoundaryOrder'    : bo })
 
 
     # execute hopr 

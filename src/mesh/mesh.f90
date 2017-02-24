@@ -56,10 +56,6 @@ CALL prms%CreateLogicalOption( 'useCurveds',          "Controls usage of high-or
                                                       "high-order data and treat curved meshes as linear meshes." //&
                                                       "With mortar meshes, it should always be true!(watertight constraint)" &
                                                       , '.TRUE.')
-CALL prms%CreateLogicalOption( 'interpolateFromTree', "For non-conforming meshes, built by refinement from a tree structure, "//&
-                                                      "the metrics can be built from the tree geometry if it is contained "//&
-                                                      "in the mesh. Can improve free-stream preservation.",&
-                                                      '.TRUE.')
 CALL prms%CreateRealOption(    'meshScale',           "Scale the mesh by this factor (shrink/enlarge).",&
                                                       '1.0')
 CALL prms%CreateLogicalOption( 'meshdeform',          "Apply simple sine-shaped deformation on cartesion mesh (for testing).",&

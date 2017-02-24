@@ -13,3 +13,9 @@ cd freestream
 ```
 see [freestream/README.md](freestream/README.md) for details.
 
+
+to clean all test folders, run
+```
+rm */log* */*ERROR* */*.h5 */*.dat */*.vtu */*.csv */*~ helpers.pyc
+```
+

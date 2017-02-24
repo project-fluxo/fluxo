@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import shutil
 import subprocess
 
@@ -13,8 +14,8 @@ def copy2temporary(tmp_dir, f) :
     return name
 
 ########################################################################################################
-def execute(exec_path, prm_path, projectname, log = True, ntail = 0 ,\
-      mpi_procs = 1) :
+def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, ntail = 0 ,\
+      mpi_procs = 1, L2 = 0., Linf=0.,PID=0. ) :
    if mpi_procs == 1 :
       cmd = []
    else :
@@ -40,10 +41,9 @@ def execute(exec_path, prm_path, projectname, log = True, ntail = 0 ,\
        for line in lines :
            print line,
        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       print "!!     PROGRAM crashed!    !!"
+       print "!!   PROGRAM crashed!    !!"
        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!"
        return None
-
    #for line in lines :
       #print line,
    if log :
@@ -58,6 +58,15 @@ def execute(exec_path, prm_path, projectname, log = True, ntail = 0 ,\
          i=i+1
          if ( i > (nlines -ntail) ) :
             print line,
+   if analyze_fcts :
+      results = []
+      if type(analyze_fcts) != list : 
+         return analyze_fcts(lines)
+      for analyze_fct in analyze_fcts :
+         tmp=analyze_fct(lines)
+         results.append(tmp)
+
+      return results
 
 ########################################################################################################
 
@@ -81,11 +90,11 @@ def modify_prm(path, properties) :
          prop = tmp[0]
          if key.strip() == prop.strip() :
             # change property
-            tmp = tmp[1].split("!")
-            if len(tmp) > 1 :
-               lines[i] = "%s= %s !%s" % (prop, str(value), tmp[1])
-            else :
-               lines[i] = "%s= %s\n" % (prop, str(value))
+            #tmp = tmp[1].split("!")
+            #if len(tmp) > 1 :
+            #   lines[i] = "%s= %s !%s" % (prop, str(value), tmp[1])
+            #else :
+            lines[i] = "%s= %s\n" % (prop, str(value))
             found = True
       if (not found) :
          print " parameter not found: %s " % key
@@ -120,3 +129,62 @@ def read_prm(path,param) :
              return None
    if (not found) :
       print " parameter not found: %s " % param
+
+########################################################################################################
+
+# write summary to screen
+def write_summarytable(summary) :
+    print "\n"
+    print "=" * 132
+    print "  S U M M A R Y : "
+    sys.stdout.write("=" * 132)
+    header=True
+    for line in summary.split('\n') :
+      if (header) :
+        sys.stdout.write('\n'+line.replace(',',' '))
+        sys.stdout.write("\n")
+        sys.stdout.write("-" * 132)
+        header=False
+      else :
+        sys.stdout.write('\n'+line.replace(',',' '))
+    
+    sys.stdout.write("\n")
+    print "=" * 132
+
+########################################################################################################
+
+# extract the L2 error of the last timestep
+def get_last_L2_error(lines) :
+   for l in lines[-15:] :
+      if "L_2" in l :
+         tmp = l.split(":")[1]
+         return [float(x) for x in tmp.split()]
+
+########################################################################################################
+
+# extract the L_inf error of the last timestep
+def get_last_Linf_error(lines) :
+   for l in lines[-15:] :
+      if "L_inf" in l :
+         tmp = l.split(":")[1]
+         return [float(x) for x in tmp.split()]
+
+########################################################################################################
+
+def get_last_number(lines) :
+   for line in reversed(lines) :
+      tmp = line.split(' ')
+      for t in reversed(tmp) :
+         try :
+            return float(t)
+         except :
+            pass
+
+########################################################################################################
+
+def get_cpu_per_dof(lines) :
+   for line in reversed(lines) :
+      if "CALCULATION TIME PER TSTEP/DOF: [" in line :
+         return float(line.split("[")[1].split("sec")[0])
+########################################################################################################
+

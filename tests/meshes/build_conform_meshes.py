@@ -43,9 +43,9 @@ args.procs = 1
 
 
 # this generates 3 meshes
-nElemsX = ['02','04','08' ]
-nElemsY = ['02','04','08' ]
-nElemsZ = ['02','04','08' ]
+nElemsX = ['02','04','08','16' ]
+nElemsY = ['02','04','08','16' ]
+nElemsZ = ['02','04','08','16' ]
 
 projectname = read_prm(args.prm,'ProjectName')
 

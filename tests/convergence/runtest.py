@@ -26,7 +26,7 @@ from helpers import get_last_L2_error, get_last_Linf_error, get_cpu_per_dof,writ
 ########################################################################################################
 parser = argparse.ArgumentParser(description='Tool to run fluxo tests')
 parser.add_argument('-p','--procs', type=int, default=1, help='number of processors used for the run')
-parser.add_argument('-ntail', type=int, default=15, help='number of last line output of screenlog')
+parser.add_argument('-ntail', type=int, default=20, help='number of last line output of screenlog')
 parser.add_argument('exe', help='path to executable')
 parser.add_argument('prm',   help='path to parameter file')
 
@@ -43,38 +43,39 @@ args.exe = copy2temporary(tmp_dir, args.exe)
 args.prm = copy2temporary(tmp_dir, args.prm)
 
 
-# different polynomial degrees 
-Degree = ['4','5']
+# this generates 3 meshes
+Degree = ['4','5','6']
 nDegree=len(Degree) 
-#Meshes = sorted(glob.glob('../meshes/*_mesh.h5'))
-Meshes = [ '../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
-          ,'../meshes/CartBoxPeriodic_04_04_04_mesh.h5'
+Meshes = sorted(glob.glob('../meshes/*_mesh.h5'))
+#Meshes = [
+#           '../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
+#          ,'../meshes/CartBoxPeriodic_04_04_04_mesh.h5'
 #          ,'../meshes/CartBoxPeriodic_08_08_08_mesh.h5'
-#---
-          ,'../meshes/ConformBoxTrilinear_02_02_02_mesh.h5'
-          ,'../meshes/ConformBoxTrilinear_04_04_04_mesh.h5'
+##---
+#          ,'../meshes/ConformBoxTrilinear_04_04_04_mesh.h5'
 #          ,'../meshes/ConformBoxTrilinear_08_08_08_mesh.h5'
-#---
-          ,'../meshes/ConformBoxCurved_Ngeo3_02_02_02_mesh.h5'
-          ,'../meshes/ConformBoxCurved_Ngeo3_04_04_04_mesh.h5'
+#          ,'../meshes/ConformBoxTrilinear_16_16_16_mesh.h5'
+##---
+#          ,'../meshes/ConformBoxCurved_Ngeo3_04_04_04_mesh.h5'
 #          ,'../meshes/ConformBoxCurved_Ngeo3_08_08_08_mesh.h5'
-#---
-          ,'../meshes/DeformedBoxMortar_Ngeo_1_Level_01_mesh.h5'
-          ,'../meshes/DeformedBoxMortar_Ngeo_1_Level_02_mesh.h5'
+#          ,'../meshes/ConformBoxCurved_Ngeo3_16_16_16_mesh.h5'
+##---
+#          ,'../meshes/DeformedBoxMortar_Ngeo_1_Level_01_mesh.h5'
+#          ,'../meshes/DeformedBoxMortar_Ngeo_1_Level_02_mesh.h5'
 #          ,'../meshes/DeformedBoxMortar_Ngeo_1_Level_04_mesh.h5'
-#---
-          ,'../meshes/DeformedBoxMortar_Ngeo_2_Level_01_mesh.h5'
-          ,'../meshes/DeformedBoxMortar_Ngeo_2_Level_02_mesh.h5'
+##---
+#          ,'../meshes/DeformedBoxMortar_Ngeo_2_Level_01_mesh.h5'
+#          ,'../meshes/DeformedBoxMortar_Ngeo_2_Level_02_mesh.h5'
 #          ,'../meshes/DeformedBoxMortar_Ngeo_2_Level_04_mesh.h5'
-#---
-          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_1_Level_01_mesh.h5'
-          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_1_Level_02_mesh.h5'
+##---
+#          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_1_Level_01_mesh.h5'
+#          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_1_Level_02_mesh.h5'
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_1_Level_04_mesh.h5'
-#---
-          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_01_mesh.h5'
-          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_02_mesh.h5'
+##---
+#          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_01_mesh.h5'
+#          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_02_mesh.h5'
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_04_mesh.h5'
-         ]
+#         ]
 
 nMeshes=len(Meshes) 
 for m in range(0,nMeshes) :
@@ -118,14 +119,14 @@ for i in range(0,nDegree) :
                               log = True, ntail = args.ntail ,\
                               mpi_procs = args.procs )
     except :
-        shutil.rmtree(tmp_dir)
-        exit(1)
+      shutil.rmtree(tmp_dir)
+      exit(1)
     end_time = time.time()
 
     nVar=len(L2)
     if(header) :
       summaryheader=("%-8s " % " Degree" )
-      summaryheader=summaryheader+( ", %50s " % "Meshname" )
+      summaryheader=summaryheader+( ", %45s " % "Meshname" )
       for ivar in range(0,nVar) :
         summaryheader=summaryheader+( ", %10s%2i%-9s " % ("   L2(",ivar+1,")") )
       for ivar in range(0,nVar) :
@@ -139,7 +140,6 @@ for i in range(0,nDegree) :
 
       header=False
     #endif header
-
     
     summaryline=( "%8s " % Degree[i] )
     summaryline=summaryline+( ", %45s " % meshname )
@@ -158,8 +158,6 @@ for i in range(0,nDegree) :
   #end for Meshes
 #end for Degree
 
-
-sumfile.close()
 write_summarytable(summary)
 print "table written to %s ..." % summaryfilename
 print "=" * 132

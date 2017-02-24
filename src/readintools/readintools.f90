@@ -653,7 +653,7 @@ SWRITE(UNIT_StdOut,'(100("!"))')
 SWRITE(UNIT_StdOut,'(A)') "WARNING: The following options are defined, but NOT set in parameter-file or readin:"
 DO WHILE (associated(current))
   IF (.NOT.current%opt%isRemoved) THEN
-    SWRITE(UNIT_StdOut,*) "   ", TRIM(current%opt%name)
+    SWRITE(UNIT_StdOut,'(A,A30,A,A)') "   ", TRIM(current%opt%name)," ... from section: ",TRIM(current%opt%section)
   END IF
   current => current%next
 END DO
