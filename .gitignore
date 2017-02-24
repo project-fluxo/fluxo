@@ -38,3 +38,6 @@ doc/ford/out
 *vtu
 *.dat
 log.*
+*.csv
+*.pyc
+tests/meshes/*mesh.h5

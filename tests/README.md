@@ -12,10 +12,11 @@ For the freestream test, go to the folder
 cd freestream
 ```
 see [freestream/README.md](freestream/README.md) for details.
-
-
-to clean all test folders, run
 ```
-rm */log* */*ERROR* */*.h5 */*.dat */*.vtu */*.csv */*~ helpers.pyc
+cd convergence
 ```
+see [convergence/README.md](convergence/README.md) for details.
+
+each run writes a summary into the test folder.
+
 
