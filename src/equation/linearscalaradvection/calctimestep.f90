@@ -48,6 +48,9 @@ USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:DiffC
 USE MOD_TimeDisc_Vars,ONLY:DFLScale
 #endif /*PARABOLIC*/
+#ifndef GNU
+USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
+#endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

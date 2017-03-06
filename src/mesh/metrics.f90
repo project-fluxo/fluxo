@@ -81,10 +81,9 @@ USE MOD_Mesh_Vars,     ONLY:NGeo,NgeoRef,nElems,offsetElem,crossProductMetrics
 USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
 USE MOD_Mesh_Vars,     ONLY:NodeCoords,Elem_xGP
-USE MOD_Mesh_Vars,     ONLY:NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Interpolation_Vars
 USE MOD_Interpolation, ONLY:GetVandermonde,GetNodesAndWeights,GetDerivativeMatrix
-USE MOD_ChangeBasis,   ONLY:changeBasis3D,ChangeBasis3D_XYZ
+USE MOD_ChangeBasis,   ONLY:changeBasis3D
 USE MOD_Basis,         ONLY:LagrangeInterpolationPolys
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
@@ -96,8 +95,6 @@ INTEGER :: i,j,k,q,iElem
 INTEGER :: ll
 ! Jacobian on CL N and NGeoRef
 REAL    :: DetJac_N( 1,0:PP_N,   0:PP_N,   0:PP_N)
-REAL    :: tmp(      1,0:NgeoRef,0:NgeoRef,0:NgeoRef)
-!REAL    :: tmp2(     1,0:Ngeo,0:Ngeo,0:Ngeo)
 ! interpolation points and derivatives on CL N
 REAL    :: XCL_N(      3,  0:PP_N,0:PP_N,0:PP_N)          ! mapping X(xi) P\in N
 REAL    :: XCL_Ngeo(   3,  0:Ngeo,0:Ngeo,0:Ngeo)          ! mapping X(xi) P\in Ngeo
@@ -121,11 +118,8 @@ REAL    :: Vdm_CLNGeo_CLN(    0:PP_N   ,0:Ngeo)
 REAL    :: Vdm_CLN_N(         0:PP_N   ,0:PP_N)
 
 ! 3D Vandermonde matrices and lengths,nodes,weights
-REAL,DIMENSION(0:NgeoRef,0:NgeoRef) :: Vdm_xi_Ref,Vdm_eta_Ref,Vdm_zeta_Ref
-REAL,DIMENSION(0:PP_N   ,0:PP_N)    :: Vdm_xi_N  ,Vdm_eta_N  ,Vdm_zeta_N
 REAL    :: xiRef( 0:NgeoRef),wBaryRef( 0:NgeoRef)
 REAL    :: xiCL_N(0:PP_N)   ,wBaryCL_N(0:PP_N)
-REAL    :: xi0(3),dxi(3),length(3)
 !==================================================================================================================================
 ! Prerequisites
 Metrics_fTilde=0.
@@ -159,8 +153,9 @@ CALL GetNodesAndWeights(PP_N   , NodeTypeCL  , xiCL_N  , wIPBary=wBaryCL_N)
 detJac_Ref=0.
 DO iElem=1,nElems
   !1.a) Transform from EQUI_Ngeo to CL points on Ngeo and N
-  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_CLNGeo,NodeCoords(:,:,:,:,iElem)            ,XCL_Ngeo)
-  CALL   ChangeBasis3D(3,NGeo,PP_N,Vdm_CLNGeo_CLN,   XCL_Ngeo                             ,XCL_N)
+  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_CLNGeo,NodeCoords(:,:,:,:,iElem) ,XCL_Ngeo               )
+  CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_CLNGeo_CLN   ,XCL_Ngeo                  ,XCL_N                  )
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_CLN_N        ,XCL_N                     ,Elem_xGP(:,:,:,:,iElem))
 
   !1.b) Jacobi Matrix of d/dxi_dd(X_nn): dXCL_NGeo(dd,nn,i,j,k))
   dXCL_NGeo=0.
@@ -285,7 +280,6 @@ DO iElem=1,nElems
 
 
   ! interpolate Metrics from Cheb-Lobatto N onto GaussPoints N
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_CLN_N,XCL_N            ,Elem_xGP(      :,:,:,:,iElem))
   CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_CLN_N,JaCL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
   CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_CLN_N,JaCL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
   CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_CLN_N,JaCL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
@@ -304,7 +298,7 @@ END SUBROUTINE CalcMetrics
 SUBROUTINE CalcSurfMetrics(Nloc,JaCL_N,XCL_N,Vdm_CLN_N,iElem)
 ! MODULES
 USE MOD_Globals,        ONLY:CROSS
-USE MOD_Mesh_Vars,      ONLY:ElemToSide,MortarType,nSides
+USE MOD_Mesh_Vars,      ONLY:ElemToSide,MortarType
 USE MOD_Mesh_Vars,      ONLY:NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Mesh_Vars,      ONLY:NormalDirs,TangDirs,NormalSigns
 USE MOD_Mappings,       ONLY:CGNS_SideToVol2

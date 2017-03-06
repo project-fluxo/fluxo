@@ -329,7 +329,7 @@ SUBROUTINE CalcSource(Ut,t)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_Equation_Vars,ONLY:IniExactFunc
-USE MOD_PreProc,ONLY:PP_N
+USE MOD_PreProc
 USE MOD_Mesh_vars,ONLY: nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

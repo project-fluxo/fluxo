@@ -20,6 +20,7 @@ INCLUDE(CMakeDependentOption)
 # =========================================================================
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
+STRING(FIND "${CMAKE_HOSTNAME}" "marconi" ON_MARCONI)
 # Set options that need to be enabled BEFORE ANY PROJECT OR LANGUAGE COMMAND
 IF (ONHORNET GREATER -1)
   SET(CMAKE_C_COMPILER       cc)
@@ -29,6 +30,9 @@ IF (ONHORNET GREATER -1)
   MARK_AS_ADVANCED(C_PATH CXX_PATH Fortran_PATH)
   MESSAGE(STATUS "Compiling on Hazelhen")
   ADD_DEFINITIONS(-DLUSTRE)
+ENDIF()
+IF (ON_MARCONI GREATER -1)
+  MESSAGE(STATUS "Compiling on Marconi")
 ENDIF()
 
 # =========================================================================
@@ -255,6 +259,9 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
    #environment specific variables
    IF(ONHORNET GREATER -1)
       SET(FLUXO_INSTRUCTION "-xCORE-AVX2")
+   ELSEIF(ON_MARCONI GREATER -1)
+      SET(FLUXO_INSTRUCTION "-axMIC-AVX512 ") #for BW and KNL
+      #SET(FLUXO_INSTRUCTION "-xMIC-AVX512 -align array64byte") #for KNL
    ELSE()
       SET(FLUXO_INSTRUCTION "-xHost")
    ENDIF()
