@@ -82,7 +82,7 @@ SET(   FLUXO_BUILD_HDF5 ON  CACHE BOOL "Compile and build hdf5 library")
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
-                        "Used equation system (navierstokes/linearscalaradvection/mhd/maxwell)")
+                        "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
 SET(   FLUXO_TESTCASE   "default"      CACHE STRING
@@ -106,8 +106,9 @@ IF(FLUXO_DISC_CARTESIANFLUX)
   ADD_DEFINITIONS(-DCARTESIANFLUX=${FLUXO_DISC_CARTESIANFLUX} )
 ENDIF()
 
-UNSET(FLUXO_OPTIMIZED CACHE) # unset by default (set in if statement)
-IF (NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+IF (CMAKE_BUILD_TYPE MATCHES "Debug")
+  UNSET(FLUXO_OPTIMIZED CACHE) # unset if debug
+ELSE()
   SET(FLUXO_OPTIMIZED  ON  CACHE BOOL "switch on/off some optimized implementations.")
 ENDIF()
 IF(FLUXO_OPTIMIZED)
@@ -126,7 +127,7 @@ ENDIF()
 
 IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   IF(FLUXO_DISCTYPE EQUAL 2)
-    MESSAGE(ERROR " You fool!!! The configuration of split form discretization (DiscType 2) and Gauss nodes is not possible!")
+    MESSAGE(ERROR " Split form discretization (DiscType=2) + Gauss nodes is not possible! Choose either DiscType=2 + Gauss-Lob., or DiscType=1 + Gauss / Gauss-Lob. ")
   ENDIF()
 ENDIF()
 
@@ -138,14 +139,22 @@ ENDIF()
 # Equation system
 # =========================================================================
 # variables set in an if clause needs to be unset by default
-UNSET(FLUXO_EQN_GLM CACHE ) # if mhd
-UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if mhd
+
+SET(EQNSYSNAME_FOUND false ) #to be set in each equation system
+                             # so that its clear that the equation system has been accounted for here!
 
 IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
+  SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes)
-ELSEIF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
+ENDIF()
+
+IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
+  SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=1 -Dlinearscalaradvection)
-ELSEIF(FLUXO_EQNSYSNAME STREQUAL "mhd")
+ENDIF()
+
+IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
+  SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS( -Dmhd)
   SET(FLUXO_EQN_GLM  ON  CACHE BOOL "switch on/off divergence cleaing for mhd.")
   IF(FLUXO_EQN_GLM)
@@ -157,19 +166,26 @@ ELSEIF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   IF(FLUXO_EQN_ANISO_HEAT)
     ADD_DEFINITIONS(-DPP_ANISO_HEAT=T)
   ENDIF()
-ELSEIF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
+ELSE()
+  UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd
+  UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
+ENDIF()
+
+IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
+  SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=8 -Dmaxwell)
   IF (FLUXO_PARABOLIC)
     MESSAGE(ERROR " Do not use parabolic flag with maxwell equation system!")
   ENDIF()
-ELSE()
-  MESSAGE(ERROR " Unknown equation system.")
+ENDIF()
+
+IF(NOT EQNSYSNAME_FOUND ) 
+  # no given equation system
+  MESSAGE(ERROR " This equation system does not appear in CMakeLists.txt!")
 ENDIF()
 
 
 # variables set in an if clause needs to be unset by default
-UNSET(FLUXO_PARABOLIC_LIFTING CACHE ) #if parabolic
-UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if parabolic & navierstokes
 
 IF (FLUXO_PARABOLIC)
   ADD_DEFINITIONS(-DPARABOLIC=1)
@@ -200,8 +216,12 @@ IF (FLUXO_PARABOLIC)
     ELSE()
       MESSAGE(ERROR " No such VISCOSITY known.")
     ENDIF()
+  ELSE()
+    UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if parabolic & not navierstokes
   ENDIF()
 ELSE()
+  UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if not parabolic & not navierstokes
+  UNSET(FLUXO_PARABOLIC_LIFTING CACHE ) #if not parabolic
   ADD_DEFINITIONS(-DPARABOLIC=0)
 ENDIF()
 
@@ -261,14 +281,13 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
       SET(FLUXO_INSTRUCTION "-xCORE-AVX2")
    ELSEIF(ON_MARCONI GREATER -1)
       SET(FLUXO_INSTRUCTION "-axMIC-AVX512 ") #for BW and KNL
-      #SET(FLUXO_INSTRUCTION "-xMIC-AVX512 -align array64byte") #for KNL
    ELSE()
       SET(FLUXO_INSTRUCTION "-xHost")
    ENDIF()
    # set Flags
   SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -r8 -i4 -traceback -warn all -shared-intel -DINTEL")
-  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}    -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
-  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -p -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
   SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
    # add flags only for compiling not linking!
    SET (FLUXO_COMPILE_FLAGS "-fpp -assume bscc")
@@ -314,10 +333,16 @@ IF(NOT FLUXO_BUILD_HDF5)
       MESSAGE (STATUS "h5diff found:${HDF5_DIFF_EXECUTABLE}")
     ENDIF()
   ENDIF()
+  UNSET(HDF5TAG CACHE ) #if not build hdf5
+  UNSET(HDF5DOWNLOAD CACHE ) #if not build hdf5
+  UNSET(FLUXO_HDF5_DLDIR CACHE ) #if not build hdf5
+  UNSET(FLUXO_HDF5_DIR CACHE ) #if not build hdf5
+  UNSET(FLUXO_HDF5FC CACHE ) 
+  UNSET(FLUXO_HDF5CC CACHE ) 
 ELSE()
   # define here the path to download from
-SET (HDF5DOWNLOAD https://bitbucket.hdfgroup.org/scm/hdffv/hdf5.git )
-SET (HDF5TAG "hdf5-1_10_0-patch1" CACHE STRING "HDF5 version tag")
+  SET (HDF5DOWNLOAD https://bitbucket.hdfgroup.org/scm/hdffv/hdf5.git )
+  SET (HDF5TAG "hdf5-1_10_0-patch1" CACHE STRING "HDF5 version tag")
 
   SET(FLUXO_HDF5_DLDIR ${FLUXO_EXTERNAL_LIB_DIR}/HDF5)
   SET(FLUXO_HDF5_DIR  ${FLUXO_HDF5_DLDIR}/build)
