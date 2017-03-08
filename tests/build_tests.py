@@ -156,7 +156,9 @@ if(len(args.hostname) > 1 ) :
 builderr= "_"
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-if(args.case ==0 or args.case ==1) :
+caseID=1
+if(args.case ==0 or args.case ==caseID) :
+   print "caseID: %d" %caseID
    options=[]
    options.extend(baseopts)
    options.extend([
@@ -177,7 +179,9 @@ if(args.case ==0 or args.case ==1) :
      builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-if(args.case ==0 or args.case ==2) :
+caseID=2
+if(args.case ==0 or args.case ==caseID) :
+   print "caseID: %d" %caseID
    options=[]
    options.extend(baseopts)
    options.extend([
@@ -198,7 +202,9 @@ if(args.case ==0 or args.case ==2) :
      builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-if(args.case ==0 or args.case ==3) :
+caseID=3
+if(args.case ==0 or args.case ==caseID) :
+   print "caseID: %d" %caseID
    options=[]
    options.extend(baseopts)
    options.extend([
@@ -219,7 +225,9 @@ if(args.case ==0 or args.case ==3) :
      builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-if(args.case ==0 or args.case ==4) :
+caseID=4
+if(args.case ==0 or args.case ==caseID) :
+   print "caseID: %d" %caseID
    options=[]
    options.extend(baseopts)
    options.extend([
@@ -240,7 +248,9 @@ if(args.case ==0 or args.case ==4) :
      builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-if(args.case ==0 or args.case ==5) :
+caseID=5
+if(args.case ==0 or args.case ==caseID) :
+   print "caseID: %d" %caseID
    options=[]
    options.extend(baseopts)
    options.extend([
