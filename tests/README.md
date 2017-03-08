@@ -1,7 +1,20 @@
 ## Test directory
 This is a collection of tests for fluxo 
 
-For testing the first time, build the meshes:
+### Test different builds
+For testing different builds (options in cmake), do:
+```
+python build_tests.py -p 1 -withmpi 1 -buildhdf5 1
+```
+type 
+```
+python build_tests.py --help
+```
+for explanation of options.
+
+
+### Test the code
+When testing the first time, build the meshes:
 ```
 cd meshes
 ```
