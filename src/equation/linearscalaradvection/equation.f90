@@ -99,7 +99,7 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT SCALAR LINADV...'
 AdvVel             = GETREALARRAY('AdvVel',3)
 ! Read the diffusion constant from ini file
 DiffC             = GETREAL('DiffC','0.')
-IniWavenumber     = GETREALARRAY('IniWavenumber',3,'1.,1.,1.')
+IniWaveNumber     = GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 
 ! Read in boundary parameters
 IniExactFunc = GETINT('IniExactFunc')
@@ -165,7 +165,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 USE MOD_Globals,ONLY:Abort,MPIRoot
 USE MOD_Preproc,ONLY:PP_Pi
 USE MOD_Equation_Vars,ONLY:AdvVel,DiffC
-USE MOD_Equation_Vars,ONLY: IniWavenumber 
+USE MOD_Equation_Vars,ONLY: IniWaveNumber 
 USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 IMPLICIT NONE
@@ -268,15 +268,15 @@ CASE(5) ! Kopriva page 200, advection-diffusion, but for 3D with 1/( (4t+1)^(3/2
                   -32./(DiffC*theta**3)*SUM(          cent(:)**2) & 
                    -8./(DiffC*theta**2)*SUM(AdvVel(:)*cent(:)   ) )
 
-CASE(6) !SINUS periodic, angle with IniWavenumber, exp(-|omega|^2*DiffC*t)*SIN(sum(omega(:)*x(:)))
-         ! note that Omega=IniWavenumber*Pi
+CASE(6) !ADVDIFF- SINUS periodic, angle with IniWaveNumber, exp(-|omega|^2*DiffC*t)*SIN(sum(omega(:)*x(:)))
+         ! note that Omega=IniWaveNumber*Pi
   cent(:)  = x(:)-AdvVel(:)*tEval
-  Amplitude= (PP_Pi*SUM(IniWavenumber(:)))**2*DiffC
-  theta    = PP_Pi*SUM(IniWavenumber(:)*cent(:))
+  Amplitude= SUM((PP_Pi*IniWaveNumber(:))**2)*DiffC
+  theta    = PP_Pi*SUM(IniWaveNumber(:)*cent(:))
   Resu     = EXP(-Amplitude*tEval)*SIN(theta)
-  Resu_t   = -Amplitude* Resu   - PP_Pi*SUM(IniWavenumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)
-  Resu_tt  = -Amplitude*(Resu_t - PP_Pi*SUM(IniWavenumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)) &
-                                -(PP_Pi*SUM(IniWavenumber(:)*AdvVel(:)))**2*Resu
+  Resu_t   = -Amplitude* Resu   - PP_Pi*SUM(IniWaveNumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)
+  Resu_tt  = -Amplitude*(Resu_t - PP_Pi*SUM(IniWaveNumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)) &
+                                -(PP_Pi*SUM(IniWaveNumber(:)*AdvVel(:)))**2*Resu
 
 CASE(7) ! Kopriva page 200, advection-diffusion, but for 2D in x,y planes  with 1/( (4t+1) )
   x0 = (/-0.,-0.,-0./)
