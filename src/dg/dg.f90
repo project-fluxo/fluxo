@@ -225,7 +225,7 @@ END SUBROUTINE InitDGbasis
 !> and once the solution is received the flux is computed on the master sides and sent back.
 !> in between starting the send/receive process and its finish, we call buffer routines to hide the communication latency.
 !==================================================================================================================================
-SUBROUTINE DGTimeDerivative_weakForm(t)
+SUBROUTINE DGTimeDerivative_weakForm(tIn)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
@@ -256,7 +256,7 @@ USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)                 :: t                      !< Current time
+REAL,INTENT(IN)                 :: tIn                    !< Current time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
@@ -297,7 +297,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_
 ! Lifting 
 ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
 ! The communication of the gradients is started within the lifting routines
-CALL Lifting(t)
+CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
@@ -320,7 +320,7 @@ CALL StartSendMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),Send
 #endif /* MPI*/
 
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
-CALL GetBoundaryFlux(t,Flux)
+CALL GetBoundaryFlux(tIn,Flux)
 CALL FillFlux(Flux,doMPISides=.FALSE.)
 ! here, the weak flag is set, since small sides can be slave and must be added to big sides, which are always master!
 CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
@@ -341,8 +341,8 @@ CALL SurfInt(Flux,Ut,doMPIsides=.TRUE.)
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)
 
 !  Compute source terms and sponge (in physical space, conversion to reference space inside routines)
-IF(doCalcSource) CALL CalcSource(Ut,t)
-IF(doTCSource)   CALL TestcaseSource(Ut,t)
+IF(doCalcSource) CALL CalcSource(Ut,tIn)
+IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
 
 END SUBROUTINE DGTimeDerivative_weakForm
 

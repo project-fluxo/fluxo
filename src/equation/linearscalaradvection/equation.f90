@@ -160,18 +160,18 @@ END SUBROUTINE FillIni
 !> Collection of analytical function, can represent exact solutions. input is x and t and the exactfunction integer.
 !> The state in conservative variables is returned.
 !==================================================================================================================================
-SUBROUTINE ExactFunc(ExactFunction,tin,x,resu) 
+SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu) 
 ! MODULES
 USE MOD_Globals,ONLY:Abort,MPIRoot
 USE MOD_Preproc,ONLY:PP_Pi
 USE MOD_Equation_Vars,ONLY:AdvVel,DiffC
 USE MOD_Equation_Vars,ONLY: IniWavenumber 
-USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,t,RKc,RKb
+USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                 :: tin              !< evaluation time 
+REAL,INTENT(IN)                 :: tIn              !< evaluation time 
 REAL,INTENT(IN)                 :: x(3)             !< x,y,z position
 INTEGER,INTENT(IN)              :: ExactFunction    !< determines the exact function
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -188,53 +188,53 @@ REAL                            :: r,theta
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
-Cent=x-AdvVel*t
 SELECT CASE (ExactFunction)
 CASE DEFAULT
   CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(0)        
   CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) !linear
-    Resu=0.+SUM(Cent)
-    Resu_t=-SUM(Advvel)
-    Resu_tt=0.
+  Cent=x-AdvVel*tEval
+  Resu=0.+SUM(Cent)
+  Resu_t=-SUM(Advvel)
+  Resu_tt=0.
 CASE(21) !linear
-    Resu=10.+SUM(Cent)
-    Resu_t=-SUM(Advvel)
-    Resu_tt=0.
+  Cent=x-AdvVel*tEval
+  Resu=10.+SUM(Cent)
+  Resu_t=-SUM(Advvel)
+  Resu_tt=0.
 CASE(101) !constant
-    Resu=3.5
-    Resu_t=0.
-    Resu_tt=0.
+  Resu=3.5
+  Resu_t=0.
+  Resu_tt=0.
 CASE(102) !linear steadystate in xy
-    Resu=SUM(x(1:2))
-    Resu_t=0.
-    Resu_tt=0.
+  Resu=SUM(x(1:2))
+  Resu_t=0.
+  Resu_tt=0.
 CASE(103) !radial steadystate in xy
-    Resu=SUM(x(1:2)**2)**2
-    Resu_t=0.
-    Resu_tt=0.
+  Resu=SUM(x(1:2)**2)**2
+  Resu_t=0.
+  Resu_tt=0.
 CASE(104) !radial steadystate in xy
-    r=SQRT(SUM(x(1:2)**2))
-    theta=ATAN2(x(2),x(1))/PP_Pi
-    Resu=r**6*(0.1*(3*theta-theta**3))**2
-    Resu_t=0.
-    Resu_tt=0.
+  r=SQRT(SUM(x(1:2)**2))
+  theta=ATAN2(x(2),x(1))/PP_Pi
+  Resu=r**6*(0.1*(3*theta-theta**3))**2
+  Resu_t=0.
+  Resu_tt=0.
 CASE(105) !radial steadystate in xy
-    r=SQRT(SUM(x(1:2)**2))
-    theta=ATAN2(x(2),x(1))/PP_Pi
-    Resu=(1-r**2)*(1.+(r*(3*theta-theta**3))**2)
-    Resu_t=0.
-    Resu_tt=0.
+  r=SQRT(SUM(x(1:2)**2))
+  theta=ATAN2(x(2),x(1))/PP_Pi
+  Resu=(1-r**2)*(1.+(r*(3*theta-theta**3))**2)
+  Resu_t=0.
+  Resu_tt=0.
 CASE(106) !sinus steadystate in xy
-    r=SQRT(SUM(x(1:2)**2))
-    theta=ATAN2(x(2),x(1))
-    Resu=(SIN(2*PP_Pi*r)-0.5*SIN(4*PP_Pi*r))*(COS(2*theta)-SIN(4*(theta-0.4)))
-    Resu_t=0.
-    Resu_tt=0.
-
-
+  r=SQRT(SUM(x(1:2)**2))
+  theta=ATAN2(x(2),x(1))
+  Resu=(SIN(2*PP_Pi*r)-0.5*SIN(4*PP_Pi*r))*(COS(2*theta)-SIN(4*(theta-0.4)))
+  Resu_t=0.
+  Resu_tt=0.
 CASE(2) !sinus [-1,1] 
+  Cent=x-AdvVel*tEval
   Frequency=0.5
   Amplitude=1.
   Omega=2.*PP_Pi*Frequency
@@ -243,58 +243,57 @@ CASE(2) !sinus [-1,1]
   Resu_tt=-Amplitude*SIN(Omega*SUM(Cent))*Omega*SUM(AdvVel)*Omega*SUM(AdvVel)
 CASE(3) 
   ! not used at the moment
-CASE(4) ! quadratic
+CASE(4) ! quadratic, 1D
+  cent(1)=x(1)-AdvVel(1)*tEval
   ! g(t)
-  Resu=5.*(x(1)-AdvVel(1)*teval)**2
+  Resu=5.*cent(1)**2
   ! g'(t)
-  Resu_t=-10.*AdvVel(1)*(x(1)-AdvVel(1)*teval)
+  Resu_t=-10.*AdvVel(1)*cent(1)
   ! g''(t)
   Resu_tt=10.*AdvVel(1)*AdvVel(1)
-! This is needed for Taylor Time Discretization
-!  SELECT CASE(tDeriv)
-!  CASE(0)
-!    resu=5.*(x(1)-AdvVel(1)*t)**2
-!  CASE(1)
-!    Resu=-10.*AdvVel(1)*(x(1)-AdvVel(1)*t)
-!  CASE(2)
-!    Resu=10.*AdvVel(1)*AdvVel(1)
-!  CASE DEFAULT
-!    Resu=0.
-!  END SELECT
 CASE(5) ! Kopriva page 200, advection-diffusion, but for 3D with 1/( (4t+1)^(3/2) )
   x0 = (/-0.5,-0.5,-0.5/)
-  Resu=1./((4.*teval+1.)**(1.5))*EXP(-(SUM((x(:)-AdvVel(:)*t-x0(:))**2))/(DiffC*(4.*teval+1.)))
-  Resu_t=Resu   *( -6./(4.*teval+1.) &
-                   +2./(DiffC*(4.*teval+1.))*SUM(AdvVel(:)*(x(:)-AdvVel(:)*teval-x0(:))) &
-                   +4./(DiffC*(4.*teval+1.)**2)*SUM((x(:)-AdvVel(:)*teval-x0(:))**2) )
-  Resu_tt=Resu_t*( -6./(4.*t+1.) &
-                   +2./(DiffC*(4.*teval+1.))*SUM(AdvVel(:)*(x(:)-AdvVel(:)*teval-x0(:))) &
-                   +4./(DiffC*(4.*teval+1.)**2)*SUM((x(:)-AdvVel(:)*teval-x0(:))**2) ) &
-          + Resu*( 24./(4.*t+1.)**2 &
-                   -8./(DiffC*(4.*teval+1.)**2)*SUM(AdvVel(:)*(x(:)-AdvVel(:)*t-x0(:))) &
-                   -2./(DiffC*(4.*teval+1.))*SUM(AdvVel(:)*AdvVel(:)) &
-                   -32./(DiffC*(4.*teval+1.)**3)*SUM((x(:)-AdvVel(:)*teval-x0(:))**2) & 
-                   -8./(DiffC*(4.*teval+1.)**2)*SUM(AdvVel(:)*(x(:)-AdvVel(:)*teval-x0(:))) )
-CASE(6) !SINUS periodic, angle with IniWavenumber, exp(-|omega|^2*DiffC*t)*SIN(omega(:)*x(:))
+  cent(:)=x(:)-AdvVel(:)*tEval-x0(:)
+  theta = 4.*tEval+1. 
+  Resu=1./(theta**(1.5))*EXP(-(SUM(Cent(:)**2))/(DiffC*theta))
+  Resu_t=Resu   *( -6./theta &
+                   +2./(DiffC*theta   )*SUM(AdvVel(:)*cent(:)   ) &
+                   +4./(DiffC*theta**2)*SUM(          cent(:)**2) )
+  Resu_tt=Resu_t*( -6./theta &
+                   +2./(DiffC*theta   )*SUM(AdvVel(:)*cent(:)   ) &
+                   +4./(DiffC*theta**2)*SUM(          cent(:)**2) ) &
+          + Resu*( 24./theta**2 &
+                   -8./(DiffC*theta**2)*SUM(AdvVel(:)*cent(:)   ) &
+                   -2./(DiffC*theta   )*SUM(AdvVel(:)*AdvVel(:) ) &
+                  -32./(DiffC*theta**3)*SUM(          cent(:)**2) & 
+                   -8./(DiffC*theta**2)*SUM(AdvVel(:)*cent(:)   ) )
+
+CASE(6) !SINUS periodic, angle with IniWavenumber, exp(-|omega|^2*DiffC*t)*SIN(sum(omega(:)*x(:)))
          ! note that Omega=IniWavenumber*Pi
-  Amplitude=-SUM(IniWavenumber(:)**2)*PP_Pi*PP_Pi*DiffC
-  Resu   = EXP(Amplitude*teval)*SIN(PP_Pi*SUM(IniWavenumber(:)*cent(:)))
-  Resu_t = Amplitude*Resu
-  Resu_tt= Amplitude*Resu_t
-CASE(7) ! Kopriva page 200, advection-diffusion, but only 2D in x,y planes  with 1/( (4t+1) )
+  cent(:)  = x(:)-AdvVel(:)*tEval
+  Amplitude= (PP_Pi*SUM(IniWavenumber(:)))**2*DiffC
+  theta    = PP_Pi*SUM(IniWavenumber(:)*cent(:))
+  Resu     = EXP(-Amplitude*tEval)*SIN(theta)
+  Resu_t   = -Amplitude* Resu   - PP_Pi*SUM(IniWavenumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)
+  Resu_tt  = -Amplitude*(Resu_t - PP_Pi*SUM(IniWavenumber(:)*AdvVel(:))*EXP(-Amplitude*tEval)*COS(theta)) &
+                                -(PP_Pi*SUM(IniWavenumber(:)*AdvVel(:)))**2*Resu
+
+CASE(7) ! Kopriva page 200, advection-diffusion, but for 2D in x,y planes  with 1/( (4t+1) )
   x0 = (/-0.,-0.,-0./)
-  Resu=1./((4.*teval+1.))*EXP(-(SUM((x(1:2)-AdvVel(1:2)*t-x0(1:2))**2))/(DiffC*(4.*teval+1.)))
-  Resu_t=Resu   *( -4./(4.*teval+1.) &
-                   +2./(DiffC*(4.*teval+1.))*SUM(AdvVel(1:2)*(x(1:2)-AdvVel(1:2)*teval-x0(1:2))) &
-                   +4./(DiffC*(4.*teval+1.)**2)*SUM((x(1:2)-AdvVel(1:2)*teval-x0(1:2))**2) )
-  Resu_tt=Resu_t*( -4./(4.*teval+1.) &
-                   +2./(DiffC*(4.*teval+1.))*SUM(AdvVel(1:2)*(x(1:2)-AdvVel(1:2)*teval-x0(1:2))) &
-                   +4./(DiffC*(4.*teval+1.)**2)*SUM((x(1:2)-AdvVel(1:2)*teval-x0(1:2))**2) ) &
-          + Resu*( 16./(4.*t+1.)**2 &
-                   -8./(DiffC*(4.*teval+1.)**2)*SUM(AdvVel(1:2)*(x(1:2)-AdvVel(1:2)*teval-x0(1:2))) &
-                   -2./(DiffC*(4.*teval+1.))*SUM(AdvVel(1:2)*AdvVel(1:2)) &
-                   -32./(DiffC*(4.*teval+1.)**3)*SUM((x(1:2)-AdvVel(1:2)*teval-x0(1:2))**2) & 
-                   -8./(DiffC*(4.*teval+1.)**2)*SUM(AdvVel(1:2)*(x(1:2)-AdvVel(1:2)*teval-x0(1:2))) )
+  cent(1:2)=x(1:2)-AdvVel(1:2)*tEval-x0(1:2)
+  theta = 4.*tEval+1. 
+  Resu=1./(theta)*EXP(-(SUM(cent(1:2)**2))/(DiffC*theta))
+  Resu_t=Resu   *( -4./theta &
+                   +2./(DiffC*theta   )*SUM(AdvVel(1:2)*cent(1:2)   ) &
+                   +4./(DiffC*theta**2)*SUM(            cent(1:2)**2) )
+  Resu_tt=Resu_t*( -4./theta &
+                   +2./(DiffC*theta   )*SUM(AdvVel(1:2)*cent(1:2)   ) &
+                   +4./(DiffC*theta**2)*SUM(            cent(1:2)**2) ) &
+          + Resu*( 16./theta**2 &
+                   -8./(DiffC*theta**2)*SUM(AdvVel(1:2)*cent(1:2)   ) &
+                   -2./(DiffC*theta   )*SUM(AdvVel(1:2)*AdvVel(1:2) ) &
+                  -32./(DiffC*theta**3)*SUM(            cent(1:2)**2) & 
+                   -8./(DiffC*theta**2)*SUM(AdvVel(1:2)*cent(1:2)   ) )
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
@@ -322,7 +321,7 @@ END SUBROUTINE ExactFunc
 !==================================================================================================================================
 !> Compute source terms for some specific testcases and adds it to DG time derivative
 !==================================================================================================================================
-SUBROUTINE CalcSource(Ut,t)
+SUBROUTINE CalcSource(Ut,tIn)
 !==================================================================================================================================
 ! Specifies all the initial conditions. The state in conservative variables is returned.
 !==================================================================================================================================
@@ -334,7 +333,7 @@ USE MOD_Mesh_vars,ONLY: nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                 :: t
+REAL,INTENT(IN)                 :: tIn
 REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG time derivative
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES

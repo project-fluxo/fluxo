@@ -114,7 +114,7 @@ END SUBROUTINE InitBC
 !> Computes the boundary values for all sides
 !> BCType: 1...periodic, 2...exact BC
 !==================================================================================================================================
-SUBROUTINE GetBoundaryFlux(t,Flux)
+SUBROUTINE GetBoundaryFlux(tIn,Flux)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc
@@ -131,7 +131,7 @@ USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 ! INPUT VARIABLES
-REAL,INTENT(IN)         :: t       !< current time (provided by time integration scheme)
+REAL,INTENT(IN)         :: tIn       !< current time (provided by time integration scheme)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)        :: Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides) !< boundary flux 
@@ -158,7 +158,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(IniExactFunc,t,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
         END DO ! p
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
@@ -174,7 +174,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,t,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          CALL ExactFunc(BCState,tin,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
         END DO ! p
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
@@ -226,7 +226,7 @@ END SUBROUTINE GetBoundaryFlux
 !==================================================================================================================================
 !> Computes the boundary fluxes for the lifting procedure for all sides.
 !==================================================================================================================================
-SUBROUTINE Lifting_GetBoundaryFlux(t,Flux)
+SUBROUTINE Lifting_GetBoundaryFlux(tIn,Flux)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc
@@ -239,7 +239,7 @@ USE MOD_DG_Vars      ,ONLY: U_master
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)                :: t                                    !< current time (provided by time integration scheme)
+REAL,INTENT(IN)                :: tIn                                  !< current time (provided by time integration scheme)
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)               :: Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides) !< lifting boundary flux
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -261,7 +261,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(IniExactFunc,t,face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
+          CALL ExactFunc(IniExactFunc,tIn,face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -271,7 +271,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCstate,t,face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
+          CALL ExactFunc(BCstate,tIn,face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc

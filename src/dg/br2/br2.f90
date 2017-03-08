@@ -164,7 +164,7 @@ END SUBROUTINE InitLifting
 !> * The surface integral of the fluxes is calculated, here the strong form is used and the etaBR2 factor is applied.
 !>   In the same step, the surface contribution is added to the prolonged volume contribution
 !==================================================================================================================================
-SUBROUTINE Lifting(t)
+SUBROUTINE Lifting(tIn)
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
@@ -184,7 +184,7 @@ USE MOD_Mesh_Vars,         ONLY: nSides,FirstSlaveSide,LastSlaveSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN) :: t        !< current simulation time
+REAL,INTENT(IN) :: tIn        !< current simulation time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
@@ -210,7 +210,7 @@ CALL StartSendMPIData(   FluxZ,DataSizeSide,1,nSides,MPIRequest_Lifting(:,3,SEND
 #endif /*MPI*/
 
 ! fill the all surface fluxes on this proc
-CALL Lifting_FillFlux_BC(t,FluxX, FluxY, FluxZ)
+CALL Lifting_FillFlux_BC(tIn,FluxX, FluxY, FluxZ)
 CALL Lifting_FillFlux(FluxX,FluxY,FluxZ,doMPISides=.FALSE.)
 
 CALL Flux_Mortar(FluxX,doMPISides=.FALSE.,weak=.FALSE.)
