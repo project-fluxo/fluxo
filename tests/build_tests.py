@@ -14,7 +14,7 @@ import argparse
 
 def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, keepdir=0):
    # build directory
-   builddir='dir_'+project
+   builddir='dirx_'+project
    os.system('rm -rf '+builddir) #destroy directory from previous run
    os.system('mkdir '+builddir )
    os.chdir(builddir)
@@ -39,14 +39,17 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
    stderr=open("stderr",'r').readlines()
    cmake_err= False
    for line in stderr :
-      logf.write(line)
       if "ERROR" in line :
          cmake_err= True
          sys.stdout.write("%s" % line)
 
+   logf.write('CONFIG: STDOUT FILE:\n')
    for line in stdout :
       logf.write(line)
 
+   logf.write('CONFIG: STDERR FILE:\n')
+   for line in stderr :
+      logf.write(line)
 
    logf.close()
    if (ntail > 0) :
@@ -73,10 +76,17 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
    
    logf = open(log_path, 'a')
    build_success= False
+
+   logf.write('MAKE: STDOUT FILE:\n')
    for line in stdout :
       logf.write(line)
       if "SUCCESS: FLUXO BUILD COMPLETE!" in line :
          build_success= True
+
+   logf.write('MAKE: STDERR FILE:\n')
+   for line in stderr :
+      logf.write(line)
+
    logf.close()
    if (ntail > 0) :
       nlines=len(stdout)
@@ -112,8 +122,11 @@ parser.add_argument('-withmpi', type=int, default=1, help="(1) compile with mpi 
                                                           "(0) compile without mpi  ")
 parser.add_argument('-buildhdf5', type=int, default=1, help="(1) build hdf5 locally (default),\n"
                                                             "(0) use external hdf5 (modules)")
+parser.add_argument('-hostname', type=str, default="", help="cmake hostname, needed if compiling on a cluster" )
 parser.add_argument('-keepdir', type=int, default=1, help="(1) keep all build directories (default),\n" 
                                                           "(0) delete sucessfull build directories")
+parser.add_argument('-case', type=int, default=0, help="(0) run all cases,\n" 
+                                                       "(>0) run only specific case")
 
 args = parser.parse_args()
 
@@ -122,94 +135,130 @@ if(args.withmpi == 0) :
   MPIOPT="OFF"
 else :
   MPIOPT="ON"
+baseopts=["FLUXO_BUILD_MPI"        ,MPIOPT 
+         ]
+
 
 if(args.buildhdf5 == 0) :
   HDF5OPT="OFF"
 else :
   HDF5OPT="ON"
 
+baseopts.extend([
+          "FLUXO_BUILD_HDF5"       ,HDF5OPT
+         ])
+
+if(len(args.hostname) > 1 ) :
+  baseopts.extend([
+         "CMAKE_HOSTNAME"       ,args.hostname 
+         ])
 
 builderr= "_"
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-options=[ "CMAKE_BUILD_TYPE"       ,"Release"
-         ,"FLUXO_BUILD_MPI"        ,MPIOPT
-         ,"FLUXO_BUILD_HDF5"       ,HDF5OPT
-         ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
-         ,"FLUXO_DISCTYPE"         ,"1"
-         ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-         ,"FLUXO_PARABOLIC"        ,"ON"
-         ,"FLUXO_PARABOLIC_LIFTING","br1"
-         ,"FLUXO_TESTCASE"         ,"default" 
-        ]
-
-pname="build_test_1"
-stat = buildfluxo(buildopts=options, project=pname,\
-                              ntail = args.ntail ,\
-                              mpi_procs = args.procs , keepdir=args.keepdir )
-if(not stat) :
-  builderr= builderr+" "+pname
+if(args.case ==0 or args.case ==1) :
+   options=[]
+   options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_TESTCASE"         ,"default" 
+           ])
+   
+   pname="build_linadv_release"
+   stat = buildfluxo(buildopts=options, project=pname,\
+                                 ntail = args.ntail ,\
+                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-
-options=[ "CMAKE_BUILD_TYPE"       ,"Debug"
-         ,"FLUXO_BUILD_MPI"        ,MPIOPT
-         ,"FLUXO_BUILD_HDF5"       ,HDF5OPT
-         ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
-         ,"FLUXO_DISCTYPE"         ,"1"
-         ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-         ,"FLUXO_PARABOLIC"        ,"ON"
-         ,"FLUXO_PARABOLIC_LIFTING","br1"
-         ,"FLUXO_TESTCASE"         ,"default" 
-        ]
-
-pname="build_test_2"
-stat = buildfluxo(buildopts=options, project=pname,\
-                              ntail = args.ntail ,\
-                              mpi_procs = args.procs , keepdir=args.keepdir )
-if(not stat) :
-  builderr= builderr+" "+pname
+if(args.case ==0 or args.case ==2) :
+   options=[]
+   options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_TESTCASE"         ,"default" 
+           ])
+   
+   pname="build_linadv_type1_GL_br1"
+   stat = buildfluxo(buildopts=options, project=pname,\
+                                 ntail = args.ntail ,\
+                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-
-options=[ "CMAKE_BUILD_TYPE"       ,"Debug"
-         ,"FLUXO_BUILD_MPI"        ,MPIOPT
-         ,"FLUXO_BUILD_HDF5"       ,HDF5OPT
-         ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
-         ,"FLUXO_DISCTYPE"         ,"1"
-         ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
-         ,"FLUXO_PARABOLIC"        ,"ON"
-         ,"FLUXO_PARABOLIC_LIFTING","br2"
-         ,"FLUXO_TESTCASE"         ,"default" 
-        ]
-
-pname="build_test_3"
-stat = buildfluxo(buildopts=options, project=pname,\
-                              ntail = args.ntail ,\
-                              mpi_procs = args.procs , keepdir=args.keepdir )
-if(not stat) :
-  builderr= builderr+" "+pname
+if(args.case ==0 or args.case ==3) :
+   options=[]
+   options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br2"
+            ,"FLUXO_TESTCASE"         ,"default" 
+           ])
+   
+   pname="build_linadv_type1_Gauss_br2"
+   stat = buildfluxo(buildopts=options, project=pname,\
+                                 ntail = args.ntail ,\
+                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-
-options=[ "CMAKE_BUILD_TYPE"       ,"Debug"
-         ,"FLUXO_BUILD_MPI"        ,MPIOPT
-         ,"FLUXO_BUILD_HDF5"       ,HDF5OPT
-         ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
-         ,"FLUXO_DISCTYPE"         ,"2"
-         ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-         ,"FLUXO_PARABOLIC"        ,"ON"
-         ,"FLUXO_PARABOLIC_LIFTING","br1"
-         ,"FLUXO_TESTCASE"         ,"default" 
-        ]
-
-pname="build_test_4"
-stat = buildfluxo(buildopts=options, project=pname,\
-                              ntail = args.ntail ,\
-                              mpi_procs = args.procs , keepdir=args.keepdir )
-if(not stat) :
-  builderr= builderr+" "+pname
+if(args.case ==0 or args.case ==4) :
+   options=[]
+   options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_TESTCASE"         ,"default" 
+           ])
+   
+   pname="build_linadv_type2_br1"
+   stat = buildfluxo(buildopts=options, project=pname,\
+                                 ntail = args.ntail ,\
+                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr= builderr+" "+pname
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+if(args.case ==0 or args.case ==5) :
+   options=[]
+   options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_DISC_CARTESIANFLUX","ON"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+            ,"FLUXO_TESTCASE"         ,"default" 
+           ])
+   
+   pname="build_linadv_type2_nopara_cart"
+   stat = buildfluxo(buildopts=options, project=pname,\
+                                 ntail = args.ntail ,\
+                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr= builderr+" "+pname
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 

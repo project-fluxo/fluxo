@@ -171,10 +171,20 @@ metric = 0.5*(metric_L+metric_R)
 #endif /*ndef CARTESIANFLUX*/
 !Fstar=SUM(AdvVel(1:3)*metric(1:3))*0.5*(UL+UR)
 
+#ifdef CARTESIANFLUX
+Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
+           + AdvVel(2)*metric(2)*(UL+UR) &
+           + AdvVel(3)*metric(3)*(UL+UR) )
+#else
+!with metric dealising
+!Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
+!           + AdvVel(2)*metric(2)*(UL+UR) &
+!           + AdvVel(3)*metric(3)*(UL+UR) )
 !without metric dealising (standard DG flux on curved meshes)
 Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
            + AdvVel(2)*(metric_L(2)*UL+metric_R(2)*UR) &
            + AdvVel(3)*(metric_L(3)*UL+metric_R(3)*UR) )
+#endif /*def CARTESIANFLUX*/
 
 END SUBROUTINE StandardDGFluxVec
 
