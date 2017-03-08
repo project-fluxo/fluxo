@@ -77,7 +77,7 @@ SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
-SET(   FLUXO_BUILD_HDF5 ON  CACHE BOOL "Compile and build hdf5 library")
+OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" ON)
 
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
@@ -309,10 +309,14 @@ ENDIF()
 # Add the libraries
 # =========================================================================
 
-IF(FLUXO_BUILD_MPI)
-  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+IF(FLUXO_BUILD_HDF5)
+  IF(FLUXO_BUILD_MPI)
+    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+  ELSE()
+    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+  ENDIF()
 ELSE()
-  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+  UNSET(FLUXO_EXTERNAL_LIB_DIR CACHE ) 
 ENDIF()
 MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
 
@@ -524,8 +528,9 @@ ADD_CUSTOM_TARGET(preproc_defines COMMAND echo ${comp_defs_str})
 # =========================================================================
 # Install
 # =========================================================================
-INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATION bin)
 
+#INSTALL(FILES    ${CMAKE_Fortran_MODULE_DIRECTORY}/configuration-cmake.f90 DESTINATION include )
+INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATION bin)
 #INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/userblock.txt DESTINATION bin)
 
 
@@ -533,31 +538,32 @@ INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake DESTINATI
 # USERBLOCK + Preproc_flags
 # =========================================================================
 
-## A function to get all user defined variables with a specified prefix
-#function (getListOfVarsStartingWith _prefix _varResult)
-#    GET_CMAKE_PROPERTY(_vars CACHE_VARIABLES)
-#    STRING(REGEX MATCHALL "(^|;)${_prefix}[A-Za-z0-9_]*" _matchedVars "${_vars}")
-#    SET(${_varResult} ${_matchedVars} PARENT_SCOPE)
-#endfunction()
-#
-## A function to get all user defined variables with a specified prefix
-#SET(configuration ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/configuration.cmake)
-#FILE(WRITE ${configuration} "")
-#GETLISTOFVARSSTARTINGWITH("FLUXO_" fluxoVars)
-#FOREACH (_var IN LISTS fluxoVars)
-#  GET_PROPERTY(currentHelpString CACHE "${_var}" PROPERTY HELPSTRING)
-#  SET(boolian (${${_var}} STREQUAL "ON" OR ${${_var}} STREQUAL "OFF"))
+# A function to get all user defined variables with a specified prefix
+function (getListOfVarsStartingWith _prefix _varResult)
+    GET_CMAKE_PROPERTY(_vars CACHE_VARIABLES)
+    STRING(REGEX MATCHALL "(^|;)${_prefix}[A-Za-z0-9_]*" _matchedVars "${_vars}")
+    SET(${_varResult} ${_matchedVars} PARENT_SCOPE)
+endfunction()
+
+# A function to get all user defined variables with a specified prefix
+SET(configuration ${CMAKE_Fortran_MODULE_DIRECTORY}/configuration-cmake.f90)
+FILE(WRITE ${configuration} "!This file is included during compilation in fluxo.f90 to show the configuration on the screen output. \n")
+FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A)') \" THIS IS AN OUTPUT OF THE FLUXO OPTIONS USED IN CMAKE:\" \n")
+GETLISTOFVARSSTARTINGWITH("FLUXO_" fluxoVars)
+FOREACH (_var IN LISTS fluxoVars)
+  GET_PROPERTY(currentHelpString CACHE "${_var}" PROPERTY HELPSTRING)
+#  SET(boolian (${${_var}} STREQUAL "ON" OR ${${_var}} STREQUAL "OFF")) 
 #  IF(${boolian})
-#    FILE(APPEND ${configuration} "OPTION(${_var} \"${currentHelpString}\" ${${_var}})\n")
+#    #FILE(APPEND ${configuration} "OPTION(${_var} \"${currentHelpString}\" ${${_var}})\n")
+#    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,*)  \"   CMAKE,OPTION: ${_var} ${${_var}} \" \n")
 #  ELSE()
-#    IF(${_var})
-#      STRING(REPLACE "\\" "\\\\" ${_var} ${${_var}})
-#    ENDIF()
-#    FILE(APPEND ${configuration} "SET(${_var} \"${${_var}}\" CACHE STRING \"${currentHelpString}\")\n")
+    IF(${_var})
+      STRING(REPLACE "\\" "\\\\" ${_var} ${${_var}})
+    ENDIF()
+    #FILE(APPEND ${configuration} "SET(${_var} \"${${_var}}\" CACHE STRING \"${currentHelpString}\")\n")
+    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A18,A25,A3,A40)')  \"   CMAKE-OPTION : \",\" ${_var} \",\" : \",\"${${_var}}\"\n")
 #  ENDIF()
-#ENDFOREACH()
-#ADD_CUSTOM_COMMAND(TARGET fluxolib PRE_BUILD COMMAND
-#  sh ${CMAKE_CURRENT_SOURCE_DIR}/tools/userblock/generateuserblock.sh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+ENDFOREACH()
 
 # =========================================================================
 # Add FLUXO2VTK tool

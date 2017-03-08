@@ -78,33 +78,38 @@ END IF
 CALL prms%read_options(ParameterFile)
 !
 CALL InitIOHDF5()
-SWRITE(UNIT_stdOut,'(132("="))')
-SWRITE(UNIT_stdOut,'(A)') &
-"                  __________________   _______              _______     ______   ______      ______   __________________ "
-SWRITE(UNIT_stdOut,'(A)') &
-"                 /                 /) /      /)            /      /)   /     /) /      |   _/     /) /                 /)"
-SWRITE(UNIT_stdOut,'(A)') &
-"                /       __________// /      //            /      //   /     // /__     |_/´     _// /      _____      // "
-SWRITE(UNIT_stdOut,'(A)') &
-"               /      /)__________) /      //            /      //   /     //  (__|          _/´_) /      /)___/     //  "
-SWRITE(UNIT_stdOut,'(A)') &
-"              /      //___         /      //            /      //   /     //      |       _/´_/´  /      //   /     //   "
-SWRITE(UNIT_stdOut,'(A)') &
-"             /           /)       /      //            /      //   /     //       |     /´ /´    /      //   /     //    "
-SWRITE(UNIT_stdOut,'(A)') &
-"            /      _____//       /      //            /      //   /     //      _/´     |/´     /      //   /     //     "
-SWRITE(UNIT_stdOut,'(A)') &
-"           /      /)____)       /      //            /      //   /     //    _/´        |      /      //   /     //      "
-SWRITE(UNIT_stdOut,'(A)') &
-"          /      //            /      //_________   /      //___/     // __/´     _     |__   /      //___/     //       "
-SWRITE(UNIT_stdOut,'(A)') &
-"         /      //            /                 /) /                 // /      _/´ |      /) /                 //        "
-SWRITE(UNIT_stdOut,'(A)') &
-"        /______//            /_________________// /_________________// /_____/` _/´|_____// /_________________//         "
-SWRITE(UNIT_stdOut,'(A)') &
-"        )______)             )_________________)  )_________________)  )_____)/´   )_____)  )_________________)          "
-SWRITE(UNIT_stdOut,'(A)')
-SWRITE(UNIT_stdOut,'(132("="))')
+IF(MPIroot)THEN
+  WRITE(UNIT_stdOut,'(132("="))')
+  WRITE(UNIT_stdOut,'(A)') &
+  "                  __________________   _______              _______     ______   ______      ______   __________________ "
+  WRITE(UNIT_stdOut,'(A)') &
+  "                 /                 /) /      /)            /      /)   /     /) /      |   _/     /) /                 /)"
+  WRITE(UNIT_stdOut,'(A)') &
+  "                /       __________// /      //            /      //   /     // /__     |_/´     _// /      _____      // "
+  WRITE(UNIT_stdOut,'(A)') &
+  "               /      /)__________) /      //            /      //   /     //  (__|          _/´_) /      /)___/     //  "
+  WRITE(UNIT_stdOut,'(A)') &
+  "              /      //___         /      //            /      //   /     //      |       _/´_/´  /      //   /     //   "
+  WRITE(UNIT_stdOut,'(A)') &
+  "             /           /)       /      //            /      //   /     //       |     /´ /´    /      //   /     //    "
+  WRITE(UNIT_stdOut,'(A)') &
+  "            /      _____//       /      //            /      //   /     //      _/´     |/´     /      //   /     //     "
+  WRITE(UNIT_stdOut,'(A)') &
+  "           /      /)____)       /      //            /      //   /     //    _/´        |      /      //   /     //      "
+  WRITE(UNIT_stdOut,'(A)') &
+  "          /      //            /      //_________   /      //___/     // __/´     _     |__   /      //___/     //       "
+  WRITE(UNIT_stdOut,'(A)') &
+  "         /      //            /                 /) /                 // /      _/´ |      /) /                 //        "
+  WRITE(UNIT_stdOut,'(A)') &
+  "        /______//            /_________________// /_________________// /_____/` _/´|_____// /_________________//         "
+  WRITE(UNIT_stdOut,'(A)') &
+  "        )______)             )_________________)  )_________________)  )_____)/´   )_____)  )_________________)          "
+  WRITE(UNIT_stdOut,'(A)')
+  WRITE(UNIT_stdOut,'(132("="))')
+  !write CMAKE compilation options to screen. This file is build during cmake procedure to build/include
+#include "configuration-cmake.f90"
+  WRITE(UNIT_stdOut,'(132("="))')
+END IF !MPIroot
 ! Measure init duration
 StartTime=FLUXOTIME()
 !
