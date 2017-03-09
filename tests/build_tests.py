@@ -12,9 +12,16 @@ import argparse
 
 ########################################################################################################
 
-def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, keepdir=0):
+def buildfluxo( buildopts=None , case=0, project="test" , ntail = 0 , mpi_procs = 1, keepdir=0, 
+                err= None ):
+   if len(buildopts) < 2 :
+      print "error, nobuild options given"
+      err.extend(["caseID=%6d ,project= %s" % (case,project)])
+      return False
    # build directory
-   builddir='dirx_'+project
+   builddir=("dirx_%d_%s" % (case,project))
+   log_path=("../log.%d_%s" % (case,project))
+
    os.system('rm -rf '+builddir) #destroy directory from previous run
    os.system('mkdir '+builddir )
    os.chdir(builddir)
@@ -26,17 +33,17 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
    print "===> OPTIONS:"
    print allopts
 
-   log_path="../log."+project
    logf = open(log_path, 'w')
    logf.write("===> OPTIONS: \n %s \n" % (allopts) )
  
    cmdconfig = "cmake ../../. "+allopts
    print "  "
    print "===> configure..."
-   os.system(cmdconfig+" 2>stderr 1>stdout")
 
+   os.system(cmdconfig+" 2>stderr 1>stdout")
    stdout=open("stdout",'r').readlines()
    stderr=open("stderr",'r').readlines()
+
    cmake_err= False
    for line in stderr :
       if "ERROR" in line :
@@ -64,17 +71,18 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
       print " !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!!! "
       print "===============================================  "
       print "  "
+      err.extend(["caseID=%6d ,project= %s" % (case,project)])
       return (not cmake_err)
    #MAKE
    print "  "
    print "===> make..."
    cmdmake = ("make -j %d VERBOSE=1" % (mpi_procs) )
-   os.system(cmdmake+" 2>stderr 1>stdout")
 
+   os.system(cmdmake+" 2>stderr 1>stdout")
    stdout=open("stdout",'r').readlines()
    stderr=open("stderr",'r').readlines()
    
-   logf = open(log_path, 'a')
+   logf = open(log_path, 'a') #append
    build_success= False
 
    logf.write('MAKE: STDOUT FILE:\n')
@@ -99,11 +107,12 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
    os.chdir('../')
    print "===============================================  "
    if (build_success) :
-     if(keepdir ==0) :
-        os.system('rm -rf '+builddir) #destroy directory
-     print " Build finished sucessfully."
+      if(keepdir ==0) :
+         os.system('rm -rf '+builddir) #destroy directory
+      print " Build finished sucessfully."
    else :
-     print " !!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! "
+      print " !!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! "
+      err.extend(["caseID=%6d ,project= %s" % (case,project)])
    print "===============================================  "
    print "  "
    return build_success
@@ -176,7 +185,24 @@ baseopts=[
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
-   pname="build_linadv_release"
+   pname="build_linadv_release_type1_GL"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_linadv_release_type2_GL"
    print "caseID: %d name: %s" % (caseID,pname)
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -188,8 +214,8 @@ if(cases[0] ==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -205,8 +231,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   if(not dbg)  : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -222,8 +248,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -239,8 +265,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br2"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -256,8 +282,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -273,8 +299,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br2"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -290,11 +316,12 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC"        ,"OFF"
            ])
    
-   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
 
 ######################################################################
 
+#FINAL ERROR HANDLING:
 if(len(builderr) > 0 ) :
   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"
@@ -302,7 +329,8 @@ if(len(builderr) > 0 ) :
   for line in builderr :
      print "--> "+line
   print " "
-  print "... see log.[project] files and dirx_[project] folders."
+  print "... see log.caseID_project files"
+  print "   and dirx_caseID_project folders."
   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 else :
   print "/////////////////////////////////////////////////////////"
