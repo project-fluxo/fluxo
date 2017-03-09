@@ -108,6 +108,14 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
    print "  "
    return build_success
   
+########################################################################################################
+# parse a str with comma separated ranges: 1,5,10-12
+def parse_range(astr):
+    result = set()
+    for part in astr.split(','):
+       x = part.split('-')
+       result.update(range(int(x[0]), int(x[-1]) + 1))
+    return sorted(result)
 
 ########################################################################################################
 
@@ -116,26 +124,27 @@ def buildfluxo( buildopts=None , project="test" , ntail = 0 , mpi_procs = 1, kee
 ########################################################################################################
 parser = argparse.ArgumentParser(description='Tool to build/compile fluxo in different configurations',\
                                  formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument('-p','--procs', type=int, default=1, help='number of processors used for the make')
-parser.add_argument('-ntail', type=int, default=5, help='number of last line output of cmake/make screenlog')
-parser.add_argument('-withmpi', type=int, default=1, help="(1) compile with mpi (default)\n"
-                                                          "(0) compile without mpi  ")
-parser.add_argument('-buildhdf5', type=int, default=1, help="(1) build hdf5 locally (default),\n"
-                                                            "(0) use external hdf5 (modules)")
-parser.add_argument('-hostname', type=str, default="", help="cmake hostname, needed if compiling on a cluster" )
-parser.add_argument('-keepdir', type=int, default=1, help="(1) keep all build directories (default),\n" 
-                                                          "(0) delete sucessfull build directories")
-parser.add_argument('-case', type=int, default=0, help="(0) run all cases,\n" 
-                                                       "(>0) run only specific case")
+parser.add_argument('-p','--procs',type=int,default=1, help='    number of processors used for the make (DEFAULT=1)')
+parser.add_argument('-ntail', type=int, default=5,     help='    number of last line output of cmake/make screenlog (DEFAULT=5)')
+parser.add_argument('-withmpi', type=int, default=1,   help="1 : DEFAULT ,compile with mpi\n"
+                                                            "0 : compile without mpi  ")
+parser.add_argument('-buildhdf5', type=int, default=1, help="1 : DEFAULT, build hdf5 locally,\n"
+                                                            "0 : use external hdf5 (modules)")
+parser.add_argument('-hostname', type=str, default="", help="    cmake hostname, only needed if compiling on a cluster" )
+parser.add_argument('-keepdir', type=int, default=1,   help="1 : DEFAULT, keep all build directories,\n" 
+                                                            "0 : delete sucessfull build directories")
+parser.add_argument('-case', type=str, default='0',    help="0 : DEFAULT, run all cases,\n" 
+                                                            "101,102-104 : list of specific cases to run (without spaces!) ")
 
 args = parser.parse_args()
 
+cases = parse_range(args.case)
 
 if(args.withmpi == 0) :
   MPIOPT="OFF"
 else :
   MPIOPT="ON"
-baseopts=["FLUXO_BUILD_MPI"        ,MPIOPT 
+globopts=["FLUXO_BUILD_MPI"        ,MPIOPT 
          ]
 
 
@@ -144,139 +153,126 @@ if(args.buildhdf5 == 0) :
 else :
   HDF5OPT="ON"
 
-baseopts.extend([
+globopts.extend([
           "FLUXO_BUILD_HDF5"       ,HDF5OPT
          ])
 
 if(len(args.hostname) > 1 ) :
-  baseopts.extend([
+  globopts.extend([
          "CMAKE_HOSTNAME"       ,args.hostname 
          ])
 
-builderr= "_"
+builderr= []
 
+#######################################################################
+baseopts=[
+           "FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+          ,"FLUXO_TESTCASE"         ,"default"
+         ]
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-caseID=1
-if(args.case ==0 or args.case ==caseID) :
-   print "caseID: %d" %caseID
-   options=[]
-   options.extend(baseopts)
+caseID=101
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_linadv_release"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Release"
-            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
             ,"FLUXO_DISCTYPE"         ,"1"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
-            ,"FLUXO_TESTCASE"         ,"default" 
            ])
    
-   pname="build_linadv_release"
-   stat = buildfluxo(buildopts=options, project=pname,\
-                                 ntail = args.ntail ,\
-                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
    if(not stat) :
-     builderr= builderr+" "+pname
+     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-caseID=2
-if(args.case ==0 or args.case ==caseID) :
-   print "caseID: %d" %caseID
-   options=[]
-   options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
-            ,"FLUXO_DISCTYPE"         ,"1"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"ON"
-            ,"FLUXO_PARABOLIC_LIFTING","br1"
-            ,"FLUXO_TESTCASE"         ,"default" 
-           ])
-   
+caseID=102
+if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type1_GL_br1"
-   stat = buildfluxo(buildopts=options, project=pname,\
-                                 ntail = args.ntail ,\
-                                 mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr= builderr+" "+pname
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
-caseID=3
-if(args.case ==0 or args.case ==caseID) :
-   print "caseID: %d" %caseID
-   options=[]
-   options.extend(baseopts)
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ])
+   
+   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) :
+     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+caseID=103
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_Gauss_br2"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
             ,"FLUXO_DISCTYPE"         ,"1"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br2"
-            ,"FLUXO_TESTCASE"         ,"default" 
            ])
    
-   pname="build_linadv_type1_Gauss_br2"
-   stat = buildfluxo(buildopts=options, project=pname,\
-                                 ntail = args.ntail ,\
-                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
    if(not stat) :
-     builderr= builderr+" "+pname
+     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-caseID=4
-if(args.case ==0 or args.case ==caseID) :
-   print "caseID: %d" %caseID
-   options=[]
-   options.extend(baseopts)
+caseID=104
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type2_br1"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
             ,"FLUXO_DISCTYPE"         ,"2"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
-            ,"FLUXO_TESTCASE"         ,"default" 
            ])
    
-   pname="build_linadv_type2_br1"
-   stat = buildfluxo(buildopts=options, project=pname,\
-                                 ntail = args.ntail ,\
-                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
    if(not stat) :
-     builderr= builderr+" "+pname
+     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
-caseID=5
-if(args.case ==0 or args.case ==caseID) :
-   print "caseID: %d" %caseID
-   options=[]
-   options.extend(baseopts)
+caseID=105
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type2_nopara_cart"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
             ,"FLUXO_DISCTYPE"         ,"2"
             ,"FLUXO_DISC_CARTESIANFLUX","ON"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"OFF"
-            ,"FLUXO_TESTCASE"         ,"default" 
            ])
    
-   pname="build_linadv_type2_nopara_cart"
-   stat = buildfluxo(buildopts=options, project=pname,\
-                                 ntail = args.ntail ,\
-                                 mpi_procs = args.procs , keepdir=args.keepdir )
+   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
    if(not stat) :
-     builderr= builderr+" "+pname
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
 
+######################################################################
 
-
-if(len(builderr) > 1 ) :
-  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  print "!!!!! WARNING, following builds failed !!!!!"
-  print builderr
-  print "see log.build_test files.."
-  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+if(len(builderr) > 0 ) :
+  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"
+  print " "
+  for line in builderr :
+     print "--> "+line
+  print " "
+  print "... see log.[project] files and dirx_[project] folders."
+  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 
