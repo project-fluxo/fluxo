@@ -164,13 +164,17 @@ if(len(args.hostname) > 1 ) :
 
 builderr= []
 
+dbg  = False #debug, no builds
+stat = True
 #######################################################################
+#first group, 100 < caseID <200
+caseID=100 
 baseopts=[
            "FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
           ,"FLUXO_TESTCASE"         ,"default"
          ]
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-caseID=101
+caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_linadv_release"
    print "caseID: %d name: %s" % (caseID,pname)
@@ -178,56 +182,16 @@ if(cases[0] ==0 or (caseID in cases)) :
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Release"
-            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISCTYPE"         ,"2"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
-caseID=102
-if(cases[0]==0 or (caseID in cases)) :
-   pname="build_linadv_type1_GL_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
-
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"1"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"ON"
-            ,"FLUXO_PARABOLIC_LIFTING","br1"
-           ])
-   
-   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
-caseID=103
-if(cases[0]==0 or (caseID in cases)) :
-   pname="build_linadv_type1_Gauss_br2"
-   print "caseID: %d name: %s" % (caseID,pname)
-
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"1"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
-            ,"FLUXO_PARABOLIC"        ,"ON"
-            ,"FLUXO_PARABOLIC_LIFTING","br2"
-           ])
-   
-   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
-caseID=104
+caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type2_br1"
    print "caseID: %d name: %s" % (caseID,pname)
@@ -241,12 +205,78 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC_LIFTING","br1"
            ])
    
-   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
+   if(not dbg)  : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
-caseID=105
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_GL_br1"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_GL_br2"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br2"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_Gauss_br1"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_Gauss_br2"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br2"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type2_nopara_cart"
    print "caseID: %d name: %s" % (caseID,pname)
@@ -260,9 +290,8 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC"        ,"OFF"
            ])
    
-   stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
-   if(not stat) :
-     builderr.extend(["caseID=%6d , %s" % (caseID,pname)])
+   if(not dbg ) : stat = buildfluxo(buildopts=options, project=pname, ntail = args.ntail , mpi_procs = args.procs , keepdir=args.keepdir )
+   if(not stat) : builderr.extend(["caseID=%6d ,project= %s" % (caseID,pname)])
 
 ######################################################################
 
@@ -275,4 +304,10 @@ if(len(builderr) > 0 ) :
   print " "
   print "... see log.[project] files and dirx_[project] folders."
   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+else :
+  print "/////////////////////////////////////////////////////////"
+  print " "
+  print " ==> ALL BUILDS WERE SUCCESSFULL!"
+  print " "
+  print "/////////////////////////////////////////////////////////"
 
