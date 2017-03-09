@@ -15,15 +15,15 @@
 !==================================================================================================================================
 #include "defines.h"
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Computes the time step to be used in the explicit Runge-Kutta schemes
-!===================================================================================================================================
+!==================================================================================================================================
 MODULE MOD_CalcTimeStep
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 INTERFACE CALCTIMESTEP
   MODULE PROCEDURE CALCTIMESTEP
 END INTERFACE
@@ -33,9 +33,9 @@ PUBLIC :: CALCTIMESTEP
 
 CONTAINS
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Calculate the time step for the current update of U for the Maxwell equations
-!===================================================================================================================================
+!==================================================================================================================================
 FUNCTION CALCTIMESTEP(errType)
 ! MODULES
 USE MOD_Globals
@@ -43,20 +43,24 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
 USE MOD_Equation_Vars,ONLY:c,c_corr
 USE MOD_TimeDisc_Vars,ONLY:CFLScale
+#ifndef GNU
+USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
+#endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL                           :: CalcTimeStep !< computed time step
 INTEGER,INTENT(OUT)            :: errType      !< integer flag for the type of error that occured
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                        :: i,j,k,iElem
 REAL                           :: Max_Lambda1,Max_Lambda2,Max_Lambda3
 REAL                           :: TimeStepConv
-!===================================================================================================================================
+REAL                           :: buf(2)
+!==================================================================================================================================
 TimeStepConv=HUGE(1.)
 errType=0
 DO iElem=1,nElems
@@ -83,14 +87,20 @@ DO iElem=1,nElems
     errType=1
   END IF
 END DO ! iElem
-#ifdef MPI
-CALL MPI_ALLREDUCE(MPI_IN_PLACE,TimeStepConv,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
+
+IF(IEEE_IS_NAN(TimeStepConv))THEN
+  errType=1
+END IF
+#if MPI
+buf(1)=TimeStepConv
+buf(2)=-errType ! reduce with timestep, minus due to MPI_MIN
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,buf,2,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
+TimeStepConv=buf(1)
+errType=INT(-buf(2))
 #endif /*MPI*/
 
 CalcTimeStep=TimeStepConv
-IF(IEEE_IS_NAN(CalcTimeStep))THEN
-  errType=1
-END IF
+
 END FUNCTION CALCTIMESTEP
 
 END MODULE MOD_CalcTimeStep

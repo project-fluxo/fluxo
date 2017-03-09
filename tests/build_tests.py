@@ -175,8 +175,9 @@ builderr= []
 
 dbg  = False #debug, no builds
 stat = True
-#######################################################################
-#first group, 100 < caseID <200
+#============================================================================
+#first group, LINADV, 100 < caseID <200
+#============================================================================
 caseID=100 
 baseopts=[
            "FLUXO_EQNSYSNAME"       ,"linearscalaradvection"
@@ -318,10 +319,72 @@ if(cases[0]==0 or (caseID in cases)) :
    
    if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                                     mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-######################################################################
+#============================================================================
+#next group, MAXWELL, 200 < caseID <300
+#============================================================================
+caseID=200 
+baseopts=[
+           "FLUXO_EQNSYSNAME"       ,"maxwell"
+          ,"FLUXO_TESTCASE"         ,"default"
+         ]
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_maxwell_type1_GL"
+   print "caseID: %d name: %s" % (caseID,pname)
 
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_maxwell_type2_GL"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_maxwell_type2_GL_CART"
+   print "caseID: %d name: %s" % (caseID,pname)
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_DISC_CARTESIANFLUX","ON"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+           ])
+   
+   if(not dbg ) : stat = buildfluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                                    mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+#============================================================================
 #FINAL ERROR HANDLING:
+#============================================================================
 if(len(builderr) > 0 ) :
   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"

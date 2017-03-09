@@ -15,18 +15,18 @@
 !==================================================================================================================================
 #include "defines.h"
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Contains the parameters for the Maxwell system (including the hyperbolic divergence cleaning variable psi)
-!===================================================================================================================================
+!==================================================================================================================================
 MODULE MOD_Equation_Vars
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
 SAVE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL             :: doCalcSource            !< logical to define if a source term (e.g. exactfunc) is added
 REAL                :: c_corr
 REAL                :: c_corr2    !< c_corr^2
@@ -35,7 +35,6 @@ REAL                :: c_corr_c2  !< c_corr*c^2
 REAL                :: fDamping
 REAL                :: eta_c      !< (c_corr -1 )*c
 REAL                :: scr        !< constant for damping in divcorr
-REAL                :: Pi
 INTEGER             :: IniExactFunc
 INTEGER             :: BCType(6)=-999
 INTEGER             :: BoundaryCondition(6,2)
@@ -45,16 +44,16 @@ REAL,ALLOCATABLE    :: BCData(:,:,:,:)
 INTEGER,ALLOCATABLE :: nBCByType(:)
 INTEGER,ALLOCATABLE :: BCSideID(:,:)
 
-CHARACTER(LEN=255),DIMENSION(4),PARAMETER :: StrVarNames(8)=(/ CHARACTER(LEN=255) :: 'ElectricFieldX', &
-                                                                                     'ElectricFieldY', &
-                                                                                     'ElectricFieldZ', &
-                                                                                     'MagneticFieldX', &
-                                                                                     'MagneticFieldY', &
-                                                                                     'MagneticFieldZ', &
-                                                                                     'Phi           ', &
-                                                                                     'Psi           ' /)
+CHARACTER(LEN=255),DIMENSION(4),PARAMETER ::  StrVarNames(8)=&
+   (/ CHARACTER(LEN=255) :: 'ElectricFieldX', &
+                            'ElectricFieldY', &
+                            'ElectricFieldZ', &
+                            'MagneticFieldX', &
+                            'MagneticFieldY', &
+                            'MagneticFieldZ', &
+                            'Phi           ', &
+                            'Psi           ' /)
 
-LOGICAL             :: EquationInitIsDone=.FALSE.
 !REAL,PARAMETER      :: c=299792458.
 !REAL,PARAMETER      :: eps0=8.8541878176E-12
 REAL,PARAMETER      :: c=1.  !normalized
@@ -64,7 +63,10 @@ INTEGER             :: alpha_shape
 REAL                :: shapeFuncPrefix
 REAL                :: rCutoff
 
+LOGICAL             :: EquationInitIsDone=.FALSE.
+#if (PP_DiscType==2)
 INTEGER             :: WhichVolumeFlux
 PROCEDURE(),POINTER :: VolumeFluxAverageVec
+#endif /*PP_DiscType==2*/
 
 END MODULE MOD_Equation_Vars

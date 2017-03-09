@@ -15,20 +15,20 @@
 !==================================================================================================================================
 #include "defines.h"
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Initializes the equation specific parameters and computes analytical functions and the evaluation of any source terms for the
 !> 3D Maxwell equations
-!===================================================================================================================================
+!==================================================================================================================================
 MODULE MOD_Equation
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
-!-----------------------------------------------------------------------------------------------------------------------------------
-! Private Part ---------------------------------------------------------------------------------------------------------------------
-! Public Part ----------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
+! Private Part --------------------------------------------------------------------------------------------------------------------
+! Public Part ---------------------------------------------------------------------------------------------------------------------
 INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
@@ -55,7 +55,7 @@ PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
 PUBLIC:: FinalizeEquation
-!===================================================================================================================================
+!==================================================================================================================================
 
 CONTAINS
 
@@ -76,31 +76,30 @@ CALL prms%CreateIntOption(     'AlphaShape',  " Constant for the shape function.
 CALL prms%CreateRealArrayOption('r_cutoff'," Constant for cutoff of shape function.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization.")
 #if (PP_DiscType==2)
-CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form DG volume integral.")
+CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form DG volume intgral.")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
-!===================================================================================================================================
+!==================================================================================================================================
 ! Get the wave speeds and (possible) VolumeFlux for the split form Maxwell equation
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
+USE MOD_Preproc
 USE MOD_ReadInTools
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars 
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
 ! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#ifdef MPI
-#endif
-!===================================================================================================================================
+!==================================================================================================================================
 IF(InterpolationInitIsDone.AND.EquationInitIsDone)THEN
    SWRITE(*,*) "InitMaxwell not ready to be called or already called."
    RETURN
@@ -111,7 +110,6 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT MAXWELL ...'
 ! Read correction velocity
 scr            = 1./ GETREAL('c_r','0.18')  !constant for damping
 c_corr             = GETREAL('c_corr','1.')
-Pi=ACOS(-1.)
 c_corr2   = c_corr*c_corr
 c_corr_c  = c_corr*c 
 c_corr_c2 = c_corr*c2
@@ -135,9 +133,10 @@ alpha_shape = GETINT('AlphaShape','2')
 rCutoff     = GETREAL('r_cutoff','1.')
 ! Compute factor for shape function
 ShapeFuncPrefix = 1/(2 * beta(1.5, alpha_shape + 1.) * alpha_shape + 2 * beta(1.5, alpha_shape + 1.)) &
-                * (alpha_shape + 1.)/(PI*(rCutoff**3))
+                * (alpha_shape + 1.)/(PP_Pi*(rCutoff**3))
             
 
+#if (PP_DiscType==2)
 WhichVolumeFlux = GETINT('VolumeFlux','0')
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
@@ -147,6 +146,7 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+#endif /*PP_DiscType==2*/
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MAXWELL DONE!'
@@ -162,16 +162,16 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN) :: IniExactFunc_in                                !< Exactfunction to be used
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Input state
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: i,j,k,iElem
-!===================================================================================================================================
+!==================================================================================================================================
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
 DO iElem=1,nElems
@@ -186,51 +186,55 @@ END DO ! iElem=1,nElems
 END SUBROUTINE FillIni
 
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
-!===================================================================================================================================
-SUBROUTINE ExactFunc(ExactFunction,t,x,resu)
+!==================================================================================================================================
+SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 !USE nr,only:bessj
 !USE nrtype,only:SP
 USE MOD_Globals
-USE MOD_Equation_Vars,ONLY:Pi,c,c2,eps0
-USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage
+USE MOD_PreProc,     ONLY : PP_Pi
+USE MOD_Equation_Vars,ONLY:c
+USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN)              :: ExactFunction       !< determines the exact function
-REAL,INTENT(IN)                 :: t                   !< current time
+REAL,INTENT(IN)                 :: tIn                   !< current time
 REAL,INTENT(IN)                 :: x(3)                !< physical spatial coordinates
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: Resu(PP_nVar)       !< state in conservative variables
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+REAL                            :: tEval
 REAL               :: Resu_t(PP_nVar),Resu_tt(PP_nVar) ! state in conservative variables
 REAL               :: Frequency,Amplitude,Omega
-REAL               :: Cent(3),r,r2,zlen
-REAL               :: a, b, d, l, m, n, B0             ! aux. Variables for Resonator-Example
+REAL               :: r,r2,zlen
+REAL               :: a1, b1, d1, l1, m1, n1, B0       ! aux. Variables for Resonator-Example
 REAL               :: gamma,Psi,GradPsiX,GradPsiY      !     -"-
-REAL               :: xrel(3), theta, Etheta           ! aux. Variables for Dipole
-REAL,PARAMETER     :: xDipole(1:3)=(/0,0,0/)           ! aux. Constants for Dipole
-REAL,PARAMETER     :: Q=1, dD=1, omegaD=2.096          ! aux. Constants for Dipole
-REAL               :: c1,s1,b1,b2                      ! aux. Variables for Gyrotron
-REAL               :: eps,phi,z                        ! aux. Variables for Gyrotron
-REAL               :: Er,Br,Ephi,Bphi,Bz               ! aux. Variables for Gyrotron
-REAL, PARAMETER    :: B0G=1.0,g=3236.706462            ! aux. Constants for Gyrotron
-REAL, PARAMETER    :: k0=3562.936537,h=1489.378411     ! aux. Constants for Gyrotron
-REAL, PARAMETER    :: omegaG=3.562936537e+3            ! aux. Constants for Gyrotron
-INTEGER, PARAMETER :: mG=34,nG=19                      ! aux. Constants for Gyrotron
-!===================================================================================================================================
-Cent=x
+!REAL               :: xrel(3), theta, Etheta           ! aux. Variables for Dipole
+!REAL,PARAMETER     :: xDipole(1:3)=(/0,0,0/)           ! aux. Constants for Dipole
+!REAL,PARAMETER     :: Q=1, dD=1, omegaD=2.096          ! aux. Constants for Dipole
+!REAL               :: c1,s1,b2                         ! aux. Variables for Gyrotron
+!REAL               :: eps,phi,z                        ! aux. Variables for Gyrotron
+!REAL               :: Er,Br,Ephi,Bphi,Bz               ! aux. Variables for Gyrotron
+!REAL, PARAMETER    :: B0G=1.0,g=3236.706462            ! aux. Constants for Gyrotron
+!REAL, PARAMETER    :: k0=3562.936537,h=1489.378411     ! aux. Constants for Gyrotron
+!REAL, PARAMETER    :: omegaG=3.562936537e+3            ! aux. Constants for Gyrotron
+!INTEGER, PARAMETER :: mG=34,nG=19                      ! aux. Constants for Gyrotron
+!==================================================================================================================================
+!tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
+tEval=tIn
+
 SELECT CASE (ExactFunction)
 CASE DEFAULT
-  CALL TestcaseExactFunc(ExactFunction,t,x,Resu,Resu_t,Resu_tt)
+  CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(0)        
-  CALL TestcaseExactFunc(ExactFunction,t,x,Resu,Resu_t,Resu_tt)
+  CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! Constant 
   Resu=1.
   Resu_t=0.
@@ -241,57 +245,57 @@ CASE(2) ! Coaxial Waveguide
   zlen=2.5
   r=0.5
   r2=(x(1)*x(1)+x(2)*x(2))/r
-  omega=Frequency*2.*Pi/zlen
+  omega=Frequency*2.*PP_Pi/zlen
   resu   =0.
-  resu(1)=( x(1))*sin(omega*(x(3)-c*t))/r2
-  resu(2)=( x(2))*sin(omega*(x(3)-c*t))/r2
-  resu(4)=(-x(2))*sin(omega*(x(3)-c*t))/(r2*c)
-  resu(5)=( x(1))*sin(omega*(x(3)-c*t))/(r2*c) 
+  resu(1)=( x(1))*sin(omega*(x(3)-c*tEval))/r2
+  resu(2)=( x(2))*sin(omega*(x(3)-c*tEval))/r2
+  resu(4)=(-x(2))*sin(omega*(x(3)-c*tEval))/(r2*c)
+  resu(5)=( x(1))*sin(omega*(x(3)-c*tEval))/(r2*c) 
 
   Resu_t=0.
-  resu_t(1)=-omega*c*( x(1))*cos(omega*(x(3)-c*t))/r2
-  resu_t(2)=-omega*c*( x(2))*cos(omega*(x(3)-c*t))/r2
-  resu_t(4)=-omega*c*(-x(2))*cos(omega*(x(3)-c*t))/(r2*c)
-  resu_t(5)=-omega*c*( x(1))*cos(omega*(x(3)-c*t))/(r2*c) 
+  resu_t(1)=-omega*c*( x(1))*cos(omega*(x(3)-c*tEval))/r2
+  resu_t(2)=-omega*c*( x(2))*cos(omega*(x(3)-c*tEval))/r2
+  resu_t(4)=-omega*c*(-x(2))*cos(omega*(x(3)-c*tEval))/(r2*c)
+  resu_t(5)=-omega*c*( x(1))*cos(omega*(x(3)-c*tEval))/(r2*c) 
   Resu_tt=0.
-  resu_tt(1)=-(omega*c)**2*( x(1))*sin(omega*(x(3)-c*t))/r2
-  resu_tt(2)=-(omega*c)**2*( x(2))*sin(omega*(x(3)-c*t))/r2
-  resu_tt(4)=-(omega*c)**2*(-x(2))*sin(omega*(x(3)-c*t))/(r2*c)
-  resu_tt(5)=-(omega*c)**2*( x(1))*sin(omega*(x(3)-c*t))/(r2*c) 
+  resu_tt(1)=-(omega*c)**2*( x(1))*sin(omega*(x(3)-c*tEval))/r2
+  resu_tt(2)=-(omega*c)**2*( x(2))*sin(omega*(x(3)-c*tEval))/r2
+  resu_tt(4)=-(omega*c)**2*(-x(2))*sin(omega*(x(3)-c*tEval))/(r2*c)
+  resu_tt(5)=-(omega*c)**2*( x(1))*sin(omega*(x(3)-c*tEval))/(r2*c) 
 CASE(3) ! Resonator
   !special initial values
   !geometric perameters
-  a=1.5; b=1.0; d=3.0
+  a1=1.5; b1=1.0; d1=3.0
   !time parameters
-  l=5.; m=4.; n=3.; B0=1.
-  IF(a.eq.0)THEN
+  l1=5.; m1=4.; n1=3.; B0=1.
+  IF(ABS(a1).LT.1.0e-12)THEN
     ERRWRITE(*,*)'ERROR: a eq 0!'
     STOP
   END IF
-  IF(b.eq.0)THEN
+  IF(ABS(b1).LT.1.0E-12)THEN
     ERRWRITE(*,*)'ERROR: b eq 0!'
     STOP
   END IF
-  IF(d.eq.0)THEN
+  IF(ABS(d1).LT.1.0E-12)THEN
     ERRWRITE(*,*)'ERROR: d eq 0!'
     STOP
   END IF
-  omega = Pi*c*sqrt((m/a)**2+(n/b)**2+(l/d)**2)
-  gamma = sqrt((omega/c)**2-(l*pi/d)**2)
-  IF(gamma.eq.0)THEN
+  omega = PP_Pi*c*SQRT((m1/a1)**2+(n1/b1)**2+(l1/d1)**2)
+  gamma = SQRT((omega/c)**2-(l1*PP_Pi/d1)**2)
+  IF(ABS(gamma).LT.1.0E-12)THEN
     ERRWRITE(*,*)'ERROR: gamma eq 0!'
     STOP
   END IF
-  Psi      =   B0          * cos((m*pi/a)*x(1)) * cos((n*pi/b)*x(2))
-  GradPsiX = -(B0*(m*pi/a) * sin((m*pi/a)*x(1)) * cos((n*pi/b)*x(2)))
-  GradPsiY = -(B0*(n*pi/b) * cos((m*pi/a)*x(1)) * sin((n*pi/b)*x(2)))
+  Psi      =   B0               * COS((m1*PP_Pi/a1)*x(1)) * COS((n1*PP_Pi/b1)*x(2))
+  GradPsiX = -(B0*(m1*PP_Pi/a1) * SIN((m1*PP_Pi/a1)*x(1)) * COS((n1*PP_Pi/b1)*x(2)))
+  GradPsiY = -(B0*(n1*PP_Pi/b1) * COS((m1*PP_Pi/a1)*x(1)) * SIN((n1*PP_Pi/b1)*x(2)))
 
-  resu(1)= (-omega/gamma**2) * sin((l*pi/d)*x(3)) *(-GradPsiY)* sin(omega*t)
-  resu(2)= (-omega/gamma**2) * sin((l*pi/d)*x(3)) *  GradPsiX * sin(omega*t)
+  resu(1)= (-omega/gamma**2) * SIN((l1*PP_Pi/d1)*x(3)) *(-GradPsiY)* SIN(omega*tEval)
+  resu(2)= (-omega/gamma**2) * SIN((l1*PP_Pi/d1)*x(3)) *  GradPsiX * SIN(omega*tEval)
   resu(3)= 0.0
-  resu(4)=(1/gamma**2)*(l*pi/d) * cos((l*pi/d)*x(3)) * GradPsiX * cos(omega*t)
-  resu(5)=(1/gamma**2)*(l*pi/d) * cos((l*pi/d)*x(3)) * GradPsiY * cos(omega*t)
-  resu(6)= Psi                  * sin((l*pi/d)*x(3))            * cos(omega*t)
+  resu(4)=(1./gamma**2)*(l1*PP_Pi/d1) * COS((l1*PP_Pi/d1)*x(3)) * GradPsiX * COS(omega*tEval)
+  resu(5)=(1./gamma**2)*(l1*PP_Pi/d1) * COS((l1*PP_Pi/d1)*x(3)) * GradPsiY * COS(omega*tEval)
+  resu(6)= Psi                        * SIN((l1*PP_Pi/d1)*x(3))            * COS(omega*tEval)
   resu(7)=0.
   resu(8)=0.
 
@@ -303,27 +307,27 @@ CASE(3) ! Resonator
 !  IF (xrel(3).GT.eps) THEN
 !    theta = ATAN(SQRT(xrel(1)**2+xrel(2)**2)/xrel(3))
 !  ELSE IF (xrel(3).LT.(-eps)) THEN
-!    theta = ATAN(SQRT(xrel(1)**2+xrel(2)**2)/xrel(3)) + pi
+!    theta = ATAN(SQRT(xrel(1)**2+xrel(2)**2)/xrel(3)) + PP_Pi
 !  ELSE
-!    theta = 0.5*pi
+!    theta = 0.5*PP_Pi
 !  END IF
 !  IF (xrel(1).GT.eps)      THEN
 !    phi = ATAN(xrel(2)/xrel(1))
 !  ELSE IF (xrel(1).LT.eps) THEN
-!    phi = ATAN(xrel(2)/xrel(1)) + pi
+!    phi = ATAN(xrel(2)/xrel(1)) + PP_Pi
 !  ELSE IF (xrel(2).GT.eps) THEN
-!    phi = 0.5*pi
+!    phi = 0.5*PP_Pi
 !  ELSE IF (xrel(2).LT.eps) THEN
-!    phi = 1.5*pi
+!    phi = 1.5*PP_Pi
 !  ELSE
 !    phi = 0.0                                                                                     ! Vorsicht: phi ist hier undef!
 !  END IF
 !
-!  Er = 2.*cos(theta)*Q*dD/(4.*pi*eps0) * ( 1./r**3*sin(omegaD*t-omegaD*r/c) + (omegaD/(c*r**2)*cos(omegaD*t-omegaD*r/c) ) )
-!  Etheta = sin(theta)*Q*dD/(4.*pi*eps0) * ( (1./r**3-omegaD**2/(c**2*r))*sin(omegaD*t-omegaD*r/c) &
-!          + (omegaD/(c*r**2)*cos(omegaD*t-omegaD* r/c) ) ) 
-!  Bphi = 1/(c2*eps0)*omegaD*sin(theta)*Q*dD/(4.*pi) &
-!       * ( - omegaD/(c*r)*sin(omegaD*t-omegaD*r/c) + 1./r**2*cos(omegaD*t-omegaD*r/c) )
+!  Er = 2.*cos(theta)*Q*dD/(4.*PP_Pi*eps0) * ( 1./r**3*sin(omegaD*tEval-omegaD*r/c) + (omegaD/(c*r**2)*cos(omegaD*tEval-omegaD*r/c)) )
+!  Etheta = sin(theta)*Q*dD/(4.*PP_Pi*eps0) * ( (1./r**3-omegaD**2/(c**2*r))*sin(omegaD*tiEval-omegaD*r/c) &
+!          + (omegaD/(c*r**2)*cos(omegaD*tEval-omegaD* r/c) ) ) 
+!  Bphi = 1/(c2*eps0)*omegaD*sin(theta)*Q*dD/(4.*PP_Pi) &
+!       * ( - omegaD/(c*r)*sin(omegaD*tEval-omegaD*r/c) + 1./r**2*cos(omegaD*tEval-omegaD*r/c) )
 !  IF (ABS(phi).GT.eps) THEN 
 !    resu(1)= sin(theta)*cos(phi)*Er + cos(theta)*cos(phi)*Etheta 
 !    resu(2)= sin(theta)*sin(phi)*Er + cos(theta)*sin(phi)*Etheta
@@ -342,70 +346,70 @@ CASE(3) ! Resonator
 !  IF (x(1).GT.eps)      THEN
 !    phi = ATAN(x(2)/x(1))
 !  ELSE IF (x(1).LT.(-eps)) THEN
-!    phi = ATAN(x(2)/x(1)) + pi
+!    phi = ATAN(x(2)/x(1)) + PP_Pi
 !  ELSE IF (x(2).GT.eps) THEN
-!    phi = 0.5*pi
+!    phi = 0.5*PP_Pi
 !  ELSE IF (x(2).LT.(-eps)) THEN
-!    phi = 1.5*pi
+!    phi = 1.5*PP_Pi
 !  ELSE
 !    phi = 0.0                                                                                     ! Vorsicht: phi ist hier undef!
 !  END IF
 !  z = x(3)
 !  Er  =-B0G*mG*omegaG/(r*g**2)*bessj(mG,REAL(g*r,SP))                             * &
-!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*t)+sin(h*z+mG*phi)*sin(omegaG*t))
+!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEal))
 !  Ephi= B0G*omegaG/g      *0.5*(bessj(mG-1,REAL(g*r,SP))-bessj(mG+1,REAL(g*r,SP)))* &
-!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*t)+sin(h*z+mG*phi)*cos(omegaG*t))
+!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEal))
 !  Br  =-B0G*h/g           *0.5*(bessj(mG-1,REAL(g*r,SP))-bessj(mG+1,REAL(g*r,SP)))* &
-!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*t)+sin(h*z+mG*phi)*cos(omegaG*t))
+!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEal))
 !  Bphi=-B0G*mG*h/(r*g**2)     *bessj(mG,REAL(g*r,SP))                             * &
-!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*t)+sin(h*z+mG*phi)*sin(omegaG*t))
+!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEal))
 !  resu(1)= cos(phi)*Er - sin(phi)*Ephi
 !  resu(2)= sin(phi)*Er + cos(phi)*Ephi
 !  resu(3)= 0.0
 !  resu(4)= cos(phi)*Br - sin(phi)*Bphi
 !  resu(5)= sin(phi)*Br + cos(phi)*Bphi
-!  resu(6)= B0G*bessj(mG,REAL(g*r,SP))*cos(h*z+mG*phi-omegaG*t)
+!  resu(6)= B0G*bessj(mG,REAL(g*r,SP))*cos(h*z+mG*phi-omegaG*tEval)
 !  resu(7)= 0.0
 !  resu(8)= 0.0
 
 CASE(7) ! Manufactured Solution
   resu(:)=0
-  resu(1)=SIN(2*pi*(x(1)-t))
+  resu(1)=SIN(2*PP_Pi*(x(1)-tEval))
   resu_t(:)=0
-  resu_t(1)=-2*pi*COS(2*pi*(x(1)-t))
+  resu_t(1)=-2*PP_Pi*COS(2*PP_Pi*(x(1)-tEval))
   resu_tt(:)=0
-  resu_tt(1)=-4*pi*pi*resu(1)
+  resu_tt(1)=-4*PP_Pi*PP_Pi*resu(1)
 
 CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), domain [0;1]^3!!!
   resu(:)=0.
-  resu(1)=x(1)*SIN(Pi*x(2))*SIN(Pi*x(3)) !*SIN(t)
-  resu(2)=x(2)*SIN(Pi*x(3))*SIN(Pi*x(1)) !*SIN(t)
-  resu(3)=x(3)*SIN(Pi*x(1))*SIN(Pi*x(2)) !*SIN(t)
-  resu(4)=pi*SIN(Pi*x(1))*(x(3)*COS(Pi*x(2))-x(2)*COS(Pi*x(3))) !*(COS(t)-1)
-  resu(5)=pi*SIN(Pi*x(2))*(x(1)*COS(Pi*x(3))-x(3)*COS(Pi*x(1))) !*(COS(t)-1)
-  resu(6)=pi*SIN(Pi*x(3))*(x(2)*COS(Pi*x(1))-x(1)*COS(Pi*x(2))) !*(COS(t)-1)
+  resu(1)=x(1)*SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3)) !*SIN(t)
+  resu(2)=x(2)*SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1)) !*SIN(t)
+  resu(3)=x(3)*SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2)) !*SIN(t)
+  resu(4)=PP_Pi*SIN(PP_Pi*x(1))*(x(3)*COS(PP_Pi*x(2))-x(2)*COS(PP_Pi*x(3))) !*(COS(t)-1)
+  resu(5)=PP_Pi*SIN(PP_Pi*x(2))*(x(1)*COS(PP_Pi*x(3))-x(3)*COS(PP_Pi*x(1))) !*(COS(t)-1)
+  resu(6)=PP_Pi*SIN(PP_Pi*x(3))*(x(2)*COS(PP_Pi*x(1))-x(1)*COS(PP_Pi*x(2))) !*(COS(t)-1)
 
   resu_t(:)=0.
-  resu_t(1)= COS(t)*resu(1)
-  resu_t(2)= COS(t)*resu(2)
-  resu_t(3)= COS(t)*resu(3)
-  resu_t(4)=-SIN(t)*resu(4)
-  resu_t(5)=-SIN(t)*resu(5)
-  resu_t(6)=-SIN(t)*resu(6)
+  resu_t(1)= COS(tEval)*resu(1)
+  resu_t(2)= COS(tEval)*resu(2)
+  resu_t(3)= COS(tEval)*resu(3)
+  resu_t(4)=-SIN(tEval)*resu(4)
+  resu_t(5)=-SIN(tEval)*resu(5)
+  resu_t(6)=-SIN(tEval)*resu(6)
   resu_tt=0.
-  resu_tt(1)=-SIN(t)*resu(1)
-  resu_tt(2)=-SIN(t)*resu(2)
-  resu_tt(3)=-SIN(t)*resu(3)
-  resu_tt(4)=-COS(t)*resu(4)
-  resu_tt(5)=-COS(t)*resu(5)
-  resu_tt(6)=-COS(t)*resu(6)
+  resu_tt(1)=-SIN(tEval)*resu(1)
+  resu_tt(2)=-SIN(tEval)*resu(2)
+  resu_tt(3)=-SIN(tEval)*resu(3)
+  resu_tt(4)=-COS(tEval)*resu(4)
+  resu_tt(5)=-COS(tEval)*resu(5)
+  resu_tt(6)=-COS(tEval)*resu(6)
 
-  resu(1)=     SIN(t)*resu(1)
-  resu(2)=     SIN(t)*resu(2)
-  resu(3)=     SIN(t)*resu(3)
-  resu(4)=(COS(t)-1.)*resu(4)
-  resu(5)=(COS(t)-1.)*resu(5)
-  resu(6)=(COS(t)-1.)*resu(6)
+  resu(1)=     SIN(tEval)*resu(1)
+  resu(2)=     SIN(tEval)*resu(2)
+  resu(3)=     SIN(tEval)*resu(3)
+  resu(4)=(COS(tEval)-1.)*resu(4)
+  resu(5)=(COS(tEval)-1.)*resu(5)
+  resu(6)=(COS(tEval)-1.)*resu(6)
 
 !CASE(50,51)            ! Initialization and BC Gyrotron - including derivatives
 !  eps=1e-10
@@ -414,11 +418,11 @@ CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), doma
 !  IF (x(1).GT.eps)      THEN
 !    phi = ATAN(x(2)/x(1))
 !  ELSE IF (x(1).LT.(-eps)) THEN
-!    phi = ATAN(x(2)/x(1)) + pi
+!    phi = ATAN(x(2)/x(1)) + PP_Pi
 !  ELSE IF (x(2).GT.eps) THEN
-!    phi = 0.5*pi
+!    phi = 0.5*PP_Pi
 !  ELSE IF (x(2).LT.(-eps)) THEN
-!    phi = 1.5*pi
+!    phi = 1.5*PP_Pi
 !  ELSE
 !    phi = 0.0                                                                                     ! Vorsicht: phi ist hier undef!
 !  END IF
@@ -430,17 +434,17 @@ CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), doma
 !  tDeriv=CurrentStage-1
 !  SELECT CASE(MOD(tDeriv,4))
 !    CASE(0)
-!      c1  =  omegaG**tDeriv * cos(a-omegaG*t)
-!      s1  =  omegaG**tDeriv * sin(a-omegaG*t)
+!      c1  =  omegaG**tDeriv * cos(a-omegaG*tEval)
+!      s1  =  omegaG**tDeriv * sin(a-omegaG*tEval)
 !    CASE(1)
-!      c1  =  omegaG**tDeriv * sin(a-omegaG*t)
-!      s1  = -omegaG**tDeriv * cos(a-omegaG*t)
+!      c1  =  omegaG**tDeriv * sin(a-omegaG*tEval)
+!      s1  = -omegaG**tDeriv * cos(a-omegaG*tEval)
 !    CASE(2)
-!      c1  = -omegaG**tDeriv * cos(a-omegaG*t)
-!      s1  = -omegaG**tDeriv * sin(a-omegaG*t)
+!      c1  = -omegaG**tDeriv * cos(a-omegaG*tEval)
+!      s1  = -omegaG**tDeriv * sin(a-omegaG*tEval)
 !    CASE(3)
-!      c1  = -omegaG**tDeriv * sin(a-omegaG*t)
-!      s1  =  omegaG**tDeriv * cos(a-omegaG*t)
+!      c1  = -omegaG**tDeriv * sin(a-omegaG*tEval)
+!      s1  =  omegaG**tDeriv * cos(a-omegaG*tEval)
 !    CASE DEFAULT
 !      CALL abort(__STAMP__,'What is that weired tDeriv you gave me?',999,999.)
 !  END SELECT
@@ -461,53 +465,54 @@ CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), doma
 
 END SELECT ! ExactFunction
 
-# if (PP_TimeDiscMethod==1)
-! For O3 RK, the boundary condition has to be adjusted
-! Works only for O3 RK!!
-SELECT CASE(CurrentStage)
-CASE(1)
-  ! resu = g(t)
-CASE(2)
-  ! resu = g(t) + dt/3*g'(t)
-  Resu=Resu + dt/3.*Resu_t
-CASE(3)
-  ! resu = g(t) + 3/4 dt g'(t) +5/16 dt^2 g''(t)
-  Resu=Resu + 0.75*dt*Resu_t+5./16.*dt*dt*Resu_tt
-CASE DEFAULT
-  ! Stop, works only for 3 Stage O3 LS RK
-  CALL abort(__STAMP__,'Exactfuntion works only for 3 Stage O3 LS RK!',999,999.)
-END SELECT
-#endif
+! For O3 LS 3-stage RK, we have to define proper time dependent BC
+IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant
+  SELECT CASE(CurrentStage)
+  CASE(1)
+    ! resu = g(t)
+  CASE(2)
+    ! resu = g(t) + dt/3*g'(t)
+    Resu=Resu + dt*RKc(2)*Resu_t
+  CASE(3)
+    ! resu = g(t) + 3/4 dt g'(t) +5/16 dt^2 g''(t)
+    Resu=Resu + RKc(3)*dt*Resu_t + RKc(2)*RKb(2)*dt*dt*Resu_tt
+  CASE DEFAULT
+    ! Stop, works only for 3 Stage O3 LS RK
+    CALL abort(__STAMP__,&
+               'Exactfuntion works only for 3 Stage O3 LS RK!')
+  END SELECT !CurrentStage
+END IF !fullBoundaryOrder
+
 END SUBROUTINE ExactFunc
 
 
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
-!===================================================================================================================================
-SUBROUTINE CalcSource(Ut,t)
+!==================================================================================================================================
+SUBROUTINE CalcSource(Ut,tIn)
 ! MODULES
 USE MOD_Globals,       ONLY : abort
 USE MOD_PreProc
 USE MOD_DG_Vars,       ONLY : U
-USE MOD_Equation_Vars, ONLY : pi,eps0,c_corr,scr,IniExactFunc
+USE MOD_Equation_Vars, ONLY : eps0,c_corr,scr,IniExactFunc
 USE MOD_Mesh_Vars,     ONLY : Elem_xGP,nElems                  ! for shape function: xyz position of the Gauss points
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)    :: t                                       !< current time
+REAL,INTENT(IN)    :: tIn                                       !< current time
 REAL,INTENT(INOUT) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG time derivative
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER            :: i,j,k,iElem
 REAL               :: eps0inv
-REAL               :: r                                                 ! for Dipole
 REAL               :: x(3)
-REAL,PARAMETER     :: xDipole(1:3)=(/0,0,0/), Q=1, d=1, omega=2.096     ! for Dipole
-!===================================================================================================================================
+!REAL               :: r                                                 ! for Dipole
+!REAL,PARAMETER     :: xDipole(1:3)=(/0,0,0/), Q=1, d=1, omega=2.096     ! for Dipole
+!==================================================================================================================================
 eps0inv = 1./eps0
 SELECT CASE (IniExactFunc)
 CASE(0) ! Particles
@@ -518,7 +523,7 @@ CASE(3) ! Resonator         - no sources
 !  DO iElem=1,PP_nElems
 !    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
 !      r = SQRT(DOT_PRODUCT(Elem_xGP(:,i,j,k,iElem)-xDipole,Elem_xGP(:,i,j,k,iElem)-xDipole))
-!      Ut(3,i,j,k,iElem) = Ut(3,i,j,k,iElem) - (shapefunc(r)) * Q*d*omega * COS(omega*t) * eps0inv
+!      Ut(3,i,j,k,iElem) = Ut(3,i,j,k,iElem) - (shapefunc(r)) * Q*d*omega * COS(omega*tIn) * eps0inv
 !      Ut(8,i,j,k,iElem) = Ut(8,i,j,k,iElem) + (shapefunc(r)) * c_corr*Q * eps0inv
 !    END DO; END DO; END DO
 !  END DO
@@ -526,23 +531,23 @@ CASE(3) ! Resonator         - no sources
 CASE(7) ! Manufactured Solution
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
-      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) - 2*pi*COS(2*pi*(Elem_xGP(1,i,j,k,iElem)-t)) * eps0inv
-      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem) + 2*pi*COS(2*pi*(Elem_xGP(1,i,j,k,iElem)-t)) * c_corr * eps0inv
+      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) - 2*PP_Pi*COS(2*PP_Pi*(Elem_xGP(1,i,j,k,iElem)-tIn)) * eps0inv
+      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem) + 2*PP_Pi*COS(2*PP_Pi*(Elem_xGP(1,i,j,k,iElem)-tIn)) * c_corr * eps0inv
     END DO; END DO; END DO
   END DO
 CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), domain [0;1]^3!!!
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N  
       x(:)=Elem_xGP(:,i,j,k,iElem)
-      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) + (COS(t)- (COS(t)-1.)*2*pi*pi)*x(1)*SIN(Pi*x(2))*SIN(Pi*x(3))
-      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) + (COS(t)- (COS(t)-1.)*2*pi*pi)*x(2)*SIN(Pi*x(3))*SIN(Pi*x(1))
-      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) + (COS(t)- (COS(t)-1.)*2*pi*pi)*x(3)*SIN(Pi*x(1))*SIN(Pi*x(2))
-      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) - (COS(t)-1.)*pi*COS(Pi*x(1))*(SIN(Pi*x(2))+SIN(Pi*x(3)))
-      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) - (COS(t)-1.)*pi*COS(Pi*x(2))*(SIN(Pi*x(3))+SIN(Pi*x(1)))
-      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) - (COS(t)-1.)*pi*COS(Pi*x(3))*(SIN(Pi*x(1))+SIN(Pi*x(2)))
-      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem) + c_corr*SIN(t)*( SIN(pi*x(2))*SIN(pi*x(3)) &
-                                                            +SIN(pi*x(3))*SIN(pi*x(1)) &
-                                                            +SIN(pi*x(1))*SIN(pi*x(2)) )
+      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(1)*SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3))
+      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(2)*SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1))
+      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(3)*SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2))
+      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(1))*(SIN(PP_Pi*x(2))+SIN(PP_Pi*x(3)))
+      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(2))*(SIN(PP_Pi*x(3))+SIN(PP_Pi*x(1)))
+      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(3))*(SIN(PP_Pi*x(1))+SIN(PP_Pi*x(2)))
+      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem) + c_corr*SIN(tIn)*( SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3)) &
+                                                              +SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1)) &
+                                                              +SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2)) )
     END DO; END DO; END DO ! i,j,k
   END DO! iElem
 
@@ -554,23 +559,23 @@ END SELECT ! ExactFunction
 Ut(7:8,:,:,:,:)=Ut(7:8,:,:,:,:)-(c_corr*scr)*U(7:8,:,:,:,:)
 END SUBROUTINE CalcSource
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Implementation of (possibly several different) shapefunctions
-!===================================================================================================================================
+!==================================================================================================================================
 FUNCTION shapefunc(r)
 ! MODULES
   USE MOD_Equation_Vars, ONLY : shapeFuncPrefix, alpha_shape, rCutoff
 ! IMPLICIT VARIABLE HANDLING
     IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
     REAL :: r         !< radius / distance to center
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
     REAL :: shapefunc !< sort of a weight for the source
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-!===================================================================================================================================
+!==================================================================================================================================
    IF (r.GE.rCutoff) THEN
      shapefunc = 0.0
    ELSE
@@ -583,26 +588,26 @@ FUNCTION beta(z,w)
    IMPLICIT NONE
    REAL beta, w, z
 !   beta = exp(gammln(z)+gammln(w)-gammln(z+w)) nr not used!! 
-   beta = 0.
+   beta = 0.*z*w
 END FUNCTION beta 
 
 
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Finalize the equation system
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE FinalizeEquation()
 ! MODULES
 USE MOD_Equation_Vars,ONLY:EquationInitIsDone
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-!===================================================================================================================================
+!==================================================================================================================================
 EquationInitIsDone = .FALSE.
 END SUBROUTINE FinalizeEquation
 
