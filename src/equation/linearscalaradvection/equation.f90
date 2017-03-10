@@ -67,7 +67,8 @@ CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusio
 CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
 #if (PP_DiscType==2)
-CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form DG volume integral ")
+CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form "\\&
+                                              "DG volume integral ")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
