@@ -15,7 +15,11 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Module defining one specific testcase with all necessary variables
+!> This Testcase initializes a background state called Ueq, which can be taken from an exactfunction (testcase_exactfunc) or read
+!> from a mesh file that contains the MHD equilibrium solution. 
+!> The time-derivative of the state Ut_Eq=Ut(Eq) is evaluated and introduced as a source, such that the new time derivative becomes
+!> Ut_new = Ut - Ut_Eq(U_eq)
+!> basically forcing  U_eq to be a steady state
 !==================================================================================================================================
 MODULE MOD_Testcase
 ! MODULES
@@ -28,16 +32,12 @@ INTERFACE InitTestcase
   MODULE PROCEDURE InitTestcase
 END INTERFACE
 
-INTERFACE DefineParametersTestcase
-  MODULE PROCEDURE DefineParametersTestcase
-END INTERFACE
-
 INTERFACE FinalizeTestcase
   MODULE PROCEDURE FinalizeTestcase
 END INTERFACE
 
+
 PUBLIC:: InitTestcase
-PUBLIC:: DefineParametersTestcase
 PUBLIC:: FinalizeTestcase
 
 CONTAINS
@@ -55,9 +55,22 @@ IMPLICIT NONE
 ! LOCAL VARIABLES 
 !==================================================================================================================================
 CALL prms%SetSection("Testcase")
-
+CALL prms%CreateIntOption('EquilibriumStateIni', &
+     "=-1: Default: no equilibrium state used. U_t(U_eq)=0. Sanity check if code is compiled with this testcase."//&
+     "= 0 : Use U_eq=exactFunc(IniExactFunc) for equilibrium state "//&
+     "> 0 : Use U_eq=exactFunc(EquilibriumStateIni) for equilibrium state "//&
+     "=-2 : Read U_eq from MeshFile"//&
+     "=-3 : Read U_eq from the solution of a stateFile"//&
+     ,'-1')
+CALL prms%CreateStringOption('EquilibriumStateFile', &
+     "name of statefile to used for eq. solution (only if EquilibriumStateIni=-3)")
+CALL prms%CreateLogicalOption('EquilibriumDivBcorr', &
+     "switch to compute B from a vector potential instead of using B directly" , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcErrorToEquilibrium', &
+     "switch for TC_analyze: compute difference of |U-Ueq|" , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcDeltaBEnergy', &
+     "switch for TC_analyze: compute Energy of 1/(2mu0)|B-Beq|^2" , '.FALSE.')
 END SUBROUTINE DefineParametersTestcase
-
 
 !==================================================================================================================================
 !> Specifies all the initial conditions. The state in conservative variables is returned.
@@ -66,7 +79,8 @@ SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Testcase_Vars
-USE MOD_ReadInTools,      ONLY: GETLOGICAL
+USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
+USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -76,27 +90,41 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
-SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE "DEFAULT"...'
-
-doTCanalyze = GETLOGICAL('doTCanalyze','.FALSE.')
+SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE "MHD EQUILIBRIUM"...'
+doTCsource=.TRUE.
+EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
+IF(EquilibriumStateIni.EQ.-3) THEN
+  EquilibriumStateFile=GETSTR('EquilibriumStateFile')
+END IF
+EquilibriumDivBcorr=GETLOGICAL('EquilibriumDivBcorr','.FALSE.')
+!======EQUILIBRIUM STUFF====
+CALL InitEquilibriumState()
+!TESTCASE ANALYZE
+doCalcErrorToEquilibrium = GETLOGICAL('CalcErrorToEquilibrium','.FALSE.')
+doCalcDeltaBEnergy       = GETLOGICAL('CalcDeltaBEnergy','.FALSE.')
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitTestcase
 
-!==================================================================================================================================
-!> Finalize testcase data 
-!==================================================================================================================================
+
+!=================================================================================================================================
+!> Finalize Variables 
+!=================================================================================================================================
 SUBROUTINE FinalizeTestcase()
 ! MODULES
+USE MOD_Testcase_Vars
 IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-!==================================================================================================================================
+!=================================================================================================================================
+SDEALLOCATE(Ueq)
+SDEALLOCATE(Ueq_BC)
+SDEALLOCATE(Uteq)
 END SUBROUTINE FinalizeTestcase
 
 END MODULE MOD_Testcase

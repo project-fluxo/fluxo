@@ -1,0 +1,50 @@
+!==================================================================================================================================
+! Copyright (c) 2016 - 2017 Gregor Gassner
+! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2017 Andrew Winters
+!
+! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+! of the License, or (at your option) any later version.
+!
+! FLUXO is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+!
+! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
+!==================================================================================================================================
+
+!=================================================================================================================================
+!> Contains the variables of your testcase that should be globally accessible!
+!=================================================================================================================================
+MODULE MOD_TestCase_Vars
+! MODULES
+IMPLICIT NONE
+PUBLIC
+SAVE
+!---------------------------------------------------------------------------------------------------------------------------------
+! GLOBAL VARIABLES
+!---------------------------------------------------------------------------------------------------------------------------------
+LOGICAL                  :: doTCPreTimeStep=.FALSE.  !< compute something before the timestep
+LOGICAL                  :: doTCSource=.FALSE.       !< compute source terms for testcase
+LOGICAL                  :: EvalEquilibrium          !< switch for TC_exactfunc
+LOGICAL                  :: doCalcErrorToEquilibrium !< switch for TC_analyze: compute difference of |U-Ueq|
+LOGICAL                  :: doCalcDeltaBEnergy       !< switch for TC_analyze: compute Energy of 1/(2mu0) |B-Beq|^2
+REAL                     :: deltaB_Energy            !< stored to compute growth rate 
+INTEGER                  :: EquilibriumStateIni      !< =-1: Default: no equilibrium state used. U_t(U_eq)=0. 
+                                                     !<      Sanity check if code is compiled with this testcase
+                                                     !< = 0 : Use U_eq=exactFunc(IniExactFunc) for equilibrium state
+                                                     !< > 0 : Use U_eq=exactFunc(EquilibriumStateIni) for equilibrium state
+                                                     !< =-2 : Read U_eq from MeshFile
+                                                     !< =-3 : Read U_eq from the solution of a stateFile
+
+LOGICAL                  :: EquilibriumDivBcorr     !< switch to compute B from a vector potential instead of using B directly
+
+
+
+REAL,ALLOCATABLE         :: InputEq(:,:,:,:,:)       !< equilibrium data from Mesh
+REAL,ALLOCATABLE         :: Ueq(:,:,:,:,:)           !< full equilibrium solution
+REAL,ALLOCATABLE         :: Ueq_BC(:,:,:,:)          !< full equilibrium solution at all BCfaces
+REAL,ALLOCATABLE         :: Uteq(:,:,:,:,:)          !< DG time derivative of Ueq
+!=================================================================================================================================
+
+END MODULE MOD_TestCase_Vars

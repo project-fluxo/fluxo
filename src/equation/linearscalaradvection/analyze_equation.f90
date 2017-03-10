@@ -43,7 +43,7 @@ PUBLIC::DefineParametersAnalyzeEquation
 CONTAINS
 
 !==================================================================================================================================
-!> Define parameters 
+!> Define parameters for analyze Linadv 
 !==================================================================================================================================
 SUBROUTINE DefineParametersAnalyzeEquation()
 ! MODULES
