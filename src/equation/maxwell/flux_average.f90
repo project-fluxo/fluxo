@@ -189,11 +189,11 @@ Fstar=0.5*(normal(1)*(fL+fR)+normal(2)*(gL+gR)+normal(3)*(hL+hR))
 END SUBROUTINE StandardDGFlux
 
 
+!==================================================================================================================================
+!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
+!> for curved metrics, no dealiasing is done (exactly = standard DG )!
+!==================================================================================================================================
 SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
-!==================================================================================================================================
-!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-!> for curved metrics, 1/2(metric_L+metric_R) is taken!
-!==================================================================================================================================
 #ifdef CARTESIANFLUX
                              metric, &
 #else
@@ -206,8 +206,10 @@ USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL,UR       !< left and right conservative solution states
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL,UauxR !< auxiliary variables: (srho,v1,v2,v3,p,|v|^2)
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
+REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
+REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)   !< constant metric terms for the Cartesian case
 #else
@@ -220,11 +222,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(PP_nVar)             :: fL,gL,hL,fR,gR,hR
-#ifndef CARTESIANFLUX
-REAL                                :: metric(3)
 !==================================================================================================================================
-metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 fL(1) = UL(8)*c_corr_c2    ! phi*chi*c^2
 fL(2) = UL(6)*c2           ! B3*c^2
 fL(3) =-UL(5)*c2           ! -B2*c^2
@@ -290,11 +288,11 @@ Fstar=0.5*( metric_L(1)*fL+metric_L(2)*gL+metric_L(3)*hL &
 END SUBROUTINE StandardDGFluxVec
 
 
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
 !==================================================================================================================================
-!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
 #ifdef CARTESIANFLUX
                              metric, &
 #else
@@ -307,8 +305,10 @@ USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL,UR       !< left and right conservative solution states
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL,UauxR !< auxiliary variables: (srho,v1,v2,v3,p,|v|^2)
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
+REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
+REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)   !< constant metric terms for the Cartesian case
 #else

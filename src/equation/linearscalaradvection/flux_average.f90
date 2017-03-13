@@ -15,7 +15,7 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Computes two-point average fluxes for the volint when using the split-form (DiscType=3)
+!> Computes two-point average fluxes for the volint when using the split-form (DiscType=2)
 !==================================================================================================================================
 MODULE MOD_Flux_Average
 ! MODULES
@@ -55,7 +55,7 @@ PUBLIC::StandardDGFluxDealiasedMetricVec
 CONTAINS
 
 !==================================================================================================================================
-!> Compute Navier-Stokes fluxes using the conservative variables and derivatives for every volume Gauss point.
+!> Compute linadvdiff transformed fluxes using conservative variables and derivatives for every volume Gauss point.
 !> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
 SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
@@ -142,7 +142,7 @@ END SUBROUTINE StandardDGFlux
 
 
 !==================================================================================================================================
-!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the scalar advection eq.
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
 SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
@@ -158,8 +158,10 @@ USE MOD_Equation_Vars,ONLY:AdvVel
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL,UR          !< left and right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL,UauxR    !< left and right auxiliary variables
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(1),INTENT(IN)        :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(1),INTENT(IN)        :: UauxR          !< right auxiliary variables
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
 #else
@@ -171,19 +173,14 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right mertric
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#ifndef CARTESIANFLUX
-REAL                                :: metric(3)
 !==================================================================================================================================
-metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
-!Fstar=SUM(AdvVel(1:3)*metric(1:3))*0.5*(UL+UR)
 
+!without metric dealising (standard DG flux on curved meshes)
 #ifdef CARTESIANFLUX
 Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
            + AdvVel(2)*metric(2)*(UL+UR) &
            + AdvVel(3)*metric(3)*(UL+UR) )
 #else
-!without metric dealising (standard DG flux on curved meshes)
 Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
            + AdvVel(2)*(metric_L(2)*UL+metric_R(2)*UR) &
            + AdvVel(3)*(metric_L(3)*UL+metric_R(3)*UR) )
@@ -192,7 +189,7 @@ Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
 END SUBROUTINE StandardDGFluxVec
 
 !==================================================================================================================================
-!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the scalar adv. equation
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
 SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
@@ -208,8 +205,10 @@ USE MOD_Equation_Vars,ONLY:AdvVel
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL,UR          !< left and right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL,UauxR    !< left and right auxiliary variables
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(1),INTENT(IN)        :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(1),INTENT(IN)        :: UauxR          !< right auxiliary variables
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
 #else
