@@ -40,11 +40,16 @@ INTERFACE StandardDGFluxVec
   MODULE PROCEDURE StandardDGFluxVec
 END INTERFACE
 
+INTERFACE StandardDGFluxDealiasedMetricVec
+  MODULE PROCEDURE StandardDGFluxDealiasedMetricVec
+END INTERFACE
+
 
 PUBLIC::EvalEulerFluxTilde3D
 PUBLIC::EvalUaux
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
+PUBLIC::StandardDGFluxDealiasedMetricVec
 !==================================================================================================================================
 
 CONTAINS
@@ -136,7 +141,7 @@ END SUBROUTINE StandardDGFlux
 
 !==================================================================================================================================
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
 SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
 #ifdef CARTESIANFLUX
@@ -176,10 +181,6 @@ Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
            + AdvVel(2)*metric(2)*(UL+UR) &
            + AdvVel(3)*metric(3)*(UL+UR) )
 #else
-!with metric dealising
-!Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
-!           + AdvVel(2)*metric(2)*(UL+UR) &
-!           + AdvVel(3)*metric(3)*(UL+UR) )
 !without metric dealising (standard DG flux on curved meshes)
 Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
            + AdvVel(2)*(metric_L(2)*UL+metric_R(2)*UR) &
@@ -188,5 +189,47 @@ Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
 
 END SUBROUTINE StandardDGFluxVec
 
+!==================================================================================================================================
+!> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
+#ifdef CARTESIANFLUX
+                             metric, &
+#else
+                             metric_L,metric_R, &
+#endif
+                             Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:AdvVel
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL,UR          !< left and right state
+REAL,DIMENSION(1),INTENT(IN)        :: UauxL,UauxR    !< left and right auxiliary variables
+#ifdef CARTESIANFLUX
+REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
+#else
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right mertric
+#endif
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+#ifndef CARTESIANFLUX
+REAL                                :: metric(3)
+!==================================================================================================================================
+metric = 0.5*(metric_L+metric_R)
+#endif /*ndef CARTESIANFLUX*/
+!Fstar=SUM(AdvVel(1:3)*metric(1:3))*0.5*(UL+UR)
+
+Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
+           + AdvVel(2)*metric(2)*(UL+UR) &
+           + AdvVel(3)*metric(3)*(UL+UR) )
+
+END SUBROUTINE StandardDGFluxDealiasedMetricVec
 
 END MODULE MOD_Flux_Average

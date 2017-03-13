@@ -70,13 +70,17 @@ IMPLICIT NONE
 CALL prms%SetSection("Equation")
 CALL prms%CreateRealArrayOption('WaveSpeed',    "Wave speeds for the Maxwell equations.")
 CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in Maxwell's.")
-CALL prms%CreateRealArrayOption('c_r'," Damping constant for the GLM divergence cleaning.")
-CALL prms%CreateRealArrayOption('c_corr'," Wave speed for GLM divergence cleaning.")
-CALL prms%CreateIntOption(     'AlphaShape',  " Constant for the shape function.")
-CALL prms%CreateRealArrayOption('r_cutoff'," Constant for cutoff of shape function.")
+CALL prms%CreateRealArrayOption('c_r'," Damping constant for the GLM divergence cleaning.","0.18")
+CALL prms%CreateRealArrayOption('c_corr'," Wave speed for GLM divergence cleaning.","1.0")
+CALL prms%CreateIntOption(     'AlphaShape',  " Constant for the shape function.","2")
+CALL prms%CreateRealArrayOption('r_cutoff'," Constant for cutoff of shape function.","1.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization.")
 #if (PP_DiscType==2)
-CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form DG volume intgral.")
+CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
+                                              "DG volume integral "//&
+                                              "0: Standard DG Flux"//&
+                                              "1: standard DG Flux with metric dealiasing" &
+                            ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -90,7 +94,10 @@ USE MOD_Preproc
 USE MOD_ReadInTools
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars 
+#if (PP_DiscType==2)
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
+USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
+#endif /*PP_DiscType==2*/
 ! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -142,6 +149,9 @@ SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -196,7 +206,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 USE MOD_Globals
 USE MOD_PreProc,     ONLY : PP_Pi
 USE MOD_Equation_Vars,ONLY:c
-USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !,t
+USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -227,8 +237,7 @@ REAL               :: gamma,Psi,GradPsiX,GradPsiY      !     -"-
 !REAL, PARAMETER    :: omegaG=3.562936537e+3            ! aux. Constants for Gyrotron
 !INTEGER, PARAMETER :: mG=34,nG=19                      ! aux. Constants for Gyrotron
 !==================================================================================================================================
-!tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
-tEval=tIn
+tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
 SELECT CASE (ExactFunction)
 CASE DEFAULT

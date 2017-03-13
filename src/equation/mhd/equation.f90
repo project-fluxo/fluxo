@@ -51,12 +51,50 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
-CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateIntOption(     'IniRefState',  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.")
+CALL prms%CreateIntOption(     "IniExactFunc",  " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateIntOption(     "IniRefState",  " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateRealArrayOption("AdvVel"," Advection Velocity for exactfunction 4.","1.,1.,1.")
+CALL prms%CreateRealArrayOption("IniWaveNumber"," For exactfunction: wavenumber of solution.")
+CALL prms%CreateRealArrayOption("IniCenter"," For exactfunction: center coordinates.","0.,0.,0.")
+CALL prms%CreateRealOption(   "IniAmplitude", " For exactfunction: amplitude","0.1")
+CALL prms%CreateRealOption(   "IniFrequency", " For exactfunction: Frequency","1.0")
+CALL prms%CreateRealOption(   "IniHalfwidth", " For exactfunction: Halfwidth","0.1")
+CALL prms%CreateRealOption(   "IniDisturbance", "For exactfunction: Strength of initial disturbance","0.")
+CALL prms%CreateRealOption(   "kappa", "ratio of specific heats","1.6666666666666667")
+CALL prms%CreateRealOption(   "mu_0", "magnetic permeability in vacuum","1.0")
+#ifdef PARABOLIC
+CALL prms%CreateRealOption(   "eta", "magnetic resistivity","0.")
+CALL prms%CreateRealOption(   "mu", "fluid viscosity","0.")
+CALL prms%CreateRealOption(   "s23", "stress tensor scaling (normally 2/3)","0.6666666666666667")
+CALL prms%CreateRealOption(   "Pr", "Prandtl number","0.72")
+#ifdef PP_ANISO_HEAT
+CALL prms%CreateRealOption(   "kpar", "If anisotropic heat terms enabled: diffusion parallel to magnetic field","0.")
+CALL prms%CreateRealOption(   "kperp", "If anisotropic heat terms enabled: diffusion perpendicular to magnetic field","0.")
+#endif /*PP_ANISO_HEAT*/
+#endif /*PARABOLIC*/
+
+#ifdef PP_GLM
+CALL prms%CreateRealOption(   "GLM_scale", "MHD with GLM option: save ch from timestep <1","0.9")
+CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of GLM variable 1/cr=5.555 (cr=0.18),"//&
+                                         "set zero for no damping.","5.555")
+CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms to momentum equation.",&
+                                                 ".FALSE.")
+#endif /*PP_GLM*/
+CALL prms%CreateRealOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization"&
+                           ,multiple=.TRUE.)
+CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
+                                           "1: Lax-Friedrichs, "//&
+                                           "2: HLLC, "//&
+                                           "3: Roe, "//&
+                                           "4: HLL, "//&
+                                           "5: HLLD (only with mu_0=1), " )
+
 #if (PP_DiscType==2)
-CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form "\\&
-                                              "DG volume integral ")
+CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
+                                              "DG volume integral "//&
+                                              "0: Standard DG Flux"//&
+                                              "1: standard DG Flux with metric dealiasing" &
+                            ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -72,7 +110,10 @@ USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars 
 USE MOD_Riemann
-USE MOD_Flux_Average
+#if (PP_DiscType==2)
+USE MOD_Flux_Average, ONLY: standardDGFluxVec
+USE MOD_Flux_Average, ONLY: standardDGFluxDealiasedMetricVec
+#endif /*PP_DiscType==2*/
 ! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -212,6 +253,9 @@ SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -263,7 +307,7 @@ END SUBROUTINE FillIni
 !> Specifies all the initial conditions. The state in conservative variables is returned.
 !> t is the actual time
 !==================================================================================================================================
-SUBROUTINE ExactFunc(ExactFunction,t,x,resu) 
+SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu) 
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
@@ -273,25 +317,21 @@ USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniW
 USE MOD_Equation_Vars,ONLY:IniDisturbance
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
-#if (PP_TimeDiscMethod==1)
-USE MOD_TimeDisc_Vars,ONLY:dt,Currentstage
-#endif /*PP_TimeDiscMethod==1*/
+USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !,t
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN)              :: ExactFunction    !< determines the exact function
 REAL,INTENT(IN)                 :: x(3)             !< evaluation position
-REAL,INTENT(IN)                 :: t                !< evaluation time
+REAL,INTENT(IN)                 :: tIn              !< evaluation time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< state in conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+REAL                            :: tEval
 REAL                            :: Resu_t(PP_nVar),Resu_tt(PP_nVar)      ! state in conservative variables
-#if (PP_TimeDiscMethod==1)
-LOGICAL                         :: timeDependant
-#endif
 INTEGER                         :: i,j
 REAL                            :: Omega,a
 REAL                            :: Prim(1:PP_nVar) 
@@ -301,15 +341,14 @@ REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
 !==================================================================================================================================
-#if (PP_TimeDiscMethod==1)
-timeDependant=.FALSE.
-#endif
+!tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
+tEval=tIn
 ! Determine the value, the first and the second time derivative
 SELECT CASE (ExactFunction)
 CASE DEFAULT
-  CALL TestcaseExactFunc(ExactFunction,t,x,Resu,Resu_t,Resu_tt)
+  CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(0)        
-  CALL TestcaseExactFunc(ExactFunction,t,x,Resu,Resu_t,Resu_tt)
+  CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
   !Resu(1)  = Prim(1)
@@ -322,26 +361,25 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
 CASE(3) ! alven wave 
-    Omega=Pi*IniFrequency
-    ! r: lenght-variable = lenght of computational domain
-    r=2.
-    ! e: epsilon = 0.2
-    e=0.2
-    nx  = 1./SQRT(r**2+1.)
-    ny  = r/SQRT(r**2+1.)
-    sqr = 1. !2*SQRT(Pi)
-    Va  = omega/(ny*sqr)
-    phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(2)-0.5*r)) - Va*t
-    Resu=0.
-    Resu(1) = 1.
-    Resu(2) = -e*ny*COS(phi_alv)
-    Resu(3) =  e*nx*COS(phi_alv)
-    Resu(4) =  e*SIN(phi_alv)
-    Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
-    Resu(6) = nx -Resu(2)*sqr
-    Resu(7) = ny -Resu(3)*sqr
-    Resu(8) =    -Resu(4)*sqr
-#if (PP_TimeDiscMethod==1)
+  Omega=Pi*IniFrequency
+  ! r: lenght-variable = lenght of computational domain
+  r=2.
+  ! e: epsilon = 0.2
+  e=0.2
+  nx  = 1./SQRT(r**2+1.)
+  ny  = r/SQRT(r**2+1.)
+  sqr = 1. !2*SQRT(Pi)
+  Va  = omega/(ny*sqr)
+  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(2)-0.5*r)) - Va*tEval
+  Resu=0.
+  Resu(1) = 1.
+  Resu(2) = -e*ny*COS(phi_alv)
+  Resu(3) =  e*nx*COS(phi_alv)
+  Resu(4) =  e*SIN(phi_alv)
+  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(6) = nx -Resu(2)*sqr
+  Resu(7) = ny -Resu(3)*sqr
+  Resu(8) =    -Resu(4)*sqr
   ! g'(t)
   Resu_t     =0.
   Resu_t(1)  =0.
@@ -361,28 +399,23 @@ CASE(3) ! alven wave
   Resu_tt(6) = -Resu_tt(2)*sqr
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
-  timeDependant=.TRUE.
-#endif
 
 CASE(4) ! navierstokes exact function
   Omega=Pi*IniFrequency
   a=AdvVel(1)*2.*Pi
 
   ! g(t)
-  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*t)
+  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
   Resu(5)=Resu(1)*Resu(1)
   Resu(6:PP_nVar)=0.
-#if (PP_TimeDiscMethod==1)
   ! g'(t)
-  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*t)
+  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
   Resu_t(5)=2.*Resu(1)*Resu_t(1)
   Resu_t(6:PP_nVar)=0.
   ! g''(t)
-  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*t)
+  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
   Resu_tt(6:PP_nVar)=0.
-  timeDependant=.TRUE.
-#endif
 CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
@@ -392,29 +425,26 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   Omega=Pi*IniFrequency
 
   ! g(t)
-  Resu(1:3)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - t))
+  Resu(1:3)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   Resu(4)           = 0.
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
   Resu(6)           = Resu(1)
   Resu(7)           =-Resu(1)
   Resu(8:PP_nVar)   = 0.
-#if (PP_TimeDiscMethod==1)
   ! g'(t)
-  Resu_t(1:3)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - t))
+  Resu_t(1:3)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
   Resu_t(4)         = 0.
   Resu_t(5)         = 4.*Resu(1)*Resu_t(1) +Resu_t(1)
   Resu_t(6)         = Resu_t(1)
   Resu_t(7)         =-Resu_t(1)
   Resu_t(8:PP_nVar) = 0.
   ! g''(t)
-  Resu_tt(1:3)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - t))
+  Resu_tt(1:3)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
   Resu_tt(4)        = 0.
   Resu_tt(5)        = 4.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))+Resu_tt(1)
   Resu_tt(6)        = Resu_tt(1)
   Resu_tt(7)        =-Resu_tt(1)
   Resu_tt(8:PP_nVar)= 0.
-  timeDependant=.TRUE.
-#endif
 CASE(6) ! case 5 rotated
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
@@ -425,17 +455,16 @@ CASE(6) ! case 5 rotated
 
   ! g(t)
   Resu              = 0.
-  Resu(1:2)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - t))
+  Resu(1:2)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   !Resu(3)           = 0.
   Resu(4)           = Resu(1)
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
   Resu(6)           = Resu(1)
   !Resu(7)           = 0.
   Resu(8)           =-Resu(1)
-#if (PP_TimeDiscMethod==1)
   ! g'(t)
   Resu_t            = 0.
-  Resu_t(1:2)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - t))
+  Resu_t(1:2)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
   !Resu_t(3)         = 0.
   Resu_t(4)         = Resu_t(1)
   Resu_t(5)         = 4.*Resu(1)*Resu_t(1) +Resu_t(1)
@@ -444,15 +473,13 @@ CASE(6) ! case 5 rotated
   Resu_t(8)         =-Resu_t(1)
   ! g''(t)
   Resu_tt           = 0.
-  Resu_tt(1:2)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - t))
+  Resu_tt(1:2)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
   !Resu_tt(3)        = 0.
   Resu_tt(4)        = Resu_tt(1)
   Resu_tt(5)        = 4.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))+Resu_tt(1)
   Resu_tt(6)        = Resu_tt(1)
   !Resu_tt(7)        = 0.
   Resu_tt(8)        =-Resu_tt(1)
-  timeDependant=.TRUE.
-#endif
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
@@ -776,32 +803,31 @@ CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0),
   CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
-#if (PP_TimeDiscMethod==1)
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
-IF(timeDependant)THEN ! only add resu_t, resu_tt if time dependant
+IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant
   SELECT CASE(CurrentStage)
   CASE(1)
     ! resu = g(t)
   CASE(2)
     ! resu = g(t) + dt/3*g'(t)
-    Resu=Resu + dt/3.*Resu_t
+    Resu=Resu + dt*RKc(2)*Resu_t
   CASE(3)
     ! resu = g(t) + 3/4 dt g'(t) +5/16 dt^2 g''(t)
-    Resu=Resu + 0.75*dt*Resu_t + 0.3125*dt*dt*Resu_tt
+    Resu=Resu + RKc(3)*dt*Resu_t + RKc(2)*RKb(2)*dt*dt*Resu_tt
   CASE DEFAULT
     ! Stop, works only for 3 Stage O3 LS RK
     CALL abort(__STAMP__,&
-               'Exactfuntion works only for 3 Stage O3 LS RK!',999,999.)
-  END SELECT
-END IF
-#endif
+               'Exactfuntion works only for 3 Stage O3 LS RK!')
+  END SELECT !CurrentStage
+END IF !fullBoundaryOrder
+
 END SUBROUTINE ExactFunc
 
 
 !==================================================================================================================================
 !> Compute the source terms, called from dg timedrivtaive
 !==================================================================================================================================
-SUBROUTINE CalcSource(Ut,t) 
+SUBROUTINE CalcSource(Ut,tIn) 
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc !PP_N,PP_nElems
@@ -821,7 +847,7 @@ USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                 :: t            !< evaluation time
+REAL,INTENT(IN)                 :: tIn        !< evaluation time
 REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems) !<time derivative, where source is added 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -849,12 +875,12 @@ CASE(4) ! navierstokes exact function
   tmp(6)=0.
 #endif
   tmp=tmp*IniAmplitude
-  at=a*t
+  at=a*tIn
   DO iElem=1,PP_nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
       sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*t))
+      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*tIn))
       Ut_src=0.
       Ut_src(1  )       =  tmp(1)*cosXGP
       Ut_src(2:4)       =  tmp(2)*cosXGP + tmp(3)*sinXGP2
@@ -870,8 +896,8 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
 #endif
   DO iElem=1,PP_nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-t))
-      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-t))
+      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
       rho_xx =-omega*omega*rho
       rho    = rho+2.
       Ut_src=0.
@@ -897,8 +923,8 @@ CASE(6) ! case 5 rotated
 #endif
   DO iElem=1,PP_nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-t))
-      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-t))
+      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
       rho_xx =-omega*omega*rho
       rho    = rho+2.
       Ut_src=0.

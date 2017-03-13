@@ -63,12 +63,15 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
 CALL prms%CreateRealArrayOption('AdvVel',       "Advection velocity for advection part of LinAdv-Diff.")
-CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.")
-CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.")
+CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.","0.")
+CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.","1.,1.,1.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
 #if (PP_DiscType==2)
-CALL prms%CreateIntOption(     'VolumeFlux',  " Specifies the two-point flux to be used in the flux of the split-form "\\&
-                                              "DG volume integral ")
+CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form:"//&
+                                              "DG volume integral "//&
+                                              "0: Standard DG Flux"//&
+                                              "1: standard DG Flux with metric dealiasing" &
+                            ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -82,7 +85,10 @@ USE MOD_Globals
 USE MOD_ReadInTools,ONLY:GETREALARRAY,GETREAL,GETINT
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars
+#if (PP_DiscType==2)
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
+USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
+#endif /*PP_DiscType==2*/
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -111,6 +117,9 @@ SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
