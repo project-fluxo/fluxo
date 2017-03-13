@@ -40,7 +40,7 @@ SUBROUTINE TestcaseExactFunc(ExactFunction,tIn,x,resu,resu_t,resu_tt,Apot)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Pi,sSqrt4Pi,Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
@@ -77,7 +77,7 @@ CASE(10010) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*
   xc(:)  = x(:) + (/-0.0343, 0.0776, 0./)
   Prim(:)= RefStatePrim(IniRefState,:)
   Prim(2:4)=0.
-  Omega=2*Pi*IniFrequency
+  Omega=2*PP_Pi*IniFrequency
   a=SQRT(IniAmplitude*Prim(5))/omega !IniAmplitude is related to the change of pressure (IniAmplitude=0.1: 10% change) 
   Prim(6)= a*omega*SIN(Omega*xc(1))*COS(Omega*xc(2))
   Prim(7)=-a*omega*COS(Omega*xc(1))*SIN(Omega*xc(2))
@@ -311,13 +311,13 @@ CASE(92) !cylindrical equilibrium for ideal MHD for internal kink (Jorek paper H
   Lz=100.
   Prim(:)=0.
   Prim(1)=1.-0.9*r2(1) 
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*pi*pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
   Prim(8)=1.  !Bz=1.
-  Bphi= 2*pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
+  Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
   Prim(6)=-x(2)*Bphi  !/r
   Prim(7)= x(1)*Bphi  !/r
-  dp  = 2*pi*pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
+  dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
   Prim(5)=Prim(5)-smu_0*dp
   IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 

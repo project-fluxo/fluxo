@@ -46,15 +46,14 @@ SUBROUTINE InitEquilibriumState()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_MPI
-USE MOD_MPI_Vars
 USE MOD_Testcase_Vars
 USE MOD_Testcase_ExactFunc ,ONLY: TestcaseExactFunc
 USE MOD_CalcTimeStep       ,ONLY: CalcTimeStep
 USE MOD_DG                 ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars            ,ONLY: DGInitIsDone
-USE MOD_DG_Vars            ,ONLY: U,Ut,U_Minus,U_Plus
+USE MOD_DG_Vars            ,ONLY: U,Ut,U_master,U_slave
 USE MOD_ProlongToFace      ,ONLY: ProlongToFace
+USE MOD_FillMortar         ,ONLY: U_Mortar
 USE MOD_Equation           ,ONLY: ExactFunc
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
 USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
@@ -63,12 +62,16 @@ USE MOD_Equation_Vars      ,ONLY: StrVarNames
 USE MOD_Restart_Vars       ,ONLY: DoRestart
 USE MOD_Mesh_Vars          ,ONLY: MeshFile
 USE MOD_Mesh_Vars          ,ONLY: nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars          ,ONLY: Elem_xGP
+USE MOD_Mesh_Vars          ,ONLY: Elem_xGP,nElems
 USE MOD_Mesh_Vars          ,ONLY: NormVec,TangVec1,TangVec2
 USE MOD_Mesh_Vars          ,ONLY: nBCSides,nInnerSides,nMPISides_MINE
-USE MOD_Mesh_Vars          ,ONLY: SideID_plus_lower,SideID_plus_upper
-USE MOD_Output             ,ONLY: VisualizeAny
-USE MOD_HDF5_Output        ,ONLY: WriteAnyStateToHDF5
+USE MOD_Output             ,ONLY: Visualize
+USE MOD_HDF5_Output        ,ONLY: WriteAnyState
+#if MPI
+USE MOD_MPI_Vars
+USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
+USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide 
+#endif /*MPI*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -81,15 +84,11 @@ INTEGER             :: i,j,k,iElem
 INTEGER             :: iBC,iSide,SideID,BCType,nBCLoc
 REAL                :: dt_min
 REAL                :: resu_t(PP_nVar),resu_tt(PP_nVar)
-REAL                :: U_tmp(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems)
+REAL                :: U_tmp(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
 REAL,ALLOCATABLE    :: Apot(:,:,:,:,:),Bdivfree(:,:,:,:,:)
 INTEGER             :: errType
 INTEGER             :: nTotal
-INTEGER             :: EquilibriumDisturbFunc
-CHARACTER(LEN=255)  :: errMsg
 CHARACTER(LEN=255)  :: FileTypeStr
-CHARACTER(LEN=255)  :: EquilibriumStateFile
-LOGICAL             :: EquilibriumDivBcorr
 !CHECK
 REAL                :: deltaB(3),maxjmp_B(3)
 !==================================================================================================================================
@@ -101,9 +100,9 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT EQUILIBRIUM STATE...'
 
 
-ALLOCATE(Ueq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems))
+ALLOCATE(Ueq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Ueq_BC(PP_nVar,0:PP_N,0:PP_N,nBCSides))
-ALLOCATE(Uteq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems))
+ALLOCATE(Uteq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Ueq  =0.
 Ueq_BC=0.
 Uteq =0.
@@ -113,26 +112,26 @@ IF(EquilibriumStateIni.EQ.0) THEN
                                              'set to IniExactFunc'    ,' | ',EquilibriumStateIni
 END IF
 IF(EquilibriumDivBcorr) THEN
-  ALLOCATE(Apot(3,0:PP_N,0:PP_N,0:PP_N,PP_nElems))
+  ALLOCATE(Apot(3,0:PP_N,0:PP_N,0:PP_N,nElems))
   Apot=-999.
 END IF
 
 IF(EquilibriumStateIni.GT.0)THEN
   evalEquilibrium=.TRUE. !for exactfunctestcase
   IF(EquilibriumDivBcorr)THEN
-    DO iElem=1,PP_nElems
+    DO iElem=1,nElems
       DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
         CALL TestcaseExactFunc(EquilibriumStateIni,0., &
                                Elem_xGP(1:3,i,j,k,iElem),Ueq(1:PP_nVar,i,j,k,iElem), &
                                resu_t,resu_tt,Apot(:,i,j,k,iElem))
       END DO; END DO; END DO!i,j,k
-    END DO ! iElem=1,PP_nElems
+    END DO ! iElem=1,nElems
   ELSE
-    DO iElem=1,PP_nElems
+    DO iElem=1,nElems
       DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
         CALL ExactFunc(EquilibriumStateIni,0.,Elem_xGP(1:3,i,j,k,iElem),Ueq(1:PP_nVar,i,j,k,iElem))
       END DO; END DO; END DO!i,j,k
-    END DO ! iElem=1,PP_nElems
+    END DO ! iElem=1,nElems
   END IF !EquilibriumDivBcorr
 ELSEIF(EquilibriumStateIni.EQ.-2) THEN
   !Read Ueq from Mesh
@@ -142,17 +141,16 @@ ELSEIF(EquilibriumStateIni.EQ.-2) THEN
     CALL ReadEquilibriumFromMesh(Ueq)
   END IF
 ELSEIF(EquilibriumStateIni.EQ.-3) THEN
-  !EquilibriumStateFile=GETSTR('EquilibriumStateFile')
   EquilibriumDivBcorr=.FALSE. !Apot not there
   CALL ReadEquilibriumFromMesh(Ueq)
   CALL ReadEquilibriumFromState(EquilibriumStateFile,Ueq) !overwrite Ueq with U from Statefile
 END IF !EquilibriumState
 
 IF(EquilibriumDivBcorr)THEN
-  ALLOCATE(Bdivfree(3,0:PP_N,0:PP_N,0:PP_N,PP_nElems))
+  ALLOCATE(Bdivfree(3,0:PP_N,0:PP_N,0:PP_N,nElems))
   !==== overwrite B FROM POTENTIAL
   CALL ComputeBfromPotential(Apot,Ueq(6:8,:,:,:,:),Bdivfree)
-  nTotal=(PP_N+1)**3*PP_nElems
+  nTotal=(PP_N+1)**3*nElems
   !PrimToCons before overwriting magnetic field, to keep same pressure!!
   CALL ConsToPrimVec(nTotal,U_tmp,Ueq)
   U_tmp(6:8,:,:,:,:)=BdivFree(1:3,:,:,:,:)
@@ -162,19 +160,21 @@ IF(EquilibriumDivBcorr)THEN
 END IF !EquilibriumDivBcorr
 
 !CHECK continuity of tangential B-field on FACES
-CALL ProlongToFace(Ueq,U_Minus,U_Plus,doMPISides=.FALSE.)
-#ifdef MPI
+CALL ProlongToFace(Ueq,U_master,U_slave,doMPISides=.FALSE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+#if MPI
 ! Prolong to face for MPI sides - send direction
-CALL StartReceiveMPIData(U_Plus,DataSizeSide,SideID_plus_lower,SideID_plus_upper,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE
-CALL ProlongToFace(Ueq,U_Minus,U_Plus,doMPiSides=.TRUE.)
-CALL StartSendMPIData(   U_Plus,DataSizeSide,SideID_plus_lower,SideID_plus_upper,MPIRequest_U(:,RECV),SendID=2) ! Send YOUR
+CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE
+CALL ProlongToFace(Ueq,U_master,U_slave,doMPiSides=.TRUE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
+CALL StartSendMPIData(   U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,RECV),SendID=2) ! Send YOUR
 ! Complete send / receive
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U) !Send YOUR - receive MINE
 #endif /*MPI*/
 maxjmp_B(:)=0.
 DO SideID=nBCsides+1,nBCsides+nInnerSides+nMPISides_MINE
   DO j=0,PP_N ; DO i=0,PP_N
-    deltaB(:) = U_Plus(6:8,i,j,SideID)-U_Minus(6:8,i,j,SideID)
+    deltaB(:) = U_slave(6:8,i,j,SideID)-U_master(6:8,i,j,SideID)
     maxjmp_B(1)  = MAX(maxjmp_B(1),ABS(SUM(NormVec( :,i,j,SideID)*deltaB(:))))
     maxjmp_B(2)  = MAX(maxjmp_B(2),ABS(SUM(TangVec1(:,i,j,SideID)*deltaB(:))))
     maxjmp_B(3)  = MAX(maxjmp_B(3),ABS(SUM(TangVec2(:,i,j,SideID)*deltaB(:))))
@@ -200,17 +200,17 @@ DO iBC=1,nBCs
   nBCLoc =nBCByType(iBC)
   IF(nBCLoc.EQ.0) CYCLE
   ! FOR BCType 21, use equilibrium state as BC
-  CALL ProlongToFace(U,U_Minus,U_Plus,doMPISides=.FALSE.)
+  CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
   DO iSide=1,nBCLoc
     SideID=BCSideID(iBC,iSide)
-    BCdata(:,:,:,SideID)=U_Minus(:,:,:,SideID)
+    BCdata(:,:,:,SideID)=U_master(:,:,:,SideID)
   END DO !iSide=1,nBCloc
-  U_Minus=0.
-  U_Plus=0.
+  U_master=0.
+  U_slave=0.
 END DO !iBC=1,nBCs
 
 ! Call DG operator to fill face data, fluxes, gradients for analyze
-dt_Min=CALCTIMESTEP(errType,errMsg) 
+dt_Min=CALCTIMESTEP(errType) 
 CALL DGTimeDerivative(0.)
 
 !store time derivative of Ueq
@@ -223,7 +223,6 @@ CALL EvalNorms(Uteq)
 IF(doRestart)THEN
   U=U_tmp !copy U back
 ELSE
-  EquilibriumDisturbFunc=GETINT('EquilibriumDisturbFunc','0')
   IF(EquilibriumDisturbFunc.EQ.0) THEN
     EquilibriumDisturbFunc=IniExactFunc
     SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumDisturbFunc changed!| ', &
@@ -232,11 +231,11 @@ ELSE
   !then disturb the Initial state U
   CALL DisturbU(EquilibriumDisturbFunc)
   FileTypeStr='EquilibriumSource'
-  CALL VisualizeAny(Uteq,FileTypeStr,0.,PrimVisu=.FALSE.)
-  CALL WriteAnyStateToHDF5(PP_nVar,Uteq,MeshFile,FileTypeStr,StrVarNames,0.)
+  CALL Visualize(0.,Uteq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.TRUE.)
+  CALL WriteAnyState(PP_nVar,Uteq,MeshFile,FileTypeStr,StrVarNames,0.)
   FileTypeStr='EquilibriumState'
-  CALL VisualizeAny(Ueq,FileTypeStr,0.,PrimVisu=.TRUE.)
-  CALL WriteAnyStateToHDF5(PP_nVar,Ueq,MeshFile,FileTypeStr,StrVarNames,0.)
+  CALL Visualize(0.,Ueq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.TRUE.)
+  CALL WriteAnyState(PP_nVar,Ueq,MeshFile,FileTypeStr,StrVarNames,0.)
 END IF !doRestart
 
 SWRITE(UNIT_stdOut,'(A)')' INIT EQUILIBRIUM STATE DONE!'
@@ -252,17 +251,17 @@ SUBROUTINE ComputeBfromPotential(Apot,Bexact,Bdivfree)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars, ONLY: sJ,Metrics_ftilde,Metrics_gtilde,Metrics_htilde
-USE MOD_Mesh_Vars, ONLY: Elem_xGP
+USE MOD_Mesh_Vars, ONLY: Elem_xGP,nElems
 USE MOD_DG_Vars,   ONLY: D
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN   )              :: Apot(3,0:PP_N,0:PP_N,0:PP_N,PP_nElems)
-REAL,INTENT(IN   )              :: Bexact(3,0:PP_N,0:PP_N,0:PP_N,PP_nElems)
+REAL,INTENT(IN   )              :: Apot(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL,INTENT(IN   )              :: Bexact(3,0:PP_N,0:PP_N,0:PP_N,nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)                :: Bdivfree(3,0:PP_N,0:PP_N,0:PP_N,PP_nElems)
+REAL,INTENT(OUT)                :: Bdivfree(3,0:PP_N,0:PP_N,0:PP_N,nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER                         :: i,j,k,l,iElem
@@ -279,7 +278,7 @@ SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
 
 !!TEST !!!!!!!!!!!!!!
 !! OVERWRITE Apot and Bexact
-!DO iElem=1,PP_nElems
+!DO iElem=1,nElems
 !  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 !      x(:)=Elem_xGP(:,i,j,k,iElem)-1.
 !!      Apot(1,i,j,k,iElem)  =0.
@@ -306,7 +305,7 @@ SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
 
 
 Bdivfree=0.
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   !compute covariant vectors
   aCov=0.
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -352,7 +351,7 @@ END DO !iElem
 
 maxDivB=0.
 !CHECK STRONG DIVERGENCE div B = 1/J sum_i d/dxi^i (JB^i)
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   divB=0.
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     ! Compute the covariant components 
@@ -376,7 +375,7 @@ maxBex(3)=MAXVAL(ABS(Bexact(3,:,:,:,:)))
 maxBdiff(1)=MAXVAL(ABS(Bdivfree(1,:,:,:,:)-Bexact(1,:,:,:,:)))
 maxBdiff(2)=MAXVAL(ABS(Bdivfree(2,:,:,:,:)-Bexact(2,:,:,:,:)))
 maxBdiff(3)=MAXVAL(ABS(Bdivfree(3,:,:,:,:)-Bexact(3,:,:,:,:)))
-#ifdef MPI
+#if MPI
 IF(MPIRoot)THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,maxBex  ,3,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(MPI_IN_PLACE,maxBdiff,3,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
@@ -404,8 +403,8 @@ USE MOD_Preproc
 USE MOD_Globals               ,ONLY: Abort
 USE MOD_Testcase_Vars         ,ONLY: InputEq
 USE MOD_DG_Vars               ,ONLY: U
-USE MOD_Mesh_Vars             ,ONLY: Elem_xGP
-USE MOD_Equation_Vars         ,ONLY: Pi,sSqrt4Pi,Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Mesh_Vars             ,ONLY: Elem_xGP,nElems
+USE MOD_Equation_Vars         ,ONLY: Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars         ,ONLY: smu_0,mu_0
 USE MOD_Equation_Vars         ,ONLY: IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars         ,ONLY: IniDisturbance
@@ -431,7 +430,7 @@ CASE(10071) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[
         ! "Three-dimensional simulations of compressible tearing instability"
         ! rho_0=1, p0=0.5*beta (choose with refstate)
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
       x=Elem_xGP(:,i,j,k,iElem)
       CALL ConsToPrim(Prim,U(:,i,j,k,iElem))
@@ -445,7 +444,7 @@ CASE(10071) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[
       !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
       CALL PrimToCons(Prim,U(:,i,j,k,iElem))
     END DO; END DO; END DO !i,j,k
-  END DO ! iElem=1,PP_nElems
+  END DO ! iElem=1,nElems
 
 CASE(10090,10091) !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2008), current Jz in z direction is given:
          ! cylindrical domain r[0,1], z[0,20] (from q(r=1)=4.4 =2*pi*B0/(Lz*Bphi(r=1)) => B0/Lz=0.364 B0~7.44, L0~20.)
@@ -454,7 +453,7 @@ CASE(10090,10091) !cylindrical equilibrium for ideal MHD for current hole (Czarn
          ! Bphi(r) =mu_0 1/r  \int_0^r r*Jc dr
          ! pressure difference from gradp=J x B:
          ! dp(r) = -smu_0 ( 0.5*Bphi^2 + \int_0^r Bphi^2/r dr)
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
       x=Elem_xGP(:,i,j,k,iElem)
       CALL ConsToPrim(Prim,U(:,i,j,k,iElem))
@@ -463,9 +462,9 @@ CASE(10090,10091) !cylindrical equilibrium for ideal MHD for current hole (Czarn
                   
       CALL PrimToCons(Prim,U(:,i,j,k,iElem))
     END DO; END DO; END DO !i,j,k
-  END DO ! iElem=1,PP_nElems
+  END DO ! iElem=1,nElems
 CASE(101) ! R=10, a=1, 1st toroidal n=1&2 mode of toroidal velocity, 
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
       x=Elem_xGP(:,i,j,k,iElem)
       CALL ConsToPrim(Prim,U(:,i,j,k,iElem))
@@ -479,21 +478,21 @@ CASE(101) ! R=10, a=1, 1st toroidal n=1&2 mode of toroidal velocity,
       prim(4)= 0.
       CALL PrimToCons(Prim,U(:,i,j,k,iElem))
     END DO; END DO; END DO !i,j,k
-  END DO ! iElem=1,PP_nElems
+  END DO ! iElem=1,nElems
 CASE(999) ! TESTING
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
       x=Elem_xGP(:,i,j,k,iElem)
       CALL ConsToPrim(Prim,U(:,i,j,k,iElem))
       a=ATAN2(x(2),x(1)) !toroidal angle
       !vtor=(10.+2*COS(a)+0.03*SIN(2*a))/SQRT(Prim(1))
-      vtor=(10+3*cos(a-0.3)+4.*sin(a+0.5)+0.3*cos(2*a-0.1) + 0.4*sin(2*a+0.3) + 0.01*cos(3*a+0.25) -0.04*sin(3*a-0.7))/SQRT(prim(1)
+      vtor=(10+3*cos(a-0.3)+4.*sin(a+0.5)+0.3*cos(2*a-0.1) + 0.4*sin(2*a+0.3)+0.01*cos(3*a+0.25) -0.04*sin(3*a-0.7))/SQRT(prim(1))
       prim(2)= -vtor*SIN(a)
       prim(3)=  vtor*COS(a)
       prim(4)= 0.
       CALL PrimToCons(Prim,U(:,i,j,k,iElem))
     END DO; END DO; END DO !i,j,k
-  END DO ! iElem=1,PP_nElems
+  END DO ! iElem=1,nElems
 CASE DEFAULT
   CALL abort(__STAMP__,' DisturbU function not specified!')
 END SELECT ! ExactFunction
@@ -507,14 +506,14 @@ SUBROUTINE EvalNorms(Uin)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_Interpolation_Vars, ONLY: wGP
 USE MOD_Equation_Vars,      ONLY: StrVarNames
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                 :: Uin(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:PP_nElems)
+REAL,INTENT(IN)                 :: Uin(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -528,7 +527,7 @@ L_Inf(:)=-1.E10
 L_2(:)=0.
 vol=0.
 ! Interpolate values of Error-Grid from GP's
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
    DO k=0,PP_N
      DO j=0,PP_N
        DO i=0,PP_N
@@ -540,9 +539,9 @@ DO iElem=1,PP_nElems
        END DO ! k
      END DO ! l
    END DO ! m
-END DO ! iElem=1,PP_nElems
+END DO ! iElem=1,nElems
 
-#ifdef MPI
+#if MPI
 IF(MPIRoot)THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,L_2  ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(MPI_IN_PLACE,L_Inf,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
@@ -575,8 +574,8 @@ SUBROUTINE ReadEquilibriumFromMesh(Ueq,Apot)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars             ,ONLY: MeshFile,Ngeo
-USE MOD_Mesh_Vars             ,ONLY: offsetElem
-USE MOD_Interpolation_Vars    ,ONLY: NodeTypeGL
+USE MOD_Mesh_Vars             ,ONLY: offsetElem,nElems
+USE MOD_Interpolation_Vars    ,ONLY: NodeType,NodeTypeGL
 USE MOD_Testcase_Vars         ,ONLY: InputEq
 USE MOD_Interpolation         ,ONLY: GetVandermonde 
 USE MOD_Equation_Vars         ,ONLY: PrimToConsVec
@@ -590,8 +589,8 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)          :: Ueq(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:PP_nElems)
-REAL,INTENT(OUT),OPTIONAL :: Apot(3,0:PP_N,0:PP_N,0:PP_N,1:PP_nElems)
+REAL,INTENT(OUT)          :: Ueq(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL,INTENT(OUT),OPTIONAL :: Apot(3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 REAL,ALLOCATABLE   :: MHDEQdata_GL(:,:,:,:,:)
@@ -600,7 +599,7 @@ REAL               :: maxPsi(2),minPsi(2)
 INTEGER            :: nTotal,iElem,nVarMHDEQ
 LOGICAL            :: exists
 !==================================================================================================================================
-  CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.)
+  CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
   CALL DataSetExists(File_ID,'MHDEQdata_GL',exists)
   IF(exists)THEN 
     CALL GetDataSize(File_ID,'MHDEQdata_GL',nDims,HSize)
@@ -614,8 +613,8 @@ LOGICAL            :: exists
       CALL abort(__STAMP__, &
       'ERROR: MHDEQdata_GL has not the magnetic potential included, in Meshfile: '//TRIM(Meshfile))
     END IF
-    ALLOCATE(MHDEQdata_GL(nVarMHDEQ,0:Ngeo,0:Ngeo,0:Ngeo,PP_nElems))
-    CALL ReadArray('MHDEQdata_GL',5,(/nVarMHDEQ,Ngeo+1,Ngeo+1,Ngeo+1,PP_nElems/),OffsetElem,5,RealArray=MHDEQdata_GL)
+    ALLOCATE(MHDEQdata_GL(nVarMHDEQ,0:Ngeo,0:Ngeo,0:Ngeo,nElems))
+    CALL ReadArray('MHDEQdata_GL',5,(/nVarMHDEQ,Ngeo+1,Ngeo+1,Ngeo+1,nElems/),OffsetElem,5,RealArray=MHDEQdata_GL)
   END IF
   CALL CloseDataFile() 
   IF(.NOT.exists) CALL Abort(__STAMP__, &
@@ -629,16 +628,16 @@ LOGICAL            :: exists
   ! 8-10 (Ax,Ay,Az) 
 
   !interpolate to computing nodes
-  ALLOCATE(InputEq(1:nVarMHDEQ,0:PP_N,0:PP_N,0:PP_N,PP_nElems))
+  ALLOCATE(InputEq(1:nVarMHDEQ,0:PP_N,0:PP_N,0:PP_N,nElems))
   CALL GetVandermonde(Ngeo,NodeTypeGL,PP_N,NodeType,Vdm_GLNgeo_N)
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     CALL ChangeBasis3D(nVarMHDEQ,Ngeo,PP_N,Vdm_GLNgeo_N,MHDEQdata_GL(:,:,:,:,iElem),InputEq(:,:,:,:,iElem))
   END DO !iElem
   Ueq=0.
   Ueq(  1,:,:,:,:) =InputEq(  1,:,:,:,:) !density
   Ueq(  5,:,:,:,:) =InputEq(  2,:,:,:,:) !pressure
   Ueq(6:8,:,:,:,:) =InputEq(3:5,:,:,:,:) !magnetic field (x,y,z components)
-  nTotal=(PP_N+1)**3*PP_nElems
+  nTotal=(PP_N+1)**3*nElems
   ! input data is in primitive variables, change to cons 
   CALL PrimToConsVec(nTotal,Ueq,Ueq)
   !if potential is given
@@ -651,7 +650,7 @@ LOGICAL            :: exists
   maxPsi(2)=MAXVAL(InputEq(7,:,:,:,:))
   minPsi(1)=MINVAL(InputEq(6,:,:,:,:))
   minPsi(2)=MINVAL(InputEq(7,:,:,:,:))
-#ifdef MPI
+#if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,maxPsi,2,MPI_DOUBLE_PRECISION,MPI_MAX,MPI_COMM_WORLD,iError)
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,minPsi,2,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
@@ -668,7 +667,7 @@ SUBROUTINE ReadEquilibriumFromState(StateFile,Ueq)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars             ,ONLY: offsetElem
+USE MOD_Mesh_Vars             ,ONLY: offsetElem,nElems
 USE MOD_HDF5_input            ,ONLY: OpenDataFile,CloseDataFile,ReadArray,DataSetExists,GetDataSize
 USE MOD_HDF5_input            ,ONLY: File_ID
 USE MOD_IO_HDF5               ,ONLY: Hsize,nDims
@@ -679,14 +678,14 @@ IMPLICIT NONE
 CHARACTER(LEN=255)  :: StateFile
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: Ueq(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:PP_nElems)
+REAL,INTENT(OUT)   :: Ueq(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL               :: U_HDF5(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:PP_nElems)
+REAL               :: U_HDF5(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 INTEGER            :: nVarHDF5,N_HDF5
 LOGICAL            :: exists
 !==================================================================================================================================
-  CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.)
+  CALL OpenDataFile(StateFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
   CALL DataSetExists(File_ID,'DG_Solution',exists)
   IF(exists)THEN 
     CALL GetDataSize(File_ID,'DG_Solution',nDims,HSize)
@@ -697,7 +696,7 @@ LOGICAL            :: exists
           'ERROR: nVar of DG_Solution /=PP_nVar in Statefile: '//TRIM(StateFile))
     IF(N_HDF5.NE.PP_N) CALL abort(__STAMP__, &
           'ERROR: N of DG_Solution /=PP_N in Statefile: '//TRIM(StateFile))
-    CALL ReadArray('DG_Solution',5,(/PP_nVar,PP_N+1,PP_N+1,PP_N+1,PP_nElems/),OffsetElem,5,RealArray=U_HDF5)
+    CALL ReadArray('DG_Solution',5,(/PP_nVar,PP_N+1,PP_N+1,PP_N+1,nElems/),OffsetElem,5,RealArray=U_HDF5)
   END IF
   CALL CloseDataFile() 
   IF(.NOT.exists) CALL Abort(__STAMP__, &

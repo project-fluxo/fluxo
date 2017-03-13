@@ -44,7 +44,7 @@ USE MOD_PreProc
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_DG_Vars,ONLY:U
-USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP
+USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars,ONLY:R,smu_0
 USE MOD_Equation_Vars,ONLY: ConsToPrim
 USE MOD_Equation_Vars,ONLY: FastestWave3D
@@ -89,7 +89,7 @@ IF(.NOT.GLM_init) CALL InitTimeStep_GLMch1()
 #endif /*PP_GLM*/
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   Max_Lambda=0.
   DO k=0,PP_N
     DO j=0,PP_N
@@ -158,10 +158,10 @@ DO iElem=1,PP_nElems
   Max_Lambda_v=0.  ! Viscous
 #endif /* PARABOLIC*/
   IF(errType.NE.0)EXIT
-END DO ! iElem=1,PP_nElems
+END DO ! iElem=1,nElems
 TimeStep(1)=TimeStepConv
 TimeStep(2)=TimeStepVisc
-#ifdef MPI
+#if MPI
 buf(1)=TimeStep(1)
 buf(2)=TimeStep(2)
 buf(3)=-REAL(errType)
@@ -188,7 +188,7 @@ END FUNCTION CALCTIMESTEP
 SUBROUTINE InitTimeStep_GLMch1()
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
 USE MOD_TimeDisc_Vars,ONLY:CFLScale
 USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1
 ! IMPLICIT VARIABLE HANDLING
@@ -203,7 +203,7 @@ INTEGER                      :: i,j,k,iElem
 REAL                         :: Max_Lambda(3)
 !==================================================================================================================================
 GLM_dtch1=HUGE(1.)
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   Max_Lambda=0.
   DO k=0,PP_N; DO j=0,PP_N;  DO i=0,PP_N
         Max_Lambda(1)=MAX(Max_Lambda(1),sJ(i,j,k,iElem) &
@@ -215,7 +215,7 @@ DO iElem=1,PP_nElems
   END DO; END DO; END DO ! i,j,k
   GLM_dtch1=MIN(GLM_dtch1,CFLScale*2./SUM(Max_Lambda))
 END DO !iElem
-#ifdef MPI
+#if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,GLM_dtch1,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
 GLM_init=.TRUE.

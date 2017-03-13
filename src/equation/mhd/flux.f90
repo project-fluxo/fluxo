@@ -319,6 +319,9 @@ END SUBROUTINE EvalFluxTilde3D
 SUBROUTINE EvalAdvectionFlux1D(U_Face,F_Face)
 ! MODULES
 USE MOD_Equation_Vars,ONLY:KappaM1,KappaM2,smu_0,s2mu_0
+#ifdef PP_GLM
+USE MOD_Equation_vars,ONLY:GLM_ch
+#endif 
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

@@ -36,7 +36,10 @@ INTERFACE FinalizeAnalyzeEquation
 END INTERFACE
 
 
-PUBLIC:: AnalyzeEquation, InitAnalyzeEquation, FinalizeAnalyzeEquation
+PUBLIC:: AnalyzeEquation
+PUBLIC:: InitAnalyzeEquation
+PUBLIC:: FinalizeAnalyzeEquation
+PUBLIC:: DefineParametersAnalyzeEquation
 !==================================================================================================================================
 
 CONTAINS
@@ -197,7 +200,7 @@ SUBROUTINE CalcDivergence(L2_divB,Linf_divB)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde   ! metrics
 USE MOD_DG_Vars            ,ONLY:U,D
 IMPLICIT NONE
@@ -216,7 +219,7 @@ REAL                            :: divB_loc
 ! Needed for the computation of the forcing term for the channel flow
 L2_divB=0.
 Linf_divB=0.
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   ! Compute the gradient in the reference system
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     gradB_xi  = 0.
@@ -268,7 +271,7 @@ SUBROUTINE CalcBulk(Bulk)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -284,7 +287,7 @@ REAL                            :: box(1:PP_nVar)
 #endif
 !==================================================================================================================================
 Bulk=0.
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     Bulk =Bulk+U(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
   END DO; END DO; END DO !i,j,k
@@ -313,7 +316,7 @@ SUBROUTINE CalcEnergy(Energy)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U
 USE MOD_Equation_Vars,      ONLY: s2mu_0
 IMPLICIT NONE
@@ -327,9 +330,8 @@ REAL,INTENT(OUT)                :: Energy(2) !< kinetic and magnetic energy
 INTEGER                         :: iElem,i,j,k
 REAL                            :: IntegrationWeight
 !==================================================================================================================================
-kineticEnergy=0.
-magneticEnergy=0.
-DO iElem=1,PP_nElems
+Energy=0.
+DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
     Energy(1)  = Energy(1)+SUM(U(2:4,i,j,k,iElem)**2)/U(1,i,j,k,iElem)*IntegrationWeight

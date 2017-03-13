@@ -39,6 +39,7 @@ END INTERFACE
 
 PUBLIC:: InitTestcase
 PUBLIC:: FinalizeTestcase
+PUBLIC:: DefineParametersTestcase 
 
 CONTAINS
 
@@ -60,8 +61,8 @@ CALL prms%CreateIntOption('EquilibriumStateIni', &
      "= 0 : Use U_eq=exactFunc(IniExactFunc) for equilibrium state "//&
      "> 0 : Use U_eq=exactFunc(EquilibriumStateIni) for equilibrium state "//&
      "=-2 : Read U_eq from MeshFile"//&
-     "=-3 : Read U_eq from the solution of a stateFile"//&
-     ,'-1')
+     "=-3 : Read U_eq from the solution of a stateFile" &
+     ,"-1")
 CALL prms%CreateStringOption('EquilibriumStateFile', &
      "name of statefile to used for eq. solution (only if EquilibriumStateIni=-3)")
 CALL prms%CreateLogicalOption('EquilibriumDivBcorr', &
@@ -70,6 +71,10 @@ CALL prms%CreateLogicalOption('CalcErrorToEquilibrium', &
      "switch for TC_analyze: compute difference of |U-Ueq|" , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcDeltaBEnergy', &
      "switch for TC_analyze: compute Energy of 1/(2mu0)|B-Beq|^2" , '.FALSE.')
+CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
+     "=0: Default: disturbance case number = iniExactFunc"// &
+     ">0: specific disturbance function added to initial state." &
+     ,"0.")
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
@@ -81,6 +86,7 @@ USE MOD_Globals
 USE MOD_Testcase_Vars
 USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
 USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
+USE MOD_Restart_Vars       ,ONLY: DoRestart
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -102,6 +108,9 @@ CALL InitEquilibriumState()
 !TESTCASE ANALYZE
 doCalcErrorToEquilibrium = GETLOGICAL('CalcErrorToEquilibrium','.FALSE.')
 doCalcDeltaBEnergy       = GETLOGICAL('CalcDeltaBEnergy','.FALSE.')
+IF(.NOT.doRestart)THEN
+  EquilibriumDisturbFunc=GETINT('EquilibriumDisturbFunc','0')
+END IF
 
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')

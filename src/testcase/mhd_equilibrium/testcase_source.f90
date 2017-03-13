@@ -40,10 +40,11 @@ SUBROUTINE TestcaseSource(Ut,t)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Testcase_Vars,ONLY:Uteq
+USE MOD_Mesh_Vars,    ONLY:nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems) !< solution time derivative
+REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< solution time derivative
 REAL,INTENT(IN)                 :: t         !< solution time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES

@@ -75,8 +75,8 @@ USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN) :: U_L(     PP_nVar,0:PP_N,0:PP_N) !<  left state on face
-REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face
+REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
 #if PARABOLIC                                                 
 REAL,INTENT(IN) :: gradUx_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in x 
 REAL,INTENT(IN) :: gradUx_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in x 
@@ -426,8 +426,8 @@ REAL,DIMENSION(1:3)  :: uRS,utR,utRS  !,uR
 REAL,DIMENSION(1:3)  :: BLS,BtL,BtLS  !,BL
 REAL,DIMENSION(1:3)  :: BRS,BtR,BtRS  !,BR
 REAL,DIMENSION(1:3)  :: uSS,BSS,utSS,BtSS
-REAL,DIMENSION(1:8)  :: U_LS, U_LSS
-REAL,DIMENSION(1:8)  :: U_RS, U_RSS
+REAL,DIMENSION(1:PP_nVar)  :: U_LS, U_LSS
+REAL,DIMENSION(1:PP_nVar)  :: U_RS, U_RSS
 REAL, PARAMETER      :: hlld_eps = 1.0e-8
 REAL, PARAMETER      :: hlld_small_eps = 1.0e-12
 !==================================================================================================================================
@@ -521,6 +521,9 @@ U_LS(1)   = rhoLS
 U_LS(2:4) = rhoLS * uLS 
 U_LS(5)   = eLS         
 U_LS(6:8) = BLS         
+#ifdef PP_GLM
+U_LS(9) = ConsL(9)
+#endif /* PP_GLM */
 
 !Right * state
 temp = rhoR * (SR-unR) * (SR - SM) - Bn*Bn
@@ -544,6 +547,9 @@ U_RS(1)   = rhoRS
 U_RS(2:4) = rhoRS * uRS
 U_RS(5)   = eRS
 U_RS(6:8) = BRS
+#ifdef PP_GLM
+U_RS(9) = ConsR(9)
+#endif /* PP_GLM */
 
 IF (ABS(Bn)<hlld_small_eps) THEN
    !If Bn=0 four states reduce to two
@@ -578,6 +584,9 @@ ELSE
    U_LSS(2:4) = rhoLSS*uSS      ; U_RSS(2:4) = rhoRSS*uSS
    U_LSS(5)   = eLSS            ; U_RSS(5)   = eRSS
    U_LSS(6:8) = BSS             ; U_RSS(6:8) = BSS
+#ifdef PP_GLM
+   U_LSS(9) = ConsL(9)          ; U_RSS(9)   = consR(9)
+#endif /* PP_GLM */
 END IF !|Bn|<0
 
 END ASSOCIATE !rhoL,rhoR,...

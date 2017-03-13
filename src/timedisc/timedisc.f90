@@ -146,7 +146,7 @@ USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
 USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState
-USE MOD_Mesh_Vars           ,ONLY: MeshFile,nGlobalElems
+USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 IMPLICIT NONE
@@ -188,8 +188,7 @@ CALL DGTimeDerivative(t)
 
 
 ! Write the state at time=0, i.e. the initial condition
-CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
-                      FutureTime=tWriteData,isErrorFile=.FALSE.)
+CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
 CALL Visualize(t,U)
 
@@ -237,8 +236,7 @@ DO
     nCalcTimestep=nCalcTimestep-1
   END IF !nCalcTimeStepMax <>1
   IF(errType.NE.0)THEN !error in time step computation
-    CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
-                          FutureTime=tWriteData,isErrorFile=.TRUE.)
+    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
     CALL abort(__STAMP__,&
    'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
   END IF
@@ -299,8 +297,7 @@ DO
       ! Visualize data
       CALL Visualize(t,U)
       ! Write state to file
-      CALL WriteState(MeshFileName=TRIM(MeshFile),OutputTime=t,&
-                            FutureTime=tWriteData,isErrorFile=.FALSE.)
+      CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
       writeCounter=0
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
     END IF

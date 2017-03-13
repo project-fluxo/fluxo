@@ -12,7 +12,7 @@
 ! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
 !
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
-!================================================================================================================================== 
+!==================================================================================================================================
 #include "defines.h"
 
 !==================================================================================================================================
@@ -24,11 +24,15 @@ USE MOD_IO_HDF5
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! Private Part ---------------------------------------------------------------------------------------------------------------------
-! Public Part ----------------------------------------------------------------------------------------------------------------------
+! Private Part --------------------------------------------------------------------------------------------------------------------
+! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 INTERFACE WriteState
   MODULE PROCEDURE WriteState
+END INTERFACE
+
+INTERFACE WriteAnyState
+  MODULE PROCEDURE WriteAnyState
 END INTERFACE
 
 INTERFACE WriteTimeAverage
@@ -52,37 +56,72 @@ INTERFACE WriteAttribute
 END INTERFACE
 
 
-PUBLIC :: WriteState,FlushFiles,WriteHeader,WriteTimeAverage
-PUBLIC :: WriteArray,WriteAttribute
+PUBLIC :: WriteState
+PUBLIC :: WriteAnyState
+PUBLIC :: FlushFiles
+PUBLIC :: WriteHeader
+PUBLIC :: WriteTimeAverage
+PUBLIC :: WriteArray
+PUBLIC :: WriteAttribute
 !==================================================================================================================================
 
 CONTAINS
 
+!==================================================================================================================================
+!> wrapper for Routine below 
+!==================================================================================================================================
+SUBROUTINE WriteState(OutputTime,FutureTime,isErrorFile)
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_DG_Vars      ,ONLY: U
+USE MOD_Equation_Vars,ONLY: StrVarNames
+USE MOD_Mesh_Vars    ,ONLY: MeshFile
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)                :: OutputTime   !< simulation time when output is performed
+REAL,INTENT(IN)                :: FutureTime   !< hint, when next file will be written
+LOGICAL,INTENT(IN)             :: isErrorFile  !< indicate whether an error file is written in case of a crashed simulation
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+CHARACTER(LEN=255)             :: FileType
+!==================================================================================================================================
+IF(isErrorFile) THEN
+  FileType='ERROR_State'
+ELSE
+  FileType='State'
+END IF
+CALL WriteAnyState(PP_nVar,U,MeshFile,FileType,StrVarNames,OutputTime,FutureTime)
+END SUBROUTINE WriteState
 
 !==================================================================================================================================
 !> Subroutine to write the solution U to HDF5 format
 !> Is used for postprocessing and for restart
 !==================================================================================================================================
-SUBROUTINE WriteState(MeshFileName,OutputTime,FutureTime,isErrorFile   )
+SUBROUTINE WriteAnyState(nVar,Uin,MeshFileName,FileType,StrVarNames,OutputTime,FutureTime)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Globals
-USE MOD_DG_Vars      ,ONLY: U
 USE MOD_Output_Vars  ,ONLY: ProjectName
 USE MOD_Mesh_Vars    ,ONLY: offsetElem,nGlobalElems,nElems
-USE MOD_Equation_Vars,ONLY: StrVarNames
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)             :: nVar
+REAL        ,INTENT(IN)        :: Uin(1:nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 CHARACTER(LEN=*),INTENT(IN)    :: MeshFileName   !< file name of mesh used for simulation
+CHARACTER(LEN=*),INTENT(IN)    :: FileType
+CHARACTER(LEN=*)               :: StrVarNames(nVar)
 REAL,INTENT(IN)                :: OutputTime     !< simulation time when output is performed
-REAL,INTENT(IN)                :: FutureTime     !< hint, when next file will be written
-LOGICAL,INTENT(IN)             :: isErrorFile    !< indicate whether an error file is written in case of a crashed simulation
+REAL,INTENT(IN),OPTIONAL       :: FutureTime     !< hint, when next file will be written
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-CHARACTER(LEN=255)             :: FileName,FileType
+CHARACTER(LEN=255)             :: FileName
 REAL                           :: StartT,EndT
-REAL,POINTER                   :: UOut(:,:,:,:,:)
 INTEGER                        :: Nout
 !==================================================================================================================================
 IF(MPIRoot)THEN
@@ -92,17 +131,15 @@ END IF
 
 
 ! Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
-FileType=MERGE('ERROR_State','State      ',isErrorFile)
 Nout=PP_N
 FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.h5'
 IF(MPIRoot)THEN
   WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileName)
-  CALL GenerateFileSkeleton(TRIM(FileName),'State',PP_nVar,NOut,StrVarNames,MeshFileName, &
+  CALL GenerateFileSkeleton(TRIM(FileName),'State',nVar,NOut,StrVarNames,MeshFileName, &
        OutputTime,FutureTime)
 END IF !MPIroot
 
 ! build output data
-  UOut => U
 
 ! Reopen file and write DG solution
 #if MPI
@@ -110,20 +147,21 @@ CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
 CALL GatheredWriteArray(FileName,create=.FALSE.,&
                         DataSetName='DG_Solution', rank=5,&
-                        nValGlobal=(/PP_nVar,NOut+1,NOut+1,NOut+1,nGlobalElems/),&
-                        nVal=      (/PP_nVar,NOut+1,NOut+1,NOut+1,nElems/),&
+                        nValGlobal=(/nVar,NOut+1,NOut+1,NOut+1,nGlobalElems/),&
+                        nVal=      (/nVar,NOut+1,NOut+1,NOut+1,nElems/),&
                         offset=    (/0,      0,     0,     0,     offsetElem/),&
-                        collective=.TRUE.,RealArray=UOut)
-NULLIFY(Uout)
+                        collective=.TRUE.,RealArray=Uin)
 
-CALL WriteAdditionalElemData(FileName,ElementOut)
-CALL WriteAdditionalFieldData(FileName,FieldOut)
+IF(INDEX(TRIM(FileType),'State').NE.0)THEN
+  CALL WriteAdditionalElemData(FileName,ElementOut)
+  CALL WriteAdditionalFieldData(FileName,FieldOut)
+END IF
 
 IF(MPIRoot)THEN
   GETTIME(EndT)
   WRITE(UNIT_stdOut,'(A,F0.3,A)',ADVANCE='YES')'DONE  [',EndT-StartT,'s]'
 END IF
-END SUBROUTINE WriteState
+END SUBROUTINE WriteAnyState
 
 
 !==================================================================================================================================

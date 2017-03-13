@@ -83,8 +83,9 @@ END SUBROUTINE InitAnalyzeTestcase
 SUBROUTINE AnalyzeTestcase(Time)
 ! MODULES
 USE MOD_Globals
-USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_Data
-USE MOD_Testcase_Vars,    ONLY:doCalcErrorToEquilibrium
+USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_Data,Analyze_dt
+USE MOD_Testcase_Vars,    ONLY:doCalcErrorToEquilibrium,doCalcDeltaBEnergy,deltaB_Energy
+USE MOD_Restart_Vars,     ONLY:RestartTime
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -137,7 +138,7 @@ SUBROUTINE CalcErrorToEquilibrium(L2_eq_Error,Linf_eq_Error)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars       ,ONLY: sJ
+USE MOD_Mesh_Vars       ,ONLY: sJ,nElems
 USE MOD_DG_Vars         ,ONLY: U
 USE MOD_Testcase_Vars   ,ONLY: Ueq
 USE MOD_ChangeBasis     ,ONLY: ChangeBasis3D
@@ -163,7 +164,7 @@ REAL                            :: IntegrationWeight
 Linf_eq_Error(:)=-1.E10
 L2_eq_Error(:)=0.
 ! Interpolate values of Error-Grid from GP's
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
    ! Interpolate the Jacobian to the analyze grid: be careful we interpolate the inverse of the inverse of the jacobian ;-)
    J_N(1,:,:,:)=1./sJ(:,:,:,iElem)
    CALL ChangeBasis3D(1,PP_N,NAnalyze,Vdm_GaussN_NAnalyze,J_N(1:1,0:PP_N,0:PP_N,0:PP_N),J_NAnalyze(1:1,:,:,:))
@@ -180,7 +181,7 @@ DO iElem=1,PP_nElems
        END DO ! k
      END DO ! l
    END DO ! m
-END DO ! iElem=1,PP_nElems
+END DO ! iElem=1,nElems
 
 #if MPI
 IF(MPIRoot)THEN
@@ -200,12 +201,12 @@ END SUBROUTINE CalcErrorToEquilibrium
 !==================================================================================================================================
 !> Calculates  magnetic Energy of B-Beq over whole domain (normalized with volume)
 !==================================================================================================================================
-SUBROUTINE CalcDeltaB_Energy(dbEnergy)
+SUBROUTINE CalcDeltaBEnergy(dbEnergy)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U
 USE MOD_Testcase_Vars,      ONLY: Ueq
 USE MOD_Equation_Vars,      ONLY: s2mu_0
@@ -221,9 +222,8 @@ REAL,INTENT(OUT)                :: dbEnergy !< mean magnetic energy  1/(2mu0)*|B
 INTEGER                         :: iElem,i,j,k
 REAL                            :: IntegrationWeight
 !==================================================================================================================================
-kineticEnergy=0.
-magneticEnergy=0.
-DO iElem=1,PP_nElems
+dbEnergy=0.
+DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
     dbEnergy  = dbEnergy+SUM((U(6:8,i,j,k,iElem)-Ueq(6:8,i,j,k,iElem))**2)*IntegrationWeight

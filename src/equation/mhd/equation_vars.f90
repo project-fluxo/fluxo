@@ -24,54 +24,52 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL              :: Pi
-REAL              :: sSqrt4Pi
-INTEGER           :: IniExactFunc
-!INTEGER           :: BCType(6)=-999
-!INTEGER           :: BoundaryCondition(6,2)
-INTEGER           :: IniRefState  ! RefState for initialization (case IniExactFunc=1 only)
-INTEGER,PARAMETER :: nAuxVar=8 
-REAL,ALLOCATABLE  :: RefStatePrim(:,:),RefStateCons(:,:)
+LOGICAL             :: doCalcSource      !< logical to define if a source term (e.g. exactfunc) is added
+INTEGER             :: IniExactFunc      !< Exact Function for initialization
+INTEGER             :: IniRefState       !< RefState for initialization (case IniExactFunc=1 only)
+INTEGER,PARAMETER   :: nAuxVar=8         !< number of auxiliary variables for average flux
+REAL,ALLOCATABLE    :: RefStatePrim(:,:) !< primitive reference states
+REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 ! Boundary condition arrays
-REAL,ALLOCATABLE     :: BCData(:,:,:,:)
-INTEGER,ALLOCATABLE  :: nBCByType(:)
-INTEGER,ALLOCATABLE  :: BCSideID(:,:)
+REAL,ALLOCATABLE    :: BCData(:,:,:,:)  !< data for steady state boundary conditions
+INTEGER,ALLOCATABLE :: nBCByType(:)     !< Number of sides for each boundary
+INTEGER,ALLOCATABLE :: BCSideID(:,:)    !< SideIDs for BC types
 #ifdef PARABOLIC
-REAL              :: mu         ! fluid viscosity, NOT mu0 ANYMORE!!!!
-REAL              :: eta        ! Current resistivity
-REAL              :: etasmu_0   ! eta/mu0 
-REAL              :: Pr
-REAL              :: KappasPr
-REAL              :: s23       ! (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
+REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navier-stokes ANYMORE!!!!
+REAL                :: eta              !< Current resistivity
+REAL                :: etasmu_0         !< =eta/mu0 
+REAL                :: Pr               !< Prandtl number
+REAL                :: KappasPr         !< =kappa/Pr
+REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
 #  ifdef PP_ANISO_HEAT
-REAL              :: kperp     ! perpendicular  (to magnetic field)heat diffusion coefficient
-REAL              :: kpar      ! parallel (to magnetic field) heat diffusion coeffcient 
-#  endif /*PP_ANISO_HEAT*/
-#endif /*PARABOLIC*/
-REAL              :: mu_0      ! permeability
-REAL              :: smu_0     !
-REAL              :: s2mu_0    !
-REAL              :: Kappa      ! ratio of specific heats
-REAL              :: KappaM1  ! = kappa - 1
-REAL              :: KappaM2  ! = kappa - 2
-REAL              :: sKappaM1 ! = 1/(kappa -1)
-REAL              :: KappaP1  ! = kappa + 1
-REAL              :: sKappaP1 ! = 1/(kappa +1)
-REAL              :: R        ! Gas constant
-REAL              :: AdvVel(3)    ! Advection Velocity for the test cases
-REAL              :: IniWavenumber(3)
-REAL              :: IniFrequency
-REAL              :: IniAmplitude
-REAL              :: IniHalfwidth
-REAL              :: IniCenter(3)
-REAL              :: IniDisturbance
+REAL                :: kperp            !< perpendicular  (to magnetic field)heat diffusion coefficient
+REAL                :: kpar             !< parallel (to magnetic field) heat diffusion coeffcient 
+#  endif /*PP_ANISO_HEAT*/             
+#endif /*PARABOLIC*/                   
+REAL                :: mu_0             !< magnetic permeability in vacuum
+REAL                :: smu_0            !< =1/mu_0
+REAL                :: s2mu_0           !< =1/(2*mu_0)
+REAL                :: Kappa            !< ratio of specific heats
+REAL                :: KappaM1          !< = kappa - 1
+REAL                :: KappaM2          !< = kappa - 2
+REAL                :: sKappaM1         !< = 1/(kappa -1)
+REAL                :: KappaP1          !< = kappa + 1
+REAL                :: sKappaP1         !< = 1/(kappa +1)
+REAL                :: R                !< Gas constant
+REAL                :: AdvVel(3)        !< Advection Velocity for the test cases
+REAL                :: IniWavenumber(3) !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
+REAL                :: IniFrequency     !< frequency for exactfunc
+REAL                :: IniAmplitude     !< amplitude for exactfunc
+REAL                :: IniHalfwidth     !< halfwidth for exactfunc
+REAL                :: IniCenter(3)     !< center point for exactfunc
+REAL                :: IniDisturbance   !< disturbance scaling for exactfunc
 #ifdef PP_GLM
-LOGICAL           :: GLM_init=.FALSE.
-REAL              :: GLM_dtch1  ! timestep for ch=1 (must be initialized)
-REAL              :: GLM_ch    ! Divergence correction speed
-REAL              :: GLM_scale  ! scaling of maximum divergence speed
-REAL              :: GLM_scr ! 1/cr. Related to damping of divergence error, factor chi=ch^2/cp^2.  cr=cp^2/ch ~0.18, chi=ch/cr
-LOGICAL           :: divBSource
+LOGICAL             :: GLM_init=.FALSE. !< switch set true when GLM_dtch1 is computed
+REAL                :: GLM_dtch1        !< timestep for ch=1 (initialized in calctimestep)
+REAL                :: GLM_ch           !< Divergence correction speed
+REAL                :: GLM_scale        !< scaling of maximum divergence speed (timestep security)
+REAL                :: GLM_scr          !< 1/cr. damping of divergence error, factor chi=ch^2/cp^2,cr=cp^2/ch~0.18,chi=1/cr
+LOGICAL           :: divBSource         !< switch for adding source terms depending on diverngece errors
 #endif /*PP_GLM*/
 
 
@@ -104,12 +102,15 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 #endif 
                    /)
 
-LOGICAL           :: EquationInitIsDone=.FALSE.
+LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
-INTEGER             :: WhichRiemannSolver
-PROCEDURE(),POINTER :: SolveRiemannProblem
-INTEGER             :: WhichVolumeFlux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec
+INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
+PROCEDURE(),POINTER :: SolveRiemannProblem      !< pointer to riemann solver routine (depends on WhichRiemannSolver)
+#if (PP_DiscType==2)
+!procedure pointers for split form DG
+INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
+PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*PP_DiscType==2*/
 !==================================================================================================================================
 
 INTERFACE ConsToPrim

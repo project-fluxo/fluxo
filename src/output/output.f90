@@ -61,7 +61,12 @@ INTERFACE FinalizeOutput
   MODULE PROCEDURE FinalizeOutput
 END INTERFACE
 
-PUBLIC:: InitOutput,PrintStatusLine,Visualize,InitOutputToFile,OutputToFile,FinalizeOutput
+PUBLIC:: InitOutput
+PUBLIC:: PrintStatusLine
+PUBLIC:: Visualize
+PUBLIC:: InitOutputToFile
+PUBLIC:: OutputToFile
+PUBLIC:: FinalizeOutput
 !==================================================================================================================================
 
 PUBLIC::DefineParametersOutput
@@ -204,11 +209,17 @@ END SUBROUTINE PrintStatusLine
 !> Currently only Paraview binary format is supported.
 !> Tecplot support has been removed due to licensing issues (possible GPL incompatibility).
 !==================================================================================================================================
-SUBROUTINE Visualize(OutputTime,U)
+SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:StrVarNames
+#if defined(linearscalaradvection)
+USE MOD_Equation      ,ONLY: ExactFunc
+USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
+#elif (defined(mhd) || defined(navierstokes))
+USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
+#endif /*defined(mhd)*/
 USE MOD_Output_Vars,ONLY:ProjectName,OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
@@ -218,20 +229,59 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)               :: OutputTime               !< simulation time of output
-REAL,INTENT(IN)               :: U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< solution vector to be visualized
+REAL,INTENT(IN)               :: Uin(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< solution vector to be visualized
+CHARACTER(LEN=255),OPTIONAL,INTENT(IN) :: FileTypeStrIn
+LOGICAL,OPTIONAL,INTENT(IN) :: PrimVisuOpt
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                       :: iElem,PP_nVar_loc,iVar
+INTEGER                       :: iElem
 REAL,ALLOCATABLE              :: Coords_NVisu(:,:,:,:,:) 
 REAL,ALLOCATABLE              :: U_NVisu(:,:,:,:,:)
 CHARACTER(LEN=255)            :: FileString
-CHARACTER(LEN=255),ALLOCATABLE:: StrVarNames_loc(:)
+CHARACTER(LEN=255)            :: FileTypeStr
+LOGICAL                       :: PrimVisu
+#if defined (linearscalaradvection)
+REAL                          :: Uex(1,0:PP_N,0:PP_N,0:PP_N)
+#elif (defined (mhd) || defined (navierstokes))
+REAL                          :: cons(PP_nVar)
+#endif
+INTEGER                       :: i,j,k,nOutVars
+CHARACTER(LEN=255),ALLOCATABLE:: strvarnames_tmp(:)
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
-! Specify output names
 
-PP_nVar_loc=PP_nVar
-ALLOCATE(U_NVisu(PP_nVar_loc,0:NVisu,0:NVisu,0:NVisu,1:nElems))
+IF(PRESENT(FileTypeStrIn))THEN
+  FileTypeStr=FileTypeStrIn
+ELSE
+  FileTypeStr='Solution'
+END IF !PRESENT(FileTypeStrIn)
+IF(PRESENT(PrimVisuOpt))THEN
+  PrimVisu=PrimVisuOpt
+ELSE
+  PrimVisu=.FALSE.
+END IF
+! Specify output names
+#if defined (linearscalaradvection)
+nOutVars=2
+ALLOCATE(strvarnames_tmp(nOutVars))
+strvarnames_tmp(1)=StrVarnames(1)
+strvarnames_tmp(2)='ExactSolution'
+#elif (defined (mhd) | defined (navierstokes))
+nOutVars=PP_nVar
+ALLOCATE(strvarnames_tmp(nOutVars))
+IF(PrimVisu)THEN
+  strvarnames_tmp=StrVarnamesPrim
+ELSE
+  strvarnames_tmp=StrVarnames
+END IF
+#else
+!default
+nOutVars=PP_nVar
+ALLOCATE(strvarnames_tmp(nOutVars))
+strvarnames_tmp=StrVarnames
+#endif
+
+ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))
 U_NVisu = 0.
 ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
 
@@ -239,19 +289,26 @@ DO iElem=1,nElems
     ! Create coordinates of visualization points
     CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,Elem_xGP(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
     ! Interpolate solution onto visu grid
-    CALL ChangeBasis3D(PP_nVar,PP_N,NVisu,Vdm_GaussN_NVisu,U(1:PP_nVar,:,:,:,iElem),U_NVisu(1:PP_nVar,:,:,:,iElem))
+    CALL ChangeBasis3D(PP_nVar,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:PP_nVar,:,:,:,iElem),U_NVisu(1:PP_nVar,:,:,:,iElem))
+#if defined (linearscalaradvection)
+  DO k=0,Nvisu ; DO j=0,Nvisu ; DO i=0,Nvisu
+     CALL ExactFunc(AnalyzeExactFunc,OutputTime,Coords_NVisu(1:3,i,j,k,iElem),U_nVisu(2:2,i,j,k,iElem))
+  END DO ; END DO ; END DO
+#elif (defined (mhd) || defined (navierstokes))
+  IF(PrimVisu)THEN
+    DO k=0,Nvisu ; DO j=0,Nvisu ; DO i=0,Nvisu
+      cons=U_NVisu(1:PP_nVar,i,j,k,iElem)
+      CALL ConsToPrim(U_NVisu(1:PP_nVar,i,j,k,iElem),cons)
+    END DO ; END DO ; END DO
+  END IF !PrimVisu
+#endif /*linadv,navierstokes,mhd*/
 END DO !iElem
-
-ALLOCATE(StrVarNames_loc(PP_nVar_loc))
-DO iVar=1,PP_nVar
-  StrVarNames_loc(iVar) = StrVarNames(iVar) 
-END DO ! iVar=1,PP_nVar
 
 ! Visualize data
 SELECT CASE(OutputFormat)
 CASE(OUTPUTFORMAT_PARAVIEW)
-  FileString=TRIM(TIMESTAMP(TRIM(ProjectName),OutputTime))//'.vtu'
-  CALL WriteDataToVTK3D(        NVisu,nElems,PP_nVar_loc,StrVarNames_loc,Coords_NVisu(1:3,:,:,:,:), &
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStr),OutputTime))//'.vtu'
+  CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,StrVarNames_tmp,Coords_NVisu(1:3,:,:,:,:), &
                                 U_NVisu,TRIM(FileString))
 END SELECT
 

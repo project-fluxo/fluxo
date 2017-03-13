@@ -52,6 +52,7 @@ PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
 PUBLIC:: FinalizeEquation
+PUBLIC:: DefineParametersEquation 
 !==================================================================================================================================
 
 CONTAINS
@@ -119,7 +120,7 @@ END SUBROUTINE DefineParametersEquation
 SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
-USE MOD_ReadInTools       ,ONLY:CNTSTR,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
+USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars 
@@ -146,8 +147,6 @@ END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MHD...'
 
-Pi           = ACOS(-1.)
-sSqrt4Pi     = 0.5/SQRT(pi)
 
 IniRefState=-1
 ! Read in boundary parameters
@@ -207,7 +206,7 @@ GLM_dtch1=0. !must be initialized to correct value in first call of calctimestep
 
 
 ! Read Boundary information / RefStates / perform sanity check
-nRefState=CNTSTR('RefState',0)
+nRefState=COUNTOPTION('RefState')
 
 ! determine max MaxBCState
 MaxBCState = 0
@@ -216,7 +215,7 @@ DO iSide=1,nBCSides
   locState=BoundaryType(BC(iSide),BC_STATE)
   IF((locType.NE.22).AND.(locType.NE.220)) MaxBCState = MAX(MaxBCState,locState) !BCType=22: special BC with different exactfuncs
 END DO
-#ifdef MPI
+#if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,MaxBCState,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
 
@@ -289,7 +288,7 @@ END SUBROUTINE InitEquation
 SUBROUTINE FillIni(IniExactFunc_in,U_in)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Mesh_Vars,ONLY:Elem_xGP
+USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -297,14 +296,14 @@ IMPLICIT NONE
 INTEGER,INTENT(IN) :: IniExactFunc_in  !< handle to specify exactfunction
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems) !< initialized DG solution 
+REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< initialized DG solution 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                         :: i,j,k,iElem
 !==================================================================================================================================
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
@@ -312,7 +311,7 @@ DO iElem=1,PP_nElems
       END DO ! i
     END DO ! j
   END DO !k
-END DO ! iElem=1,PP_nElems
+END DO ! iElem=1,nElems
 END SUBROUTINE FillIni
 
 
@@ -325,7 +324,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Pi,sSqrt4Pi,Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
@@ -349,14 +348,14 @@ REAL                            :: Resu_t(PP_nVar),Resu_tt(PP_nVar)      ! state
 INTEGER                         :: i,j
 REAL                            :: Omega,a
 REAL                            :: Prim(1:PP_nVar) 
-REAL                            :: Prim2(1:PP_nVar) 
 REAL                            :: r, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
 !==================================================================================================================================
 !tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
-tEval=tIn
+tEval=tIn 
+
 ! Determine the value, the first and the second time derivative
 SELECT CASE (ExactFunction)
 CASE DEFAULT
@@ -375,14 +374,14 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
 CASE(3) ! alven wave 
-  Omega=Pi*IniFrequency
+  Omega=PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
   ! e: epsilon = 0.2
   e=0.2
   nx  = 1./SQRT(r**2+1.)
   ny  = r/SQRT(r**2+1.)
-  sqr = 1. !2*SQRT(Pi)
+  sqr = 1. !2*SQRT(PP_Pi)
   Va  = omega/(ny*sqr)
   phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(2)-0.5*r)) - Va*tEval
   Resu=0.
@@ -415,8 +414,8 @@ CASE(3) ! alven wave
   Resu_tt(8) = -Resu_tt(4)*sqr
 
 CASE(4) ! navierstokes exact function
-  Omega=Pi*IniFrequency
-  a=AdvVel(1)*2.*Pi
+  Omega=PP_Pi*IniFrequency
+  a=AdvVel(1)*2.*PP_Pi
 
   ! g(t)
   Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
@@ -436,7 +435,7 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
   END IF 
   
-  Omega=Pi*IniFrequency
+  Omega=PP_Pi*IniFrequency
 
   ! g(t)
   Resu(1:3)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
@@ -465,7 +464,7 @@ CASE(6) ! case 5 rotated
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
   END IF 
   
-  Omega=Pi*IniFrequency
+  Omega=PP_Pi*IniFrequency
 
   ! g(t)
   Resu              = 0.
@@ -497,7 +496,7 @@ CASE(6) ! case 5 rotated
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
-  Omega=2*Pi*IniFrequency
+  Omega=2*PP_Pi*IniFrequency
   a=SQRT(IniAmplitude*Prim(5))/omega !IniAmplitude is related to the change of pressure (IniAmplitude=0.1: 10% change) 
   Prim(6)= a*omega*SIN(Omega*x(1))*COS(Omega*x(2))
   Prim(7)=-a*omega*COS(Omega*x(1))*SIN(Omega*x(2))
@@ -512,7 +511,7 @@ CASE(11) ! mhd exact equilibrium, Psi=a(x^2+y^2), B_x= dPsi/dy=2ay, B_y=-dPsi/dx
   Prim(5)= Prim(5)-4*a*a*SUM(x(1:2)**2)
   Prim(6)= 2*a*x(2)
   Prim(7)=-2*a*x(1)
-  Prim(:)= Prim(:)+RefStatePrim(2,:)*IniDisturbance*PRODUCT(SIN(2*Pi*x(1:2)))
+  Prim(:)= Prim(:)+RefStatePrim(2,:)*IniDisturbance*PRODUCT(SIN(2*PP_Pi*x(1:2)))
 
   IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 
                 'negative pressure in exactfunc 11 !',999,prim(5))
@@ -596,7 +595,7 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
         ! assuming rho_0=p_0=1
         ! eta=1.0E-02, mu=1.0E-03,kappa=5/3
   Prim=0.
-  Prim(1)=1.+1.0E-03*COS(2*Pi*x(1))*SIN(0.5*Pi*x(2))
+  Prim(1)=1.+1.0E-03*COS(2*PP_Pi*x(1))*SIN(0.5*PP_Pi*x(2))
   Prim(5)=1.
   Prim(7)=1.-2./(1+EXP(2*5*(x(1)-0.5))) !tanh((x(1)-0.5)/lambda) lambda=0.2
   Prim(8)=SQRT(1-Prim(7)*Prim(7))
@@ -614,14 +613,14 @@ CASE(80) ! 2D island coalesence domain [-1,1]^2
         ! deltaBy =  deltaPsi_x = 1.0E-03*pi/2*COS(pi/2*x)*COS(pi*y) 
 
         ! p  = p0 + 0.5*(1-eps^2)* (COSH(x/lambda)+EPS*COS(y/lambda))^-2
-  nx=2*pi*x(1)
-  ny=2*pi*x(2)
+  nx=2*PP_Pi*x(1)
+  ny=2*PP_Pi*x(2)
   r = 1./(COSH(nx)+0.2*COS(ny))
   Prim=0.
   Prim(1)=1.
   Prim(5)=1. + 0.5*(1-0.2*0.2)*r*r
-  Prim(6)=-r*(0.2*SIN(ny)) + 1.0E-03*pi*SIN(0.25*nx)*SIN(0.5*ny)
-  Prim(7)=-r*(SINH(nx))    + 1.0E-03*0.5*pi*COS(0.25*nx)*COS(0.5*ny)
+  Prim(6)=-r*(0.2*SIN(ny)) + 1.0E-03*PP_Pi*SIN(0.25*nx)*SIN(0.5*ny)
+  Prim(7)=-r*(SINH(nx))    + 1.0E-03*0.5*PP_Pi*COS(0.25*nx)*COS(0.5*ny)
   Prim(8)=0.
   CALL PrimToCons(Prim,Resu)
 
@@ -704,13 +703,13 @@ CASE(92) !cylindrical equilibrium for ideal MHD for internal kink (Jorek paper H
   Lz=100.
   Prim(:)=0.
   Prim(1)=1.-0.9*r2(1) 
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*pi*pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
   Prim(8)=1.  !Bz=1.
-  Bphi= 2*pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
+  Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
   Prim(6)=-x(2)*Bphi  !/r
   Prim(7)= x(1)*Bphi  !/r
-  dp  = 2*pi*pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
+  dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
   Prim(5)=Prim(5)-smu_0*dp
   IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 
@@ -725,13 +724,13 @@ CASE(910) ! like 91, but with constant density:
   Lz=100.
   Prim(:)=0.
   Prim(1)=1.
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*pi*pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
   Prim(8)=1.  !Bz=1.
-  Bphi= 2*pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
+  Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
   Prim(6)=-x(2)*Bphi  !/r
   Prim(7)= x(1)*Bphi  !/r
-  dp  = 2*pi*pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
+  dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
   Prim(5)=Prim(5)-smu_0*dp
   IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 
@@ -745,13 +744,13 @@ CASE(911) ! like 91, but with a different q profile 0.82 <= q <= 1.4:
   Lz=100.
   Prim(:)=0.
   Prim(1)=1.-0.9*r2(1) 
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*pi*pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
   Prim(8)=1.  !Bz=1.
-  Bphi= 2*pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
+  Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
   Prim(6)=-x(2)*Bphi  !/r
   Prim(7)= x(1)*Bphi  !/r
-  dp  = 2*pi*pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
+  dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
   Prim(5)=Prim(5)-smu_0*dp
   IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 
@@ -844,10 +843,10 @@ END SUBROUTINE ExactFunc
 SUBROUTINE CalcSource(Ut,tIn) 
 ! MODULES
 USE MOD_Globals,ONLY:Abort
-USE MOD_PreProc !PP_N,PP_nElems
+USE MOD_PreProc !PP_N
 USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
-USE MOD_Equation_Vars, ONLY:Pi,sKappaM1,Kappa,KappaM1,AdvVel
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP
+USE MOD_Equation_Vars, ONLY:sKappaM1,Kappa,KappaM1,AdvVel
+USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #ifdef PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
@@ -862,7 +861,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)                 :: tIn        !< evaluation time
-REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems) !<time derivative, where source is added 
+REAL,INTENT(INOUT)              :: Ut(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !<time derivative, where source is added 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -876,8 +875,8 @@ REAL                            :: rho,rho_x,rho_xx
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
-  Omega=Pi*IniFrequency
-  a=AdvVel(1)*2.*Pi
+  Omega=PP_Pi*IniFrequency
+  a=AdvVel(1)*2.*PP_Pi
   tmp(1)=-a+3*Omega
   tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
   tmp(3)=IniAmplitude*Omega*KappaM1  
@@ -890,7 +889,7 @@ CASE(4) ! navierstokes exact function
 #endif
   tmp=tmp*IniAmplitude
   at=a*tIn
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
       sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
@@ -904,11 +903,11 @@ CASE(4) ! navierstokes exact function
     !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
 CASE(5) ! mhd exact function, KAPPA==2!!!
-  Omega=Pi*IniFrequency
+  Omega=PP_Pi*IniFrequency
 #ifdef PARABOLIC
   tmp(1)=6*mu/Pr
 #endif
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
       rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
@@ -931,11 +930,11 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
     !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
 CASE(6) ! case 5 rotated 
-  Omega=Pi*IniFrequency
+  Omega=PP_Pi*IniFrequency
 #ifdef PARABOLIC
   tmp(1)=6*mu/Pr
 #endif
-  DO iElem=1,PP_nElems
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
       rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
@@ -965,7 +964,7 @@ END SELECT ! ExactFunction
 IF(DivBSource)THEN
 !!! from equilibrium in momentum equation (grad p= J x B), we have a source from the non-divergence free magnetic field 
 !!! (not added in energy equation to match Jorek equations)
-!  DO iElem=1,PP_nElems
+!  DO iElem=1,nElems
 !    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 !      Ut_src=0.
 !      Ut_src(2:4)=(smu_0/GLM_ch)*Ut(9,i,j,k,iElem)*U(6:8,i,j,k,iElem) !B*divB, Ut(9)/ch^2 = -divB

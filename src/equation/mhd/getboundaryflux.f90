@@ -122,7 +122,7 @@ SUBROUTINE FillBCdata(tIn,BCdata)
 USE MOD_PreProc
 USE MOD_Globals           ,ONLY: Abort
 USE MOD_Mesh_Vars         ,ONLY: nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars         ,ONLY: BCFace_xGP
+USE MOD_Mesh_Vars         ,ONLY: Face_xGP
 USE MOD_Equation          ,ONLY: ExactFunc
 USE MOD_Equation_Vars     ,ONLY: RefStateCons
 USE MOD_Equation_Vars     ,ONLY: IniExactFunc
@@ -154,7 +154,7 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,BCFace_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
           END DO ! p
         END DO ! q
       END DO !iSide=1,nBCloc
@@ -175,7 +175,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,BCFace_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -194,7 +194,7 @@ USE MOD_Globals      ,ONLY: Abort
 USE MOD_Riemann      ,ONLY: Riemann
 USE MOD_DG_Vars      ,ONLY: U_master
 USE MOD_Mesh_Vars    ,ONLY: nSides,nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,BCFace_xGP
+USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
@@ -207,7 +207,7 @@ USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
 USE MOD_Equation_Vars,ONLY: GLM_ch 
 #endif /*PP_GLM*/
 #ifdef PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_Minus,gradUy_Minus,gradUz_Minus
+USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
@@ -249,9 +249,9 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),BCdata(:,:,:,SideID), &
 #ifdef PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -262,14 +262,14 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,BCFace_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
           END DO ! p
         END DO ! q
         CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #ifdef PARABOLIC
-                     gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                     gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                     gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                     gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                     gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                     gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -283,9 +283,9 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #ifdef PARABOLIC
-                     gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                     gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                     gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                     gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                     gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                     gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -297,14 +297,14 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,BCFace_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
         END DO ! p
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #ifdef PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
+                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
+                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -329,7 +329,7 @@ DO iBC=1,nBCs
           ! symmetry state
           CALL ConsToPrim(PrimL(:),U_L(:))
           U_R(1:8)=(/U_L(1),-U_L(2),U_L(3:5),-U_L(6),U_L(7:8)/)
-          PrimR(:)=(/PrimL(1),-PrimL(2),PrimL(3:5),-PrimL(6),PrimL(7:8)/)
+          PrimR(1:8)=(/PrimL(1),-PrimL(2),PrimL(3:5),-PrimL(6),PrimL(7:8)/)
 #ifdef PP_GLM
           PrimR(9)=0.
           U_R(9)=0.
@@ -371,15 +371,15 @@ DO iBC=1,nBCs
           BCGradMat(2,1) = BCGradMat(1,2)
           BCGradMat(3,1) = BCGradMat(1,3)
           BCGradMat(2,3) = BCGradMat(3,2)
-          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(1,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(1,3) * gradUz_Minus(:,p,q,SideID)
-          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(2,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(2,3) * gradUz_Minus(:,p,q,SideID)
-          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(3,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(3,3) * gradUz_Minus(:,p,q,SideID)
+          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_master(:,p,q,SideID) &
+                                 + BCGradMat(1,2) * gradUy_master(:,p,q,SideID) &
+                                 + BCGradMat(1,3) * gradUz_master(:,p,q,SideID)
+          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_master(:,p,q,SideID) &
+                                 + BCGradMat(2,2) * gradUy_master(:,p,q,SideID) &
+                                 + BCGradMat(2,3) * gradUz_master(:,p,q,SideID)
+          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_master(:,p,q,SideID) &
+                                 + BCGradMat(3,2) * gradUy_master(:,p,q,SideID) &
+                                 + BCGradMat(3,3) * gradUz_master(:,p,q,SideID)
 #endif /*PARABOLIC*/
         END DO ! p
       END DO ! q
@@ -421,7 +421,7 @@ SUBROUTINE Lifting_GetBoundaryFlux(tIn,Flux)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars    ,ONLY: nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,BCFace_xGP
+USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
@@ -473,7 +473,7 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,t,BCface_xGP(:,p,q,SideID),U_Face_loc(:))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
             Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
           END DO ! p
         END DO ! q
@@ -498,7 +498,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,t,BCface_xGP(:,p,q,SideID),U_Face_loc(:))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
           Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
         END DO ! p
       END DO ! q
@@ -570,7 +570,7 @@ END DO ! iBC
 
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N
-    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_master(:,p,q,SideID)*SurfElem(p,q,SideID)
+    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_master(:,p,q,SideID))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
 END SUBROUTINE Lifting_GetBoundaryFlux

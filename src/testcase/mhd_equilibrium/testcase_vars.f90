@@ -38,6 +38,9 @@ INTEGER                  :: EquilibriumStateIni      !< =-1: Default: no equilib
                                                      !< =-3 : Read U_eq from the solution of a stateFile
 
 LOGICAL                  :: EquilibriumDivBcorr     !< switch to compute B from a vector potential instead of using B directly
+INTEGER                  :: EquilibriumDisturbFunc  !< =0: Default: use same number as iniExactfunc for disturbance added to 
+                                                    !< initialization state, else specific function
+CHARACTER(LEN=255)       :: EquilibriumStateFile    !< if equilibrium is read from a state
 
 
 

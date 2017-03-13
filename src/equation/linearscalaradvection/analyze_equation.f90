@@ -36,8 +36,10 @@ INTERFACE FinalizeAnalyzeEquation
 END INTERFACE
 
 
-PUBLIC:: AnalyzeEquation, InitAnalyzeEquation, FinalizeAnalyzeEquation
-PUBLIC::DefineParametersAnalyzeEquation
+PUBLIC:: AnalyzeEquation
+PUBLIC:: InitAnalyzeEquation
+PUBLIC:: FinalizeAnalyzeEquation
+PUBLIC:: DefineParametersAnalyzeEquation
 !==================================================================================================================================
 
 CONTAINS
@@ -154,7 +156,7 @@ REAL,INTENT(OUT)                :: Umax
 !==================================================================================================================================
 Umin=MINVAL(U)
 Umax=MAXVAL(U)
-#ifdef MPI
+#if MPI
 IF(MPIRoot)THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,Umin,1,MPI_DOUBLE_PRECISION,MPI_MIN,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(MPI_IN_PLACE,Umax,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
