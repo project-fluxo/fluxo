@@ -45,10 +45,10 @@ PUBLIC::EvalDiffFluxTilde3D
 
 CONTAINS
 
+!==================================================================================================================================
+!> Compute linear scalar advection & diffusion fluxes with using the solution and its gradient for every volume Gauss point.
+!==================================================================================================================================
 SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
-!==================================================================================================================================
-! Compute linear scalar advection fluxes with velocity AdvVel(3) using the conservative variables for every volume Gauss point.
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
@@ -65,10 +65,12 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem ! Determines the actual element
+INTEGER,INTENT(IN)                                 :: iElem !< Determines the actual element
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde             ! transformed fluxes (iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i 
@@ -127,9 +129,10 @@ END SUBROUTINE EvalFluxTilde3D
 
 
 #if PARABOLIC
+!==================================================================================================================================
+!> Compute linear scalar  diffusion fluxes with using the gradient of the solution  for every volume Gauss point.
+!==================================================================================================================================
 SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
-!==================================================================================================================================
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
@@ -142,10 +145,12 @@ USE MOD_DG_Vars,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                        :: iElem
+INTEGER,INTENT(IN)                                 :: iElem !< Determines the actual element
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde             ! transformed fluxes (iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
+REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================

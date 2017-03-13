@@ -15,10 +15,10 @@
 !==================================================================================================================================
 #include "defines.h"
 
-MODULE MOD_Flux
 !==================================================================================================================================
 !> Contains the routine EvalFlux3D which computes the complete flux f,g,h for all DOFs in one Element: used in volume integral
 !==================================================================================================================================
+MODULE MOD_Flux
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -38,7 +38,7 @@ PUBLIC::EvalFluxTilde3D
 CONTAINS
 
 !==================================================================================================================================
-!> Compute linear scalar advection fluxes with velocity AdvVel(3) using the conservative variables for every volume Gauss point.
+!> Compute advection flux of Maxwell's equations for every volume Gauss point.
 !==================================================================================================================================
 SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
@@ -50,10 +50,12 @@ USE MOD_DG_Vars       ,ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem                !< element ID
+INTEGER,INTENT(IN)                                 :: iElem  !< current element treated in volint
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< transformed fluxes (iVar,i,j,k)
+REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
+REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
+REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                :: f(8),g(8),h(8)    ! Cartesian fluxes 
