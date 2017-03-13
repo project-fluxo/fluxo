@@ -332,8 +332,8 @@ CASE(3) ! Resonator
 !    phi = 0.0                                                                                     ! Vorsicht: phi ist hier undef!
 !  END IF
 !
-!  Er = 2.*cos(theta)*Q*dD/(4.*PP_Pi*eps0) * ( 1./r**3*sin(omegaD*tEval-omegaD*r/c) + (omegaD/(c*r**2)*cos(omegaD*tEval-omegaD*r/c)) )
-!  Etheta = sin(theta)*Q*dD/(4.*PP_Pi*eps0) * ( (1./r**3-omegaD**2/(c**2*r))*sin(omegaD*tiEval-omegaD*r/c) &
+!  Er = 2.*cos(theta)*Q*dD/(4.*PP_Pi*eps0)*( 1./r**3*sin(omegaD*tEval-omegaD*r/c)+ (omegaD/(c*r**2)*cos(omegaD*tEval-omegaD*r/c)) )
+!  Etheta = sin(theta)*Q*dD/(4.*PP_Pi*eps0) * ( (1./r**3-omegaD**2/(c**2*r))*sin(omegaD*tEval-omegaD*r/c) &
 !          + (omegaD/(c*r**2)*cos(omegaD*tEval-omegaD* r/c) ) ) 
 !  Bphi = 1/(c2*eps0)*omegaD*sin(theta)*Q*dD/(4.*PP_Pi) &
 !       * ( - omegaD/(c*r)*sin(omegaD*tEval-omegaD*r/c) + 1./r**2*cos(omegaD*tEval-omegaD*r/c) )
@@ -365,13 +365,13 @@ CASE(3) ! Resonator
 !  END IF
 !  z = x(3)
 !  Er  =-B0G*mG*omegaG/(r*g**2)*bessj(mG,REAL(g*r,SP))                             * &
-!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEal))
+!                                                           ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEval))
 !  Ephi= B0G*omegaG/g      *0.5*(bessj(mG-1,REAL(g*r,SP))-bessj(mG+1,REAL(g*r,SP)))* &
-!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEal))
+!                                                           (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEval))
 !  Br  =-B0G*h/g           *0.5*(bessj(mG-1,REAL(g*r,SP))-bessj(mG+1,REAL(g*r,SP)))* &
-!                                                                 (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEal))
+!                                                           (-cos(h*z+mG*phi)*sin(omegaG*tEval)+sin(h*z+mG*phi)*cos(omegaG*tEval))
 !  Bphi=-B0G*mG*h/(r*g**2)     *bessj(mG,REAL(g*r,SP))                             * &
-!                                                                 ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEal))
+!                                                           ( cos(h*z+mG*phi)*cos(omegaG*tEval)+sin(h*z+mG*phi)*sin(omegaG*tEval))
 !  resu(1)= cos(phi)*Er - sin(phi)*Ephi
 !  resu(2)= sin(phi)*Er + cos(phi)*Ephi
 !  resu(3)= 0.0
