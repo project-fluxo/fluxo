@@ -56,14 +56,6 @@ PUBLIC::EvalDiffFlux3D
 PUBLIC::EvalDiffFluxTilde3D
 #endif /*PARABOLIC*/
 
-#ifdef PP_GLM
-INTERFACE GLMFlux
-  MODULE PROCEDURE GLMFlux
-END INTERFACE
-
-PUBLIC :: GLMFlux
-#endif /*PP_GLM*/
-
 !==================================================================================================================================
 
 CONTAINS
@@ -78,7 +70,7 @@ USE MOD_DG_Vars,ONLY:U
 USE MOD_Equation_Vars ,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch2
+USE MOD_Equation_Vars,ONLY: GLM_ch
 #endif /*PP_GLM*/
 #ifdef PARABOLIC
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
@@ -184,14 +176,17 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(6) = f(6)+U(9,PP_IJK,iElem)
-  f(9) = GLM_ch2*b1
+  f(5) = f(5)+GLM_ch*b1*U(9,PP_IJK,iElem)
+  f(6) = f(6)+GLM_ch   *U(9,PP_IJK,iElem)
+  f(9) =      GLM_ch*b1
 
-  g(7) = g(7)+U(9,PP_IJK,iElem)
-  g(9) = GLM_ch2*b2
+  g(5) = g(5)+GLM_ch*b2*U(9,PP_IJK,iElem)
+  g(7) = g(7)+GLM_ch   *U(9,PP_IJK,iElem)
+  g(9) =      GLM_ch*b2
 
-  h(8) = h(8)+U(9,PP_IJK,iElem)
-  h(9) = GLM_ch2*b3
+  h(5) = h(5)+GLM_ch*b3*U(9,PP_IJK,iElem)
+  h(8) = h(8)+GLM_ch   *U(9,PP_IJK,iElem)
+  h(9) =      GLM_ch*b3
 #endif /* PP_GLM */
 
 #ifdef PARABOLIC
@@ -358,7 +353,9 @@ F_Face(6)=0.
 F_Face(7)=v1*b2-b1*v2
 F_Face(8)=v1*b3-b1*v3
 #ifdef PP_GLM
-F_Face(9) = 0.  !additional flux is accounted for in riemann subroutine 
+F_Face(5)=F_Face(5)+GLM_ch*b1*U_Face(9)
+F_Face(6)=F_Face(6)+GLM_ch   *U_Face(9)
+F_Face(9)=          GLM_ch*b1
 #endif /* PP_GLM */
 END ASSOCIATE ! b1 => UFace(6) ...
 END SUBROUTINE EvalAdvectionFlux1D
@@ -705,46 +702,6 @@ END DO; END DO; END DO ! i,j,k
 #endif /*OPTIMIZED*/
 END SUBROUTINE EvalDiffFluxTilde3D
 #endif /*PARABOLIC*/
-
-
-#ifdef PP_GLM
-!==================================================================================================================================
-!> Calculates the exact Riemann flux for the divergence correction system (generalized Lagrangian Multiplier, GLM)
-!==================================================================================================================================
-SUBROUTINE GLMFlux(ConsL,ConsR,Flux)
-USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY: GLM_ch,GLM_ch2
-!----------------------------------------------------------------------------------------------------------------------------------
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-REAL,INTENT(INOUT) :: ConsL(PP_nVar)   !< left state, is changed
-REAL,INTENT(INOUT) :: ConsR(PP_nVar)   !< right state, is changed
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT/OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-REAL,INTENT(OUT)   :: Flux(2)          !< GLM flux
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-REAL               :: Bx_m, Psi_m
-!==================================================================================================================================
-Bx_m  = 0.5*(ConsR(6)+ConsL(6)) -0.5/GLM_ch*(ConsR(9)-ConsL(9))
-Psi_m = 0.5*(ConsR(9)+ConsL(9)) -0.5*GLM_ch*(ConsR(6)-ConsL(6))
-
-
-Flux(1) = Psi_m        
-Flux(2) = GLM_ch2*Bx_m 
-
-ConsL(6) = Bx_m
-ConsR(6) = Bx_m
-
-ConsL(9) = Psi_m !just to guarantee that the jump(psi)=0
-ConsR(9) = Psi_m
-
-END SUBROUTINE GLMFlux
-#endif /* PP_GLM */
 
 
 END MODULE MOD_Flux

@@ -71,9 +71,9 @@ IMPLICIT NONE
 INTEGER,INTENT(IN)                        :: iElem !< current element index in volint
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
 REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux                      !< auxiliary variables, not needed here
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -154,14 +154,15 @@ SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
                              Fstar)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:AdvVel
+USE MOD_Equation_Vars ,ONLY:AdvVel
+USE MOD_Equation_Vars ,ONLY:nAuxVar
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL          !< left auxiliary variables
-REAL,DIMENSION(1),INTENT(IN)        :: UauxR          !< right auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
 #else
@@ -202,13 +203,14 @@ SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:AdvVel
+USE MOD_Equation_Vars ,ONLY:nAuxVar
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL          !< left auxiliary variables
-REAL,DIMENSION(1),INTENT(IN)        :: UauxR          !< right auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
 #ifdef CARTESIANFLUX
 REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
 #else

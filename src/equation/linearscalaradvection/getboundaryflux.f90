@@ -285,12 +285,10 @@ DO iBC=1,nBCs
          ' unknown BC Type in linearscalaradvection/getboundaryflux.f90!',BCType,999.)
   END SELECT ! BCType
 END DO ! iBC
-!for BR1 and BR2, lifting is in strong form...
-Flux(:,:,:,1:nBCSides)=Flux(:,:,:,1:nBCSides)-U_master(:,:,:,1:nBCSides)
-
+!for BR1 and BR2, lifting is in strong form: Flux=Flux-U_master...
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N
-    Flux(:,p,q,SideID)=Flux(:,p,q,SideID)*SurfElem(p,q,SideID)
+    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_master(:,p,q,SideID))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
 END SUBROUTINE Lifting_GetBoundaryFlux

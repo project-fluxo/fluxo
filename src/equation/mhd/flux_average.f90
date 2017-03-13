@@ -70,7 +70,7 @@ USE MOD_DG_Vars,ONLY:U
 USE MOD_Equation_Vars ,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch2
+USE MOD_Equation_vars ,ONLY:GLM_ch
 #endif /*PP_GLM*/
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
@@ -162,14 +162,14 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(6) = f(6)+U(9,PP_IJK,iElem)
-  f(9) = GLM_ch2*b1
+  f(6) = f(6)+GLM_ch*U(9,PP_IJK,iElem)
+  f(9) = GLM_ch*b1
 
-  g(7) = g(7)+U(9,PP_IJK,iElem)
-  g(9) = GLM_ch2*b2
+  g(7) = g(7)+GLM_ch*U(9,PP_IJK,iElem)
+  g(9) = GLM_ch*b2
 
-  h(8) = h(8)+U(9,PP_IJK,iElem)
-  h(9) = GLM_ch2*b3
+  h(8) = h(8)+GLM_ch*U(9,PP_IJK,iElem)
+  h(9) = GLM_ch*b3
 #endif /* PP_GLM */
 
 END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
@@ -257,7 +257,7 @@ SUBROUTINE StandardDGFlux(Fstar,UL,UR)
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,kappaM2,smu_0,s2mu_0
 #ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch2
+USE MOD_Equation_Vars,ONLY:GLM_ch
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -306,8 +306,9 @@ Fstar(6) = 0.
 Fstar(7) = 0.5*(v1_L*b2_L-b1_L*v2_L + v1_R*b2_R-b1_R*v2_R)
 Fstar(8) = 0.5*(v1_L*b3_L-b1_L*v3_L + v1_R*b3_R-b1_R*v3_R)
 #ifdef PP_GLM
-Fstar(6) = Fstar(6)+0.5*(UL(9)+UR(9))
-Fstar(9) =  GLM_ch2*0.5*(b1_L+b1_R)
+Fstar(5) = Fstar(5)+0.5*GLM_ch*(b1_L*UL(9)+b1_R*UR(9))
+Fstar(6) = Fstar(6)+0.5*GLM_ch*(     UL(9)+     UR(9))
+Fstar(9) =          0.5*GLM_ch*(b1_L      +b1_R      )
 #endif /* PP_GLM */
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE StandardDGFlux
@@ -329,7 +330,7 @@ SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
 #ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch2
+USE MOD_Equation_vars ,ONLY:GLM_ch
 #endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -350,9 +351,6 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: qv_L,qv_R,qb_L,qb_R
-#ifdef PP_GLM
-REAL                                :: phiHat
-#endif /*PP_GLM*/
 #ifdef CARTESIANFLUX
 REAL                                :: metric_L(3)
 REAL                                :: metric_R(3)
@@ -399,11 +397,11 @@ Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)
 
 #ifdef PP_GLM
 !without metric dealiasing (=standard DG weak form on curved meshes)
-phiHat   = 0.5*(UL(9)+UR(9))
-Fstar(6) = Fstar(6) + 0.5*(UL(9)*metric_L(1) + UR(9)*metric_R(1))
-Fstar(7) = Fstar(7) + 0.5*(UL(9)*metric_L(2) + UR(9)*metric_R(2))
-Fstar(8) = Fstar(8) + 0.5*(UL(9)*metric_L(3) + UR(9)*metric_R(3))
-Fstar(9) = GLM_ch2*0.5*(qb_L+qb_R)
+Fstar(5) = Fstar(5) + 0.5*GLM_ch*(qb_L*UL(9)             + qb_R*UR(9))
+Fstar(6) = Fstar(6) + 0.5*GLM_ch*(     UL(9)*metric_L(1) +      UR(9)*metric_R(1))
+Fstar(7) = Fstar(7) + 0.5*GLM_ch*(     UL(9)*metric_L(2) +      UR(9)*metric_R(2))
+Fstar(8) = Fstar(8) + 0.5*GLM_ch*(     UL(9)*metric_L(3) +      UR(9)*metric_R(3))
+Fstar(9) =            0.5*GLM_ch*(qb_L                   +qb_R                   )
 
 #endif /* PP_GLM */
 
@@ -427,7 +425,7 @@ SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
 #ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch2
+USE MOD_Equation_vars ,ONLY:GLM_ch
 #endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -492,11 +490,12 @@ Fstar(7) = 0.5*(qv_L*b2_L-qb_L*v2_L + qv_R*b2_R-qb_R*v2_R)
 Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)
 
 #ifdef PP_GLM
-phiHat   = 0.5*(UL(9)+UR(9))
+Fstar(5) = Fstar(5) + 0.5*GLM_ch*(qb_L*UL(9)+qb_R*UR(9))
+phiHat   = 0.5*GLM_ch*(UL(9)+UR(9))
 Fstar(6) = Fstar(6) + phiHat*metric(1)
 Fstar(7) = Fstar(7) + phiHat*metric(2)
 Fstar(8) = Fstar(8) + phiHat*metric(3)
-Fstar(9) = GLM_ch2*0.5*(qb_L+qb_R)
+Fstar(9) =            0.5*GLM_ch*(qb_L+qb_R)
 #endif /* PP_GLM */
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...

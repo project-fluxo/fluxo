@@ -38,8 +38,7 @@ PUBLIC::Riemann
 CONTAINS
 
 !==================================================================================================================================
-!> Computes the numerical flux
-!> Conservative States are rotated into normal direction in this routine and are NOT backrotatet: don't use it after this routine!!
+!> Computes the numerical upwind flux, F=A^-*UR + A^+ * UL
 !==================================================================================================================================
 SUBROUTINE Riemann(F,U_L,U_R,nv,t1,t2)
 ! MODULES
@@ -49,12 +48,14 @@ USE MOD_Equation_Vars,ONLY:eta_c,c,c2,c_corr,c_corr_c,c_corr_c2
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N),INTENT(IN) :: U_L,U_R !< left and right conservative solution states
-REAL                                 ,INTENT(IN) :: nv(3,0:PP_N,0:PP_N) !< normal vector
-REAL                                 ,INTENT(IN) :: t1(3,0:PP_N,0:PP_N),t2(3,0:PP_N,0:PP_N) !< tangential vectors
+REAL,INTENT(IN) :: U_L(     PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)                                 :: F(PP_nVar,0:PP_N,0:PP_N)
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------

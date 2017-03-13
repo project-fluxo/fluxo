@@ -16,7 +16,7 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Contains a routine to calculate the permitted time step.
+!> Contains a routine to calculate the maximum explicit time step.
 !==================================================================================================================================
 MODULE MOD_CalcTimeStep
 ! MODULES

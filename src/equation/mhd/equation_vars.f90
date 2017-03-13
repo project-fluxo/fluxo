@@ -70,7 +70,6 @@ LOGICAL           :: GLM_init=.FALSE.
 REAL              :: GLM_dtch1  ! timestep for ch=1 (must be initialized)
 REAL              :: GLM_ch    ! Divergence correction speed
 REAL              :: GLM_scale  ! scaling of maximum divergence speed
-REAL              :: GLM_ch2
 REAL              :: GLM_scr ! 1/cr. Related to damping of divergence error, factor chi=ch^2/cp^2.  cr=cp^2/ch ~0.18, chi=ch/cr
 LOGICAL           :: divBSource
 #endif /*PP_GLM*/
@@ -170,7 +169,11 @@ prim(1)=cons(1)
 ! velocity
 prim(2:4)=cons(2:4)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
+#ifdef PP_GLM
+prim(5)=KappaM1*(cons(5)-0.5*(SUM(cons(2:4)*prim(2:4))+cons(9)*cons(9))-s2mu_0*SUM(cons(6:8)*cons(6:8)) )
+#else
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*SUM(cons(6:8)*cons(6:8)))
+#endif /*PP_GLM*/
 ! B,psi
 prim(6:PP_nVar)=cons(6:PP_nVar)
 END SUBROUTINE ConsToPrim
@@ -197,7 +200,11 @@ cons(1)=prim(1)
 ! velocity
 cons(2:4)=prim(2:4)*prim(1)
 ! total energy
+#ifdef PP_GLM
+cons(5)=sKappaM1*prim(5)+0.5*(SUM(cons(2:4)*prim(2:4))+prim(9)*prim(9))+s2mu_0*SUM(prim(6:8)*prim(6:8))
+#else
 cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*SUM(prim(6:8)*prim(6:8))
+#endif /*PP_GLM*/
 ! B,psi
 cons(6:PP_nVar)=prim(6:PP_nVar)
 END SUBROUTINE PrimToCons

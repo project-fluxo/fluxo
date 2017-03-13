@@ -91,7 +91,7 @@ CALL prms%CreateRealOption(   "kperp", "If anisotropic heat terms enabled: diffu
 CALL prms%CreateRealOption(   "GLM_scale", "MHD with GLM option: save ch from timestep <1","0.9")
 CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of GLM variable 1/cr=5.555 (cr=0.18),"//&
                                          "set zero for no damping.","5.555")
-CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms to momentum equation.",&
+CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms.",&
                                                  ".FALSE.")
 #endif /*PP_GLM*/
 CALL prms%CreateRealOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization"&
@@ -852,7 +852,7 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
 #ifdef PP_GLM
-USE MOD_Equation_Vars, ONLY:smu_0,GLM_ch2
+USE MOD_Equation_Vars, ONLY:smu_0
 USE MOD_Equation_Vars, ONLY:GLM_ch,GLM_scr
 USE MOD_Equation_Vars, ONLY:DivBSource
 USE MOD_DG_Vars,       ONLY:U
@@ -963,22 +963,21 @@ CASE DEFAULT
 END SELECT ! ExactFunction
 #ifdef PP_GLM
 IF(DivBSource)THEN
-
-!! from equilibrium in momentum equation (grad p= J x B), we have a source from the non-divergence free magnetic field 
-!! (not added in energy equation to match Jorek equations)
-  DO iElem=1,PP_nElems
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      Ut_src=0.
-      Ut_src(2:4)=(smu_0/GLM_ch2)*Ut(9,i,j,k,iElem)*U(6:8,i,j,k,iElem) !B*divB, Ut(9)/ch^2 = -divB
-      !Ut_src(5)=smu_0*(1./GLM_ch2)*Ut(9,i,j,k,iElem)*( U(2,i,j,k,iElem)*U(6,i,j,k,iElem) &
-      !                                                +U(3,i,j,k,iElem)*U(7,i,j,k,iElem) &
-      !                                                +U(4,i,j,k,iElem)*U(8,i,j,k,iElem) )
-      !Ut_src(6:8)=(1./GLM_ch2)*Ut(9,i,j,k,iElem)*U(2:4,i,j,k,iElem) !u*divB, Ut(9)/ch^2 = -divB
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
-    END DO; END DO; END DO ! i,j,k
-  END DO ! iElem
-END IF
-Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-(GLM_ch*GLM_scr)*U(9,:,:,:,:)
+!!! from equilibrium in momentum equation (grad p= J x B), we have a source from the non-divergence free magnetic field 
+!!! (not added in energy equation to match Jorek equations)
+!  DO iElem=1,PP_nElems
+!    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!      Ut_src=0.
+!      Ut_src(2:4)=(smu_0/GLM_ch)*Ut(9,i,j,k,iElem)*U(6:8,i,j,k,iElem) !B*divB, Ut(9)/ch^2 = -divB
+!      !Ut_src(5)=smu_0*(1./GLM_ch)*Ut(9,i,j,k,iElem)*( U(2,i,j,k,iElem)*U(6,i,j,k,iElem) &
+!      !                                                +U(3,i,j,k,iElem)*U(7,i,j,k,iElem) &
+!      !                                                +U(4,i,j,k,iElem)*U(8,i,j,k,iElem) )
+!      !Ut_src(6:8)=(1./GLM_ch)*Ut(9,i,j,k,iElem)*U(2:4,i,j,k,iElem) !u*divB, Ut(9)/ch^2 = -divB
+!      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
+!    END DO; END DO; END DO ! i,j,k
+!  END DO ! iElem
+END IF !divBsource
+Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
 #endif /*PP_GLM*/
 END SUBROUTINE CalcSource
 
