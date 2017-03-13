@@ -36,7 +36,7 @@ CONTAINS
 !==================================================================================================================================
 !> Specifies all the initial conditions, all case numbers  here are >10000.
 !==================================================================================================================================
-SUBROUTINE TestcaseExactFunc(ExactFunction,t,x,resu,resu_t,resu_tt,Apot) 
+SUBROUTINE TestcaseExactFunc(ExactFunction,tIn,x,resu,resu_t,resu_tt,Apot) 
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
@@ -46,25 +46,19 @@ USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniW
 USE MOD_Equation_Vars,ONLY:IniDisturbance
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_Testcase_Vars,ONLY:EvalEquilibrium
-#if (PP_TimeDiscMethod==1)
-USE MOD_TimeDisc_Vars,ONLY:dt
-#endif /*PP_TimeDiscMethod==1*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)              :: ExactFunction    !< determines the exact function
-REAL,INTENT(IN)                 :: t                !< current simulation time
+REAL,INTENT(IN)                 :: tIn              !< current simulation time
 REAL,INTENT(IN)                 :: x(3)             !< position in physical coordinates
 REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< exact fuction evaluated at tIn, returning state in conservative variables
 REAL,INTENT(OUT)                :: Resu_t(PP_nVar)  !< first time deriv of exact fuction
 REAL,INTENT(OUT)                :: Resu_tt(PP_nVar) !< second time deriv of exact fuction
-REAL,INTENT(OUT),OPTIONAL       :: Apot(3)
+REAL,INTENT(OUT),OPTIONAL       :: Apot(3)          !< optional magnetic vector potential
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-#if (PP_TimeDiscMethod==1)
-LOGICAL                         :: timeDependant
-#endif
 INTEGER                         :: i,j
 REAL                            :: Omega,a,xc(3)
 REAL                            :: Prim(1:PP_nVar) 
@@ -76,9 +70,6 @@ REAL                            :: B_R,r0,B_tor,PsiN,psi_a
 REAL                            :: psi,dpsi_dx,dpsi_dy,psi_axis,psi_0
 REAL                            :: rR2,zR2,sR0,Fprof,Faxis,dF2,p0
 !==================================================================================================================================
-#if (PP_TimeDiscMethod==1)
-timeDependant=.FALSE.
-#endif
 ! Determine the value, the first and the second time derivative
 SELECT CASE (ExactFunction)
 CASE(10010) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
@@ -338,25 +329,6 @@ CASE DEFAULT
         " exactfunc does not exist in testcase")
 END SELECT ! ExactFunction
 
-#if (PP_TimeDiscMethod==1)
-! For O3 LS 3-stage RK, we have to define proper time dependent BC
-IF(timeDependant)THEN ! only add resu_t, resu_tt if time dependant
-  SELECT CASE(tDeriv)
-  CASE(0)
-    ! resu = g(t)
-  CASE(1)
-    ! resu = g(t) + dt/3*g'(t)
-    Resu=Resu + dt/3.*Resu_t
-  CASE(2)
-    ! resu = g(t) + 3/4 dt g'(t) +5/16 dt^2 g''(t)
-    Resu=Resu + 0.75*dt*Resu_t + 0.3125*dt*dt*Resu_tt
-  CASE DEFAULT
-    ! Stop, works only for 3 Stage O3 LS RK
-    CALL abort(__STAMP__,&
-               'Exactfuntion works only for 3 Stage O3 LS RK!',999,999.)
-  END SELECT
-END IF
-#endif
 END SUBROUTINE TestcaseExactFunc
 
 
