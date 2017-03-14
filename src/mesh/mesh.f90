@@ -131,11 +131,6 @@ CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
 CALL CloseDataFile()
 
-IF(useCurveds.AND.(PP_N.LT.NGeo))THEN
-  SWRITE(UNIT_stdOut,'(A)') 'WARNING: N<NGeo, for curved hexa normals are only approximated,&
-                           & can cause problems on periodic boundaries! Set N>=NGeo'
-ENDIF
-
 CALL readMesh(MeshFile) !set nElems
 
 SWRITE(UNIT_stdOut,'(A)') "NOW CALLING setLocalSideIDs..."
@@ -219,8 +214,6 @@ CALL deleteMeshPointer()
 
 ! Build necessary mappings 
 CALL buildMappings(PP_N,V2S=V2S,V2S2=V2S2,S2V=S2V,S2V2=S2V2,S2V3=S2V3,CS2V2=CS2V2,FS2M=FS2M)
-
-SWRITE(UNIT_StdOut,'(a3,a30,a3,i0)')' | ','Ngeo',' | ', Ngeo
 
 ! ----- CONNECTIVITY IS NOW COMPLETE AT THIS POINT -----
 ! scale and deform mesh if desired (warning: no mesh output!)

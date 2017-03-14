@@ -49,6 +49,7 @@ REAL,ALLOCATABLE         :: InputEq(:,:,:,:,:)       !< equilibrium data from Me
 REAL,ALLOCATABLE         :: Ueq(:,:,:,:,:)           !< full equilibrium solution
 REAL,ALLOCATABLE         :: Ueq_BC(:,:,:,:)          !< full equilibrium solution at all BCfaces
 REAL,ALLOCATABLE         :: Uteq(:,:,:,:,:)          !< DG time derivative of Ueq
+LOGICAL                  :: TestcaseInitIsDone=.FALSE. !< Switch to check TestcaseInit status
 !=================================================================================================================================
 
 END MODULE MOD_TestCase_Vars

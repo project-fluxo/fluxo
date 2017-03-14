@@ -561,7 +561,7 @@ FOREACH (_var IN LISTS fluxoVars)
       STRING(REPLACE "\\" "\\\\" ${_var} ${${_var}})
     ENDIF()
     #FILE(APPEND ${configuration} "SET(${_var} \"${${_var}}\" CACHE STRING \"${currentHelpString}\")\n")
-    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A18,A25,A3,A40)')  \"   CMAKE-OPTION : \",\" ${_var} \",\" : \",\"${${_var}}\"\n")
+    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A18,A30,A3,A40)')  \"   CMAKE-OPTION : \",\" ${_var} \",\" : \",\"${${_var}}\"\n")
 #  ENDIF()
 ENDFOREACH()
 

@@ -89,7 +89,10 @@ USE MOD_Globals
 USE MOD_Testcase_Vars
 USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
 USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
-USE MOD_Restart_Vars       ,ONLY: DoRestart
+USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
+USE MOD_Equation_Vars      ,ONLY: IniExactFunc
+USE MOD_DG_Vars            ,ONLY: DGInitIsDone
+USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -98,6 +101,11 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+IF((.NOT.DGInitIsDone).OR.(.NOT.MeshInitIsDone) &
+   .OR.(.NOT.RestartInitIsDone).OR.TestcaseInitIsDone)THEN
+   CALL abort(__STAMP__, &
+   'InitTestcase not ready to be called or already called.',999,999.)
+END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE "MHD EQUILIBRIUM"...'
 WhichTestcase=GETSTR('WhichTestcase','mhd_equilibrium')
@@ -106,20 +114,31 @@ IF(INDEX(TRIM(WhichTestcase),'mhd_equilibrium').EQ.0)THEN
        "compiled with testcase mhd_equilibrium, but specified testcase is : "//TRIM(whichTestcase))
 END IF !check whichtestcase
 doTCsource=.TRUE.
+!======EQUILIBRIUM STUFF====
 EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
+IF(EquilibriumStateIni.EQ.0) THEN
+  EquilibriumStateIni=IniExactFunc
+  SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &
+                                             'set to IniExactFunc'    ,' | ',EquilibriumStateIni
+END IF
 IF(EquilibriumStateIni.EQ.-3) THEN
   EquilibriumStateFile=GETSTR('EquilibriumStateFile')
 END IF
 EquilibriumDivBcorr=GETLOGICAL('EquilibriumDivBcorr','.FALSE.')
-!======EQUILIBRIUM STUFF====
+IF(.NOT.doRestart)THEN
+  EquilibriumDisturbFunc=GETINT('EquilibriumDisturbFunc','0')
+  IF(EquilibriumDisturbFunc.EQ.0) THEN
+    EquilibriumDisturbFunc=IniExactFunc
+    SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumDisturbFunc changed!| ', &
+                                               'set to IniExactFunc'    ,' | ',EquilibriumDisturbFunc
+  END IF
+END IF
 CALL InitEquilibriumState()
 !TESTCASE ANALYZE
 doCalcErrorToEquilibrium = GETLOGICAL('CalcErrorToEquilibrium','.FALSE.')
 doCalcDeltaBEnergy       = GETLOGICAL('CalcDeltaBEnergy','.FALSE.')
-IF(.NOT.doRestart)THEN
-  EquilibriumDisturbFunc=GETINT('EquilibriumDisturbFunc','0')
-END IF
 
+TestcaseInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitTestcase
@@ -139,6 +158,7 @@ IMPLICIT NONE
 !---------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !=================================================================================================================================
+SDEALLOCATE(InputEq)
 SDEALLOCATE(Ueq)
 SDEALLOCATE(Ueq_BC)
 SDEALLOCATE(Uteq)

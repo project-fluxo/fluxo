@@ -28,6 +28,7 @@ LOGICAL :: doTCPreTimeStep=.FALSE.          !< compute something before the time
 LOGICAL :: doTCSource=.FALSE.               !< compute source terms for testcase
 LOGICAL :: doTCanalyze                      !< switch on analyze routines
 CHARACTER(LEN=255)       :: whichTestcase   !< input variable, to be able to check if wanted testcase was compiled
+LOGICAL :: TestcaseInitIsDone=.FALSE.       !< Switch to check TestcaseInit status
 !==================================================================================================================================
 
 END MODULE MOD_TestCase_Vars

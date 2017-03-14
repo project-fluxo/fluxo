@@ -55,7 +55,6 @@ REAL                :: KappaM2          !< = kappa - 2
 REAL                :: sKappaM1         !< = 1/(kappa -1)
 REAL                :: KappaP1          !< = kappa + 1
 REAL                :: sKappaP1         !< = 1/(kappa +1)
-REAL                :: AdvVel(3)        !< Advection Velocity for the test cases
 REAL                :: IniWavenumber(3) !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 REAL                :: IniFrequency     !< frequency for exactfunc
 REAL                :: IniAmplitude     !< amplitude for exactfunc

@@ -91,6 +91,7 @@ END IF
 
 doTCanalyze = GETLOGICAL('doTCanalyze','.FALSE.')
 
+TestcaseInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitTestcase

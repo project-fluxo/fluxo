@@ -68,7 +68,6 @@ IMPLICIT NONE
 CALL prms%SetSection("Equation")
 CALL prms%CreateIntOption(     "IniExactFunc",  " Specifies exactfunc to be used for initialization ")
 CALL prms%CreateIntOption(     "IniRefState",  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateRealArrayOption("AdvVel"," Advection Velocity for exactfunction 4.","1.,1.,1.")
 CALL prms%CreateRealArrayOption("IniWaveNumber"," For exactfunction: wavenumber of solution.")
 CALL prms%CreateRealArrayOption("IniCenter"," For exactfunction: center coordinates.","0.,0.,0.")
 CALL prms%CreateRealOption(   "IniAmplitude", " For exactfunction: amplitude","0.1")
@@ -151,12 +150,7 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT MHD...'
 IniRefState=-1
 ! Read in boundary parameters
 IniExactFunc = GETINT('IniExactFunc')
-SELECT CASE(IniExactFunc)
-CASE(1,10,11,12,13,14,70,71)
-  IniRefState   = GETINT('IniRefState')
-CASE(4)
-  AdvVel       = GETREALARRAY('AdvVel',3)
-END SELECT
+IniRefState   = GETINT('IniRefState')
 IniWavenumber = GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 IniCenter     = GETREALARRAY('IniCenter',3,'0.,0.,0.')
 IniAmplitude  = GETREAL('IniAmplitude','0.1')
@@ -330,7 +324,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
@@ -421,7 +415,7 @@ CASE(3) ! alven wave
 
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
+  a=RefStatePrim(IniRefState,2)*2.*PP_Pi
 
   ! g(t)
   Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
@@ -851,7 +845,8 @@ SUBROUTINE CalcSource(Ut,tIn)
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc !PP_N
 USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
-USE MOD_Equation_Vars, ONLY:Kappa,KappaM1,AdvVel
+USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
+USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
@@ -881,7 +876,7 @@ REAL                            :: rho,rho_x,rho_xx
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
+  a=RefStatePrim(IniRefState,2)*2.*PP_Pi
   tmp(1)=-a+3*Omega
   tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
   tmp(3)=IniAmplitude*Omega*KappaM1  

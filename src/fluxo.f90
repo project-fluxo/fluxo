@@ -37,7 +37,7 @@ USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
 USE MOD_StringTools,       ONLY:STRICMP
 USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
-USE MOD_Testcase,          ONLY:DefineParametersTestcase
+USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if PARABOLIC
@@ -130,8 +130,10 @@ CALL InitLifting()
 #endif /*PARABOLIC*/
 CALL InitTimeDisc()
 CALL InitAnalyze()
-CALL IgnoredParameters()
 CALL Restart()
+CALL InitTestcase()
+! initialization finished
+CALL IgnoredParameters()
 !
 ! Measure init duration
 Time=FLUXOTIME()
@@ -153,6 +155,7 @@ CALL FinalizeEquation()
 CALL FinalizeBC()
 CALL FinalizeInterpolation()
 CALL FinalizeTimeDisc()
+CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()

@@ -50,12 +50,10 @@ USE MOD_Testcase_Vars
 USE MOD_Testcase_ExactFunc ,ONLY: TestcaseExactFunc
 USE MOD_CalcTimeStep       ,ONLY: CalcTimeStep
 USE MOD_DG                 ,ONLY: DGTimeDerivative
-USE MOD_DG_Vars            ,ONLY: DGInitIsDone
 USE MOD_DG_Vars            ,ONLY: U,Ut,U_master,U_slave
 USE MOD_ProlongToFace      ,ONLY: ProlongToFace
 USE MOD_FillMortar         ,ONLY: U_Mortar
 USE MOD_Equation           ,ONLY: ExactFunc
-USE MOD_Equation_Vars      ,ONLY: IniExactFunc
 USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Equation_Vars      ,ONLY: ConsToPrimVec,PrimToConsVec
 USE MOD_Equation_Vars      ,ONLY: StrVarNames
@@ -64,7 +62,7 @@ USE MOD_Mesh_Vars          ,ONLY: MeshFile
 USE MOD_Mesh_Vars          ,ONLY: nBCSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars          ,ONLY: Elem_xGP,nElems
 USE MOD_Mesh_Vars          ,ONLY: NormVec,TangVec1,TangVec2
-USE MOD_Mesh_Vars          ,ONLY: nBCSides,nInnerSides,nMPISides_MINE
+USE MOD_Mesh_Vars          ,ONLY: FirstInnerSide,lastMPISide_MINE
 USE MOD_Output             ,ONLY: Visualize
 USE MOD_HDF5_Output        ,ONLY: WriteAnyState
 #if MPI
@@ -92,10 +90,6 @@ CHARACTER(LEN=255)  :: FileTypeStr
 !CHECK
 REAL                :: deltaB(3),maxjmp_B(3)
 !==================================================================================================================================
-IF(.NOT.DGInitIsDone)THEN
-   CALL abort(__STAMP__, &
-   'InitEquilibriumState not ready to be called or already called.',999,999.)
-END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT EQUILIBRIUM STATE...'
 
@@ -106,11 +100,6 @@ ALLOCATE(Uteq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Ueq  =0.
 Ueq_BC=0.
 Uteq =0.
-IF(EquilibriumStateIni.EQ.0) THEN
-  EquilibriumStateIni=IniExactFunc
-  SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &
-                                             'set to IniExactFunc'    ,' | ',EquilibriumStateIni
-END IF
 IF(EquilibriumDivBcorr) THEN
   ALLOCATE(Apot(3,0:PP_N,0:PP_N,0:PP_N,nElems))
   Apot=-999.
@@ -172,7 +161,7 @@ CALL StartSendMPIData(   U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRe
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U) !Send YOUR - receive MINE
 #endif /*MPI*/
 maxjmp_B(:)=0.
-DO SideID=nBCsides+1,nBCsides+nInnerSides+nMPISides_MINE
+DO SideID=FirstInnerSide,lastMPISide_MINE
   DO j=0,PP_N ; DO i=0,PP_N
     deltaB(:) = U_slave(6:8,i,j,SideID)-U_master(6:8,i,j,SideID)
     maxjmp_B(1)  = MAX(maxjmp_B(1),ABS(SUM(NormVec( :,i,j,SideID)*deltaB(:))))
@@ -223,15 +212,10 @@ CALL EvalNorms(Uteq)
 IF(doRestart)THEN
   U=U_tmp !copy U back
 ELSE
-  IF(EquilibriumDisturbFunc.EQ.0) THEN
-    EquilibriumDisturbFunc=IniExactFunc
-    SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumDisturbFunc changed!| ', &
-                                               'set to IniExactFunc'    ,' | ',EquilibriumDisturbFunc
-  END IF
   !then disturb the Initial state U
   CALL DisturbU(EquilibriumDisturbFunc)
   FileTypeStr='EquilibriumSource'
-  CALL Visualize(0.,Uteq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.TRUE.)
+  CALL Visualize(0.,Uteq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.FALSE.)
   CALL WriteAnyState(PP_nVar,Uteq,MeshFile,FileTypeStr,StrVarNames,0.)
   FileTypeStr='EquilibriumState'
   CALL Visualize(0.,Ueq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.TRUE.)
@@ -345,7 +329,6 @@ DO iElem=1,nElems
   END DO; END DO; END DO!i,j,k
   
 END DO !iElem
-
 
 maxDivB=0.
 !CHECK STRONG DIVERGENCE div B = 1/J sum_i d/dxi^i (JB^i)
