@@ -4,9 +4,9 @@ This is a collection of tests for fluxo
 ### Test different builds
 For testing different builds (options in cmake), do:
 ```
-python build_tests.py -p 2 -withmpi 1 -buildhdf5 1
+python build_tests.py -p 2 -withmpi=1 -buildhdf5=1
 ```
-the options are explained when typing:
+where all options are explained when typing:
 ```
 python build_tests.py --help
 ```

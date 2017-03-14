@@ -34,7 +34,7 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)  !< data for steady state boundary conditions
 INTEGER,ALLOCATABLE :: nBCByType(:)     !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)    !< SideIDs for BC types
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navier-stokes ANYMORE!!!!
 REAL                :: eta              !< Current resistivity
 REAL                :: etasmu_0         !< =eta/mu0 
@@ -55,7 +55,6 @@ REAL                :: KappaM2          !< = kappa - 2
 REAL                :: sKappaM1         !< = 1/(kappa -1)
 REAL                :: KappaP1          !< = kappa + 1
 REAL                :: sKappaP1         !< = 1/(kappa +1)
-REAL                :: R                !< Gas constant
 REAL                :: AdvVel(3)        !< Advection Velocity for the test cases
 REAL                :: IniWavenumber(3) !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 REAL                :: IniFrequency     !< frequency for exactfunc

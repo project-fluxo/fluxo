@@ -24,9 +24,10 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL :: doTCPreTimeStep=.FALSE.  !< compute something before the timestep
-LOGICAL :: doTCSource=.FALSE.       !< compute source terms for testcase
-LOGICAL :: doTCanalyze              !< switch on analyze routines
+LOGICAL :: doTCPreTimeStep=.FALSE.          !< compute something before the timestep
+LOGICAL :: doTCSource=.FALSE.               !< compute source terms for testcase
+LOGICAL :: doTCanalyze                      !< switch on analyze routines
+CHARACTER(LEN=255)       :: whichTestcase   !< input variable, to be able to check if wanted testcase was compiled
 !==================================================================================================================================
 
 END MODULE MOD_TestCase_Vars

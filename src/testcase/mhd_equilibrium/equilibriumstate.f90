@@ -271,8 +271,6 @@ REAL                            :: aCov(3,0:PP_N,0:PP_N,0:PP_N,3)  ! last index 
 REAL                            :: APotCov(3,0:PP_N,0:PP_N,0:PP_N)
 REAL                            :: divB(0:PP_N,0:PP_N,0:PP_N)
 REAL                            :: maxDivB,maxBdiff(3),maxBex(3)
-REAL                            :: x(3) 
-INTEGER                         :: method
 !==================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
 
@@ -404,9 +402,7 @@ USE MOD_Globals               ,ONLY: Abort
 USE MOD_Testcase_Vars         ,ONLY: InputEq
 USE MOD_DG_Vars               ,ONLY: U
 USE MOD_Mesh_Vars             ,ONLY: Elem_xGP,nElems
-USE MOD_Equation_Vars         ,ONLY: Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
-USE MOD_Equation_Vars         ,ONLY: smu_0,mu_0
-USE MOD_Equation_Vars         ,ONLY: IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
+USE MOD_Equation_Vars         ,ONLY: IniWaveNumber
 USE MOD_Equation_Vars         ,ONLY: IniDisturbance
 USE MOD_Equation_Vars         ,ONLY: PrimToCons,ConsToPrim
 ! IMPLICIT VARIABLE HANDLING

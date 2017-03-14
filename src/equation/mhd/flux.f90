@@ -38,7 +38,7 @@ INTERFACE EvalAdvectionFlux1D
   MODULE PROCEDURE EvalAdvectionFlux1D
 END INTERFACE
 
-#ifdef PARABOLIC
+#if PARABOLIC
 ! no interface because of dimension change
 !INTERFACE EvalDiffFlux3D
 !  MODULE PROCEDURE EvalDiffFlux3D
@@ -51,7 +51,7 @@ END INTERFACE
 
 PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalAdvectionFlux1D
-#ifdef PARABOLIC
+#if PARABOLIC
 PUBLIC::EvalDiffFlux3D
 PUBLIC::EvalDiffFluxTilde3D
 #endif /*PARABOLIC*/
@@ -72,11 +72,13 @@ USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY: GLM_ch
 #endif /*PP_GLM*/
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
-USE MOD_Equation_Vars ,ONLY:mu,KappasPr,s23,etasmu_0
+USE MOD_Equation_Vars ,ONLY:mu,s23,etasmu_0
 #ifdef PP_ANISO_HEAT
 USE MOD_Equation_vars ,ONLY:kperp,kpar
+#else
+USE MOD_Equation_vars ,ONLY:kappasPr
 #endif 
 #endif /*PARABOLIC*/
 #ifdef OPTIMIZED
@@ -95,11 +97,12 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transforme
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
-REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
+REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                              ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
 REAL                :: Ep                                      ! E + p
-#ifdef PARABOLIC
+#if PARABOLIC
+REAL                :: esrho
 REAL                :: divv
 REAL                :: gradv1x,gradv2x,gradv3x
 REAL                :: gradv1y,gradv2y,gradv3y
@@ -189,23 +192,23 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(9) =      GLM_ch*b3
 #endif /* PP_GLM */
 
-#ifdef PARABOLIC
+#if PARABOLIC
   ! Viscous part
   ! ideal gas law
-  e=Etotal*srho                              ! e...specific energy
+  esrho=Etotal*srho                              ! e...specific energy
   ! compute derivatives via product rule (a*b)'=a'*b+a*b'
-  gradv1x = srho*(gradUx(2,PP_IJK,iElem) - v1*gradUx(1,PP_IJK,iElem))    !gradu(1,1)= u_x, gradu(1,2)=u_y, gradu(1,3)=u_z
-  gradv2x = srho*(gradUx(3,PP_IJK,iElem) - v2*gradUx(1,PP_IJK,iElem))    !gradu(2,1)= v_x, gradu(2,2)=v_y, gradu(2,3)=v_z
-  gradv3x = srho*(gradUx(4,PP_IJK,iElem) - v3*gradUx(1,PP_IJK,iElem))    !gradu(3,1)= w_x, gradu(3,2)=w_y, gradu(3,3)=w_z
-  gradex  = srho*(gradUx(5,PP_IJK,iElem) -  e*gradUx(1,PP_IJK,iElem))    !gradex  = e_x, gradey  =e_y, gradez  =e_z
-  gradv1y = srho*(gradUy(2,PP_IJK,iElem) - v1*gradUy(1,PP_IJK,iElem))
-  gradv2y = srho*(gradUy(3,PP_IJK,iElem) - v2*gradUy(1,PP_IJK,iElem))
-  gradv3y = srho*(gradUy(4,PP_IJK,iElem) - v3*gradUy(1,PP_IJK,iElem))
-  gradey  = srho*(gradUy(5,PP_IJK,iElem) -  e*gradUy(1,PP_IJK,iElem))
-  gradv1z = srho*(gradUz(2,PP_IJK,iElem) - v1*gradUz(1,PP_IJK,iElem))
-  gradv2z = srho*(gradUz(3,PP_IJK,iElem) - v2*gradUz(1,PP_IJK,iElem))
-  gradv3z = srho*(gradUz(4,PP_IJK,iElem) - v3*gradUz(1,PP_IJK,iElem))
-  gradez  = srho*(gradUz(5,PP_IJK,iElem) -  e*gradUz(1,PP_IJK,iElem))
+  gradv1x = srho*(gradUx(2,PP_IJK,iElem) -   v1*gradUx(1,PP_IJK,iElem))    !gradu(1,1)= u_x, gradu(1,2)=u_y, gradu(1,3)=u_z
+  gradv2x = srho*(gradUx(3,PP_IJK,iElem) -   v2*gradUx(1,PP_IJK,iElem))    !gradu(2,1)= v_x, gradu(2,2)=v_y, gradu(2,3)=v_z
+  gradv3x = srho*(gradUx(4,PP_IJK,iElem) -   v3*gradUx(1,PP_IJK,iElem))    !gradu(3,1)= w_x, gradu(3,2)=w_y, gradu(3,3)=w_z
+  gradex  = srho*(gradUx(5,PP_IJK,iElem) -esrho*gradUx(1,PP_IJK,iElem))    !gradex  = e_x, gradey  =e_y, gradez  =e_z
+  gradv1y = srho*(gradUy(2,PP_IJK,iElem) -   v1*gradUy(1,PP_IJK,iElem))
+  gradv2y = srho*(gradUy(3,PP_IJK,iElem) -   v2*gradUy(1,PP_IJK,iElem))
+  gradv3y = srho*(gradUy(4,PP_IJK,iElem) -   v3*gradUy(1,PP_IJK,iElem))
+  gradey  = srho*(gradUy(5,PP_IJK,iElem) -esrho*gradUy(1,PP_IJK,iElem))
+  gradv1z = srho*(gradUz(2,PP_IJK,iElem) -   v1*gradUz(1,PP_IJK,iElem))
+  gradv2z = srho*(gradUz(3,PP_IJK,iElem) -   v2*gradUz(1,PP_IJK,iElem))
+  gradv3z = srho*(gradUz(4,PP_IJK,iElem) -   v3*gradUz(1,PP_IJK,iElem))
+  gradez  = srho*(gradUz(5,PP_IJK,iElem) -esrho*gradUz(1,PP_IJK,iElem))
   divv    = gradv1x+gradv2y+gradv3z
 ASSOCIATE( gradB1x => gradUx(6,PP_IJK,iElem), & 
            gradB2x => gradUx(7,PP_IJK,iElem), & 
@@ -364,18 +367,20 @@ END ASSOCIATE ! b1 => UFace(6) ...
 END SUBROUTINE EvalAdvectionFlux1D
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 !==================================================================================================================================
 !> Compute the cartesian diffusion flux of the MHD equations, for all face points (PP_N+1)**2
 !==================================================================================================================================
 SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face,gradUx_Face,gradUy_Face,gradUz_Face)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:s23,KappasPr,smu_0
+USE MOD_Equation_Vars,ONLY:s23,smu_0
 USE MOD_Equation_Vars,ONLY:mu,etasmu_0
 USE MOD_DG_Vars,ONLY:nTotal_face
 #ifdef PP_ANISO_HEAT
 USE MOD_Equation_vars,ONLY:kperp,kpar,kappaM1
+#else
+USE MOD_Equation_vars,ONLY:kappasPr
 #endif 
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -393,7 +398,7 @@ REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: g       !< Cartesian diffusii
 REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: h       !< Cartesian diffusiion flux in z
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                :: srho,e
+REAL                :: srho,esrho
 REAL                :: v1,v2,v3                                  ! auxiliary variables
 REAL                :: bb2
 REAL                :: divv
@@ -418,20 +423,20 @@ ASSOCIATE( b1 => U_Face(6,i), &
   bb2  = (b1*b1+b2*b2+b3*b3)
   ! Viscous part
   ! ideal gas law
-  e=U_Face(5,i)*srho                              ! e...specific energy
+  esrho=U_Face(5,i)*srho                              ! e...specific energy
   ! compute derivatives via product rule (a*b)'=a'*b+a*b'
-  gradv1x = srho*(gradUx_Face(2,i) - v1*gradUx_Face(1,i))    !gradu(1,1)= u_x, gradu(1,2)=u_y, gradu(1,3)=u_z
-  gradv2x = srho*(gradUx_Face(3,i) - v2*gradUx_Face(1,i))    !gradu(2,1)= v_x, gradu(2,2)=v_y, gradu(2,3)=v_z
-  gradv3x = srho*(gradUx_Face(4,i) - v3*gradUx_Face(1,i))    !gradu(3,1)= w_x, gradu(3,2)=w_y, gradu(3,3)=w_z
-  gradex  = srho*(gradUx_Face(5,i) -  e*gradUx_Face(1,i))    !gradex  = e_x, gradey  =e_y, gradez  =e_z
-  gradv1y = srho*(gradUy_Face(2,i) - v1*gradUy_Face(1,i))
-  gradv2y = srho*(gradUy_Face(3,i) - v2*gradUy_Face(1,i))
-  gradv3y = srho*(gradUy_Face(4,i) - v3*gradUy_Face(1,i))
-  gradey  = srho*(gradUy_Face(5,i) -  e*gradUy_Face(1,i))
-  gradv1z = srho*(gradUz_Face(2,i) - v1*gradUz_Face(1,i))
-  gradv2z = srho*(gradUz_Face(3,i) - v2*gradUz_Face(1,i))
-  gradv3z = srho*(gradUz_Face(4,i) - v3*gradUz_Face(1,i))
-  gradez  = srho*(gradUz_Face(5,i) -  e*gradUz_Face(1,i))
+  gradv1x = srho*(gradUx_Face(2,i) -   v1*gradUx_Face(1,i))    !gradu(1,1)= u_x, gradu(1,2)=u_y, gradu(1,3)=u_z
+  gradv2x = srho*(gradUx_Face(3,i) -   v2*gradUx_Face(1,i))    !gradu(2,1)= v_x, gradu(2,2)=v_y, gradu(2,3)=v_z
+  gradv3x = srho*(gradUx_Face(4,i) -   v3*gradUx_Face(1,i))    !gradu(3,1)= w_x, gradu(3,2)=w_y, gradu(3,3)=w_z
+  gradex  = srho*(gradUx_Face(5,i) -esrho*gradUx_Face(1,i))    !gradex  = e_x, gradey  =e_y, gradez  =e_z
+  gradv1y = srho*(gradUy_Face(2,i) -   v1*gradUy_Face(1,i))
+  gradv2y = srho*(gradUy_Face(3,i) -   v2*gradUy_Face(1,i))
+  gradv3y = srho*(gradUy_Face(4,i) -   v3*gradUy_Face(1,i))
+  gradey  = srho*(gradUy_Face(5,i) -esrho*gradUy_Face(1,i))
+  gradv1z = srho*(gradUz_Face(2,i) -   v1*gradUz_Face(1,i))
+  gradv2z = srho*(gradUz_Face(3,i) -   v2*gradUz_Face(1,i))
+  gradv3z = srho*(gradUz_Face(4,i) -   v3*gradUz_Face(1,i))
+  gradez  = srho*(gradUz_Face(5,i) -esrho*gradUz_Face(1,i))
   divv    = gradv1x+gradv2y+gradv3z
 ASSOCIATE( gradB1x => gradUx_Face(6,i), & 
            gradB2x => gradUx_Face(7,i), & 
@@ -522,9 +527,11 @@ USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:U
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
-USE MOD_Equation_Vars ,ONLY:smu_0,mu,KappasPr,s23,etasmu_0
+USE MOD_Equation_Vars ,ONLY:smu_0,mu,s23,etasmu_0
 #ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars ,ONLY:kperp,kpar
+USE MOD_Equation_vars,ONLY:kperp,kpar,kappaM1
+#else
+USE MOD_Equation_vars,ONLY:kappasPr
 #endif 
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol

@@ -61,14 +61,14 @@ CONTAINS
 !> main routine calling different riemann solvers
 !==================================================================================================================================
 SUBROUTINE Riemann(F,UL,UR,                                                                       &
-#ifdef PARABOLIC
+#if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
 #endif
                    nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
 USE MOD_Equation_vars,ONLY: ConsToPrim,PrimToCons
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ REAL             :: ConsL(1:PP_nVar)
 REAL             :: ConsR(1:PP_nVar)
 REAL             :: PrimL(1:PP_nVar)
 REAL             :: PrimR(1:PP_nVar)
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N) :: k_L,g_L,j_L,k_R,g_R,j_R
 INTEGER          :: iVar
 #endif /*PARABOLIC*/
@@ -107,20 +107,18 @@ INTEGER          :: i,j
 DO j = 0,PP_N
   DO i = 0,PP_N
     !rotate fields
-    ConsL(1) =     UL(1  ,i,j)
+    ConsL(:) =     UL(:  ,i,j)
     ConsL(2) = SUM(UL(2:4,i,j)*nv(:,i,j))
     ConsL(3) = SUM(UL(2:4,i,j)*t1(:,i,j))
     ConsL(4) = SUM(UL(2:4,i,j)*t2(:,i,j))
-    ConsL(5) =     UL(5  ,i,j)
     ConsL(6) = SUM(UL(6:8,i,j)*nv(:,i,j))
     ConsL(7) = SUM(UL(6:8,i,j)*t1(:,i,j))
     ConsL(8) = SUM(UL(6:8,i,j)*t2(:,i,j))
 
-    ConsR(1) =     UR(1,i,j)
+    ConsR(:) =     UR(:,i,j)
     ConsR(2) = SUM(UR(2:4,i,j)*nv(:,i,j))
     ConsR(3) = SUM(UR(2:4,i,j)*t1(:,i,j))
     ConsR(4) = SUM(UR(2:4,i,j)*t2(:,i,j))
-    ConsR(5) =     UR(5  ,i,j)
     ConsR(6) = SUM(UR(6:8,i,j)*nv(:,i,j))
     ConsR(7) = SUM(UR(6:8,i,j)*t1(:,i,j))
     ConsR(8) = SUM(UR(6:8,i,j)*t2(:,i,j))
@@ -141,7 +139,7 @@ DO j = 0,PP_N
 
   END DO !i
 END DO !j
-#ifdef PARABOLIC
+#if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute MHD Diffusion flux
 CALL EvalDiffFlux3D(k_L,g_L,j_L,UL,gradUx_L,gradUy_L,gradUz_L)
@@ -206,7 +204,6 @@ USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
 USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
-USE MOD_Equation_vars, ONLY: kappa,smu_0,s2mu_0 
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -262,7 +259,7 @@ USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
 USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
-USE MOD_Equation_vars, ONLY: Kappa,smu_0,s2mu_0
+USE MOD_Equation_vars, ONLY: smu_0,s2mu_0
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

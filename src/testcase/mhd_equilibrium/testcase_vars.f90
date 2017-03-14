@@ -26,6 +26,7 @@ SAVE
 !---------------------------------------------------------------------------------------------------------------------------------
 LOGICAL                  :: doTCPreTimeStep=.FALSE.  !< compute something before the timestep
 LOGICAL                  :: doTCSource=.FALSE.       !< compute source terms for testcase
+CHARACTER(LEN=255)       :: whichTestcase            !< input variable, to be able to check if wanted testcase was compiled
 LOGICAL                  :: EvalEquilibrium          !< switch for TC_exactfunc
 LOGICAL                  :: doCalcErrorToEquilibrium !< switch for TC_analyze: compute difference of |U-Ueq|
 LOGICAL                  :: doCalcDeltaBEnergy       !< switch for TC_analyze: compute Energy of 1/(2mu0) |B-Beq|^2

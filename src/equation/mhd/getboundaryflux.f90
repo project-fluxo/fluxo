@@ -34,7 +34,7 @@ INTERFACE GetBoundaryFlux
   MODULE PROCEDURE GetBoundaryFlux
 END INTERFACE
 
-#ifdef PARABOLIC
+#if PARABOLIC
 INTERFACE Lifting_GetBoundaryFlux
   MODULE PROCEDURE Lifting_GetBoundaryFlux
 END INTERFACE
@@ -48,7 +48,7 @@ END INTERFACE
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
-#ifdef PARABOLIC
+#if PARABOLIC
 PUBLIC::Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
 PUBLIC::FinalizeBC
@@ -206,7 +206,7 @@ USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY: GLM_ch 
 #endif /*PP_GLM*/
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
@@ -220,14 +220,14 @@ REAL,INTENT(IN)           :: tIn       !< evaluation time
 REAL,INTENT(OUT)                     :: Flux(PP_nVar,0:PP_N,0:PP_N,nSides) !< boundary flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                              :: iBC,iSide,iVar,p,q,SideID
+INTEGER                              :: iBC,iSide,p,q,SideID
 INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N)
 REAL,DIMENSION(1:PP_nVar)            :: U_L,U_R,PrimL,PrimR
 REAL                                 :: pstar,Bystar2,Bzstar2
 REAL                                 :: SL,cf,cf_Roe,RoeVelx
 REAL                                 :: N_loc(1:3,1:3)
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                                 :: BCGradMat(1:3,1:3)
 REAL                                 :: Fd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
 REAL                                 :: Gd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
@@ -248,7 +248,7 @@ DO iBC=1,nBCs
     DO iSide=1,nBCLoc
       SideID=BCSideID(iBC,iSide)
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),BCdata(:,:,:,SideID), &
-#ifdef PARABOLIC
+#if PARABOLIC
                    gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
                    gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
                    gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
@@ -266,7 +266,7 @@ DO iBC=1,nBCs
           END DO ! p
         END DO ! q
         CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
+#if PARABOLIC
                      gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
                      gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
                      gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
@@ -282,7 +282,7 @@ DO iBC=1,nBCs
       DO iSide=1,nBCLoc
         SideID=BCSideID(iBC,iSide)
         CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
+#if PARABOLIC
                      gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
                      gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
                      gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
@@ -301,7 +301,7 @@ DO iBC=1,nBCs
         END DO ! p
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
+#if PARABOLIC
                    gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
                    gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
                    gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
@@ -358,7 +358,7 @@ DO iBC=1,nBCs
           Flux(9,p,q,SideID) = GLM_ch*PrimL(6)
 #endif /*PP_GLM*/
         
-#ifdef PARABOLIC
+#if PARABOLIC
           !! Diffusion
           ! We prepare the gradients and set the normal derivative to zero (symmetry condition!)
           ! BCGradMat = I - n * n^T = (gradient -normal component of gradient)
@@ -371,29 +371,37 @@ DO iBC=1,nBCs
           BCGradMat(2,1) = BCGradMat(1,2)
           BCGradMat(3,1) = BCGradMat(1,3)
           BCGradMat(2,3) = BCGradMat(3,2)
-          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_master(:,p,q,SideID) &
-                                 + BCGradMat(1,2) * gradUy_master(:,p,q,SideID) &
-                                 + BCGradMat(1,3) * gradUz_master(:,p,q,SideID)
-          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_master(:,p,q,SideID) &
-                                 + BCGradMat(2,2) * gradUy_master(:,p,q,SideID) &
-                                 + BCGradMat(2,3) * gradUz_master(:,p,q,SideID)
-          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_master(:,p,q,SideID) &
-                                 + BCGradMat(3,2) * gradUy_master(:,p,q,SideID) &
-                                 + BCGradMat(3,3) * gradUz_master(:,p,q,SideID)
+          gradUx_Face_loc(1:8,p,q) = BCGradMat(1,1) * gradUx_master(1:8,p,q,SideID) &
+                                   + BCGradMat(1,2) * gradUy_master(1:8,p,q,SideID) &
+                                   + BCGradMat(1,3) * gradUz_master(1:8,p,q,SideID)
+          gradUy_Face_loc(1:8,p,q) = BCGradMat(2,1) * gradUx_master(1:8,p,q,SideID) &
+                                   + BCGradMat(2,2) * gradUy_master(1:8,p,q,SideID) &
+                                   + BCGradMat(2,3) * gradUz_master(1:8,p,q,SideID)
+          gradUz_Face_loc(1:8,p,q) = BCGradMat(3,1) * gradUx_master(1:8,p,q,SideID) &
+                                   + BCGradMat(3,2) * gradUy_master(1:8,p,q,SideID) &
+                                   + BCGradMat(3,3) * gradUz_master(1:8,p,q,SideID)
+#ifdef PP_GLM
+          !gradient from inside for divcorr (dirichlet = 0 for state)
+          gradUx_Face_loc(9,p,q) = gradUx_master(9,p,q,SideID)
+          gradUy_Face_loc(9,p,q) = gradUx_master(9,p,q,SideID)
+          gradUz_Face_loc(9,p,q) = gradUx_master(9,p,q,SideID)
+#endif /*PP_GLM*/
 #endif /*PARABOLIC*/
         END DO ! p
       END DO ! q
-#ifdef PARABOLIC
+#if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
       CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_master(:,:,:,SideID), &
                           gradUx_Face_loc,gradUy_Face_loc,gradUz_Face_loc)
       ! Sum up Euler and Diffusion Flux
-      DO iVar=2,PP_nVar
-        Flux(iVar,:,:,SideID) = Flux(iVar,:,:,SideID)                       + & 
-                                NormVec(1,:,:,SideID)*Fd_Face_loc(iVar,:,:) + &
-                                NormVec(2,:,:,SideID)*Gd_Face_loc(iVar,:,:) + &
-                                NormVec(3,:,:,SideID)*Hd_Face_loc(iVar,:,:)
-      END DO ! ivar
+      DO q=0,PP_N
+        DO p=0,PP_N
+        Flux(:,p,q,SideID) = Flux(:,p,q,SideID)                          + & 
+                                NormVec(1,p,q,SideID)*Fd_Face_loc(:,p,q) + &
+                                NormVec(2,p,q,SideID)*Gd_Face_loc(:,p,q) + &
+                                NormVec(3,p,q,SideID)*Hd_Face_loc(:,p,q)
+        END DO ! p
+      END DO ! q
 #endif /*PARABOLIC*/
     END DO !iSide=1,nBCLoc
   CASE DEFAULT ! unknown BCType
@@ -412,7 +420,7 @@ END DO! SideID
 END SUBROUTINE GetBoundaryFlux
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 !==================================================================================================================================
 !> Computes the lifting boudnary fluxes
 !==================================================================================================================================

@@ -202,9 +202,6 @@ REAL,INTENT(OUT),OPTIONAL          :: wIPBary(0:N_in) !< Barycentric weights
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                            :: i
-REAL                               :: x(0:(N_in+1)/2-1)
-REAL                               :: w(0:(N_in+1)/2-1)
-INTEGER                            :: NN
 !==================================================================================================================================
 IF(PRESENT(wIP))THEN
   SELECT CASE(TRIM(NodeType_in))
@@ -264,7 +261,6 @@ SUBROUTINE GetVandermonde(N_in,NodeType_in,N_out,NodeType_out,Vdm_In_Out,Vdm_Out
 ! MODULES
 USE MOD_Preproc
 USE MOD_Basis,             ONLY:BarycentricWeights,InitializeVandermonde
-USE MOD_Interpolation_Vars,ONLY:NodeType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES

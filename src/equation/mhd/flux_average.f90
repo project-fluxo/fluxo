@@ -89,7 +89,7 @@ REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux           !< auxiliar
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
-REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
+REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,v_2,p                          ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
 REAL                :: Ep                                      ! E + p
@@ -255,7 +255,7 @@ END SUBROUTINE EvalUaux
 SUBROUTINE StandardDGFlux(Fstar,UL,UR)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:kappa,kappaM1,kappaM2,smu_0,s2mu_0
+USE MOD_Equation_Vars,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY:GLM_ch
 #endif

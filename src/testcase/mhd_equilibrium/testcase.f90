@@ -56,6 +56,9 @@ IMPLICIT NONE
 ! LOCAL VARIABLES 
 !==================================================================================================================================
 CALL prms%SetSection("Testcase")
+CALL prms%CreateStringOption('WhichTestcase', &
+     "name of the testcase that is supposed to be used in simulation. Check if its = current testcase." &
+     ,"mhd_equilibrium")
 CALL prms%CreateIntOption('EquilibriumStateIni', &
      "=-1: Default: no equilibrium state used. U_t(U_eq)=0. Sanity check if code is compiled with this testcase."//&
      "= 0 : Use U_eq=exactFunc(IniExactFunc) for equilibrium state "//&
@@ -74,7 +77,7 @@ CALL prms%CreateLogicalOption('CalcDeltaBEnergy', &
 CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
      "=0: Default: disturbance case number = iniExactFunc"// &
      ">0: specific disturbance function added to initial state." &
-     ,"0.")
+     ,"0")
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
@@ -97,6 +100,11 @@ IMPLICIT NONE
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE "MHD EQUILIBRIUM"...'
+WhichTestcase=GETSTR('WhichTestcase','mhd_equilibrium')
+IF(INDEX(TRIM(WhichTestcase),'mhd_equilibrium').EQ.0)THEN
+  CALL abort(__STAMP__,&
+       "compiled with testcase mhd_equilibrium, but specified testcase is : "//TRIM(whichTestcase))
+END IF !check whichtestcase
 doTCsource=.TRUE.
 EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
 IF(EquilibriumStateIni.EQ.-3) THEN

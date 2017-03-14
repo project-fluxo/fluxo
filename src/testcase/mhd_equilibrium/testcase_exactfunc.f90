@@ -40,9 +40,9 @@ SUBROUTINE TestcaseExactFunc(ExactFunction,tIn,x,resu,resu_t,resu_tt,Apot)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
-USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
+USE MOD_Equation_Vars,ONLY:IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_Testcase_Vars,ONLY:EvalEquilibrium
@@ -62,14 +62,15 @@ REAL,INTENT(OUT),OPTIONAL       :: Apot(3)          !< optional magnetic vector 
 INTEGER                         :: i,j
 REAL                            :: Omega,a,xc(3)
 REAL                            :: Prim(1:PP_nVar) 
-REAL                            :: Prim2(1:PP_nVar) 
-REAL                            :: r, e, nx,ny,sqr,va,phi_alv
-REAL                            :: r2(1:16),Bphi,dp
+REAL                            :: r,r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
-REAL                            :: B_R,r0,B_tor,PsiN,psi_a
+REAL                            :: PsiN
 REAL                            :: psi,dpsi_dx,dpsi_dy,psi_axis,psi_0
 REAL                            :: rR2,zR2,sR0,Fprof,Faxis,dF2,p0
 !==================================================================================================================================
+Resu=0.
+Resu_t=0.
+Resu_tt=0.
 ! Determine the value, the first and the second time derivative
 SELECT CASE (ExactFunction)
 CASE(10010) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))

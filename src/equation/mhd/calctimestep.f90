@@ -45,13 +45,12 @@ USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_DG_Vars,ONLY:U
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
-USE MOD_Equation_Vars,ONLY:R,smu_0
 USE MOD_Equation_Vars,ONLY: ConsToPrim
 USE MOD_Equation_Vars,ONLY: FastestWave3D
 #ifdef PP_GLM
 USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1,GLM_ch,GLM_scale
 #endif /*PP_GLM*/
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Equation_Vars,ONLY:mu,KappasPr,etasmu_0
 USE MOD_TimeDisc_Vars,ONLY:DFLScale
 #ifdef PP_ANISO_HEAT
@@ -71,7 +70,7 @@ INTEGER                      :: i,j,k,iElem
 REAL                         :: sRho,v(3),Prim(1:PP_nVar),cf
 REAL                         :: TimeStepConv, TimeStepVisc, TimeStep(2)
 REAL                         :: Max_Lambda(3)
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                         :: Max_Lambda_v
 REAL                         :: Lambda_v(3)
 REAL                         :: muKappasPr_max,diffC_max
@@ -79,7 +78,7 @@ REAL                         :: muKappasPr_max,diffC_max
 REAL                         :: buf(3)
 !==================================================================================================================================
 errType=0
-#ifdef PARABOLIC
+#if PARABOLIC
 muKappasPr_max=mu*MAX(4./3.,KappasPr)
 diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
@@ -113,7 +112,7 @@ DO iElem=1,nElems
                         cf*SQRT(SUM(Metrics_gTilde(:,i,j,k,iElem)*Metrics_gTilde(:,i,j,k,iElem)))))
         Max_Lambda(3)=MAX(Max_Lambda(3),sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*v)) + &
                         cf*SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem)))))
-#ifdef PARABOLIC
+#if PARABOLIC
         ! Viscous Eigenvalues, isotropic part
         Lambda_v(1)=(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
         Lambda_v(2)=(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
@@ -144,7 +143,7 @@ DO iElem=1,nElems
     ERRWRITE(*,*)'dt_conv=',TimeStepConv,' dt_visc=',TimeStepVisc
     errType=3
   END IF
-#ifdef PARABOLIC
+#if PARABOLIC
   IF(Max_Lambda_v.GT.0.)THEN
     dtElem(iElem)=MIN(dtElem(iElem),DFLScale*4./Max_Lambda_v)
     TimeStepVisc= MIN(TimeStepVisc, DFLScale*4./Max_Lambda_v)

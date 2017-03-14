@@ -55,6 +55,10 @@ IMPLICIT NONE
 ! LOCAL VARIABLES 
 !==================================================================================================================================
 CALL prms%SetSection("Testcase")
+CALL prms%CreateStringOption('WhichTestcase', &
+     "name of the testcase that is supposed to be used in simulation. Check if its = current testcase.","default")
+CALL prms%CreateLogicalOption('doTCanalyze', &
+     "switch off/on TC_analyze" , '.FALSE.')
 
 END SUBROUTINE DefineParametersTestcase
 
@@ -66,7 +70,7 @@ SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Testcase_Vars
-USE MOD_ReadInTools,      ONLY: GETLOGICAL
+USE MOD_ReadInTools,      ONLY: GETSTR,GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -77,6 +81,13 @@ IMPLICIT NONE
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT TESTCASE "DEFAULT"...'
+WhichTestcase=GETSTR('WhichTestcase','default') !not mandatory here
+
+IF(INDEX(TRIM(WhichTestcase),'default').EQ.0)THEN
+  CALL abort(__STAMP__,&
+       "compiled with testcase default, but specified testcase is : "//TRIM(whichTestcase))
+END IF
+
 
 doTCanalyze = GETLOGICAL('doTCanalyze','.FALSE.')
 

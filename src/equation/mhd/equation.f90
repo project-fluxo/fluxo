@@ -77,7 +77,7 @@ CALL prms%CreateRealOption(   "IniHalfwidth", " For exactfunction: Halfwidth","0
 CALL prms%CreateRealOption(   "IniDisturbance", "For exactfunction: Strength of initial disturbance","0.")
 CALL prms%CreateRealOption(   "kappa", "ratio of specific heats","1.6666666666666667")
 CALL prms%CreateRealOption(   "mu_0", "magnetic permeability in vacuum","1.0")
-#ifdef PARABOLIC
+#if PARABOLIC
 CALL prms%CreateRealOption(   "eta", "magnetic resistivity","0.")
 CALL prms%CreateRealOption(   "mu", "fluid viscosity","0.")
 CALL prms%CreateRealOption(   "s23", "stress tensor scaling (normally 2/3)","0.6666666666666667")
@@ -95,8 +95,8 @@ CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of G
 CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms.",&
                                                  ".FALSE.")
 #endif /*PP_GLM*/
-CALL prms%CreateRealOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization"&
-                           ,multiple=.TRUE.)
+CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization" &
+                                ,multiple=.TRUE.)
 CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "1: Lax-Friedrichs, "//&
                                            "2: HLLC, "//&
@@ -173,12 +173,11 @@ KappaM2  =Kappa-2.
 sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
-R=GETREAL('R','287.058')
 !permeability
 mu_0    =GETREAL('mu_0','1.')
 smu_0  = 1./(mu_0)
 s2mu_0  =0.5*smu_0
-#ifdef PARABOLIC
+#if PARABOLIC
 !resistivity
 eta    =GETREAL('eta','0.') 
 etasmu_0 = eta*smu_0 
@@ -231,8 +230,15 @@ IF(nRefState .GT. 0)THEN
   ALLOCATE(RefStatePrim(nRefState,PP_nVar))
   ALLOCATE(RefStateCons(nRefState,PP_nVar))
   DO i=1,nRefState
-    RefStatePrim(i,:)  = GETREALARRAY('RefState',PP_nVar)
+    RefStatePrim(i,:)  = GETREALARRAY('RefState',8)
+#ifdef PP_GLM
+    RefStatePrim(i,9)  =0.
+#endif 
     CALL PrimToCons(RefStatePrim(i,:),RefStateCons(i,:))
+    IF(RefStateCons(i,5).LT.0.)THEN
+      CALL abort(__STAMP__, &
+          "Refstate has negative energy",i,RefStateCons(i,5))
+    END IF !neg. Energy
   END DO
 END IF
 
@@ -845,14 +851,13 @@ SUBROUTINE CalcSource(Ut,tIn)
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc !PP_N
 USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
-USE MOD_Equation_Vars, ONLY:sKappaM1,Kappa,KappaM1,AdvVel
+USE MOD_Equation_Vars, ONLY:Kappa,KappaM1,AdvVel
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
 #ifdef PP_GLM
-USE MOD_Equation_Vars, ONLY:smu_0
-USE MOD_Equation_Vars, ONLY:GLM_ch,GLM_scr
+USE MOD_Equation_Vars, ONLY:GLM_scr
 USE MOD_Equation_Vars, ONLY:DivBSource
 USE MOD_DG_Vars,       ONLY:U
 #endif /*PP_GLM*/
@@ -882,7 +887,7 @@ CASE(4) ! navierstokes exact function
   tmp(3)=IniAmplitude*Omega*KappaM1  
   tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a) 
   tmp(5)=IniAmplitude*(3.*Omega*Kappa-a)
-#ifdef PARABOLIC
+#if PARABOLIC
   tmp(6)=3.*mu*Kappa*Omega*Omega/Pr
 #else
   tmp(6)=0.
@@ -904,7 +909,7 @@ CASE(4) ! navierstokes exact function
   END DO ! iElem
 CASE(5) ! mhd exact function, KAPPA==2!!!
   Omega=PP_Pi*IniFrequency
-#ifdef PARABOLIC
+#if PARABOLIC
   tmp(1)=6*mu/Pr
 #endif
   DO iElem=1,nElems
@@ -920,7 +925,7 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
       Ut_src(5  )   =  rho_x + 12.*rho*rho_x
       Ut_src(6  )   =  rho_x 
       Ut_src(7  )   = -rho_x
-#ifdef PARABOLIC
+#if PARABOLIC
       Ut_src(5  )   =-tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
       Ut_src(6  )   =-3*eta*rho_xx 
       Ut_src(7  )   = 3*eta*rho_xx
@@ -931,7 +936,7 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
   END DO ! iElem
 CASE(6) ! case 5 rotated 
   Omega=PP_Pi*IniFrequency
-#ifdef PARABOLIC
+#if PARABOLIC
   tmp(1)=6*mu/Pr
 #endif
   DO iElem=1,nElems
@@ -948,7 +953,7 @@ CASE(6) ! case 5 rotated
       Ut_src(5)   =  rho_x + 12.*rho*rho_x
       Ut_src(6)   =  rho_x 
       Ut_src(8)   =  -rho_x
-#ifdef PARABOLIC
+#if PARABOLIC
       Ut_src(5)   = Ut_src(5)   -tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
       Ut_src(6)   = Ut_src(6)   -3*eta*rho_xx 
       Ut_src(8)   = Ut_src(8)   +3*eta*rho_xx
