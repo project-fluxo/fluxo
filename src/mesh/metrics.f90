@@ -148,7 +148,6 @@ CALL GetDerivativeMatrix(PP_N  , NodeTypeGL  , DGL_N)
 CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 
 ! Outer loop over all elements
-detJac_Ref=0.
 DO iElem=1,nElems
   !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
   CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_GLNGeo,NodeCoords(:,:,:,:,iElem) ,XGL_Ngeo               )
@@ -173,6 +172,7 @@ DO iElem=1,nElems
   CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,2,:,:,:),dX_NgeoRef(:,2,:,:,:))
   CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,3,:,:,:),dX_NgeoRef(:,3,:,:,:))
   !detJac_Ref(:,:,:,:,iElem)=0. !set above
+  detJac_Ref(1,:,:,:,iElem)=0.
   DO k=0,NgeoRef; DO j=0,NgeoRef; DO i=0,NgeoRef
     ASSOCIATE(dX_Ngeo_R => dX_NgeoRef(:,:,i,j,k))
     detJac_Ref(1,i,j,k,iElem)=detJac_Ref(1,i,j,k,iElem) & 
@@ -181,7 +181,7 @@ DO iElem=1,nElems
                               + dX_Ngeo_R(3,1)*(dX_Ngeo_R(1,2)*dX_Ngeo_R(2,3) - dX_Ngeo_R(2,2)*dX_Ngeo_R(1,3))  
     END ASSOCIATE !dX_Ngeo_R => dX_NgeoRef
   END DO; END DO; END DO !i,j,k=0,NgeoRef
-
+!
   ! projection detJacref from NgeoRef to N (mean value=Volume independant of the polynomial degree)
   CALL ChangeBasis3D(1,NgeoRef,PP_N,Vdm_NgeoRef_N,DetJac_Ref(:,:,:,:,iElem),DetJac_N)
 
@@ -223,7 +223,6 @@ DO iElem=1,nElems
   END IF !N>=Ngeo
   !save to covar array
 
-  JaGL_N=0.
   IF(crossProductMetrics)THEN
     ! exact (cross-product) form
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -257,19 +256,18 @@ DO iElem=1,nElems
     ! Metrics are the curl of R:  Ja(:)^nn = -(curl R_GL(:,nn))
     ! JaGL_N(dd,nn)= -[d/dxi_(dd+1) RGL(dd+2,nn) - d/dxi_(dd+2) RGL(dd+1,nn) ]
     !              =   d/dxi_(dd+2) RGL(dd+1,nn) - d/dxi_(dd+1) RGL(dd+2,nn) 
+    JaGL_N=0.
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ASSOCIATE(JaGL => JaGL_N(:,:,i,j,k))
       DO q=0,PP_N
-        JaGL(1,:)=JaGL(1,:) - DGL_N(j,q)*R_GL_N(3,:,i,q,k)
-        JaGL(2,:)=JaGL(2,:) - DGL_N(k,q)*R_GL_N(1,:,i,j,q)
-        JaGL(3,:)=JaGL(3,:) - DGL_N(i,q)*R_GL_N(2,:,q,j,k)
+        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) - DGL_N(j,q)*R_GL_N(3,:,i,q,k)
+        JaGL_N(2,:,i,j,k)=JaGL_N(2,:,i,j,k) - DGL_N(k,q)*R_GL_N(1,:,i,j,q)
+        JaGL_N(3,:,i,j,k)=JaGL_N(3,:,i,j,k) - DGL_N(i,q)*R_GL_N(2,:,q,j,k)
       END DO!q=0,PP_N
       DO q=0,PP_N
-        JaGL(1,:)=JaGL(1,:) + DGL_N(k,q)*R_GL_N(2,:,i,j,q) 
-        JaGL(2,:)=JaGL(2,:) + DGL_N(i,q)*R_GL_N(3,:,q,j,k) 
-        JaGL(3,:)=JaGL(3,:) + DGL_N(j,q)*R_GL_N(1,:,i,q,k) 
+        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) + DGL_N(k,q)*R_GL_N(2,:,i,j,q) 
+        JaGL_N(2,:,i,j,k)=JaGL_N(2,:,i,j,k) + DGL_N(i,q)*R_GL_N(3,:,q,j,k) 
+        JaGL_N(3,:,i,j,k)=JaGL_N(3,:,i,j,k) + DGL_N(j,q)*R_GL_N(1,:,i,q,k) 
       END DO!q=0,PP_N
-      END ASSOCIATE !JaGL => JaGL_N
 ! same with only one loop, gives different roundoff ...
 !      DO q=0,PP_N
 !        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) - DGL_N(j,q)*R_GL_N(3,:,i,q,k) + DGL_N(k,q)*R_GL_N(2,:,i,j,q)

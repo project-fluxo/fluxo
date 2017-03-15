@@ -239,6 +239,7 @@ USE MOD_Mesh_Vars, ONLY: Elem_xGP,nElems
 USE MOD_Mesh_Vars, ONLY: dXGL_N,Vdm_GLN_N
 USE MOD_DG_Vars,   ONLY: D
 USE MOD_Basis,     ONLY: INV33
+!!!USE MOD_output,    ONLY: VisualizeAny
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -250,14 +251,18 @@ REAL,INTENT(IN   )              :: Bexact(3,0:PP_N,0:PP_N,0:PP_N,nElems)
 REAL,INTENT(OUT)                :: Bdivfree(3,0:PP_N,0:PP_N,0:PP_N,nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER                         :: i,j,k,l,iElem
-REAL                            :: dAdxi(3),dAdeta(3),dAdzeta(3)
-REAL                            :: B_f,B_g,B_h
-REAL                            :: aCov(3,0:PP_N,0:PP_N,0:PP_N,3)  ! last index a_1, a_2, a_3, first index x,y,z
-REAL                            :: APotCov(3,0:PP_N,0:PP_N,0:PP_N)
-REAL                            :: divB(0:PP_N,0:PP_N,0:PP_N)
-REAL                            :: JBdivfree(1:3),InvJacMat(3,3),JacMat(3,3)
-REAL                            :: maxDivB,maxBdiff(3),maxBex(3)
+INTEGER             :: i,j,k,l,iElem
+REAL                :: dAdxi(3),dAdeta(3),dAdzeta(3)
+REAL                :: B_f,B_g,B_h
+REAL                :: aCov(3,0:PP_N,0:PP_N,0:PP_N,3)  ! last index a_1, a_2, a_3, first index x,y,z
+REAL                :: APotCov(3,0:PP_N,0:PP_N,0:PP_N)
+REAL                :: divB(0:PP_N,0:PP_N,0:PP_N)
+REAL                :: JBdivfree(1:3),InvJacMat(3,3),JacMat(3,3)
+REAL                :: maxDivB,maxBdiff(3),maxBex(3)
+!!!INTEGER             :: nTmp=12
+!!!REAL                :: Utmp(12,0:PP_N,0:PP_N,0:PP_N,nElems)
+!!!CHARACTER(LEN=255)  :: VarNamesTmp(12)
+!!!CHARACTER(LEN=255)  :: FileTypeStr
 !==================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
 
@@ -321,14 +326,23 @@ DO iElem=1,nElems
     JBdivfree(2)=(dAdzeta(1)-dAdxi(  3))
     JBdivfree(3)=(dAdxi(  2)-dAdeta( 1))
     !cartesian components 1/J(sum_i JB^i*a_i))
-    InvJacMat(:,1)=Metrics_ftilde(:,i,j,k,iElem)
-    InvJacMat(:,2)=Metrics_gtilde(:,i,j,k,iElem)
-    InvJacMat(:,3)=Metrics_htilde(:,i,j,k,iElem)
+    InvJacMat(1,:)=Metrics_ftilde(:,i,j,k,iElem)
+    InvJacMat(2,:)=Metrics_gtilde(:,i,j,k,iElem)
+    InvJacMat(3,:)=Metrics_htilde(:,i,j,k,iElem)
     CALL INV33(InvJacMat,JacMat) !JacMat=(InvJacMat)^-1
     Bdivfree(:,i,j,k,iElem)= MATMUL(JacMat,JBdivfree(:))
   END DO; END DO; END DO!i,j,k
   
 END DO !iElem
+
+!!!TEST
+!!!VarNamesTmp(1:3)=(/'acov1X','acov1Y','acov1Z'/)
+!!!VarNamesTmp(4:6)=(/'acov2X','acov2Y','acov2Z'/)
+!!!VarNamesTmp(7:9)=(/'acov3X','acov3Y','acov3Z'/)
+!!!VarNamesTmp(10:12)=(/'ApotX','ApotY','ApotZ'/)
+!!!Utmp(10:12,:,:,:,:)=Apot
+!!!FileTypeStr='DEBUG_APOT'
+!!!CALL VisualizeAny(0.,nTmp,PP_N,Elem_xGP,Utmp,FileTypeStr,VarNamesTmp)
 
 maxDivB=0.
 !CHECK STRONG DIVERGENCE div B = 1/J sum_i d/dxi^i (JB^i)
@@ -681,7 +695,9 @@ LOGICAL            :: exists
   IF(.NOT.exists) CALL Abort(__STAMP__, &
           'ERROR: DG_Solution does not exist in Statefile: '//TRIM(Statefile))
   Ueq(1:8,:,:,:,:)=U_HDF5(1:8,:,:,:,:)
+#ifdef PP_GLM
   Ueq(9,:,:,:,:)=0. !reset psi 
+#endif /*PP_GLM*/
 END SUBROUTINE ReadEquilibriumFromState 
 
 END MODULE MOD_EquilibriumState

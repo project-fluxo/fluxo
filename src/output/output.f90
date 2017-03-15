@@ -49,6 +49,10 @@ INTERFACE Visualize
   MODULE PROCEDURE Visualize
 END INTERFACE
 
+INTERFACE VisualizeAny
+  MODULE PROCEDURE VisualizeAny
+END INTERFACE
+
 INTERFACE InitOutputToFile
   MODULE PROCEDURE InitOutputToFile
 END INTERFACE
@@ -64,6 +68,7 @@ END INTERFACE
 PUBLIC:: InitOutput
 PUBLIC:: PrintStatusLine
 PUBLIC:: Visualize
+PUBLIC:: VisualizeAny
 PUBLIC:: InitOutputToFile
 PUBLIC:: OutputToFile
 PUBLIC:: FinalizeOutput
@@ -207,12 +212,12 @@ END SUBROUTINE PrintStatusLine
 !==================================================================================================================================
 !> Supersample DG dataset at (equidistant) visualization points and output to file.
 !> Currently only Paraview binary format is supported.
-!> Tecplot support has been removed due to licensing issues (possible GPL incompatibility).
 !==================================================================================================================================
 SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
+USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
 USE MOD_Equation_Vars,ONLY:StrVarNames
 #if defined(linearscalaradvection)
 USE MOD_Equation      ,ONLY: ExactFunc
@@ -220,11 +225,10 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 #elif (defined(mhd) || defined(navierstokes))
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
-USE MOD_Output_Vars,ONLY:ProjectName,OutputFormat
+USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
-USE MOD_VTK        ,ONLY:WriteDataToVTK3D
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -237,7 +241,6 @@ LOGICAL,OPTIONAL,INTENT(IN) :: PrimVisuOpt
 INTEGER                       :: iElem
 REAL,ALLOCATABLE              :: Coords_NVisu(:,:,:,:,:) 
 REAL,ALLOCATABLE              :: U_NVisu(:,:,:,:,:)
-CHARACTER(LEN=255)            :: FileString
 CHARACTER(LEN=255)            :: FileTypeStr
 LOGICAL                       :: PrimVisu
 #if defined (linearscalaradvection)
@@ -303,18 +306,75 @@ DO iElem=1,nElems
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
 END DO !iElem
+CALL VisualizeAny(OutputTime,nOutvars,Nvisu,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
+DEALLOCATE(U_NVisu)
+DEALLOCATE(Coords_NVisu)
+END SUBROUTINE Visualize
+
+!==================================================================================================================================
+!> Use any input to write to paraview
+!==================================================================================================================================
+SUBROUTINE VisualizeAny(OutputTime,nOutVars,NIn,CoordsIn,Uin,FileTypeStrIn,VarNamesIn)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Output_Vars,ONLY:Projectname,OutputFormat
+USE MOD_Mesh_Vars  ,ONLY:nElems
+USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
+USE MOD_ChangeBasis,ONLY:ChangeBasis3D
+USE MOD_VTK        ,ONLY:WriteDataToVTK3D
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)            :: nOutVars,Nin 
+REAL,INTENT(IN)               :: OutputTime               !< simulation time of output
+REAL,INTENT(IN)               :: CoordsIn(3,0:Nin,0:Nin,0:Nin,1:nElems) !< solution vector to be visualized
+REAL,INTENT(IN)               :: Uin(nOutVars,0:Nin,0:Nin,0:Nin,1:nElems) !< solution vector to be visualized
+CHARACTER(LEN=255),INTENT(IN) :: FileTypeStrIn
+CHARACTER(LEN=255),INTENT(IN) :: VarNamesIn(nOutVars)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                       :: iElem
+REAL,ALLOCATABLE              :: Coords_NVisu(:,:,:,:,:) 
+REAL,ALLOCATABLE              :: U_NVisu(:,:,:,:,:)
+CHARACTER(LEN=255)            :: FileString
+!==================================================================================================================================
+IF(outputFormat.LE.0) RETURN
+IF(Nin.EQ.PP_N)THEN
+  ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
+  ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))
+  U_NVisu = 0.
+  DO iElem=1,nElems
+    ! Create coordinates of visualization points
+    CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,CoordsIn(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
+    ! Interpolate solution onto visu grid
+    CALL ChangeBasis3D(nOutVars,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:nOutVars,:,:,:,iElem),U_NVisu(1:nOutVars,:,:,:,iElem))
+  END DO !iElem
+ELSEIF(Nin.EQ.Nvisu)THEN
+  !use input
+ELSE
+  STOP "PROBLEM VISUALIZE ANY"
+END IF !Nin
 
 ! Visualize data
 SELECT CASE(OutputFormat)
 CASE(OUTPUTFORMAT_PARAVIEW)
-  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStr),OutputTime))//'.vtu'
-  CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,StrVarNames_tmp,Coords_NVisu(1:3,:,:,:,:), &
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
+  IF(Nin.EQ.PP_N)THEN
+    CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
                                 U_NVisu,TRIM(FileString))
+  ELSEIF(Nin.EQ.Nvisu)THEN
+    CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,:), &
+                                Uin,TRIM(FileString))
+  END IF!Nin
 END SELECT
 
-DEALLOCATE(U_NVisu)
-DEALLOCATE(Coords_NVisu)
-END SUBROUTINE Visualize
+IF(Nin.EQ.PP_N)THEN
+  DEALLOCATE(U_Nvisu)
+  DEALLOCATE(Coords_NVisu)
+END IF!Nin
+
+END SUBROUTINE VisualizeAny
 
 
 !==================================================================================================================================

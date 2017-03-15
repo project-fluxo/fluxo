@@ -70,7 +70,7 @@ REAL,ALLOCATABLE   ::  buf2(:,:,:,:,:)
 #endif /*MPI*/
 INTEGER            :: nElems_glob(0:nProcessors-1)
 !==================================================================================================================================
-SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')"   WRITE 3D DATA TO VTX XML BINARY (VTU) FILE..."
+SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')"   WRITE 3D DATA TO VTX XML BINARY FILE: " //TRIM(FileString)//" ..."
 
 NPlot_p1_3=(NPlot+1)**3
 NPlot_p1_2=(NPlot+1)**2
