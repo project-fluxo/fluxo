@@ -90,7 +90,8 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars
 USE MOD_HDF5_Input
-USE MOD_Interpolation_Vars, ONLY:InterpolationInitIsDone
+USE MOD_Interpolation_Vars, ONLY:NodeType,NodeTypeGL,InterpolationInitIsDone
+USE MOD_Interpolation,      ONLY:GetVandermonde
 USE MOD_Mesh_ReadIn,        ONLY:readMesh
 USE MOD_Prepare_Mesh,       ONLY:setLocalSideIDs,fillMeshInfo
 USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR,GETREAL,GETINT
@@ -231,10 +232,14 @@ IF(GETLOGICAL('meshdeform','.FALSE.'))THEN
 END IF
 
 ! volume data
+ALLOCATE(Vdm_GLN_N(0:PP_N,0:PP_N))
+ALLOCATE(Vdm_N_GLN(0:PP_N,0:PP_N))
+CALL GetVandermonde(    PP_N, NodeTypeGL , PP_N, NodeType, Vdm_GLN_N , Vdm_N_GLN , modal=.FALSE. )
 ALLOCATE(      Elem_xGP(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+ALLOCATE(dXGL_N      (3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
 NGeoRef=3*NGeo ! build jacobian at higher degree
 ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
@@ -289,6 +294,9 @@ SDEALLOCATE(Elem_xGP)
 SDEALLOCATE(Metrics_fTilde)
 SDEALLOCATE(Metrics_gTilde)
 SDEALLOCATE(Metrics_hTilde)
+SDEALLOCATE(dXGL_N)
+SDEALLOCATE(Vdm_GLN_N)
+SDEALLOCATE(Vdm_N_GLN)
 SDEALLOCATE(sJ)
 SDEALLOCATE(detJac_Ref)
 

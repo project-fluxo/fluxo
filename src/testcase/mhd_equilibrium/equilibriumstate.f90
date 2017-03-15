@@ -236,7 +236,9 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars, ONLY: sJ,Metrics_ftilde,Metrics_gtilde,Metrics_htilde
 USE MOD_Mesh_Vars, ONLY: Elem_xGP,nElems
+USE MOD_Mesh_Vars, ONLY: dXGL_N,Vdm_GLN_N
 USE MOD_DG_Vars,   ONLY: D
+USE MOD_Basis,     ONLY: INV33
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -254,6 +256,7 @@ REAL                            :: B_f,B_g,B_h
 REAL                            :: aCov(3,0:PP_N,0:PP_N,0:PP_N,3)  ! last index a_1, a_2, a_3, first index x,y,z
 REAL                            :: APotCov(3,0:PP_N,0:PP_N,0:PP_N)
 REAL                            :: divB(0:PP_N,0:PP_N,0:PP_N)
+REAL                            :: JBdivfree(1:3),InvJacMat(3,3),JacMat(3,3)
 REAL                            :: maxDivB,maxBdiff(3),maxBex(3)
 !==================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
@@ -288,20 +291,15 @@ SWRITE(UNIT_stdOut,'(A)') ' COMPUTE B FROM POTENTIAL...'
 
 Bdivfree=0.
 DO iElem=1,nElems
-  !compute covariant vectors
-  aCov=0.
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    DO l=0,PP_N
-      aCov(:,i,j,k,1) = aCov(:,i,j,k,1) +D(i,l)*Elem_xGP(:,l,j,k,iElem)
-      aCov(:,i,j,k,2) = aCov(:,i,j,k,2) +D(j,l)*Elem_xGP(:,i,l,k,iElem)
-      aCov(:,i,j,k,3) = aCov(:,i,j,k,3) +D(k,l)*Elem_xGP(:,i,j,l,iElem)
-    END DO !l
-  END DO; END DO; END DO!i,j,k
-!  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!    aCov(:,i,j,k,1) = sJ(i,j,k,iElem)*CROSS(Metrics_gtilde(:,i,j,k,iElem),Metrics_htilde(:,i,j,k,iElem))
-!    aCov(:,i,j,k,2) = sJ(i,j,k,iElem)*CROSS(Metrics_htilde(:,i,j,k,iElem),Metrics_ftilde(:,i,j,k,iElem))
-!    aCov(:,i,j,k,3) = sJ(i,j,k,iElem)*CROSS(Metrics_ftilde(:,i,j,k,iElem),Metrics_gtilde(:,i,j,k,iElem))
-!  END DO; END DO; END DO!i,j,k
+#if (PP_NodeType==1)
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N ,dXGL_N(1,:,:,:,:,iElem) ,aCov(:,:,:,:,1))
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N ,dXGL_N(2,:,:,:,:,iElem) ,aCov(:,:,:,:,2))
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N ,dXGL_N(3,:,:,:,:,iElem) ,aCov(:,:,:,:,3))
+#elif (PP_NodeType==2)
+  aCov(:,:,:,:,1)=dXGL_N(1,:,:,:,:,iElem)
+  aCov(:,:,:,:,2)=dXGL_N(2,:,:,:,:,iElem)
+  aCov(:,:,:,:,3)=dXGL_N(3,:,:,:,:,iElem)
+#endif /*PP_NodeType*/
   
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     ApotCov(1,i,j,k)=SUM(Apot(:,i,j,k,iElem)*aCov(:,i,j,k,1))
@@ -319,13 +317,15 @@ DO iElem=1,nElems
       dAdeta(:)  = dAdeta(:)  +D(j,l)*ApotCov(:,i,l,k)
       dAdzeta(:) = dAdzeta(:) +D(k,l)*ApotCov(:,i,j,l)
     END DO !l
-    Bdivfree(1,i,j,k,iElem)=(dAdeta( 3)-dAdzeta(2))
-    Bdivfree(2,i,j,k,iElem)=(dAdzeta(1)-dAdxi(  3))
-    Bdivfree(3,i,j,k,iElem)=(dAdxi(  2)-dAdeta( 1))
+    JBdivfree(1)=(dAdeta( 3)-dAdzeta(2))
+    JBdivfree(2)=(dAdzeta(1)-dAdxi(  3))
+    JBdivfree(3)=(dAdxi(  2)-dAdeta( 1))
     !cartesian components 1/J(sum_i JB^i*a_i))
-    Bdivfree(:,i,j,k,iElem)= (  Bdivfree(1,i,j,k,iElem)*aCov(:,i,j,k,1) &
-                              + Bdivfree(2,i,j,k,iElem)*aCov(:,i,j,k,2) &
-                              + Bdivfree(3,i,j,k,iElem)*aCov(:,i,j,k,3) )*sJ(i,j,k,iElem)
+    InvJacMat(:,1)=Metrics_ftilde(:,i,j,k,iElem)
+    InvJacMat(:,2)=Metrics_gtilde(:,i,j,k,iElem)
+    InvJacMat(:,3)=Metrics_htilde(:,i,j,k,iElem)
+    CALL INV33(InvJacMat,JacMat) !JacMat=(InvJacMat)^-1
+    Bdivfree(:,i,j,k,iElem)= MATMUL(JacMat,JBdivfree(:))
   END DO; END DO; END DO!i,j,k
   
 END DO !iElem
@@ -425,7 +425,7 @@ CASE(10071) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[
     END DO; END DO; END DO !i,j,k
   END DO ! iElem=1,nElems
 
-CASE(10090,10091) !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2008), current Jz in z direction is given:
+CASE(10090,10091,10092)!cylindrical equil. for ideal MHD for current hole (Czarny, JCP, 2008), current Jz in z direction is given:
          ! cylindrical domain r[0,1], z[0,20] (from q(r=1)=4.4 =2*pi*B0/(Lz*Bphi(r=1)) => B0/Lz=0.364 B0~7.44, L0~20.)
          ! Jz=j1*(1-r^4)-j2*(1-r^2)^8, j1=0.2, j2=0.266
          ! from J=rotB (Br=0) follows

@@ -80,6 +80,7 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars,     ONLY:NGeo,NgeoRef,nElems,offsetElem,crossProductMetrics
 USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
+USE MOD_Mesh_Vars,     ONLY:Vdm_GLN_N,dXGL_N
 USE MOD_Mesh_Vars,     ONLY:NodeCoords,Elem_xGP
 USE MOD_Interpolation_Vars
 USE MOD_Interpolation, ONLY:GetVandermonde,GetNodesAndWeights,GetDerivativeMatrix
@@ -99,7 +100,6 @@ REAL    :: DetJac_N( 1,0:PP_N,   0:PP_N,   0:PP_N)
 REAL    :: XGL_N(      3,  0:PP_N,0:PP_N,0:PP_N)          ! mapping X(xi) P\in N
 REAL    :: XGL_Ngeo(   3,  0:Ngeo,0:Ngeo,0:Ngeo)          ! mapping X(xi) P\in Ngeo
 REAL    :: dXGL_Ngeo(  3,3,0:Ngeo,0:Ngeo,0:Ngeo)          ! jacobi matrix on GL Ngeo
-REAL    :: dXGL_N(     3,3,0:PP_N,0:PP_N,0:PP_N) 
 REAL    :: dX_NgeoRef( 3,3,0:NgeoRef,0:NgeoRef,0:NgeoRef) ! jacobi matrix on SOL NgeoRef
 
 REAL    :: R_GL_N(     3,3,0:PP_N,0:PP_N,0:PP_N)    ! buffer for metric terms, uses XGL_N,dXGL_N
@@ -115,7 +115,6 @@ REAL    :: Vdm_EQNgeo_GLNgeo( 0:Ngeo   ,0:Ngeo)
 REAL    :: Vdm_GLNGeo_NgeoRef(0:NgeoRef,0:Ngeo)
 REAL    :: Vdm_NgeoRef_N(     0:PP_N   ,0:NgeoRef)
 REAL    :: Vdm_GLNGeo_GLN(    0:PP_N   ,0:Ngeo)
-REAL    :: Vdm_GLN_N(         0:PP_N   ,0:PP_N)
 
 ! 3D Vandermonde matrices and lengths,nodes,weights
 REAL    :: xiRef( 0:NgeoRef),wBaryRef( 0:NgeoRef)
@@ -146,7 +145,6 @@ CALL GetVandermonde(    Ngeo   , NodeTypeGL  , PP_N    , NodeTypeGL, Vdm_GLNgeo_
 CALL GetDerivativeMatrix(PP_N  , NodeTypeGL  , DGL_N)
 
 ! 2.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
-CALL GetVandermonde(    PP_N   , NodeTypeGL  , PP_N    , NodeType,   Vdm_GLN_N         , modal=.FALSE.)
 CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 
 ! Outer loop over all elements
@@ -209,26 +207,27 @@ DO iElem=1,nElems
   ! N>=Ngeo: interpolate from dXGL_Ngeo (default)
   ! N< Ngeo: directly derive XGL_N
   IF(PP_N.GE.NGeo)THEN !compute first derivative on Ngeo and then interpolate
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,1,:,:,:),dXGL_N(:,1,:,:,:))
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,2,:,:,:),dXGL_N(:,2,:,:,:))
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,3,:,:,:),dXGL_N(:,3,:,:,:))
+    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,1,:,:,:),dXGL_N(:,1,:,:,:,iElem))
+    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,2,:,:,:),dXGL_N(:,2,:,:,:,iElem))
+    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,3,:,:,:),dXGL_N(:,3,:,:,:,iElem))
   ELSE  !N<Ngeo: first interpolate and then compute derivative (important if curved&periodic)
-    dXGL_N=0.
+    dXGL_N(:,:,:,:,:,iElem)=0.
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       ! Matrix-vector multiplication
       DO ll=0,PP_N
-        dXGL_N(1,:,i,j,k)=dXGL_N(1,:,i,j,k) + DGL_N(i,ll)*XGL_N(:,ll,j,k)
-        dXGL_N(2,:,i,j,k)=dXGL_N(2,:,i,j,k) + DGL_N(j,ll)*XGL_N(:,i,ll,k)
-        dXGL_N(3,:,i,j,k)=dXGL_N(3,:,i,j,k) + DGL_N(k,ll)*XGL_N(:,i,j,ll)
+        dXGL_N(1,:,i,j,k,iElem)=dXGL_N(1,:,i,j,k,iElem) + DGL_N(i,ll)*XGL_N(:,ll,j,k)
+        dXGL_N(2,:,i,j,k,iElem)=dXGL_N(2,:,i,j,k,iElem) + DGL_N(j,ll)*XGL_N(:,i,ll,k)
+        dXGL_N(3,:,i,j,k,iElem)=dXGL_N(3,:,i,j,k,iElem) + DGL_N(k,ll)*XGL_N(:,i,j,ll)
       END DO !l=0,N
     END DO; END DO; END DO !i,j,k=0,N
   END IF !N>=Ngeo
+  !save to covar array
 
   JaGL_N=0.
   IF(crossProductMetrics)THEN
     ! exact (cross-product) form
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k))
+      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k,iElem))
       ! exact (cross-product) form
       ! Ja(:)^nn = ( d/dxi_(nn+1) XGL_N(:) ) x (d/xi_(nn+2) XGL_N(:))
       !
@@ -249,7 +248,7 @@ DO iElem=1,nElems
     !
     !R_GL_N(dd,nn)=1/2*( XGL_N(nn+2)* d/dxi_dd XGL_N(nn+1) - XGL_N(nn+1)* d/dxi_dd XGL_N(nn+2))
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k))
+      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k,iElem))
       R_GL_N(:,1,i,j,k)=0.5*(XGL_N(3,i,j,k)*dXGL(:,2) - XGL_N(2,i,j,k)*dXGL(:,3) )
       R_GL_N(:,2,i,j,k)=0.5*(XGL_N(1,i,j,k)*dXGL(:,3) - XGL_N(3,i,j,k)*dXGL(:,1) )
       R_GL_N(:,3,i,j,k)=0.5*(XGL_N(2,i,j,k)*dXGL(:,1) - XGL_N(1,i,j,k)*dXGL(:,2) ) 

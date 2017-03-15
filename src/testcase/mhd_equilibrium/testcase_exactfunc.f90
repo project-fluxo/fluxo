@@ -211,9 +211,60 @@ CASE(10091) !like 90, BUT WITH REAL BETA!!
                +11747978409024.*r2( 4) -4854306857400.*r2( 3) +1285266977280.*r2( 2)  -138278780640.*r2( 1) &
                +5718295440.)/5.25096E+12
   IF(PRESENT(Apot))THEN
-    Apot(1:2) = Prim(8)*0.5*(/-x(2),x(1)/)
+    Apot(1:2) = 0. !Prim(8)*0.5*(/-x(2),x(1)/)
     Apot(3)   = r2(1)*(    5320.*r2(8)  -53865.*r2(7) +246240.*r2(6)-670320.*r2(5) & 
                        +1206576.*r2(4)-1508220.*r2(3)+1376640.*r2(2)-861840.*r2(1)+106920.)/6.48E+6
+  END IF
+  Prim(6)=-x(2)*Bphi  !/r
+  Prim(7)= x(1)*Bphi  !/r
+  Prim(5)=Prim(5)+smu_0*dp
+  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  & 
+                'negative pressure in exactfunc 90 !',999,prim(5))
+  !disturbance of the velocity in xy plane  (scaled with (1-r^2)^2 and IniDisturbance) 
+  IF(.NOT.EvalEquilibrium) THEN
+    Prim(2)=IniDisturbance*(1.-r2(1))**2
+    Prim(3)=x(2)*Prim(2)
+  END IF
+              
+  CALL PrimToCons(Prim,Resu)
+CASE(10092) !like 90, BUT WITH REAL BETA!!
+         !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2008), current Jz in z direction is given:
+         ! cylindrical domain r[0,1], z[0,20] (from q(r=1)=4.4 =2*pi*B0/(Lz*Bphi(r=1)) => B0/Lz=0.364 B0~7.44, L0~20.)
+         ! Jz=q0*(1-r^4)-q1*(1-r^2)^8
+  q0=0.2
+  q1=0. !0.266
+         ! from J=rotB (Br=0) follows
+         ! Bphi(r) =mu_0 1/r  \int_0^r r*Jc dr
+         ! pressure difference from gradp=J x B:
+         ! dp(r) = -smu_0 ( 0.5*Bphi^2 + \int_0^r Bphi^2/r dr)
+  Prim(:)=0.
+  Prim(1)=1. 
+  dp = (68612544.*q0**2-40824446.*q0*q1+8842385.*q1**2)/4.4108064E+8 !dpmax=-dp(r=1)
+  Prim(5)=10.*dp/9. ! =pmax, pmin=p(r=1)=pmax-dp and pmax/pmin ~=10
+  Prim(8)=SQRT(2*mu_0*Prim(5)*1.0E4) !beta=p/(0.5*smu0 B^2) =1.0E-04
+
+  r2(1)=SUM(x(1:2)**2)
+  r=SQRT(r2(1))
+  DO i=2,16
+    r2(i)=r2(i-1)*r2(1)
+  END DO  
+  Bphi=-mu_0*(9.*(q1-q0)-36.*q1*r2(1)+(84.*q1+3.*q0)*r2(2)-126.*q1*r2(3) &
+              +126.*q1*r2(4)-84.*q1*r2(5)+36.*q1*r2(6)-9.*q1*r2(7)+q1*r2(8))/18. !*r 
+
+
+  dp=-r2(1)*(       (110270160.*q1**2-220540320.*q0*q1+110270160.*q0**2)+(661620960.*q0*q1-661620960.*q1**2)*r2( 1) &
+                                                      +(2548465920.*q1**2-1323241920.*q0*q1-49008960.*q0**2)*r2( 2) &
+         +(1745944200.*q0*q1-7075668600.*q1**2)*r2( 3)+(15026147136.*q1**2-1440863424.*q0*q1+7351344.*q0**2)*r2( 4) &
+         +(600359760.*q0*q1-25215109920.*q1**2)*r2( 5)                 +(34026220800.*q1**2+84015360.*q0*q1)*r2( 6) &
+      +((-37229962770.*q1**2)-261891630.*q0*q1)*r2( 7)                +(33094661600.*q1**2+149749600.*q0*q1)*r2( 8) &
+       +((-23828156352.*q1**2)-40432392.*q0*q1)*r2( 9)                  +(13784883840.*q1**2+4455360.*q0*q1)*r2(10)&
+                             -6318071760.*q1**2*r2(11)     +2243102400.*q1**2*r2(12)       -595108800.*q1**2*r2(13)&
+                              +111086976.*q1**2*r2(14)       -13018005.*q1**2*r2(15)          +720720.*q1**2*r2(16))/4.4108064E+8
+
+  IF(PRESENT(Apot))THEN
+    Apot(1:2) = 0. !Prim(8)*0.5*(/-x(2),x(1)/)
+    Apot(3)   = r2(1)*((22680.*q1-22680.*q0)-45360.*q1*r2(1)+(70560.*q1+2520.*q0)*r2(2)-79380.*q1*r2(3) &
+                           +63504.*q1*r2(4)-35280.*q1*r2(5)+12960.*q1*r2(6)-2835.*q1*r2(7)+280.*q1*r2(8))/9.072E+4
   END IF
   Prim(6)=-x(2)*Bphi  !/r
   Prim(7)= x(1)*Bphi  !/r

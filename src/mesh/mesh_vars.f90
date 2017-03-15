@@ -48,8 +48,12 @@ LOGICAL          :: isMortarMesh               !< Marker whether non-conforming 
 REAL,ALLOCATABLE :: Metrics_fTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes f (1:3,0:N,0:N,0:N,nElems)
 REAL,ALLOCATABLE :: Metrics_gTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes g (1:3,0:N,0:N,0:N,nElems)
 REAL,ALLOCATABLE :: Metrics_hTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes h (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE :: dXGL_N      (:,:,:,:,:,:)    !< covariant Metric tensor, first dimension deriviatves d/dxi, d/deta, d/dzeta
+                                                 !< second dimension X,Y,Z, on Gauss-Lobatto points!!!
 REAL,ALLOCATABLE :: detJac_Ref(:,:,:,:,:)        !< determinant of the mesh Jacobian for each Gauss point at degree 3*NGeo
 REAL,ALLOCATABLE :: sJ(:,:,:,:)                  !< inverse of Jacobian determinent for each Gauss Point at degree N
+REAL,ALLOCATABLE :: Vdm_GLN_N(:,:)               !< Vdm to transform from GL Ngeo points to current points (gauss/GL) of deg 
+REAL,ALLOCATABLE :: Vdm_N_GLN(:,:)               !< Vdm to transform from GL Ngeo points to current points (gauss/GL) of deg 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! surface vectors
 !----------------------------------------------------------------------------------------------------------------------------------
