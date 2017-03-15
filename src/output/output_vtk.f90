@@ -12,37 +12,37 @@
 !==================================================================================================================================
 #include "defines.h"
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Module for generic data output in vtk xml fromat
 !> WARNING: WriteDataToVTK works only for POSTPROCESSING
-!===================================================================================================================================
+!==================================================================================================================================
 MODULE MOD_VTK
 ! MODULES
 IMPLICIT NONE
 PRIVATE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
-!-----------------------------------------------------------------------------------------------------------------------------------
-! Private Part ---------------------------------------------------------------------------------------------------------------------
-! Public Part ----------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
+! Private Part --------------------------------------------------------------------------------------------------------------------
+! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 INTERFACE WriteDataToVTK3D
   MODULE PROCEDURE WriteDataToVTK3D
 END INTERFACE
 
 PUBLIC::WriteDataToVTK3D
-!===================================================================================================================================
+!==================================================================================================================================
 
 CONTAINS
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Subroutine to write 3D point data to VTK format
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE WriteDataToVTK3D(NPlot,nElems,nVal,VarNames,Coord,Value,FileString)
 ! MODULES
 USE MOD_Globals
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)          :: nVal                                        !< Number of nodal output variables
 INTEGER,INTENT(IN)          :: NPlot                                       !< Number of output points .EQ. NAnalyze
@@ -51,7 +51,7 @@ REAL,INTENT(IN)             :: Coord(3,0:NPlot,0:NPlot,0:NPlot,nElems)     !< Co
 CHARACTER(LEN=*),INTENT(IN) :: VarNames(nVal)                              !< Names of all variables that will be written out
 REAL,INTENT(IN)             :: Value(nVal,0:NPlot,0:NPlot,0:NPlot,nElems)  !< Statevector
 CHARACTER(LEN=*),INTENT(IN) :: FileString                                  !< Output file name
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: i,j,k,iVal,iElem,Offset,nBytes,nVTKPoints,nVTKCells,ivtk=44
 INTEGER            :: nGlobalElems_loc
@@ -61,13 +61,15 @@ INTEGER,ALLOCATABLE:: Vertex(:,:)
 CHARACTER(LEN=35)  :: StrOffset,TempStr1,TempStr2
 CHARACTER(LEN=200) :: Buffer
 CHARACTER(LEN=1)   :: lf
+CHARACTER(LEN=255) :: tmpVarName,tmpVarNameY,tmpVarNameZ
 REAL(KIND=4)       :: FLOATdummy
+INTEGER            :: StrLen,iValVec,nValVec,nVal_loc,VecOffset(0:nVal)
 #if MPI
 INTEGER            :: iProc,nElems_proc,nElemsMax
-REAL,ALLOCATABLE   :: buf(:,:,:,:), buf2(:,:,:,:,:)
+REAL,ALLOCATABLE   ::  buf2(:,:,:,:,:)
 #endif /*MPI*/
 INTEGER            :: nElems_glob(0:nProcessors-1)
-!===================================================================================================================================
+!==================================================================================================================================
 SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')"   WRITE 3D DATA TO VTX XML BINARY (VTU) FILE..."
 
 NPlot_p1_3=(NPlot+1)**3
@@ -83,9 +85,8 @@ IF(MPIROOT)THEN
   ! here comes the MPI stuff
   nGlobalElems_loc=nElems
 #if MPI
-  !ALLOCATE buffer for Root
+  !ALLOCATE receive buffer for Root
   nElemsMax=MAXVAL(nElems_glob)
-  ALLOCATE(buf(   0:Nplot,0:Nplot,0:Nplot,nElemsMax))
   ALLOCATE(buf2(3,0:Nplot,0:Nplot,0:Nplot,nElemsMax))
   nGlobalElems_loc=SUM(nElems_glob)
 #endif /*MPI*/
@@ -110,12 +111,45 @@ IF(MPIROOT)THEN
   Buffer='      <PointData>'//lf;WRITE(ivtk) TRIM(Buffer)
   Offset=0
   WRITE(StrOffset,'(I16)')Offset
-  DO iVal=1,nVal
-    Buffer='        <DataArray type="Float32" Name="'//TRIM(VarNames(iVal))//'" &
-           &format="appended" offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
-    Offset=Offset+SIZEOF_F(INTdummy)+nVTKPoints*SIZEOF_F(FLOATdummy)
-    WRITE(StrOffset,'(I16)')Offset
-  END DO
+
+  !accout for vectors: 
+  ! if Variable Name ends with an X and the following have the same name with Y and Z 
+  ! then it forms a vector variable (X is omitted for the name) 
+  
+  iVal=0 !scalars
+  iValVec=0 !scalars & vectors
+  VecOffset(0)=0
+  DO WHILE(iVal.LT.nVal)
+    iVal=iVal+1
+    iValVec=iValVec+1
+    tmpVarName=TRIM(VarNames(iVal)) 
+    StrLen=LEN(TRIM(tmpVarName))
+    IF(iVal+2.LE.nVal)THEN !variable could be a vector
+      tmpVarNameY=TRIM(VarNames(iVal+1)) 
+      tmpVarNameZ=TRIM(VarNames(iVal+2)) 
+    END IF
+    IF((iVal+2.LE.nVal).AND.(INDEX(tmpVarName( StrLen:StrLen),"X").NE.0).AND. &
+       (INDEX(tmpVarNameY(:StrLen),TRIM(tmpVarName(:StrLen-1))//"Y").NE.0).AND. &
+       (INDEX(tmpVarNameZ(:StrLen),TRIM(tmpVarName(:StrLen-1))//"Z").NE.0))THEN !variable is a vector!
+      tmpVarName=tmpVarName(:StrLen-1)
+      Buffer='        <DataArray type="Float32" Name="'//TRIM(tmpVarName)//'" NumberOfComponents="3" &
+             &format="appended" offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
+      Offset=Offset+SIZEOF_F(INTdummy)+3*nVTKPoints*SIZEOF_F(FLOATdummy)
+      WRITE(StrOffset,'(I16)')Offset
+      VecOffset(iValVec)=VecOffset(iValVec-1)+3
+      iVal=iVal+2 !skip the Y & Z components
+    ELSE
+      Buffer='        <DataArray type="Float32" Name="'//TRIM(tmpVarName)//'" &
+             &format="appended" offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
+      Offset=Offset+SIZEOF_F(INTdummy)+nVTKPoints*SIZEOF_F(FLOATdummy)
+      WRITE(StrOffset,'(I16)')Offset
+      VecOffset(iValVec)=VecOffset(iValVec-1)+1
+    END IF
+  END DO !iVal <=nVal
+  nValVec=iValVec
+
+
+
   Buffer='      </PointData>'//lf;WRITE(ivtk) TRIM(Buffer)
   ! Specify cell data
   Buffer='      <CellData> </CellData>'//lf;WRITE(ivtk) TRIM(Buffer)
@@ -149,39 +183,50 @@ IF(MPIROOT)THEN
   ! Write leading data underscore
   Buffer='_';WRITE(ivtk) TRIM(Buffer)
 
-END IF
+END IF !MPIROOT
 
+#if MPI
+CALL MPI_BCAST(nValVec,1,MPI_INTEGER,0,MPI_COMM_WORLD,iError)
+CALL MPI_BCAST(vecOffset(0:nValVec),nValVec+1,MPI_INTEGER,0,MPI_COMM_WORLD,iError)
+#endif /*MPI*/
 ! Write binary raw data into append section
 ! Solution data
-DO iVal=1,nVal
-  IF(MPIroot)THEN
-    nBytes = nVTKPoints*SIZEOF_F(FLOATdummy)
-    WRITE(ivtk) nBytes,REAL(Value(iVal,:,:,:,:),4)
+nBytes = nVTKPoints*SIZEOF_F(FLOATdummy)
+DO iValVec=1,nValVec 
+  iVal    = vecOffset(iValVec-1)
+  nVal_loc= vecOffset(iValVec)-vecOffset(iValVec-1)
+  IF(MPIroot)THEN    
+    WRITE(ivtk) nVal_loc*nBytes
+    WRITE(ivtk)REAL(Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems),4)
 #if MPI
     DO iProc=1,nProcessors-1
       nElems_proc=nElems_glob(iProc)
-      CALL MPI_RECV(buf(:,:,:,1:nElems_proc),nElems_proc*NPlot_p1_3,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
-      WRITE(ivtk) REAL(buf(:,:,:,1:nElems_proc),4)
+      CALL MPI_RECV(     buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
+                           nVal_loc*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
+      WRITE(ivtk) REAL(  buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),4)
     END DO !iProc
   ELSE
-    CALL MPI_SEND(Value(iVal,:,:,:,:),nElems*NPlot_p1_3,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
+    CALL MPI_SEND(  Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
+                           nVal_loc*NPlot_p1_3*nElems,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
   END IF !MPIroot
-END DO       ! iVar
+END DO       ! iValVec=1,nValVec
 
 ! Coordinates
 IF(MPIRoot)THEN
   nBytes = nVTKPoints*SIZEOF_F(FLOATdummy) * 3
   WRITE(ivtk) nBytes
-  WRITE(ivtk) REAL(Coord(:,:,:,:,:),4)
+  WRITE(ivtk) REAL( Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems),4)
 #if MPI
   DO iProc=1,nProcessors-1
     nElems_proc=nElems_glob(iProc)
-    CALL MPI_RECV(buf2(:,:,:,:,1:nElems_proc),nElems_proc*NPlot_p1_3*3,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
-    WRITE(ivtk) REAL(buf2(:,:,:,:,1:nElems_proc),4)
+    CALL MPI_RECV(   buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
+                      3*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
+    WRITE(ivtk) REAL(buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),4)
   END DO !iProc
 ELSE
-  CALL MPI_SEND(Coord(:,:,:,:,:),nElems*NPlot_p1_3*3,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
+  CALL MPI_SEND(    Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
+                      3*NPlot_p1_3*nElems,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
 END IF !MPIroot
 
@@ -224,7 +269,6 @@ IF(MPIROOT)THEN
   CLOSE(ivtk)
   SDEALLOCATE(Vertex)
 #if MPI
-  SDEALLOCATE(buf)
   SDEALLOCATE(buf2)
 #endif /*MPI*/
 ENDIF
