@@ -64,7 +64,7 @@ CALL prms%CreateLogicalOption( 'crossProductMetrics', "Compute mesh metrics usin
                                                       "free-stream preservation is only guaranteed for N=3*NGeo.",&
                                                       '.FALSE.')
 CALL prms%CreateIntOption(     'debugmesh',           "Output file with visualization and debug information for the mesh. "//&
-                                                      "0: no visualization, 3: Paraview binary",'0')
+                                                      "0: no visualization, 1: Paraview vtk",'0')
 CALL prms%CreateStringOption(  'BoundaryName',        "Names of boundary conditions to be set (must be present in the mesh!)."//&
                                                       "For each BoundaryName a BoundaryType needs to be specified.",&
                                                       multiple=.TRUE.)

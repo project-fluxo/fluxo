@@ -120,10 +120,6 @@ END DO
 ! Tecplot format is deprecated and will probably removed in future versions
 SELECT CASE(debugMesh)
 CASE(1)
-  STOP 'Tecplot Output removed (license issues)'
-CASE(2)
-  STOP 'Tecplot Output removed (license issues)'
-CASE(3)
   CALL WriteDataToVTK3D(         NVisu,nElems,6,  VarNames,X_NVisu,debugVisu,'Debugmesh.vtu')
 END SELECT
 
