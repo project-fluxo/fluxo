@@ -1,4 +1,7 @@
 !==================================================================================================================================
+! Copyright (c) 2016 - 2017 Gregor Gassner
+! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2017 Andrew Winters
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
