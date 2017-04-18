@@ -15,20 +15,15 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Contains the routine EvalFluxTilde3D which computes the complete tranformed MHD flux f,g,h for all DOFs in one Element
-!> Contains the routine EvalDiffFluxTilde3D which computes only the diffusive part of the tranformed MHD flux f,g,h 
-!> Contains the routine EvalFlux1D_Adv which computes the Advection flux f for all DOFs of one Element side: used in Riemann_Adv
+!> Contains the routine EvalFluxTilde3D which computes the complete tranformed MHD flux f,g,h for all DOFs in one Element,
+!> the routine EvalDiffFluxTilde3D which computes only the diffusive part of the tranformed MHD flux f,g,h  ,
+!> the routine EvalFlux1D_Adv which computes the Advection flux f for all DOFs of one Element side: used in Riemann_Adv
 !==================================================================================================================================
 MODULE MOD_Flux
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 INTERFACE EvalFluxTilde3D
   MODULE PROCEDURE EvalFluxTilde3D
@@ -84,7 +79,6 @@ USE MOD_Equation_vars ,ONLY:kappasPr
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -325,7 +319,6 @@ USE MOD_Equation_Vars,ONLY:KappaM1,KappaM2,smu_0,s2mu_0
 #ifdef PP_GLM
 USE MOD_Equation_vars,ONLY:GLM_ch
 #endif 
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -382,7 +375,6 @@ USE MOD_Equation_vars,ONLY:kperp,kpar,kappaM1
 #else
 USE MOD_Equation_vars,ONLY:kappasPr
 #endif 
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -536,7 +528,6 @@ USE MOD_Equation_vars,ONLY:kappasPr
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

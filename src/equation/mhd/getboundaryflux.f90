@@ -19,13 +19,9 @@
 !==================================================================================================================================
 MODULE MOD_GetBoundaryFlux
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
 INTERFACE InitBC
   MODULE PROCEDURE InitBC
 END INTERFACE
@@ -43,8 +39,6 @@ END INTERFACE
 INTERFACE FinalizeBC
   MODULE PROCEDURE FinalizeBC
 END INTERFACE
-
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
@@ -68,7 +62,6 @@ USE MOD_Equation_Vars     ,ONLY: EquationInitIsDone
 USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -127,7 +120,6 @@ USE MOD_Equation          ,ONLY: ExactFunc
 USE MOD_Equation_Vars     ,ONLY: RefStateCons
 USE MOD_Equation_Vars     ,ONLY: IniExactFunc
 USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -210,7 +202,6 @@ USE MOD_Equation_Vars,ONLY: GLM_ch
 USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -439,7 +430,6 @@ USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: FastestWave1D
 USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -591,7 +581,6 @@ SUBROUTINE FinalizeBC()
 !==================================================================================================================================
 ! MODULES
 USE MOD_Equation_Vars,ONLY: BCData,nBCByType,BCSideID
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

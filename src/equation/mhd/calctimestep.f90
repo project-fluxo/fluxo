@@ -19,7 +19,6 @@
 !==================================================================================================================================
 MODULE MOD_CalcTimeStep
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -58,7 +57,6 @@ USE MOD_Equation_Vars,ONLY:KappaM1,kperp,kpar
 #endif /*PP_ANISO_HEAT*/
 #endif /*PARABOLIC*/
 USE MOD_TimeDisc_Vars,ONLY:CFLScale,ViscousTimeStep,dtElem
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -190,7 +188,6 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
 USE MOD_TimeDisc_Vars,ONLY:CFLScale
 USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

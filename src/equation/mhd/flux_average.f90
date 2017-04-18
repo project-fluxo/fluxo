@@ -19,14 +19,9 @@
 !==================================================================================================================================
 MODULE MOD_Flux_Average
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 INTERFACE EvalEulerFluxTilde3D
   MODULE PROCEDURE EvalEulerFluxTilde3D
@@ -75,7 +70,6 @@ USE MOD_Equation_vars ,ONLY:GLM_ch
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -213,7 +207,6 @@ USE MOD_Equation_Vars ,ONLY:kappaM1,KappaM2,s2mu_0
 #ifdef OPTIMIZED
 USE MOD_DG_Vars,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

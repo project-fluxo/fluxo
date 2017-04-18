@@ -19,14 +19,9 @@
 !==================================================================================================================================
 MODULE MOD_Equation
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
@@ -128,7 +123,6 @@ USE MOD_Riemann
 USE MOD_Flux_Average, ONLY: standardDGFluxVec
 USE MOD_Flux_Average, ONLY: standardDGFluxDealiasedMetricVec
 #endif /*PP_DiscType==2*/
-! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -289,7 +283,6 @@ SUBROUTINE FillIni(IniExactFunc_in,U_in)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -331,7 +324,6 @@ USE MOD_Equation_Vars,ONLY:IniDisturbance
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !,t
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -856,7 +848,6 @@ USE MOD_Equation_Vars, ONLY:GLM_scr
 USE MOD_Equation_Vars, ONLY:DivBSource
 USE MOD_DG_Vars,       ONLY:U
 #endif /*PP_GLM*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -986,7 +977,6 @@ END SUBROUTINE CalcSource
 SUBROUTINE FinalizeEquation()
 ! MODULES
 USE MOD_Equation_Vars,ONLY:EquationInitIsDone,RefStatePrim,RefStateCons
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
