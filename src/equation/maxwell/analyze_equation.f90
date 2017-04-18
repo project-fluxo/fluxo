@@ -20,14 +20,9 @@
 !==================================================================================================================================
 MODULE MOD_AnalyzeEquation
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 INTERFACE InitAnalyzeEquation
   MODULE PROCEDURE InitAnalyzeEquation
 END INTERFACE
@@ -56,7 +51,6 @@ SUBROUTINE DefineParametersAnalyzeEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools ,ONLY: prms
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -74,7 +68,6 @@ SUBROUTINE InitAnalyzeEquation()
 !USE MOD_Preproc
 !USE MOD_Analyze_Vars
 !USE MOD_AnalyzeEquation_Vars
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -98,7 +91,6 @@ SUBROUTINE AnalyzeEquation(Time)
 !USE MOD_Analyze_Vars
 !USE MOD_AnalyzeEquation_Vars
 !USE MOD_Restart_Vars,       ONLY: RestartTime
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -134,7 +126,6 @@ END SUBROUTINE AnalyzeEquation
 SUBROUTINE FinalizeAnalyzeEquation()
 ! MODULES
 !USE MOD_AnalyzeEquation_Vars
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES

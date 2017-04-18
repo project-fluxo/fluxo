@@ -20,13 +20,9 @@
 !==================================================================================================================================
 MODULE MOD_GetBoundaryFlux
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
 INTERFACE InitBC
   MODULE PROCEDURE InitBC
 END INTERFACE
@@ -45,7 +41,6 @@ INTERFACE FinalizeBC
   MODULE PROCEDURE FinalizeBC
 END INTERFACE
 
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
@@ -70,7 +65,6 @@ USE MOD_Equation_Vars     ,ONLY: EquationInitIsDone
 USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -128,7 +122,6 @@ USE MOD_DG_Vars      ,ONLY: U_master
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 #endif /*PARABOLIC*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN)         :: tIn       !< current time (provided by time integration scheme)

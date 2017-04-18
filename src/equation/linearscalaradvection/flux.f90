@@ -15,30 +15,25 @@
 !==================================================================================================================================
 #include "defines.h"
 
+!==================================================================================================================================
+!> Contains the routine EvalFlux3D which computes the complete flux f,g,h for all DOFs in one Element: used in volume integral
+!==================================================================================================================================
 MODULE MOD_Flux
-!==================================================================================================================================
-! Contains the routine EvalFlux3D which computes the complete flux f,g,h for all DOFs in one Element: used in volume integral
-!==================================================================================================================================
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 INTERFACE EvalFluxTilde3D
   MODULE PROCEDURE EvalFluxTilde3D
 END INTERFACE
 
-PUBLIC::EvalFluxTilde3D
 
 #if PARABOLIC
 INTERFACE EvalDiffFluxTilde3D
   MODULE PROCEDURE EvalDiffFluxTilde3D
 END INTERFACE
 
+PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalDiffFluxTilde3D
 #endif /*PARABOLIC*/
 !==================================================================================================================================
@@ -61,7 +56,6 @@ USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -141,7 +135,6 @@ USE MOD_Equation_Vars ,ONLY:DiffC
 #ifdef OPTIMIZED
 USE MOD_DG_Vars,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

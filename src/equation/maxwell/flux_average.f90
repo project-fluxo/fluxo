@@ -20,14 +20,9 @@
 !==================================================================================================================================
 MODULE MOD_Flux_Average
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 
 INTERFACE EvalEulerFluxTilde3D
   MODULE PROCEDURE EvalEulerFluxTilde3D
@@ -68,7 +63,6 @@ SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar
 USE MOD_Flux ,ONLY:EvalFluxTilde3D
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -97,7 +91,6 @@ SUBROUTINE EvalUaux(iElem,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

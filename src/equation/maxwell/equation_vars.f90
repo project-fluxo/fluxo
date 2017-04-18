@@ -20,7 +20,6 @@
 !==================================================================================================================================
 MODULE MOD_Equation_Vars
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
 SAVE

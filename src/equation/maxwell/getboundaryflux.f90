@@ -20,13 +20,9 @@
 !==================================================================================================================================
 MODULE MOD_GetBoundaryFlux
 ! MODULES
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
 INTERFACE InitBC
   MODULE PROCEDURE InitBC
 END INTERFACE
@@ -60,7 +56,6 @@ USE MOD_Equation_Vars     ,ONLY: EquationInitIsDone
 USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -118,7 +113,6 @@ USE MOD_Mesh_Vars    ,ONLY: Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -181,10 +175,8 @@ USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: t                                  !< current time
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -270,7 +262,6 @@ END SUBROUTINE GetBoundaryFlux
 SUBROUTINE FinalizeBC()
 ! MODULES
 USE MOD_Equation_Vars,ONLY: BCData,nBCByType,BCSideID
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

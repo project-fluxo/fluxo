@@ -22,8 +22,6 @@ MODULE MOD_Flux_Average
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
 INTERFACE EvalEulerFluxTilde3D
   MODULE PROCEDURE EvalEulerFluxTilde3D
 END INTERFACE

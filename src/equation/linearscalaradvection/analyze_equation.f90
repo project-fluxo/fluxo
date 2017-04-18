@@ -51,7 +51,6 @@ SUBROUTINE DefineParametersAnalyzeEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools ,ONLY: prms
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
@@ -72,7 +71,6 @@ USE MOD_Globals
 USE MOD_AnalyzeEquation_Vars,ONLY:doCalcMinMax
 USE MOD_Analyze_Vars,       ONLY:doAnalyzeToFile,A2F_iVar,A2F_VarNames
 USE MOD_ReadInTools,        ONLY: GETLOGICAL
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -103,7 +101,6 @@ SUBROUTINE AnalyzeEquation(Time)
 USE MOD_Globals
 USE MOD_AnalyzeEquation_Vars,ONLY:doCalcMinMax
 USE MOD_Analyze_Vars,       ONLY:doAnalyzeToFile,A2F_iVar,A2F_Data
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -143,7 +140,6 @@ SUBROUTINE CalcMinMax(Umin,Umax)
 ! MODULES
 USE MOD_Globals
 USE MOD_DG_Vars            ,ONLY:U
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

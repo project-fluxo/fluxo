@@ -25,10 +25,6 @@ MODULE MOD_Equation
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-! GLOBAL VARIABLES 
-!----------------------------------------------------------------------------------------------------------------------------------
-! Private Part --------------------------------------------------------------------------------------------------------------------
-! Public Part ---------------------------------------------------------------------------------------------------------------------
 INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
@@ -98,7 +94,6 @@ USE MOD_Equation_Vars
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
 USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
 #endif /*PP_DiscType==2*/
-! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -208,7 +203,6 @@ USE MOD_PreProc,     ONLY : PP_Pi
 USE MOD_Equation_Vars,ONLY:c
 USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -506,7 +500,6 @@ USE MOD_PreProc
 USE MOD_DG_Vars,       ONLY : U
 USE MOD_Equation_Vars, ONLY : eps0,c_corr,scr,IniExactFunc
 USE MOD_Mesh_Vars,     ONLY : Elem_xGP,nElems                  ! for shape function: xyz position of the Gauss points
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -608,7 +601,6 @@ END FUNCTION beta
 SUBROUTINE FinalizeEquation()
 ! MODULES
 USE MOD_Equation_Vars,ONLY:EquationInitIsDone
-! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
