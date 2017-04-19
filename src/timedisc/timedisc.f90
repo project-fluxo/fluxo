@@ -184,6 +184,7 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 ! --- Perform some preparational steps ---
 
 ! Do first RK stage of first timestep to fill gradients
+dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
 
 
