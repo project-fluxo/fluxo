@@ -41,7 +41,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
    logf = open(log_path, 'w')
    logf.write("===> OPTIONS: \n %s \n" % (allopts) )
  
-   cmdconfig = "cmake ../../. "+allopts
+   cmdconfig = "cmake ../../."+allopts
    print "  "
    print "===> configure..."
 
@@ -133,8 +133,8 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
    os.chdir(cwd)
    doruntest=False
    if( run_test ) :
-    if( len(run_test) == 3 ) :  # run tests
-      doruntest = True
+      if( len(run_test) == 3 ) :  # run tests
+         doruntest = True
    if(doruntest) :
       #RUN TEST
       print "  "
@@ -155,9 +155,9 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
                                log = True, ntail = ntail ,\
                                      mpi_procs = mpi_procs )
          if(Linf) :
-           print "   ... check Linf %s < %s ?" % (Linf[0],run_test[2])
-           if(float(Linf[0]) < float(run_test[2])) :
-             success = True
+            print "   ... check Linf %s < %s ?" % (Linf[0],run_test[2])
+            if(float(Linf[0]) < float(run_test[2])) :
+               success = True
       except :
          success = False
       if (not success) :
@@ -229,26 +229,26 @@ args = parser.parse_args()
 cases = parse_range(args.case)
 
 if(args.withmpi == 0) :
-  MPIOPT="OFF"
+   MPIOPT="OFF"
 else :
-  MPIOPT="ON"
+   MPIOPT="ON"
 globopts=["FLUXO_BUILD_MPI"        ,MPIOPT 
          ]
 
 
 if(args.buildhdf5 == 0) :
-  HDF5OPT="OFF"
+   HDF5OPT="OFF"
 else :
-  HDF5OPT="ON"
+   HDF5OPT="ON"
 
 globopts.extend([
           "FLUXO_BUILD_HDF5"       ,HDF5OPT
          ])
 
 if(len(args.hostname) > 1 ) :
-  globopts.extend([
-         "CMAKE_HOSTNAME"       ,args.hostname 
-         ])
+   globopts.extend([
+                    "CMAKE_HOSTNAME"       ,args.hostname 
+                   ])
 
 builderr= []
 
@@ -268,8 +268,8 @@ baseopts=[
 
 TEST=[]
 if(args.runtests == 1) :
-  # relative path from tests folder, parameterfile,Linf[0]<crit for success
-  TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-10" ])
+   # relative path from tests folder, parameterfile,Linf[0]<crit for success
+   TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -421,8 +421,8 @@ baseopts=[
          ]
 TEST=[]
 #if(args.runtests == 1) :
-#  # relative path from tests folder, parameterfile,Linf[0]<crit for success
-#  TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-10" ])
+#   # relative path from tests folder, parameterfile,Linf[0]<crit for success
+#   TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -487,8 +487,8 @@ baseopts=[
          ]
 TEST=[]
 if(args.runtests == 1) :
-  # relative path from tests folder, parameterfile,Linf[0]<crit for success
-  TEST.extend(["freestream","parameter_freestream_mhd.ini", "1.0e-10" ])
+   # relative path from tests folder, parameterfile,Linf[0]<crit for success
+   TEST.extend(["freestream","parameter_freestream_mhd.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -598,7 +598,7 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_EQN_ANISO_HEAT"   ,"ON"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
-            ,"FLUXO_PARABOLIC_LIFTING","br2"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
             ,"FLUXO_TESTCASE"         ,"mhd_equilibrium"
            ])
    
@@ -648,19 +648,20 @@ if(cases[0]==0 or (caseID in cases)) :
 #FINAL ERROR HANDLING:
 #============================================================================
 if(len(builderr) > 0 ) :
-  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"
-  print " "
-  for line in builderr :
-     print "--> "+line
-  print " "
-  print "... see log.caseID_project files"
-  print "   and dirx_caseID_project folders."
-  print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+   print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"
+   print " "
+   for line in builderr :
+      print "--> "+line
+   print " "
+   print "... see log.caseID_project files"
+   print "   and dirx_caseID_project folders."
+   print " rerun build script with -case option to run again spefic caseIDs."
+   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 else :
-  print "/////////////////////////////////////////////////////////"
-  print " "
-  print " ==> ALL BUILDS WERE SUCCESSFULL!"
-  print " "
-  print "/////////////////////////////////////////////////////////"
+   print "/////////////////////////////////////////////////////////"
+   print " "
+   print " ==> ALL BUILDS WERE SUCCESSFULL!"
+   print " "
+   print "/////////////////////////////////////////////////////////"
 

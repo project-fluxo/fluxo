@@ -91,8 +91,10 @@ USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
 USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
 USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
+USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_DG_Vars            ,ONLY: DGInitIsDone
 USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone
+USE MOD_Mesh_Vars          ,ONLY: nBCs,BoundaryType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -100,6 +102,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER             :: iBC
 !==================================================================================================================================
 IF((.NOT.DGInitIsDone).OR.(.NOT.MeshInitIsDone) &
    .OR.(.NOT.RestartInitIsDone).OR.TestcaseInitIsDone)THEN
@@ -116,14 +119,23 @@ END IF !check whichtestcase
 doTCsource=.TRUE.
 !======EQUILIBRIUM STUFF====
 EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
-IF(EquilibriumStateIni.EQ.0) THEN
+SELECT CASE(EquilibriumStateIni)
+CASE(-1) !sanity check
+  ! check that there is no BC 21, which can only be used with a given equilibrium state
+  DO iBC=1,nBCs
+    IF(nBCByType(iBC).LE.0) CYCLE
+    IF(BoundaryType(iBC,BC_TYPE) .EQ.21) THEN
+      CALL abort(__STAMP__,&
+           "BC type=21 used but EquilibriumStateIni not specified!" )
+    END IF
+  END DO !iBC
+CASE(0)
   EquilibriumStateIni=IniExactFunc
   SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &
                                              'set to IniExactFunc'    ,' | ',EquilibriumStateIni
-END IF
-IF(EquilibriumStateIni.EQ.-3) THEN
+CASE(-3)
   EquilibriumStateFile=GETSTR('EquilibriumStateFile')
-END IF
+END SELECT
 EquilibriumDivBcorr=GETLOGICAL('EquilibriumDivBcorr','.FALSE.')
 IF(.NOT.doRestart)THEN
   EquilibriumDisturbFunc=GETINT('EquilibriumDisturbFunc','0')
@@ -160,7 +172,6 @@ IMPLICIT NONE
 !=================================================================================================================================
 SDEALLOCATE(InputEq)
 SDEALLOCATE(Ueq)
-SDEALLOCATE(Ueq_BC)
 SDEALLOCATE(Uteq)
 END SUBROUTINE FinalizeTestcase
 

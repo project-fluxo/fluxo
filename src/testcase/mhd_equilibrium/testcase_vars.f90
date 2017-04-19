@@ -47,7 +47,6 @@ CHARACTER(LEN=255)       :: EquilibriumStateFile    !< if equilibrium is read fr
 
 REAL,ALLOCATABLE         :: InputEq(:,:,:,:,:)       !< equilibrium data from Mesh
 REAL,ALLOCATABLE         :: Ueq(:,:,:,:,:)           !< full equilibrium solution
-REAL,ALLOCATABLE         :: Ueq_BC(:,:,:,:)          !< full equilibrium solution at all BCfaces
 REAL,ALLOCATABLE         :: Uteq(:,:,:,:,:)          !< DG time derivative of Ueq
 LOGICAL                  :: TestcaseInitIsDone=.FALSE. !< Switch to check TestcaseInit status
 !=================================================================================================================================

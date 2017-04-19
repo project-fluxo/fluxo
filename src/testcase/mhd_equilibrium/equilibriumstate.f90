@@ -95,11 +95,12 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT EQUILIBRIUM STATE...'
 
 
 ALLOCATE(Ueq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-ALLOCATE(Ueq_BC(PP_nVar,0:PP_N,0:PP_N,nBCSides))
 ALLOCATE(Uteq(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Ueq  =0.
-Ueq_BC=0.
 Uteq =0.
+
+IF(EquilibriumStateIni.EQ.-1) RETURN ! sanity check, default value: testcase compiled but not used. finishes after allocation
+
 IF(EquilibriumDivBcorr) THEN
   ALLOCATE(Apot(3,0:PP_N,0:PP_N,0:PP_N,nElems))
   Apot=-999.
@@ -148,13 +149,19 @@ IF(EquilibriumDivBcorr)THEN
 
 END IF !EquilibriumDivBcorr
 
+
+!save U to U_tmp for restart
+IF(doRestart) U_tmp=U
+!overwrite initial U for dg_timederivative 
+U=Ueq
+
 !CHECK continuity of tangential B-field on FACES
-CALL ProlongToFace(Ueq,U_master,U_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 #if MPI
 ! Prolong to face for MPI sides - send direction
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE
-CALL ProlongToFace(Ueq,U_master,U_slave,doMPiSides=.TRUE.)
+CALL ProlongToFace(U,U_master,U_slave,doMPiSides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(   U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,RECV),SendID=2) ! Send YOUR
 ! Complete send / receive
@@ -176,27 +183,21 @@ ELSE
   CALL MPI_REDUCE(maxjmp_B  ,0,3,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
 END IF
 
-!save U to U_tmp for restart
-IF(doRestart) U_tmp=U
-!overwrite initial U for dg_timederivative 
-U=Ueq
-
 !set state state Dirichlet BC 21: equilibrium state evaluated at the Boundary!
+! U=Ueq, already prolonged to boundary sides
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
   BCType =BoundaryType(iBC,BC_TYPE)
   IF(BCType.NE.21) CYCLE
   nBCLoc =nBCByType(iBC)
-  IF(nBCLoc.EQ.0) CYCLE
   ! FOR BCType 21, use equilibrium state as BC
-  CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
   DO iSide=1,nBCLoc
     SideID=BCSideID(iBC,iSide)
     BCdata(:,:,:,SideID)=U_master(:,:,:,SideID)
   END DO !iSide=1,nBCloc
-  U_master=0.
-  U_slave=0.
 END DO !iBC=1,nBCs
+U_master=0.
+U_slave=0.
 
 ! Call DG operator to fill face data, fluxes, gradients for analyze
 dt_Min=CALCTIMESTEP(errType) 
