@@ -59,41 +59,42 @@ INTEGER,INTENT(OUT)          :: errType       !< Error code
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                      :: i,j,k,iElem
-REAL                         :: Lambda1,Lambda2,Lambda3,maxLambda
-REAL                         :: TimeStepConv, TimeStepVisc, TimeStep(3)
+REAL                         :: maxLambda1,maxLambda2,maxLambda3
+REAL                         :: TimeStepConv, TimeStepVisc,TimeStepViscElem
 #if PARABOLIC
-REAL                         :: Lambda_v1,Lambda_v2,Lambda_v3
-REAL                         :: MaxLambda_v
+REAL                         :: maxLambda_v1,maxLambda_v2,maxLambda_v3
 #endif /*PARABOLIC*/
+#if MPI
+REAL                         :: buf(3)
+#endif /*MPI*/
 !==================================================================================================================================
 errType=0
-maxLambda=1.0E-10
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
-#if PARABOLIC
-MaxLambda_v=1.0E-10  ! Viscous
-Lambda_v1=1.0E-10
-Lambda_v2=1.0E-10
-Lambda_v3=1.0E-10
-#endif /*PARABOLIC*/
 DO iElem=1,nElems
+  maxLambda1=1.0E-12
+  maxLambda2=1.0E-12
+  maxLambda3=1.0E-12
+#if PARABOLIC
+  maxLambda_v1=1.0E-12
+  maxLambda_v2=1.0E-12
+  maxLambda_v3=1.0E-12
+#endif /*PARABOLIC*/
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
-        Lambda1=ABS(SUM(Metrics_fTilde(:,i,j,k,iElem)*AdvVel(:)))
-        Lambda2=ABS(SUM(Metrics_gTilde(:,i,j,k,iElem)*AdvVel(:)))
-        Lambda3=ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*AdvVel(:)))
-        maxLambda=MAX(maxLambda,sJ(i,j,k,iElem)*(Lambda1+Lambda2+Lambda3))
+        maxLambda1=MAX(maxLambda1,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_fTilde(:,i,j,k,iElem)*AdvVel(:)))))
+        maxLambda2=MAX(maxLambda2,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_gTilde(:,i,j,k,iElem)*AdvVel(:)))))
+        maxLambda3=MAX(maxLambda3,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*AdvVel(:)))))
 #if PARABOLIC
-        Lambda_v1=MAX(Lambda_v1,DiffC*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        Lambda_v2=MAX(Lambda_v2,DiffC*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        Lambda_v3=MAX(Lambda_v3,DiffC*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        maxLambda_v=MAX(maxLambda_v,(Lambda_v1+Lambda_v2+Lambda_v3))
+        maxLambda_v1=MAX(maxLambda_v1,DiffC*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        maxLambda_v2=MAX(maxLambda_v2,DiffC*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        maxLambda_v3=MAX(maxLambda_v3,DiffC*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
 #endif /* PARABOLIC*/
       END DO ! i
     END DO ! j
   END DO ! k          
-  dtElem(iElem)=CFLScale*2./MaxLambda
+  dtElem(iElem)=CFLScale*2./(maxLambda1+maxLambda2+maxLambda3)
   TimeStepConv=MIN(TimeStepConv,dtElem(iElem))
   IF(IEEE_IS_NAN(TimeStepConv))THEN
     ERRWRITE(*,'(A,I0,A,I0)')'Convective timestep NaN on proc',myRank,' for element: ',iElem
@@ -102,10 +103,9 @@ DO iElem=1,nElems
     errType=2
   END IF
 #if PARABOLIC
-  IF(MaxLambda_v.GT.0.)THEN
-    dtElem(iElem)=MIN(dtElem(iElem),DFLScale*4./MaxLambda_v)
-    TimeStepVisc= MIN(TimeStepVisc, DFLScale*4./MaxLambda_v)
-  END IF
+  TimeStepViscElem= DFLScale*4./(MaxLambda_v1+MaxLambda_v2+MaxLambda_v3)
+  TimeStepVisc= MIN(TimeStepVisc, TimeStepViscElem)
+  dtElem(iElem)=MIN(dtElem(iElem),TimeStepViscElem)
   IF(IEEE_IS_NAN(TimeStepVisc))THEN
     ERRWRITE(*,'(A,I0,A,I0)')'Viscous timestep NaN on proc ',myRank,' for element: ', iElem
     ERRWRITE(*,'(A,3ES16.7)')'Position: Elem_xGP(:1,1,1,iElem)=',Elem_xGP(:,1,1,1,iElem)
@@ -114,15 +114,17 @@ DO iElem=1,nElems
   END IF
 #endif /* PARABOLIC*/
 END DO ! iElem=1,nElems
-TimeStep(1)=TimeStepConv
-TimeStep(2)=TimeStepVisc
 #if MPI
-TimeStep(3)=-errType ! reduce with timestep, minus due to MPI_MIN
-CALL MPI_ALLREDUCE(MPI_IN_PLACE,TimeStep,3,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
-errType=INT(-TimeStep(3))
+buf(1)=TimeStepConv
+buf(2)=TimeStepVisc
+buf(3)=-REAL(errType)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,buf,3,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
+TimeStepConv=buf(1)
+TimeStepVisc=buf(2)
+errType=NINT(-buf(3))
 #endif /*MPI*/
-ViscousTimeStep=(TimeStep(2) .LT. TimeStep(1))
-CalcTimeStep=MINVAL(TimeStep(1:2))
+ViscousTimeStep=(TimeStepVisc .LT. TimeStepConv)
+CalcTimeStep=MIN(TimeStepConv,TimeStepVisc)
 END FUNCTION CalcTimeStep
 
 END MODULE MOD_CalcTimeStep
