@@ -34,7 +34,7 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:)
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)
 INTEGER,ALLOCATABLE :: nBCByType(:)        !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)       !< SideIDs for BC types
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                :: mu0                 !< viscosity
 REAL                :: Pr                  !< Prandtl number
 REAL                :: KappasPr            !< Kappa/Pr
@@ -101,7 +101,7 @@ INTERFACE ConsToEntropy
   MODULE PROCEDURE ConsToEntropy
 END INTERFACE
 
-#ifdef PARABOLIC
+#if PARABOLIC
 #if PP_VISC==1
 INTERFACE muSuth
   MODULE PROCEDURE muSuth
@@ -245,7 +245,7 @@ entropy(5) = -rho_p
 END SUBROUTINE ConsToEntropy
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 #if PP_VISC==1
 !==================================================================================================================================
 !> Sutherland's formula can be used to derive the dynamic viscosity of an ideal gas as a function of the temperature 

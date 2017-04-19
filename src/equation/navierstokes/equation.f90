@@ -140,28 +140,30 @@ sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
 R=GETREAL('R','287.058')
-#ifdef PARABOLIC
+#if PARABOLIC
 Pr       =GETREAL('Pr','0.72')
 KappasPr =Kappa/Pr
 
 ! Viscosity
 #if PP_VISC == 0
   mu0=GETREAL('mu0','0.')
-#elif PP_VISC == 1
+#endif /*PP_VISC==0*/
 ! mu-Sutherland
+#if PP_VISC == 1
 mu0     =GETREAL('mu0','1.735E-5')
 Ts      =GETREAL('Ts','110.4')
 Tref    =1./GETREAL('Tref','280.')
 ExpoSuth=GETREAL('ExpoSuth','1.5')
 Ts      =Ts*Tref
 cSuth   =Ts**ExpoSuth*(1+Ts)/(2*Ts*Ts)
+#endif /*PP_VISC==1*/
 ! mu power-law
-#elif PP_VISC == 2
+#if PP_VISC == 2
 mu0=GETREAL('mu0','0.')
 Tref    =GETREAL('Tref')
 ExpoSuth=GETREAL('ExpoSuth')
 mu0     =mu0/Tref**ExpoSuth
-#endif /*PP_VISC*/
+#endif /*PP_VISC==2*/
 
 #endif /*PARABOLIC*/
 
@@ -181,7 +183,7 @@ DO iSide=1,nBCSides
     CALL abort(__STAMP__,&
                'No pressure (refstate) defined for BC_TYPE',locType)
 END DO
-#ifdef MPI
+#if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,MaxBCState,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
 
@@ -691,7 +693,7 @@ USE MOD_PreProc !PP_N,PP_nElems
 USE MOD_Equation_Vars, ONLY: IniExactFunc
 USE MOD_Equation_Vars, ONLY: Pi,sKappaM1,Kappa,KappaM1,AdvVel
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Equation_Vars,ONLY:mu0,Pr
 #endif
 IMPLICIT NONE
@@ -720,7 +722,7 @@ CASE(4) ! exact function
   tmp(3)=Amplitude*Omega*KappaM1
   tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a)
   tmp(5)=Amplitude*(3.*Omega*Kappa-a)
-#ifdef PARABOLIC
+#if PARABOLIC
   tmp(6)=3.*mu0*Kappa*Omega*Omega/Pr
 #else
   tmp(6)=0.

@@ -33,7 +33,7 @@ INTERFACE EvalEulerFlux1D
 END INTERFACE
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 INTERFACE EvalDiffFlux1D_Outflow
   MODULE PROCEDURE EvalDiffFlux1D_Outflow
 END INTERFACE
@@ -49,7 +49,7 @@ END INTERFACE
 
 PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalEulerFlux1D
-#ifdef PARABOLIC
+#if PARABOLIC
 PUBLIC::EvalDiffFlux1D_Outflow
 PUBLIC::EvalDiffFlux3D
 PUBLIC::EvalDiffFluxTilde3D
@@ -68,7 +68,7 @@ USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Equation_Vars ,ONLY:kappaM1,R
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-#ifdef PARABOLIC
+#if PARABOLIC
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
 USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s43,s23
 #if PP_VISC==1
@@ -96,7 +96,7 @@ REAL                :: f(5),g(5),h(5)                          ! Cartesian fluxe
 REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                              ! auxiliary variables
 REAL                :: Ep                                      ! E + p
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                :: f_visc(5),g_visc(5),h_visc(5)           ! viscous cartesian fluxes (iVar)
 REAL                :: muS,lambda                              ! viscosity,heat coeff.
 REAL                :: gradv1x,gradv2x,gradv3x
@@ -157,7 +157,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(4)=rhov3*v3+p    
   h(5)=(rhoE+p)*v3  
 
-#ifdef PARABOLIC
+#if PARABOLIC
   ! Viscous part
   ! ideal gas law
 #if PP_VISC == 0
@@ -305,7 +305,7 @@ END SUBROUTINE EvalEulerFlux1D
 
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 !==================================================================================================================================
 !> Compute Navier-Stokes fluxes 1D using tau_12=tau_13=q1=0 for outflow, for surface points!
 !==================================================================================================================================
