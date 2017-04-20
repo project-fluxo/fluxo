@@ -61,7 +61,7 @@ USE MOD_Globals
 USE MOD_Equation_Vars     ,ONLY: EquationInitIsDone
 USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
-USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs
+USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs,BoundaryType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -69,7 +69,8 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: iBC,SideID
+INTEGER :: iBC,SideID,BCType
+LOGICAL :: fillBC
 !==================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone).AND.(.NOT.EquationInitIsDone))THEN
    CALL abort(__STAMP__,&
@@ -97,12 +98,21 @@ DO SideID=1,nBCSides
   END DO
 END DO
 
-! Allocate buffer array to store temp data for all BC sides
-ALLOCATE(BCData(PP_nVar,0:PP_N,0:PP_N,nBCSides))
-BCData=0.
-
-! Fill  BC data for steady BCs (BCtype = 20, 22)
-CALL FillBCdata(0.,BCdata)
+fillBC=.FALSE.
+DO iBC=1,nBCs
+  IF(nBCByType(iBC).LE.0) CYCLE
+  BCType =BoundaryType(iBC,BC_TYPE)
+  SELECT CASE(BCType)
+  CASE(20,220)
+    fillBC=.TRUE.
+  END SELECT
+END DO
+IF(fillBC)THEN
+  ! Allocate buffer array to store temp data for all BC sides
+  ALLOCATE(BCData(PP_nVar,0:PP_N,0:PP_N,nBCSides))
+  ! Fill  BC data for steady BCs (BCtype = 20, 22)
+  CALL FillBCdata(0.,BCdata)
+END IF !fillBC
 
 END SUBROUTINE InitBC
 

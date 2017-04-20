@@ -185,6 +185,11 @@ END IF
 
 !set state state Dirichlet BC 21: equilibrium state evaluated at the Boundary!
 ! U=Ueq, already prolonged to boundary sides
+IF(BC21exists)THEN
+  IF(.NOT.ALLOCATED(BCdata))THEN
+    ALLOCATE(BCdata(1:PP_nVar,0:PP_N,0:PP_N,nBCSides))
+  END IF
+END IF
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
   BCType =BoundaryType(iBC,BC_TYPE)

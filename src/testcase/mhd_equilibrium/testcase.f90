@@ -91,10 +91,9 @@ USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
 USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
 USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
-USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
+USE MOD_Equation_Vars      ,ONLY: nBCByType
 USE MOD_DG_Vars            ,ONLY: DGInitIsDone
-USE MOD_Mesh_Vars          ,ONLY: MeshInitIsDone
-USE MOD_Mesh_Vars          ,ONLY: nBCs,BoundaryType
+USE MOD_Mesh_Vars          ,ONLY: nBCs,BoundaryType,MeshInitIsDone
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -118,17 +117,22 @@ IF(INDEX(TRIM(WhichTestcase),'mhd_equilibrium').EQ.0)THEN
 END IF !check whichtestcase
 doTCsource=.TRUE.
 !======EQUILIBRIUM STUFF====
+!boundary condition type 21: equlibrium data dirichlet
+BC21exists=.FALSE.
+DO iBC=1,nBCs
+  IF(nBCByType(iBC).LE.0) CYCLE
+  IF(BoundaryType(iBC,BC_TYPE) .EQ.21) THEN
+    BC21exists=.TRUE.
+  END IF
+END DO
 EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
 SELECT CASE(EquilibriumStateIni)
 CASE(-1) !sanity check
+  IF(BC21exists)THEN
   ! check that there is no BC 21, which can only be used with a given equilibrium state
-  DO iBC=1,nBCs
-    IF(nBCByType(iBC).LE.0) CYCLE
-    IF(BoundaryType(iBC,BC_TYPE) .EQ.21) THEN
       CALL abort(__STAMP__,&
            "BC type=21 used but EquilibriumStateIni not specified!" )
-    END IF
-  END DO !iBC
+  END IF
 CASE(0)
   EquilibriumStateIni=IniExactFunc
   SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &

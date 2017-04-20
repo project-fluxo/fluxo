@@ -45,6 +45,7 @@ CHARACTER(LEN=255)       :: EquilibriumStateFile    !< if equilibrium is read fr
 
 
 
+LOGICAL                  :: BC21exists               !< BCtype =21 exists: equilibrium state dirichlet BC
 REAL,ALLOCATABLE         :: InputEq(:,:,:,:,:)       !< equilibrium data from Mesh
 REAL,ALLOCATABLE         :: Ueq(:,:,:,:,:)           !< full equilibrium solution
 REAL,ALLOCATABLE         :: Uteq(:,:,:,:,:)          !< DG time derivative of Ueq

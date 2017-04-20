@@ -165,7 +165,7 @@ REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variabl
 REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
 #else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
-REAL,INTENT(IN)                     :: metric_R(3)    !< right mertric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 #endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
