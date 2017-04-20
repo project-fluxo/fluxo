@@ -54,7 +54,7 @@ USE MOD_Equation_Vars ,ONLY:mu0
 USE MOD_Equation_Vars ,ONLY:muSuth,R
 #endif
 #if PP_VISC == 2
-USE MOD_Equation_Vars ,ONLY:mu0,ExpoSuth,R
+USE MOD_Equation_Vars ,ONLY:mu0,ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
 #ifndef GNU
@@ -128,7 +128,7 @@ DO iElem=1,PP_nElems
 #elif PP_VISC == 1
         muX=sRho*KappasPr_max*muSuth(srho*p/R)         ! compute viscosity with Sutherlands law
 #elif PP_VISC == 2
-        muX=sRho*KappasPr_max*mu0*(srho*p/R)**ExpoSuth ! compute vsicosity using the power-law
+        muX=sRho*KappasPr_max*mu0*(srho*p/R)**ExpoPow ! compute vsicosity using the power-law
 #endif /*PP_VISC*/
         MaxLambda_v1=MAX(MaxLambda_v1,muX*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
         MaxLambda_v2=MAX(MaxLambda_v2,muX*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))

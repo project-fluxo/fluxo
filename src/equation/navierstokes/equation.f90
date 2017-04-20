@@ -62,16 +62,74 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
-CALL prms%CreateRealArrayOption('AdvVel',       "Advection velocity for advection part of LinAdv-Diff.")
-CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.","0.")
-CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.","1.,1.,1.")
-CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateIntOption(     'IniExactFunc' , " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateIntOption(      'IniRefState' , "Refstate required for initialization.")
+CALL prms%CreateRealArrayOption('RefState'    , "State(s) in primitive variables (density, velx, vely, velz, pressure).",&
+                                                multiple=.TRUE.)
+CALL prms%CreateRealArrayOption('AdvVel'      , "for exact function, const velocity.")
+CALL prms%CreateRealArrayOption('MachShock'   , "for exact function, Mach shock.")
+CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock density.")
+CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
+CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
+CALL prms%CreateRealOption(     'IniFrequency', "for exactfunc, frequency.","1.")
+CALL prms%CreateRealOption(     'IniAmplitude', "for exactfunc, Amplitude.","0.2")
+CALL prms%CreateRealOption(     'IniHalfwidth', "for exactfunc, Halfwidth.","0.2")
+CALL prms%CreateRealOption(     'Kappa'       , "ratio of specific heats.","1.4")
+CALL prms%CreateRealOption(     'R'           , "gas constant.","287.058")
+CALL prms%CreateRealOption(     'Pr'          , "Prandtl number.","0.72")
+#if PP_VISC == 0
+CALL prms%CreateRealOption(     'mu0'         , "constant viscosity.","0.")
+#elif PP_VISC == 1
+! mu-Sutherland
+CALL prms%CreateRealOption(     'mu0'         , "sutherland viscosity, prefactor.","1.735e-5")
+CALL prms%CreateRealOption(     'Ts'          , "sutherland viscosity, temperature coeff.","110.4")
+CALL prms%CreateRealOption(     'Tref'        , "sutherland viscosity, reference temperature.","280.")
+CALL prms%CreateRealOption(     'ExpoSuth'    , "sutherland viscosity, exponent.","1.5")
+#elif PP_VISC == 2
+! mu power-law
+CALL prms%CreateRealOption(     'mu0'         , "power-law viscosity, prefactor.","0.")
+CALL prms%CreateRealOption(     'Tref'        , "power-law viscosity, reference temperature.","280.")
+CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent.","1.5")
+#endif /*PP_VISC==2*/
+
+CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
+                                           " 1: Lax-Friedrichs"//&
+                                           " 2: HLLC"//&
+                                           " 3: Roe"//&
+                                           " 4: Entropy Stable"//&
+                                           " 5: Entropy Conserving"//&
+                                           " 6: Kennedy & Gruber"//&
+                                           " 7: Ducros"//&
+                                           " 8: Morinishi"//&
+                                           " 9: EC-KEP"//&
+                                           "10: approx. EC-KEP"//&
+                                           "11: EC-KEP + press. aver."//&
+                                           "12: Kennedy & Gruber (Pirozolli version)"//&
+                                           "13: Entropy conservative Ismali and Roe with LLF diss"//&
+                                           "14: Kennedy Gruber with LLF diss"//&
+                                           "15: Decros Flux with LLF diss"//&
+                                           "16: EC+KEP with LLF diss"//&
+                                           "17: EC+KEP - pressure with LLF diss"//&
+                                           "18: Kennedy Gruber (Pirozilli version)  with LLF diss"//&
+                                           "19: Morinishi + LLF diss"//&
+                                           "20: Gassner, Winters, Walch flux"//&
+                                           "21: Gassner, Winters, Walch flux + LLF diss" &
+                                          ,"1")
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form:"//&
                                               "DG volume integral "//&
-                                              "0: Standard DG Flux"//&
-                                              "1: standard DG Flux with metric dealiasing" &
-                            ,"0")
+                                              " 0: Standard DG"//&
+                                              " 1: Standard DG with metirc dealiasing"//&
+                                              " 2: Kennedy-Gruber"//&
+                                              " 3: Ducros"//&
+                                              " 4: Morinishi"//&
+                                              " 5: EC-KEP"//&
+                                              " 6: approx. EC-KEP"//&
+                                              " 7: approx. EC-KEP + press. aver."//&
+                                              " 8: Kenndy & Gruber (pirozolli version)"//&
+                                              " 9: Gassner Winter Walch"//&
+                                              "10: Two-Point EC" &
+                                             ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -96,7 +154,9 @@ USE MOD_Flux_Average
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL    :: BulkMach,BulkReynolds
+#if PP_VISC == 2
+REAL    :: Tref
+#endif /*PP_VISC==2*/
 INTEGER :: i,iSide
 INTEGER :: MaxBCState,locType,locState,nRefState
 !==================================================================================================================================
@@ -152,17 +212,17 @@ KappasPr =Kappa/Pr
 #if PP_VISC == 1
 mu0     =GETREAL('mu0','1.735E-5')
 Ts      =GETREAL('Ts','110.4')
-Tref    =1./GETREAL('Tref','280.')
+sTref   =1./GETREAL('Tref','280.')
 ExpoSuth=GETREAL('ExpoSuth','1.5')
-Ts      =Ts*Tref
+Ts      =Ts*sTref
 cSuth   =Ts**ExpoSuth*(1+Ts)/(2*Ts*Ts)
 #endif /*PP_VISC==1*/
 ! mu power-law
 #if PP_VISC == 2
 mu0=GETREAL('mu0','0.')
 Tref    =GETREAL('Tref')
-ExpoSuth=GETREAL('ExpoSuth')
-mu0     =mu0/Tref**ExpoSuth
+ExpoPow =GETREAL('ExpoPow')
+mu0     =mu0/(Tref**ExpoPow)
 #endif /*PP_VISC==2*/
 
 #endif /*PARABOLIC*/
@@ -277,7 +337,7 @@ SELECT CASE(WhichRiemannSolver)
     VolumeFluxAverage    => KennedyAndGruberFlux2
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage_LLF
   CASE(19)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Morinishi + LLF'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Morinishi + LLF diss'
     VolumeFluxAverage    => MorinishiFlux
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage_LLF
   CASE(20)
@@ -285,7 +345,7 @@ SELECT CASE(WhichRiemannSolver)
     VolumeFluxAverage    => GassnerWintersWalchFlux
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage
   CASE(21)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Gassner, Winters, Walch flux + LLF'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Gassner, Winters, Walch flux + LLF diss'
     VolumeFluxAverage    => GassnerWintersWalchFlux
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage_LLF
   CASE DEFAULT
@@ -300,8 +360,8 @@ CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC'
-  VolumeFluxAverageVec => TwoPointEntropyConservingFluxVec
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with metirc dealiasing'
+  VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Kennedy-Gruber'
   VolumeFluxAverageVec => KennedyAndGruberFluxVec1
@@ -326,6 +386,9 @@ CASE(8)
 CASE(9)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Gassner Winter Walch'
   VolumeFluxAverageVec => GassnerWintersWalchFluxVec
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC'
+  VolumeFluxAverageVec => TwoPointEntropyConservingFluxVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")

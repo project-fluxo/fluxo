@@ -16,7 +16,7 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Contains the routine EvalFlux3D which computes the complete flux f,g,h for all DOFs in one Element: used in volume integral
+!> Contains routines to evaluate the Euler and diffusion part of the Navier-Stokes flux
 !==================================================================================================================================
 MODULE MOD_Flux
 ! MODULES
@@ -75,7 +75,7 @@ USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s43,s23
 USE MOD_Equation_Vars ,ONLY:muSuth
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoSuth
+USE MOD_Equation_Vars ,ONLY:ExpoPow
 #endif
 #endif /*PARABOLIC*/
 #ifdef OPTIMIZED
@@ -170,7 +170,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   muS=muSuth(T) ! compute viscosity with Sutherlands law
 #endif
 #if PP_VISC == 2
-  muS=mu0*T**ExpoSuth  ! mu0=mu0/T0^n: compute vsicosity using the power-law
+  muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
   ! Viscous part
   ! ideal gas law
@@ -320,7 +320,7 @@ USE MOD_Equation_Vars,ONLY:mu0
 USE MOD_Equation_Vars,ONLY:muSuth
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars,ONLY:ExpoSuth,mu0
+USE MOD_Equation_Vars,ONLY:ExpoPow,mu0
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -368,7 +368,7 @@ DO q=0,PP_N
 #endif
 #if PP_VISC == 2
     ! compute vsicosity using the power-law
-    muS=mu0*T**ExpoSuth  ! mu0=mu0/T0^n
+    muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
     ! compute derivatives via product rule (a*b)'=a'*b+a*b' and multiply with viscosity
     gradv_diag = muS*srho*(gradVel(:,p,q) - v*gradRho(:,p,q))
@@ -394,7 +394,7 @@ USE MOD_Equation_Vars ,ONLY:mu0
 USE MOD_Equation_Vars ,ONLY:muSuth
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoSuth,mu0
+USE MOD_Equation_Vars ,ONLY:ExpoPow,mu0
 #endif
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_face
@@ -464,7 +464,7 @@ DO j=0,PP_N ; DO i=0,PP_N
 #endif
 #if PP_VISC == 2
   ! compute vsicosity using the power-law
-  muS=mu0*T**ExpoSuth  ! mu0=mu0/T0^n
+  muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
   e=rhoE*srho                              ! e...specific energy
   ! compute derivatives via product rule (a*b)'=a'*b+a*b'
@@ -529,7 +529,7 @@ USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s43,s23
 USE MOD_Equation_Vars ,ONLY:muSuth,kappaM1,R
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoSuth,KappaM1,R
+USE MOD_Equation_Vars ,ONLY:ExpoPow,KappaM1,R
 #endif
 #ifdef OPTIMIZED
 USE MOD_DG_Vars,ONLY:nTotal_vol
@@ -603,7 +603,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   muS=muSuth(T) ! compute viscosity with Sutherlands law
 #endif
 #if PP_VISC == 2
-  muS=mu0*T**ExpoSuth  ! mu0=mu0/T0^n: compute vsicosity using the power-law
+  muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
   ! Viscous part
   ! ideal gas law

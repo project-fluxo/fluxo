@@ -446,7 +446,7 @@ USE MOD_Equation_Vars ,ONLY:mu0
 USE MOD_Equation_Vars ,ONLY:muSuth
 #endif
 #if PP_VISC == 2
-USE MOD_Equation_Vars ,ONLY:mu0,ExpoSuth
+USE MOD_Equation_Vars ,ONLY:mu0,ExpoPow
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -494,7 +494,7 @@ DO j=0,PP_N; DO i=0,PP_N
 #endif
 ! mu power-law
 #if PP_VISC == 2
-  muS=mu0*T**ExpoSuth  ! mu0=mu0/T0^n
+  muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
   ! Compute velocity derivatives via product rule (a*b)'=a'*b+a*b'
   ! GradV(:,1)=x-gradient of V

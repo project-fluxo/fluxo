@@ -39,10 +39,11 @@ REAL                :: mu0                 !< viscosity
 REAL                :: Pr                  !< Prandtl number
 REAL                :: KappasPr            !< Kappa/Pr
 #if PP_VISC==1
-REAL                :: Ts,cSuth            !< Parameters used in muSuth
+REAL                :: sTref,ExpoSuth      !< Parameters used in muSuth sutherland visosity law
+REAL                :: Ts,cSuth            !< Parameters used in muSuth sutherland visosity law
 #endif
-#if (PP_VISC==1) || (PP_VISC==2)
-REAL                :: Tref,ExpoSuth       !< Parameters used in muSuth and power law
+#if PP_VISC==2
+REAL                :: ExpoPow             !< Exponent used in  power law viscosity
 #endif
 #endif /*PARABOLIC*/
 REAL                :: Kappa               !< ratio of specific heats
@@ -264,7 +265,7 @@ END SUBROUTINE ConsToEntropy
 !>
 !> This is only valid for Temperatures in the range 0 < T < 555 K
 !> For further informration check out the HALOWiki and Babucke's Diss. and Code. 'NS3D'
-!> ATTENTION!!!!! The global variable Tref=1./Tref and Ts=Ts/Tref !!!!!
+!> ATTENTION!!!!! The global variable sTref=1./Tref and Ts=Ts/Tref !!!!!
 !==================================================================================================================================
 FUNCTION muSuth(T)
 ! MODULES
@@ -280,7 +281,7 @@ REAL                           :: muSuth !< sutherland viscosity
 ! LOCAL VARIABLES
 REAL                           :: TnoDim
 !==================================================================================================================================
-TnoDim=T*Tref ! Tref=1./Tref !
+TnoDim=T*sTref ! sTref=1./Tref !
 IF(TnoDim .GE. TS)THEN  ! Attention: only valid for T < 550K. But we don't know what to do for higher temperatures...
   muSuth=mu0*TnoDim**ExpoSuth*(1+Ts)/(TnoDim+Ts)  ! Ts=Ts/Tref !
 ELSE
