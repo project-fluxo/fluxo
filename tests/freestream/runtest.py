@@ -33,7 +33,7 @@ parser.add_argument('prm',   help='path to parameter file')
 args = parser.parse_args()
 
 if not os.path.exists(args.prm) :
-    print "parameter-file '%s' not found" % args.prm 
+    print( "parameter-file '%s' not found" % args.prm )
     sys.exit(1)
 
 
@@ -85,14 +85,14 @@ Meshes = [ '../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
 
 nMeshes=len(Meshes) 
 for m in range(0,nMeshes) :
-    print " Mesh %4i %s  " % (m,Meshes[m])
+    print( " Mesh %4i %s  " % (m,Meshes[m]))
 
 if (nMeshes == 0 ) :
-    print " NO MESHES FOUND IN ../meshes  "
+    print( " NO MESHES FOUND IN ../meshes  ")
     shutil.rmtree(tmp_dir)
     exit(1)
 else :
-    print " %4i MESH(ES) FOUND IN ../meshes  " % nMeshes
+    print( " %4i MESH(ES) FOUND IN ../meshes  " % nMeshes)
  
 projectname = read_prm(args.prm,'ProjectName')
 
@@ -102,16 +102,16 @@ header=True
 # loop over meshes
 for i in range(0,nDegree) :
   for m in range(0,nMeshes) :
-    print "               "
-    print "Degree: %s , Mesh: %s " % (Degree[i],Meshes[m])
-    print "               "
+    print( "               ")
+    print( "Degree: %s , Mesh: %s " % (Degree[i],Meshes[m]))
+    print( "               ")
     meshname = re.sub('\_mesh\.h5','',os.path.basename(Meshes[m]))
 
     projectnameX = projectname+'_Degree_'+Degree[i]+'_Mesh_'+meshname 
     modify_prm(args.prm, {'ProjectName' : projectnameX})
-    print "               "
-    print "%3i %3i === > ProjectName: %s" % (i,m,projectnameX)
-    print "               "
+    print( "               ")
+    print( "%3i %3i === > ProjectName: %s" % (i,m,projectnameX))
+    print( "               ")
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
     modify_prm(args.prm, {'N' : Degree[i]})
@@ -168,7 +168,7 @@ for i in range(0,nDegree) :
 
 sumfile.close()
 write_summarytable(summary)
-print "table written to %s ..." % summaryfilename
-print "=" * 132
+print( "table written to %s ..." % summaryfilename)
+print( "=" * 132)
  
 shutil.rmtree(tmp_dir)

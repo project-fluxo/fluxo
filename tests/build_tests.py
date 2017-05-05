@@ -19,7 +19,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
                 run_test=None , mpi_procs = 1, keepdir=0, 
                 err= None ):
    if ( len(buildopts) < 2 ) :
-      print "error, nobuild options given"
+      print( "error, nobuild options given"  )
       err.extend(["caseID=%6d ,project= %s" % (case,project)])
       return False
    # build directory
@@ -32,18 +32,18 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
    os.chdir(builddir)
 
    allopts=" "
-   for i in range((len(buildopts)/2)) :
+   for i in range(int(int(len(buildopts))/2)) :
       allopts=allopts+" -D"+buildopts[2*i]+"="+buildopts[2*i+1]+" " 
 
-   print "===> OPTIONS:"
-   print allopts
+   print( "===> OPTIONS:" )
+   print( allopts )
 
    logf = open(log_path, 'w')
    logf.write("===> OPTIONS: \n %s \n" % (allopts) )
  
    cmdconfig = "cmake ../../."+allopts
-   print "  "
-   print "===> configure..."
+   print( "  " )
+   print( "===> configure..." )
 
    os.system(cmdconfig+" 2>stderr 1>stdout")
    stdout=open("stdout",'r').readlines()
@@ -72,21 +72,21 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
          if ( i > (nlines -ntail) ) :
             sys.stdout.write("%s" % line)
    if(not success) :
-      print "===============================================  "
-      print " !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!!! "
-      print "===============================================  "
-      print "  "
+      print( "===============================================  " )
+      print( " !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!!! " )
+      print( "===============================================  " )
+      print( "  " )
       err.extend(["caseID=%6d ,project= %s <=Cmake" % (case,project)])
       os.chdir(cwd)
       return success #=False
    else : 
-      print "===============================================  "
-      print " Cmake finished successfully."
-      print "===============================================  "
-      print "  "
+      print( "===============================================  " )
+      print( " Cmake finished successfully." )
+      print( "===============================================  " )
+      print( "  " )
    #MAKE
-   print "  "
-   print "===> make..."
+   print( "  " )
+   print( "===> make..." )
    cmdmake = ("make -j %d VERBOSE=1" % (mpi_procs) )
 
    os.system(cmdmake+" 2>stderr 1>stdout")
@@ -116,18 +116,18 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
             sys.stdout.write("%s" % line)
 
    if (not success) :
-      print "===============================================  "
-      print " !!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! "
+      print( "===============================================  " )
+      print( " !!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! " )
       err.extend(["caseID=%6d ,project= %s <=Make" % (case,project)])
-      print "===============================================  "
-      print "  "
+      print( "===============================================  " )
+      print( "  " )
       os.chdir(cwd)
       return success #=False
    else :
-      print "===============================================  "
-      print " Build finished sucessfully."
-      print "===============================================  "
-      print "  "
+      print( "===============================================  " )
+      print( " Build finished sucessfully." )
+      print( "===============================================  " )
+      print( "  " )
 
 
    os.chdir(cwd)
@@ -137,12 +137,12 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
          doruntest = True
    if(doruntest) :
       #RUN TEST
-      print "  "
-      print "===> run test %s/%s ..." % (run_test[0],run_test[1])
+      print( "  " )
+      print( "===> run test %s/%s ..." % (run_test[0],run_test[1]) )
       #change to test directory
       os.chdir(run_test[0])
       if (not os.path.isfile('./'+run_test[1])) :
-         print "!!!!!!!!  PARAMTERFILE %s/%s does not exist!" %(run_test[0],run_test[1])
+         print( "!!!!!!!!  PARAMTERFILE %s/%s does not exist!" %(run_test[0],run_test[1]) )
          os.chdir(cwd)
          return False
 
@@ -155,26 +155,26 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
                                log = True, ntail = ntail ,\
                                      mpi_procs = mpi_procs )
          if(Linf) :
-            print "   ... check Linf %s < %s ?" % (Linf[0],run_test[2])
+            print( "   ... check Linf %s < %s ?" % (Linf[0],run_test[2]) )
             if(float(Linf[0]) < float(run_test[2])) :
                success = True
       except :
          success = False
       if (not success) :
-         print "===============================================  "
-         print " !!!! PROBLEM WITH RUN, NOT FINISHED CORRECTLY!!!!! "
+         print( "===============================================  " )
+         print( " !!!! PROBLEM WITH RUN, NOT FINISHED CORRECTLY!!!!! " )
          err.extend(["caseID=%6d ,project= %s <=Run" % (case,project)])
-         print "===============================================  "
-         print "  "
+         print( "===============================================  " )
+         print( "  " )
          os.chdir(cwd)
          return success #=False
       else :
-         print "===============================================  "
-         print " Run finished sucessfully."
-         print "===============================================  "
-         print "  "
+         print( "===============================================  " )
+         print( " Run finished sucessfully." )
+         print( "===============================================  " )
+         print( "  " )
    else :
-      print " (no test specified...) "
+      print( " (no test specified...) " )
         
 
    # success still True, only delete sucessfull build if keepdir=0
@@ -274,7 +274,7 @@ if(args.runtests == 1) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_linadv_release_type1_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -291,7 +291,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_linadv_release_type2_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -308,7 +308,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type2_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -325,7 +325,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type1_GL_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -342,7 +342,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type1_GL_br2"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -359,7 +359,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type1_Gauss_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -376,7 +376,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type1_Gauss_br2"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -393,7 +393,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_linadv_type2_nopara_cart"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -427,7 +427,7 @@ TEST=[]
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_maxwell_type1_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -443,7 +443,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_maxwell_type2_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -459,7 +459,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_maxwell_type2_GL_CART"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -493,7 +493,7 @@ if(args.runtests == 1) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_mhd_release_type1_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -512,7 +512,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_mhd_release_type2_GL"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -531,7 +531,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type2_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -550,7 +550,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type1_GL_br1"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -569,7 +569,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type1_GL_br2_TCmhd"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -588,7 +588,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type1_GL_br1_TCmhd_noGLM_anisodiff"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -608,7 +608,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type1_nopara"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -626,7 +626,7 @@ if(cases[0]==0 or (caseID in cases)) :
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_mhd_type2_nopara_noGLM_cart"
-   print "caseID: %d name: %s" % (caseID,pname)
+   print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
@@ -648,20 +648,22 @@ if(cases[0]==0 or (caseID in cases)) :
 #FINAL ERROR HANDLING:
 #============================================================================
 if(len(builderr) > 0 ) :
-   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-   print "!!!!!!!    WARNING, following builds failed:     !!!!!!!!"
-   print " "
+   print( "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
+   print( "!!!!!!!    WARNING, following builds failed:     !!!!!!!!" )
+   print( " " )
    for line in builderr :
-      print "--> "+line
-   print " "
-   print "... see log.caseID_project files"
-   print "   and dirx_caseID_project folders."
-   print " rerun build script with -case option to run again spefic caseIDs."
-   print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+      print( "--> "+line )
+   print( " " )
+   print( "... see log.caseID_project files" )
+   print( "   and dirx_caseID_project folders." )
+   print( " rerun build script with -case option to run again spefic caseIDs." )
+   print( "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
+   sys.exit(100)
 else :
-   print "/////////////////////////////////////////////////////////"
-   print " "
-   print " ==> ALL BUILDS WERE SUCCESSFULL!"
-   print " "
-   print "/////////////////////////////////////////////////////////"
+   print( "/////////////////////////////////////////////////////////" )
+   print( " " )
+   print( " ==> ALL BUILDS WERE SUCCESSFULL!" )
+   print( " " )
+   print( "/////////////////////////////////////////////////////////" )
+   sys.exit(0)
 

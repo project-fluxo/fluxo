@@ -30,7 +30,7 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
       for pline in plines :
          f.write(pline)
       f.close()
-   #print cmd
+   #print(  cmd )
    p = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
    lines = []
    while p.poll() is None :
@@ -39,13 +39,13 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
          lines.extend(line)
    if p.wait() != 0 :
        for line in lines :
-           print line,
-       print "!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       print "!!   PROGRAM crashed!    !!"
-       print "!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+           print(  line )
+       print(  "!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
+       print(  "!!   PROGRAM crashed!    !!" )
+       print(  "!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
        return None
    #for line in lines :
-      #print line,
+      #print(  line )
    if log :
       f = open(log_path, 'a')
       for line in lines :
@@ -57,7 +57,7 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
       for line in lines :
          i=i+1
          if ( i > (nlines -ntail) ) :
-            print line,
+            print( line.split("\n")[0] )
    if analyze_fcts :
       results = []
       if type(analyze_fcts) != list : 
@@ -97,7 +97,7 @@ def modify_prm(path, properties) :
             lines[i] = "%s= %s\n" % (prop, str(value))
             found = True
       if (not found) :
-         print " parameter not found: %s " % key
+         print(  " parameter not found: %s " % key )
    # write parameter file
    f = open(path, 'w')
    for line in lines : 
@@ -128,15 +128,15 @@ def read_prm(path,param) :
           else :
              return None
    if (not found) :
-      print " parameter not found: %s " % param
+      print(  " parameter not found: %s " % param )
 
 ########################################################################################################
 
 # write summary to screen
 def write_summarytable(summary) :
-    print "\n"
-    print "=" * 132
-    print "  S U M M A R Y : "
+    print(  "\n" )
+    print(  "=" * 132 )
+    print(  "  S U M M A R Y : " )
     sys.stdout.write("=" * 132)
     header=True
     for line in summary.split('\n') :
@@ -149,7 +149,7 @@ def write_summarytable(summary) :
         sys.stdout.write('\n'+line.replace(',',' '))
     
     sys.stdout.write("\n")
-    print "=" * 132
+    print(  "=" * 132 )
 
 ########################################################################################################
 

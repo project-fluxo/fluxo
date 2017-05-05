@@ -30,7 +30,7 @@ parser.add_argument('prm',   help='path to parameter file')
 args = parser.parse_args()
 
 if not os.path.exists(args.prm) :
-    print "parameter-file '%s' not found" % args.prm 
+    print( "parameter-file '%s' not found" % args.prm )
     sys.exit(1)
 
 
@@ -56,9 +56,9 @@ for j in range(0,nNgeo) :
 
     projectnameX = projectname+'_Ngeo_'+Ngeo[j]+'_Level_'+Level1[i]
     modify_prm(args.prm, {'ProjectName' : projectnameX})
-    print "               "
-    print "%03.0i === > ProjectName: %s" % (i,projectnameX)
-    print "               "
+    print( "               ")
+    print( "%03.0i === > ProjectName: %s" % (i,projectnameX))
+    print( "               ")
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
     modify_prm(args.prm, {'DEFVAR=(INT):n_1' : Level1[i] })
@@ -78,7 +78,7 @@ for j in range(0,nNgeo) :
     end_time = time.time()
 
 
-    #print end_time - start_time
+    #print( end_time - start_time)
     sys.stdout.flush()
 
 
