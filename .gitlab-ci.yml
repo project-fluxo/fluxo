@@ -21,8 +21,8 @@ build_debug_linadv:
     - cmake -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=OFF  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
             -DCMAKE_BUILD_TYPE=Debug  \
             -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
-            -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1  .. |tee log.cmake_${CI_BUILD_NAME} 
-    - make VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
+            -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1  .. 2>&1 |tee log.cmake_${CI_BUILD_NAME} 
+    - make 2>&1 |tee log.make_${CI_BUILD_NAME} 
   after_script:
     - pwd 
   cache:
