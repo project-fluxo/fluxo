@@ -22,7 +22,7 @@ build_debug_hdfmod_linadv:
             -DCMAKE_BUILD_TYPE=Debug  \
             -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
             -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1  .. 2>&1 |tee log.cmake_${CI_BUILD_NAME} 
-    - make 2>&1 |tee log.make_${CI_BUILD_NAME} 
+    - make VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
   after_script:
     - pwd 
   cache:
@@ -54,7 +54,7 @@ build_release_hdfmod_linadv:
             -DCMAKE_BUILD_TYPE=Release  \
             -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
             -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1  .. 2>&1 |tee log.cmake_${CI_BUILD_NAME} 
-    - make 2>&1 |tee log.make_${CI_BUILD_NAME} 
+    - make VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
   after_script:
     - pwd 
   cache:
