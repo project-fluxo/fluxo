@@ -17,13 +17,13 @@ build_debug_linadv:
     - mkdir -p build
   script: 
     - pwd ; cd build 
-    - cmake ../. -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
-                 -DCMAKE_BUILD_TYPE=Debug  \
-                 -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
-                 -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1 2>&1 |tee log.cmake_${CI_BUILD_NAME}
+    - cmake -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
+            -DCMAKE_BUILD_TYPE=Debug  \
+            -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
+            -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1  .. |tee log.cmake_${CI_BUILD_NAME} 
     - make -VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
   after_script:
-    - echo ${CI_BUILD_NAME} " WAS SUCCESSFULL!!!"
+    - pwd 
   cache:
     key: ${CI_BUILD_NAME}
     paths:
@@ -45,14 +45,14 @@ build_release_linadv:
     - rm -rf build || true
     - mkdir -p build
   script: 
-    - pwd ; cd build 
-    - cmake ../. -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
-                 -DCMAKE_BUILD_TYPE=Release  \
-                 -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
-                 -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1 2>&1 |tee log.cmake_${CI_BUILD_NAME}
+    - cd build 
+    - cmake -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
+            -DCMAKE_BUILD_TYPE=Release  \
+            -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
+            -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1 .. |tee log.cmake_${CI_BUILD_NAME} 
     - make -VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
   after_script:
-    - echo ${CI_BUILD_NAME} " WAS SUCCESSFULL!!!"
+    - pwd 
   cache:
     key: ${CI_BUILD_NAME}
     paths:
