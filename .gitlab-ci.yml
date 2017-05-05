@@ -1,0 +1,70 @@
+stages:
+  - build
+  - test
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Stage "build"
+# v>9 artifacts: name: "${CI_PIPELINE_ID}_${CI_JOB_NAME}_${CI_COMMIT_REF_NAME}"
+# ---------------------------------------------------------------------------------------------------------------------------------
+build_debug_linadv:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - rm -rf build || true
+    - mkdir -p build
+  script: 
+    - pwd ; cd build 
+    - cmake ../. -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
+                 -DCMAKE_BUILD_TYPE=Debug  \
+                 -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
+                 -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1 2>&1 |tee log.cmake_${CI_BUILD_NAME}
+    - make -VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
+  after_script:
+    - echo ${CI_BUILD_NAME} " WAS SUCCESSFULL!!!"
+  cache:
+    key: ${CI_BUILD_NAME}
+    paths:
+    - build
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_NAME}_${CI_BUILD_REF_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - build/log.*_${CI_BUILD_NAME}
+
+build_release_linadv:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - rm -rf build || true
+    - mkdir -p build
+  script: 
+    - pwd ; cd build 
+    - cmake ../. -DFLUXO_BUILD_MPI=ON  -DFLUXO_BUILD_HDF5=ON  -DFLUXO_EQNSYSNAME=linearscalaradvection  -DFLUXO_TESTCASE=default \
+                 -DCMAKE_BUILD_TYPE=Release  \
+                 -DFLUXO_DISCTYPE=1  -DFLUXO_DISC_NODETYPE=GAUSS-LOBATTO \
+                 -DFLUXO_PARABOLIC=ON  -DFLUXO_PARABOLIC_LIFTING=br1 2>&1 |tee log.cmake_${CI_BUILD_NAME}
+    - make -VERBOSE=1 2>&1 |tee log.make_${CI_BUILD_NAME} 
+  after_script:
+    - echo ${CI_BUILD_NAME} " WAS SUCCESSFULL!!!"
+  cache:
+    key: ${CI_BUILD_NAME}
+    paths:
+    - build
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_NAME}_${CI_BUILD_REF_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - build/log.*_${CI_BUILD_NAME}
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Stage "test" 
+# v>9 artifacts: name: "${CI_PIPELINE_ID}_${CI_JOB_NAME}_${CI_COMMIT_REF_NAME}"
+# ---------------------------------------------------------------------------------------------------------------------------------
