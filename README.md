@@ -1,4 +1,5 @@
-#Fluxo
+# Fluxo
+
 FLUXO is a numerical tool to solve linear and nonlinear advection diffusion equations, for example the compressible Navier-Stokes equations, 
 the resistive magneto-hydrodynamic equations and others. 
 

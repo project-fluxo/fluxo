@@ -72,7 +72,7 @@ CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock d
 CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
 CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
 CALL prms%CreateRealOption(     'IniFrequency', "for exactfunc, frequency.","1.")
-CALL prms%CreateRealOption(     'IniAmplitude', "for exactfunc, Amplitude.","0.2")
+CALL prms%CreateRealOption(     'IniAmplitude', "for exactfunc, Amplitude.","0.1")
 CALL prms%CreateRealOption(     'IniHalfwidth', "for exactfunc, Halfwidth.","0.2")
 CALL prms%CreateRealOption(     'Kappa'       , "ratio of specific heats.","1.4")
 CALL prms%CreateRealOption(     'R'           , "gas constant.","287.058")
@@ -115,8 +115,7 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            "20: Gassner, Winters, Walch flux"//&
                                            "21: Gassner, Winters, Walch flux + LLF diss" &
                                           ,"1")
-#if (PP_DiscType==2)
-CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form:"//&
+CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
                                               "DG volume integral "//&
                                               " 0: Standard DG"//&
                                               " 1: Standard DG with metirc dealiasing"//&
@@ -130,7 +129,6 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               " 9: Gassner Winter Walch"//&
                                               "10: Two-Point EC" &
                                              ,"0")
-#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -141,7 +139,7 @@ END SUBROUTINE DefineParametersEquation
 SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
-USE MOD_ReadInTools       ,ONLY:CNTSTR,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
+USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars
@@ -166,9 +164,8 @@ IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsD
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT NAVIER-STOKES...'
+doCalcSource=.TRUE.
 
-Pi           = ACOS(-1.)
-s43=4./3.
 s23=2./3.
 
 ! Read in boundary parameters
@@ -187,7 +184,7 @@ IniCenter    = GETREALARRAY('IniCenter',3,'0.,0.,0.')
 IniAxis      = GETREALARRAY('IniAxis',3,'0.,0.,1.')
 IniAxis      = IniAxis/SQRT(SUM(IniAxis*IniAxis)) !Normalize
 IniFrequency = GETREAL('IniFrequency','1.0')
-IniAmplitude = GETREAL('IniAmplitude','0.2')
+IniAmplitude = GETREAL('IniAmplitude','0.1')
 IniHalfwidth = GETREAL('IniHalfwidth','0.2')
 
 
@@ -228,7 +225,7 @@ mu0     =mu0/(Tref**ExpoPow)
 #endif /*PARABOLIC*/
 
 ! Read Boundary information / RefStates / perform sanity check
-nRefState=CNTSTR('RefState',0)
+nRefState=COUNTOPTION('RefState')
 
 ! determine max MaxBCState
 MaxBCState = 0
@@ -353,7 +350,6 @@ SELECT CASE(WhichRiemannSolver)
          "Riemann solver not implemented")
 END SELECT
 
-#if (PP_DiscType==2)
 WhichVolumeFlux = GETINT('VolumeFlux','0')
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
@@ -393,7 +389,6 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
-#endif /*PP_DiscType==2*/
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -438,11 +433,12 @@ END SUBROUTINE FillIni
 !==================================================================================================================================
 SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu) 
 ! MODULES
+USE MOD_Preproc
 USE MOD_Globals,ONLY:Abort,CROSS
-USE MOD_Equation_Vars,ONLY:Pi,Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis
 USE MOD_Equation_Vars,ONLY:PrimToCons
-USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !TODO DEBUG,t
+USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -472,9 +468,9 @@ REAL                            :: factors(256)
 REAL                            :: sines(256)
 INTEGER                         :: f
 ! needed for cylinder potential flow
-REAL                            :: pi_loc,phi,radius
+REAL                            :: phi
 !==================================================================================================================================
-!TODO DEBUG tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
+tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
 resu_tt=0.
 SELECT CASE (ExactFunction)
@@ -490,7 +486,7 @@ CASE(1) ! constant
 CASE(2) ! sinus
   Frequency=0.01
   Amplitude=0.3
-  Omega=Pi*Frequency
+  Omega=PP_Pi*Frequency
   ! base flow
   prim(1)   = 1.
   prim(2:4) = AdvVel
@@ -529,8 +525,7 @@ CASE(21) ! linear in rho
   ! g''(t)
   Resu_tt=0.
 CASE(3) !Alfen Wave without Magnetic Field
-  Frequency=1.
-  Omega=Pi*Frequency
+  Omega=PP_Pi*IniFrequency
   ! r_len: lenght-variable = lenght of computational domain
   r_len=2.
   ! e: epsilon = 0.2
@@ -561,19 +556,17 @@ CASE(3) !Alfen Wave without Magnetic Field
   Resu_tt(4) = -e*SIN(Phi_alv)*Omega/ny*Va*Va*Omega/ny*Va
   Resu_tt(5) = 0.5*Resu(1)*2.*SUM(Resu(2:4)*Resu_tt(2:4) + Resu_t(2:4)*Resu_t(2:4))
 CASE(4) ! exact function
-  Frequency=1.
-  Amplitude=0.1
-  Omega=Pi*Frequency
-  a=AdvVel(1)*2.*Pi
+  Omega=PP_Pi*IniFrequency
+  a=AdvVel(1)*2.*PP_Pi
 
   ! g(t)
-  Resu(1:4)=2.+ Amplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
   Resu(5)=Resu(1)*Resu(1)
   ! g'(t)
-  Resu_t(1:4)=(-a)*Amplitude*cos(Omega*SUM(x) - a*tEval)
+  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
   Resu_t(5)=2.*Resu(1)*Resu_t(1)
   ! g''(t)
-  Resu_tt(1:4)=-a*a*Amplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
 CASE(5)
   Resu(2:4) = 1.+x(1)+2.*x(2)-7.*x(3) 
@@ -615,7 +608,7 @@ CASE(7) !TAYLOR GREEN VORTEX
   prim(5)=prim(5)+1./16.*A*A*prim(1)*(COS(2*x(1))*COS(2.*x(3)) + 2.*COS(2.*x(2)) +2.*COS(2.*x(1)) +COS(2*x(2))*COS(2.*x(3)))
   CALL PrimToCons(prim,Resu)
 CASE(8) !1D Sinus
-  Omega=Pi
+  Omega=PP_Pi
   cent(1)=x(1)-AdvVel(1)*tEval
   resu(1)=1.+0.25*SIN(Omega*cent(1))
   resu(2)= resu(1)*AdvVel(1)
@@ -630,7 +623,7 @@ CASE(8) !1D Sinus
   resu_tt(3:4)=0.
   resu_tt(5)=0.5*AdvVel(1)**2*resu_tt(1)
 CASE(9)
-  Omega=2.*Pi
+  Omega=2.*PP_Pi
   DO f=1,256
     factors(f)=f**(-5./3.)*exp(-1.5*(f*0.02)**(4./3.))
     factors(f)=sqrt(2.*factors(f))
@@ -664,33 +657,16 @@ CASE(10) !Roundjet Bogey Bailly 2002, Re=65000, x-axis is jet axis
 !   after x=10 blend to ResuR
   Resu=ResuL+(ResuR-ResuL)*0.5*(1.+tanh(x(1)-10.))
 CASE(11)  ! Cylinder flow
-  IF(t .EQ. 0.)THEN   ! Initialize potential flow
+  IF(tEval .EQ. 0.)THEN   ! Initialize potential flow
     prim(1)=RefStatePrim(IniRefState,1)  ! Density
     prim(4)=0.           ! VelocityZ=0. (2D flow)
     ! Calculate cylinder coordinates (0<phi<Pi/2)
-    pi_loc=ASIN(1.)*2.
-    IF(x(1) .LT. 0.)THEN
-      phi=ATAN(ABS(x(2))/ABS(x(1)))
-      IF(x(2) .LT. 0.)THEN
-        phi=pi_loc+phi
-      ELSE
-        phi=pi_loc-phi
-      END IF
-    ELSEIF(x(1) .GT. 0.)THEN
-      phi=ATAN(ABS(x(2))/ABS(x(1)))
-      IF(x(2) .LT. 0.) phi=2.*pi_loc-phi
-    ELSE
-      IF(x(2) .LT. 0.)THEN
-        phi=pi_loc*1.5
-      ELSE
-        phi=pi_loc*0.5
-      END IF
-    END IF
+    phi=ATAN2(x(2),x(1))
     ! Calculate radius**2
-    radius=x(1)*x(1)+x(2)*x(2)
+    r2=x(1)*x(1)+x(2)*x(2)
     ! Calculate velocities, radius of cylinder=0.5
-    prim(2)=RefStatePrim(IniRefState,2)*(COS(phi)**2*(1.-0.25/radius)+SIN(phi)**2*(1.+0.25/radius))
-    prim(3)=RefStatePrim(IniRefState,2)*(-2.)*SIN(phi)*COS(phi)*0.25/radius
+    prim(2)=RefStatePrim(IniRefState,2)*(COS(phi)**2*(1.-0.25/r2)+SIN(phi)**2*(1.+0.25/r2))
+    prim(3)=RefStatePrim(IniRefState,2)*(-2.)*SIN(phi)*COS(phi)*0.25/r2
     ! Calculate pressure, RefState(2)=u_infinity
     prim(5)=RefStatePrim(IniRefState,5) + &
             0.5*prim(1)*(RefStatePrim(IniRefState,2)*RefStatePrim(IniRefState,2)-prim(2)*prim(2)-prim(3)*prim(3))
@@ -709,7 +685,7 @@ CASE(12) ! SHU VORTEX,isentropic vortex (adapted from HALO)
   cent=cent-IniAxis*SUM(IniAxis*cent)
   cent=cent/iniHalfWidth !Halfwidth is dimension 1
   r2=SUM(cent*cent) !
-  du = iniAmplitude/(2.*pi)*exp(0.5*(1.-r2)) ! vel. perturbation
+  du = iniAmplitude/(2.*PP_Pi)*exp(0.5*(1.-r2)) ! vel. perturbation
   dTemp = -kappaM1/(2.*kappa*RT)*du**2 ! adiabatic
   prim(1)=prim(1)*(1.+dTemp)**(1.*skappaM1) !rho
   prim(2:4)=prim(2:4)+du*CROSS(IniAxis,cent) !v
@@ -721,7 +697,7 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
   prim(5)   = 0.00001! ambient pressure
   r2 = SQRT(SUM(x*x))! the radius
   IF ((r2.LE.0.1).AND.(r2.NE.0.)) THEN
-    du      = 4.*pi*r2*r2*r2/3. ! the volume of the small sphere
+    du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
     prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
   END IF
   CALL PrimToCons(prim,resu)
@@ -751,11 +727,11 @@ END SUBROUTINE ExactFunc
 !==================================================================================================================================
 SUBROUTINE CalcSource(Ut,tIn)
 ! MODULES
+USE MOD_PreProc
 USE MOD_Globals,ONLY:Abort
-USE MOD_PreProc !PP_N,PP_nElems
-USE MOD_Equation_Vars, ONLY: IniExactFunc
-USE MOD_Equation_Vars, ONLY: Pi,sKappaM1,Kappa,KappaM1,AdvVel
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP
+USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
+USE MOD_Equation_Vars, ONLY: Kappa,KappaM1,AdvVel,doCalcSource
+USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #if PARABOLIC
 USE MOD_Equation_Vars,ONLY:mu0,Pr
 #endif
@@ -768,7 +744,7 @@ REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                            :: Frequency,Amplitude,Omega,a
+REAL                            :: Omega,a
 INTEGER                         :: i,j,k,iElem
 REAL                            :: Ut_src(5)
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
@@ -776,23 +752,21 @@ REAL                            :: tmp(6)
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! exact function
-  Frequency=1.
-  Amplitude=0.1
-  Omega=PP_Pi*Frequency
+  Omega=PP_Pi*IniFrequency
   a=AdvVel(1)*2.*PP_Pi
   tmp(1)=-a+3*Omega
   tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
-  tmp(3)=Amplitude*Omega*KappaM1
+  tmp(3)=IniAmplitude*Omega*KappaM1
   tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a)
-  tmp(5)=Amplitude*(3.*Omega*Kappa-a)
+  tmp(5)=IniAmplitude*(3.*Omega*Kappa-a)
 #if PARABOLIC
   tmp(6)=3.*mu0*Kappa*Omega*Omega/Pr
 #else
   tmp(6)=0.
 #endif
-  tmp=tmp*Amplitude
-  at=a*tEval
-  DO iElem=1,PP_nElems
+  tmp=tmp*IniAmplitude
+  at=a*tIn
+  DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
       sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
@@ -803,6 +777,8 @@ CASE(4) ! exact function
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
+CASE DEFAULT
+  doCalcSource=.FALSE.
 END SELECT ! ExactFunction
 END SUBROUTINE CalcSource
 

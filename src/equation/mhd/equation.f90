@@ -139,7 +139,7 @@ IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsD
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MHD...'
-
+doCalcSource=.TRUE.
 
 IniRefState=-1
 ! Read in boundary parameters
@@ -323,7 +323,7 @@ USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniW
 USE MOD_Equation_Vars,ONLY:IniDisturbance
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
-USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb !,t
+USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -345,8 +345,7 @@ REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
 !==================================================================================================================================
-!tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
-tEval=tIn 
+tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
 ! Determine the value, the first and the second time derivative
 SELECT CASE (ExactFunction)
@@ -839,6 +838,7 @@ USE MOD_PreProc !PP_N
 USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
 USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
 USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
+USE MOD_Equation_Vars, ONLY:doCalcSource
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
@@ -950,6 +950,7 @@ CASE(6) ! case 5 rotated
 
 CASE DEFAULT
   ! No source -> do nothing
+  doCalcSource=.FALSE. 
 END SELECT ! ExactFunction
 #ifdef PP_GLM
 IF(DivBSource)THEN
