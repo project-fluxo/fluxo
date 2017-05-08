@@ -17,53 +17,45 @@ def copy2temporary(tmp_dir, f) :
 def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, ntail = 0 ,\
       mpi_procs = 1, L2 = 1., Linf=1.,PID=0. ) :
    if mpi_procs == 1 :
-      cmd = []
+      cmd = " "
    else :
-      cmd = ["mpirun", "-np", "%d" % mpi_procs]
-   cmd.append(exec_path)
-   cmd.append(prm_path)
+      cmd = ("mpirun -np %d " % mpi_procs)
+
+   cmd=cmd+" "+exec_path.strip()+" "+prm_path.strip()
    if log :
       #log_path = os.path.splitext(os.path.basename(prm_path))[0] + ".log"
       log_path = "log."+projectname
       plines = open(prm_path, 'r').readlines()
-      f = open(log_path, 'w')
+      logf = open(log_path, 'w')
       for pline in plines :
-         f.write(pline)
-      f.close()
-   #print(  cmd )
-   p = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-   lines = []
-   while p.poll() is None :
-      line = p.stdout.readlines()
-      if line :
-         lines.extend(line)
-   if p.wait() != 0 :
-       for line in lines :
-           print(  line )
-       print(  "!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
-       print(  "!!   PROGRAM crashed!    !!" )
-       print(  "!!!!!!!!!!!!!!!!!!!!!!!!!!!" )
-       return None
-   #for line in lines :
-      #print(  line )
+         logf.write(pline)
+      logf.close()
+   cwd = os.getcwd()  #current working director
+   os.system(cmd+" 2>std.err 1>std.out")
+   stdout=open("std.out",'r').readlines()
+   stderr=open("std.err",'r').readlines()
    if log :
-      f = open(log_path, 'a')
-      for line in lines :
-         f.write(line)
-      f.close()
+      logf = open(log_path, 'a')
+      logf.write('EXECUTE: STDOUT FILE:\n')
+      for line in stdout :
+         logf.write(line)
+      logf.write('EXECUTE: STDERR FILE:\n')
+      for line in stderr :
+         logf.write(line)
+      logf.close()
+   nlines=len(stdout)
+   finishedline = [ line for line in stdout[nlines-10:nlines] if ('finished' in line.lower())]
+   if (len(finishedline) == 0) :
+      sys.exit(99)  ## be sure that execution marked "crashed"
    if (ntail > 0) :
-      nlines=len(lines)
-      i=0
-      for line in lines :
-         i=i+1
-         if ( i > (nlines -ntail) ) :
-            print( line.split("\n")[0] )
+      for line in stdout[nlines-ntail:nlines] :
+        print( line.split("\n")[0] )
    if analyze_fcts :
       results = []
       if type(analyze_fcts) != list : 
-         return analyze_fcts(lines)
+         return analyze_fcts(stdout)
       for analyze_fct in analyze_fcts :
-         tmp=analyze_fct(lines)
+         tmp=analyze_fct(stdout)
          results.append(tmp)
 
       return results

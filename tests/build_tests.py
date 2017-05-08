@@ -16,171 +16,177 @@ from helpers import get_last_L2_error, get_last_Linf_error, get_cpu_per_dof
 ########################################################################################################
 
 def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 , 
-                run_test=None , mpi_procs = 1, keepdir=0, 
-                err= None ):
+                stage=0 , run_test=None, mpi_procs = 1 , err= None ):
    if ( len(buildopts) < 2 ) :
       print( "error, nobuild options given"  )
-      err.extend(["caseID=%6d ,project= %s" % (case,project)])
+      err.extend(["caseID=%6d ,project= %s <== build opts." % (case,project)])
       return False
    # build directory
    builddir=("dirx_%d_%s" % (case,project))
    log_path=("../log.%d_%s" % (case,project))
 
-   os.system('rm -rf '+builddir) #destroy directory from previous run
-   os.system('mkdir '+builddir )
    cwd = os.getcwd()  #current working directory
-   os.chdir(builddir)
+   if (stage < 2) :
+     os.system('rm -rf '+builddir) #destroy directory from previous run
+     os.system('mkdir '+builddir )
 
-   allopts=" "
-   for i in range(int(int(len(buildopts))/2)) :
-      allopts=allopts+" -D"+buildopts[2*i]+"="+buildopts[2*i+1]+" " 
+     os.chdir(builddir)
 
-   print( "===> OPTIONS:" )
-   print( allopts )
+     allopts=" "
+     for i in range(int(int(len(buildopts))/2)) :
+        allopts=allopts+" -D"+buildopts[2*i]+"="+buildopts[2*i+1]+" " 
+     
+     logf = open(log_path, 'w')
+     print( "===> OPTIONS:" )
+     print( allopts )
+     
+     logf.write("===> OPTIONS: \n %s \n" % (allopts) )
+     
+     cmdconfig = "cmake ../../."+allopts
+     print( "  " )
+     print( "===> configure..." )
+     
+     os.system(cmdconfig+" 2>std.err 1>std.out")
+     stdout=open("std.out",'r').readlines()
+     stderr=open("std.err",'r').readlines()
+     
+     success= True
+     for line in stderr :
+        if "ERROR" in line :
+           success= False
+           sys.stdout.write("%s" % line)
+     
+     logf.write('CONFIG: STDOUT FILE:\n')
+     for line in stdout :
+        logf.write(line)
+     
+     logf.write('CONFIG: STDERR FILE:\n')
+     for line in stderr :
+        logf.write(line)
+     
+     logf.close()
+     if (ntail > 0) :
+        nlines=len(stdout)
+        for line in stdout[nlines-ntail:nlines] :
+           sys.stdout.write("%s" % line)
+     if(not success) :
+        print( "================================================ " )
+        print( " !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!! " )
+        print( "================================================ " )
+        print( "  " )
+        err.extend(["caseID=%6d ,project= %s <=Cmake" % (case,project)])
+        os.chdir(cwd)
+        return success #=False
+     else : 
+        print( "================================================ " )
+        print( " Cmake finished successfully.                    " )                
+        print( "================================================ " )
+        print( "  " )
+     #endif (not success)
 
-   logf = open(log_path, 'w')
-   logf.write("===> OPTIONS: \n %s \n" % (allopts) )
- 
-   cmdconfig = "cmake ../../."+allopts
-   print( "  " )
-   print( "===> configure..." )
-
-   os.system(cmdconfig+" 2>stderr 1>stdout")
-   stdout=open("stdout",'r').readlines()
-   stderr=open("stderr",'r').readlines()
-
-   success= True
-   for line in stderr :
-      if "ERROR" in line :
-         success= False
-         sys.stdout.write("%s" % line)
-
-   logf.write('CONFIG: STDOUT FILE:\n')
-   for line in stdout :
-      logf.write(line)
-
-   logf.write('CONFIG: STDERR FILE:\n')
-   for line in stderr :
-      logf.write(line)
-
-   logf.close()
-   if (ntail > 0) :
-      nlines=len(stdout)
-      i=0
-      for line in stdout :
-         i=i+1
-         if ( i > (nlines -ntail) ) :
-            sys.stdout.write("%s" % line)
-   if(not success) :
-      print( "===============================================  " )
-      print( " !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!!! " )
-      print( "===============================================  " )
-      print( "  " )
-      err.extend(["caseID=%6d ,project= %s <=Cmake" % (case,project)])
-      os.chdir(cwd)
-      return success #=False
-   else : 
-      print( "===============================================  " )
-      print( " Cmake finished successfully." )
-      print( "===============================================  " )
-      print( "  " )
-   #MAKE
-   print( "  " )
-   print( "===> make..." )
-   cmdmake = ("make -j %d VERBOSE=1" % (mpi_procs) )
-
-   os.system(cmdmake+" 2>stderr 1>stdout")
-   stdout=open("stdout",'r').readlines()
-   stderr=open("stderr",'r').readlines()
+     #MAKE
+     print( "  " )
+     print( "===> make..." )
+     cmdmake = ("make -j %d VERBOSE=1" % (mpi_procs) )
+     
+     os.system(cmdmake+" 2>std.err 1>std.out")
+     stdout=open("std.out",'r').readlines()
+     stderr=open("std.err",'r').readlines()
+     
+     logf = open(log_path, 'a') #append
+     
+     success= False
+     logf.write('\n ====> MAKE: STDOUT FILE:\n \n')
+     for line in stdout :
+        logf.write(line)
+        if "SUCCESS: FLUXO BUILD COMPLETE!" in line :
+           success= True
+     
+     logf.write('\n ====> MAKE: STDERR FILE:\n \n')
+     for line in stderr :
+        logf.write(line)
+     
+     logf.close()
+     if (ntail > 0) :
+        nlines=len(stdout)
+        i=0
+        for line in stdout[nlines-ntail:nlines] :
+           sys.stdout.write("%s" % line)
+     
+     if (not success) :
+        print( "==================================================== " )
+        print( "!!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! " )
+        err.extend(["caseID=%6d ,project= %s <=Make" % (case,project)] )
+        print( "==================================================== " )
+        print( "  " )
+        os.chdir(cwd)
+        return success #=False
+     else :
+        print( "==================================================== " )
+        print( " Build finished sucessfully.                         " )                  
+        print( "==================================================== " )
+        print( "  " )
+     #endif (not success)
+      
+   #endif (stage <2)
    
-   logf = open(log_path, 'a') #append
+   # RUN TEST: stage =1 and 2
+   if (stage > 0 ) :
+     os.chdir(cwd)
+     
+     doruntest=False
+     if( run_test ) :
+        if( len(run_test) == 3 ) :  # run tests
+           doruntest = True
+     if(doruntest) :
+        if ( not os.path.exists(builddir)) :
+          print( "error, build dir does not exist: %s " % builddir  )
+          err.extend(["caseID=%6d ,project= %s <== no builddir" % (case,project)])
+          return False
+        #RUN TEST
+        print( "  " )
+        print( "===> run test %s/%s ..." % (run_test[0],run_test[1]) )
+        #change to test directory
+        os.chdir(run_test[0])
+        if (not os.path.isfile('./'+run_test[1])) :
+           print( "!!!!!!!!  PARAMTERFILE %s/%s does not exist!" %(run_test[0],run_test[1]) )
+           os.chdir(cwd)
+           return False
+     
+        projectname = read_prm(run_test[1],'ProjectName')
+        projectnamex=("%s_%d_%s" % (projectname,case,project))
+        success = False
+        try :
+           [L2,Linf,PID] = execute(cwd+"/"+builddir+"/bin/fluxo", run_test[1], projectnamex,\
+                                 [get_last_L2_error, get_last_Linf_error, get_cpu_per_dof],\
+                                 log = True, ntail = ntail ,\
+                                       mpi_procs = mpi_procs )
+           if(Linf) :
+              print( "   ... check Linf %s < %s ?" % (Linf[0],run_test[2]) )
+              if(float(Linf[0]) < float(run_test[2])) :
+                 success = True
+        except :
+           success = False
+        if (not success) :
+           print( "================================================== " )
+           print( "!!!! PROBLEM WITH RUN, NOT FINISHED CORRECTLY!!!!! " )
+           err.extend(["caseID=%6d ,project= %s <=Run" % (case,project)])
+           print( "================================================== " )
+           print( "  " )
+           os.chdir(cwd)
+           return success #=False
+        else :
+           print( "==================================================  " )
+           print( " Run finished sucessfully.                          " )
+           print( "==================================================  " )
+           print( "  " )
+     else :
+        print( " (no test specified...) " )
+     #endif (not success)
+   #endif (stage >1)
 
-   success= False
-   logf.write('\n ====> MAKE: STDOUT FILE:\n \n')
-   for line in stdout :
-      logf.write(line)
-      if "SUCCESS: FLUXO BUILD COMPLETE!" in line :
-         success= True
-
-   logf.write('\n ====> MAKE: STDERR FILE:\n \n')
-   for line in stderr :
-      logf.write(line)
-
-   logf.close()
-   if (ntail > 0) :
-      nlines=len(stdout)
-      i=0
-      for line in stdout :
-         i=i+1
-         if ( i > (nlines -ntail) ) :
-            sys.stdout.write("%s" % line)
-
-   if (not success) :
-      print( "===============================================  " )
-      print( " !!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! " )
-      err.extend(["caseID=%6d ,project= %s <=Make" % (case,project)])
-      print( "===============================================  " )
-      print( "  " )
-      os.chdir(cwd)
-      return success #=False
-   else :
-      print( "===============================================  " )
-      print( " Build finished sucessfully." )
-      print( "===============================================  " )
-      print( "  " )
-
-
+   # success still True
    os.chdir(cwd)
-   doruntest=False
-   if( run_test ) :
-      if( len(run_test) == 3 ) :  # run tests
-         doruntest = True
-   if(doruntest) :
-      #RUN TEST
-      print( "  " )
-      print( "===> run test %s/%s ..." % (run_test[0],run_test[1]) )
-      #change to test directory
-      os.chdir(run_test[0])
-      if (not os.path.isfile('./'+run_test[1])) :
-         print( "!!!!!!!!  PARAMTERFILE %s/%s does not exist!" %(run_test[0],run_test[1]) )
-         os.chdir(cwd)
-         return False
-
-      projectname = read_prm(run_test[1],'ProjectName')
-      projectnamex=("%s_%d_%s" % (projectname,case,project))
-      success = False
-      try :
-         [L2,Linf,PID] = execute(cwd+"/"+builddir+"/bin/fluxo", run_test[1], projectnamex,\
-                               [get_last_L2_error, get_last_Linf_error, get_cpu_per_dof],\
-                               log = True, ntail = ntail ,\
-                                     mpi_procs = mpi_procs )
-         if(Linf) :
-            print( "   ... check Linf %s < %s ?" % (Linf[0],run_test[2]) )
-            if(float(Linf[0]) < float(run_test[2])) :
-               success = True
-      except :
-         success = False
-      if (not success) :
-         print( "===============================================  " )
-         print( " !!!! PROBLEM WITH RUN, NOT FINISHED CORRECTLY!!!!! " )
-         err.extend(["caseID=%6d ,project= %s <=Run" % (case,project)])
-         print( "===============================================  " )
-         print( "  " )
-         os.chdir(cwd)
-         return success #=False
-      else :
-         print( "===============================================  " )
-         print( " Run finished sucessfully." )
-         print( "===============================================  " )
-         print( "  " )
-   else :
-      print( " (no test specified...) " )
-        
-
-   # success still True, only delete sucessfull build if keepdir=0
-   os.chdir(cwd)
-   if(keepdir ==0) :
-      os.system('rm -rf '+builddir) #destroy directory
    return success
 
      
@@ -202,7 +208,7 @@ def parse_range(astr):
 ########################################################################################################
 parser = argparse.ArgumentParser(description='Tool to build/compile fluxo in different configurations',\
                                  formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument('-p','--procs',type=int,default=1, help='    number of processors used for the make (DEFAULT=1)')
+parser.add_argument('-p','--procs',type=int,default=1, help='    number of processors used for the make / execute (DEFAULT=1)')
 
 parser.add_argument('-withmpi', type=int, default=1,   help="1 : DEFAULT ,compile with mpi\n"
                                                             "0 : compile without mpi  ")
@@ -215,13 +221,11 @@ parser.add_argument('-hostname', type=str, default="", help="    cmake hostname,
 parser.add_argument('-case', type=str, default='0',    help="0 : DEFAULT, run all cases,\n" 
                                                             "101,102-104 : list of specific cases to run (without spaces!) ")
 
-parser.add_argument('-runtests',type=int, default='0', help="1 : make a test run with the executable and a given parameterfile,\n" 
-                                                            "0 : DEFAULT, do not run any tests. ")
+parser.add_argument('-stage',type=int, default='0',    help="0 : DEFAULT, only build code\n"
+                                                            "1 : build code and run with executable and parameterfile\n" 
+                                                            "2 : only run examples (checks if code builds exist) ")
 
 parser.add_argument('-ntail', type=int, default=5,     help='    number of last line output of cmake/make screenlog (DEFAULT=5)')
-
-parser.add_argument('-keepdir', type=int, default=1,   help="1 : DEFAULT, keep all build directories,\n" 
-                                                            "0 : delete sucessfull build directories")
 
 
 args = parser.parse_args()
@@ -266,10 +270,9 @@ baseopts=[
           ,"FLUXO_TESTCASE"         ,"default"
          ]
 
+# relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-if(args.runtests == 1) :
-   # relative path from tests folder, parameterfile,Linf[0]<crit for success
-   TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-10" ])
+TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -286,7 +289,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname,ntail = args.ntail,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -303,7 +306,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -320,7 +323,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -337,7 +340,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -354,7 +357,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                           run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -371,7 +374,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                           run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -388,7 +391,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -405,7 +408,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=None , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=None , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -419,10 +422,9 @@ baseopts=[
            "FLUXO_EQNSYSNAME"       ,"maxwell"
           ,"FLUXO_TESTCASE"         ,"default"
          ]
+# relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-#if(args.runtests == 1) :
-#   # relative path from tests folder, parameterfile,Linf[0]<crit for success
-#   TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-10" ])
+# TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -438,7 +440,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -454,7 +456,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -471,7 +473,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=None , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          run_test=None , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -485,10 +487,9 @@ caseID=300
 baseopts=[
            "FLUXO_EQNSYSNAME"       ,"mhd"
          ]
+# relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-if(args.runtests == 1) :
-   # relative path from tests folder, parameterfile,Linf[0]<crit for success
-   TEST.extend(["freestream","parameter_freestream_mhd.ini", "1.0e-10" ])
+TEST.extend(["freestream","parameter_freestream_mhd.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -507,7 +508,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -526,7 +527,7 @@ if(cases[0] ==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -545,7 +546,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -564,7 +565,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -583,7 +584,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -603,7 +604,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -621,7 +622,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=TEST , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -640,7 +641,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          run_test=None , mpi_procs = args.procs , keepdir=args.keepdir, err=builderr )
+                          run_test=None , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
