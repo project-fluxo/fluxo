@@ -182,6 +182,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
            print( "  " )
      else :
         print( " (no test specified...) " )
+        success = True #ignore this test
      #endif (not success)
    #endif (stage >1)
 
