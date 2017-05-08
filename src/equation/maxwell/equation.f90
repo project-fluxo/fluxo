@@ -498,7 +498,7 @@ SUBROUTINE CalcSource(Ut,tIn)
 USE MOD_Globals,       ONLY : abort
 USE MOD_PreProc
 USE MOD_DG_Vars,       ONLY : U
-USE MOD_Equation_Vars, ONLY : eps0,c_corr,scr,IniExactFunc
+USE MOD_Equation_Vars, ONLY : eps0,c_corr,scr,IniExactFunc,doCalcSource
 USE MOD_Mesh_Vars,     ONLY : Elem_xGP,nElems                  ! for shape function: xyz position of the Gauss points
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

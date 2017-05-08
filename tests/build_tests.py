@@ -819,7 +819,12 @@ if(len(builderr) > 0 ) :
 else :
    print( "/////////////////////////////////////////////////////////" )
    print( " " )
-   print( " ==> ALL BUILDS WERE SUCCESSFULL!" )
+   if ( args.stage == 0) :
+     print( " ==> ALL BUILDS SUCCESSFULL!" )
+   if ( args.stage == 1) :
+     print( " ==> ALL BUILDS AND RUNS SUCCESSFULL!" )
+   if ( args.stage == 2) :
+     print( " ==> ALL RUNS SUCCESSFULL!" )
    print( " " )
    print( "/////////////////////////////////////////////////////////" )
    sys.exit(0)
