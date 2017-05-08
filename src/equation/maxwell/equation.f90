@@ -108,7 +108,7 @@ IF(InterpolationInitIsDone.AND.EquationInitIsDone)THEN
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MAXWELL ...'
-
+doCalcSource=.TRUE.
 ! Read correction velocity
 scr            = 1./ GETREAL('c_r','0.18')  !constant for damping
 c_corr             = GETREAL('c_corr','1.')
@@ -517,10 +517,10 @@ REAL               :: x(3)
 !==================================================================================================================================
 eps0inv = 1./eps0
 SELECT CASE (IniExactFunc)
-CASE(0) ! Particles
-CASE(1) ! Constant          - no sources
-CASE(2) ! Coaxial Waveguide - no sources
-CASE(3) ! Resonator         - no sources
+!CASE(0) ! Particles
+!CASE(1) ! Constant          - no sources
+!CASE(2) ! Coaxial Waveguide - no sources
+!CASE(3) ! Resonator         - no sources
 !CASE(4) ! Dipole
 !  DO iElem=1,PP_nElems
 !    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
@@ -555,7 +555,7 @@ CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), doma
 
 !CASE(50,51) ! TE_34,19 Mode - no sources
 CASE DEFAULT
-  CALL abort(__STAMP__,'Exactfunction not specified!',999,999.)
+  doCalcSource=.FALSE.
 END SELECT ! ExactFunction
 !source fo divcorr damping!
 Ut(7:8,:,:,:,:)=Ut(7:8,:,:,:,:)-(c_corr*scr)*U(7:8,:,:,:,:)

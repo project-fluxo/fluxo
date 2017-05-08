@@ -101,6 +101,7 @@ IF((.NOT.InterpolationInitIsDone).OR.EquationInitIsDone)THEN
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SCALAR LINADV...'
+doCalcSource=.TRUE.
 
 ! Read the velocity vector from ini file
 AdvVel             = GETREALARRAY('AdvVel',3)
@@ -334,7 +335,7 @@ END SUBROUTINE ExactFunc
 SUBROUTINE CalcSource(Ut,tIn)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
-USE MOD_Equation_Vars,ONLY:IniExactFunc
+USE MOD_Equation_Vars,ONLY:IniExactFunc,doCalcSource
 USE MOD_PreProc
 USE MOD_Mesh_vars,ONLY: nElems
 IMPLICIT NONE
@@ -349,16 +350,18 @@ REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG
 !INTEGER                          :: iElem,i,j,k
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
-CASE(1) ! constant 
-CASE(2) ! sinus
-CASE(3)
-CASE(4) ! exact function
+!CASE(1) ! constant 
+!CASE(2) ! sinus
+!CASE(3)
+!CASE(4) ! exact function
 !  DO iElem=1,nElems
 !    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
      ! code
 !    END DO; END DO; END DO ! i,j,k
 !  END DO
-CASE(101)
+!CASE(101)
+CASE DEFAULT
+  doCalcSource=.FALSE.
 END SELECT ! ExactFunction
 END SUBROUTINE CalcSource
 
