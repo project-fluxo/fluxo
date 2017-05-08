@@ -83,6 +83,31 @@ build_mhd:
     paths:
     - tests/log.*
 
+#--------------------------------------------------------------------------------------------------------------------------------
+build_nav-st:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - module list
+    - rm -rf tests/dirx_* || true
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 400-499 
+  after_script:
+    - pwd 
+  cache:
+    key: ${CI_BUILD_NAME}
+    paths:
+    - tests/dirx_4[0-9][0-9]*
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/log.*
 
 # =================================================================================================================================
 # Stage "short_runs"
@@ -136,3 +161,28 @@ short_runs_mhd:
     when: always
     paths:
     - tests/freestream/log.MHD*
+
+#--------------------------------------------------------------------------------------------------------------------------------
+short_runs_nav-st:
+  stage: short_runs
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - module list
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 2 -stage 2 -case 400-499 
+  after_script:
+    - pwd 
+  cache:
+    key: build_nav-st
+    paths:
+    - tests/dirx_4[0-9][0-9]*
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/freestream/log.NAVIERSTOKES*
