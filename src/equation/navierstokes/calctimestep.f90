@@ -41,7 +41,7 @@ FUNCTION CALCTIMESTEP(errType)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Mesh_Vars     ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP
+USE MOD_Mesh_Vars     ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars ,ONLY:kappa,kappaM1
 USE MOD_TimeDisc_Vars ,ONLY:CFLScale,ViscousTimeStep,dtElem
 #if PARABOLIC
@@ -81,14 +81,13 @@ REAL                         :: buf(3)
 #endif /*MPI*/
 !==================================================================================================================================
 errType=0
-errMsg=""
 #if PARABOLIC
 KappasPr_max=MAX(4./3.,KappasPr)
 #endif /*PARABOLIC*/
 
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   maxLambda1=1.0E-12
   maxLambda2=1.0E-12
   maxLambda3=1.0E-12
@@ -102,7 +101,6 @@ DO iElem=1,PP_nElems
       DO i=0,PP_N
         ! Convective Eigenvalues
         IF(IEEE_IS_NAN(U(1,i,j,k,iElem)))THEN
-          WRITE(errMsg,'(A,3ES16.7)')'Density NaN, Position= ',Elem_xGP(:,i,j,k,iElem)
           ERRWRITE(*,'(A,3ES16.7)')'Density NaN, Position= ',Elem_xGP(:,i,j,k,iElem)
           errType=1
         END IF
@@ -110,7 +108,6 @@ DO iElem=1,PP_nElems
         v=U(2:4,i,j,k,iElem)*sRho
         p=kappaM1*(U(5,i,j,k,iElem)-0.5*U(1,i,j,k,iElem)*SUM(v*v))
         IF(p.LE.0.)THEN
-          WRITE(ErrMsg,'(A,3ES16.7)')'Pressure Negative, Position= ',Elem_xGP(:,i,j,k,iElem)
           ERRWRITE(*,'(A,3ES16.7)')'Pressure Negative, Position= ',Elem_xGP(:,i,j,k,iElem)
           errType=2
         END IF
@@ -121,7 +118,7 @@ DO iElem=1,PP_nElems
                         c*SQRT(SUM(Metrics_gTilde(:,i,j,k,iElem)*Metrics_gTilde(:,i,j,k,iElem)))))
         MaxLambda3=MAX(MaxLambda3,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*v)) + &
                         c*SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem)))))
-#ifdef PARABOLIC
+#if PARABOLIC
         ! Viscous Eigenvalues
 #if   PP_VISC == 0
         muX=sRho*KappasPr_max*mu0   ! Constant mu
@@ -140,7 +137,6 @@ DO iElem=1,PP_nElems
   dtElem(iElem)=CFLScale*2./(maxLambda1+maxLambda2+maxLambda3)
   TimeStepConv=MIN(TimeStepConv,dtElem(iElem))
   IF(IEEE_IS_NAN(TimeStepConv))THEN
-    ErrMsg='Convective timestep NaN '
     ERRWRITE(*,'(A,I0,A,I0)')'Convective timestep NaN on proc',myRank,' for element: ',iElem
     ERRWRITE(*,'(A,3ES16.7)')'Position: Elem_xGP(:1,1,1,iElem)=',Elem_xGP(:,1,1,1,iElem)
     ERRWRITE(*,*)'dt_conv=',TimeStepConv,' dt_visc=',TimeStepVisc
@@ -151,16 +147,14 @@ DO iElem=1,PP_nElems
   TimeStepVisc= MIN(TimeStepVisc, TimeStepViscElem)
   dtElem(iElem)=MIN(dtElem(iElem),TimeStepViscElem)
   IF(IEEE_IS_NAN(TimeStepVisc))THEN
-    ErrMsg='Viscous timestep NaN '
     ERRWRITE(*,'(A,I0,A,I0)')'Viscous timestep NaN on proc ',myRank,' for element: ', iElem
     ERRWRITE(*,'(A,3ES16.7)')'Position: Elem_xGP(:1,1,1,iElem)=',Elem_xGP(:,1,1,1,iElem)
     ERRWRITE(*,*)'dt_visc=',TimeStepVisc,' dt_conv=',TimeStepConv
     errType=4
   END IF
-  Max_Lambda_v=0.  ! Viscous
 #endif /* PARABOLIC*/
   IF(errType.NE.0)EXIT
-END DO ! iElem=1,PP_nElems
+END DO ! iElem=1,nElems
 
 #if MPI
 buf(1)=TimeStepConv

@@ -31,7 +31,7 @@ INTERFACE GetBoundaryFlux
   MODULE PROCEDURE GetBoundaryFlux
 END INTERFACE
 
-#ifdef PARABOLIC
+#if PARABOLIC
 INTERFACE Lifting_GetBoundaryFlux
   MODULE PROCEDURE Lifting_GetBoundaryFlux
 END INTERFACE
@@ -43,7 +43,7 @@ END INTERFACE
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
-#ifdef PARABOLIC
+#if PARABOLIC
 PUBLIC::Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
 PUBLIC::FinalizeBC
@@ -60,7 +60,7 @@ SUBROUTINE InitBC()
 USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Equation_Vars     ,ONLY: EquationInitIsDone
-USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID
+USE MOD_Equation_Vars     ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY: MeshInitIsDone,nBCSides,BC,nBCs,BoundaryType
 IMPLICIT NONE
@@ -129,7 +129,7 @@ SUBROUTINE FillBCdata(tIn,BCdata)
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
 USE MOD_Mesh_Vars    ,ONLY: nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars    ,ONLY: BCFace_xGP
+USE MOD_Mesh_Vars    ,ONLY: Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
@@ -160,7 +160,7 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,BCFace_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
           END DO ! p
         END DO ! q
       END DO !iSide=1,nBCloc
@@ -180,7 +180,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,BCFace_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),BCdata(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -197,17 +197,17 @@ SUBROUTINE GetBoundaryFlux(tIn,Flux)
 USE MOD_PreProc
 USE MOD_Globals      ,ONLY: Abort
 USE MOD_Riemann      ,ONLY: Riemann
-USE MOD_DG_Vars      ,ONLY: U_Minus
+USE MOD_DG_Vars      ,ONLY: U_Master
 USE MOD_Mesh_Vars    ,ONLY: nSides,nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,BCFace_xGP
+USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: ConstoPrim_aux,ConstoPrim,PrimtoCons
 USE MOD_Equation_Vars,ONLY: Kappa,KappaM1,sKappaM1,sKappaP1,RefStatePrim,RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
 USE MOD_Flux         ,ONLY: EvalEulerFlux1D
-#ifdef PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_Minus,gradUy_Minus,gradUz_Minus
+#if PARABOLIC
+USE MOD_Lifting_Vars ,ONLY: gradUx_Master,gradUy_Master,gradUz_Master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D,EvalDiffFlux1D_Outflow
 #endif /*PARABOLIC*/
 IMPLICIT NONE
@@ -224,7 +224,7 @@ INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N),N_loc(1:3,1:3)
 REAL                                 :: Prim(1:8),ar,br
 REAL                                 :: U_loc(PP_nVar)
-#ifdef PARABOLIC
+#if PARABOLIC
 REAL                                 :: BCGradMat(1:3,1:3)
 REAL                                 :: Fd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
 REAL                                 :: Gd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
@@ -246,11 +246,11 @@ DO iBC=1,nBCs
   CASE(20,220) !steadyStateBCs
     DO iSide=1,nBCLoc
       SideID=BCSideID(iBC,iSide)
-      CALL Riemann(Flux(:,:,:,SideID),U_Minus(:,:,:,SideID),BCdata(:,:,:,SideID), &
-#ifdef PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+      CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),BCdata(:,:,:,SideID), &
+#if PARABOLIC
+                   gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
+                   gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
+                   gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -261,14 +261,14 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,BCFace_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
           END DO ! p
         END DO ! q
-        CALL Riemann(Flux(:,:,:,SideID),U_Minus(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
-                     gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                     gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                     gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+        CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
+#if PARABOLIC
+                     gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
+                     gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
+                     gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -280,11 +280,11 @@ DO iBC=1,nBCs
       END DO ! q
       DO iSide=1,nBCLoc
         SideID=BCSideID(iBC,iSide)
-        CALL Riemann(Flux(:,:,:,SideID),U_Minus(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
-                     gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                     gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                     gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+        CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
+#if PARABOLIC
+                     gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
+                     gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
+                     gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -296,14 +296,14 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,BCFace_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
         END DO ! p
       END DO ! q
-      CALL Riemann(Flux(:,:,:,SideID),U_Minus(:,:,:,SideID),U_Face_loc, &
-#ifdef PARABOLIC
-                   gradUx_Minus(:,:,:,SideID),gradUx_Minus(:,:,:,SideID), &
-                   gradUy_Minus(:,:,:,SideID),gradUy_Minus(:,:,:,SideID), &
-                   gradUz_Minus(:,:,:,SideID),gradUz_Minus(:,:,:,SideID), &
+      CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
+#if PARABOLIC
+                   gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
+                   gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
+                   gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -314,16 +314,16 @@ DO iBC=1,nBCs
         DO p=0,PP_N
           !! Advection
           ! Compute the Euler state: tangential component of v=0, density from inside and pressure with a 1D riemann problem
-          U_loc(1) = U_Minus(1,p,q,SideID)
-          U_loc(5) = U_Minus(5,p,q,SideID)
+          U_loc(1) = U_Master(1,p,q,SideID)
+          U_loc(5) = U_Master(5,p,q,SideID)
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
           N_loc(:,3) = TangVec2(:,p,q,SideID)
           ! rotate momentum in normal direction
-          U_loc(2)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,1))
-          U_loc(3)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,2))
-          U_loc(4)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,3))
+          U_loc(2)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,1))
+          U_loc(3)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,2))
+          U_loc(4)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,3))
           ! Compute the primitives 
           CALL ConsToPrim_aux(Prim,U_loc)
           ! Compute the 1D wall Riemann problem pressure solution
@@ -350,12 +350,12 @@ DO iBC=1,nBCs
           U_Face_loc(5,p,q)   = prim(5)*sKappaM1 !pressure from outside 
         END DO ! p
       END DO ! q
-#ifdef PARABOLIC
+#if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
       CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:),&
-                          gradUx_Minus(:,:,:,SideID),                           &
-                          gradUy_Minus(:,:,:,SideID),                           &
-                          gradUz_Minus(:,:,:,SideID))                           
+                          gradUx_Master(:,:,:,SideID),                           &
+                          gradUy_Master(:,:,:,SideID),                           &
+                          gradUz_Master(:,:,:,SideID))                           
       ! Sum up Euler and Diffusion Flux
       DO iVar=2,PP_nVar
         Flux(iVar,:,:,SideID) = Flux(iVar,:,:,SideID)               + & 
@@ -371,16 +371,16 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          U_loc(1) = U_Minus(1,p,q,SideID)
-          U_loc(5) = U_Minus(5,p,q,SideID)
+          U_loc(1) = U_Master(1,p,q,SideID)
+          U_loc(5) = U_Master(5,p,q,SideID)
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
           N_loc(:,3) = TangVec2(:,p,q,SideID)
           ! rotate momentum in normal direction
-          U_loc(2)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,1))
-          U_loc(3)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,2))
-          U_loc(4)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,3))
+          U_loc(2)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,1))
+          U_loc(3)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,2))
+          U_loc(4)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,3))
           ! Compute the primitives
           CALL ConsToPrim_aux(Prim,U_loc)
           ! Compute the 1D wall Riemann problem pressure solution
@@ -397,7 +397,7 @@ DO iBC=1,nBCs
           Flux(2:4,p,q,SideID) = Prim(5)*N_loc(:,1)
           Flux(  5,p,q,SideID) = 0.
   
-#ifdef PARABOLIC
+#if PARABOLIC
           !! Diffusion
           ! We prepare the gradients and set the normal derivative to zero (symmetry condition!)
           ! BCGradMat = I - n * n^T = (gradient -normal component of gradient)
@@ -410,21 +410,21 @@ DO iBC=1,nBCs
           BCGradMat(2,1) = BCGradMat(1,2)
           BCGradMat(3,1) = BCGradMat(1,3)
           BCGradMat(2,3) = BCGradMat(3,2)
-          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(1,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(1,3) * gradUz_Minus(:,p,q,SideID)
-          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(2,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(2,3) * gradUz_Minus(:,p,q,SideID)
-          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_Minus(:,p,q,SideID) &
-                                 + BCGradMat(3,2) * gradUy_Minus(:,p,q,SideID) &
-                                 + BCGradMat(3,3) * gradUz_Minus(:,p,q,SideID)
+          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_Master(:,p,q,SideID) &
+                                 + BCGradMat(1,2) * gradUy_Master(:,p,q,SideID) &
+                                 + BCGradMat(1,3) * gradUz_Master(:,p,q,SideID)
+          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_Master(:,p,q,SideID) &
+                                 + BCGradMat(2,2) * gradUy_Master(:,p,q,SideID) &
+                                 + BCGradMat(2,3) * gradUz_Master(:,p,q,SideID)
+          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_Master(:,p,q,SideID) &
+                                 + BCGradMat(3,2) * gradUy_Master(:,p,q,SideID) &
+                                 + BCGradMat(3,3) * gradUz_Master(:,p,q,SideID)
 #endif /*PARABOLIC*/
         END DO ! p
       END DO ! q
-#ifdef PARABOLIC
+#if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
-      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Minus(:,:,:,SideID), &
+      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Master(:,:,:,SideID), &
                           gradUx_Face_loc,gradUy_Face_loc,gradUz_Face_loc)
       ! Sum up Euler and Diffusion Flux
       DO iVar=2,PP_nVar
@@ -441,7 +441,7 @@ DO iBC=1,nBCs
       DO q=0,PP_N
         DO p=0,PP_N
           ! get pressure from refstate
-          U_loc = U_Minus(:,p,q,SideID)
+          U_loc = U_Master(:,p,q,SideID)
           CALL ConsToPrim(Prim(1:5),U_loc)
           Prim(5) = RefStatePrim(BCState,5)
           ! U_loc contains now the state with pressure from outside (refstate)
@@ -456,19 +456,19 @@ DO iBC=1,nBCs
           U_Face_loc(2,p,q)= SUM(U_loc(2:4)*N_loc(:,1))
           U_Face_loc(3,p,q)= SUM(U_loc(2:4)*N_loc(:,2))
           U_Face_loc(4,p,q)= SUM(U_loc(2:4)*N_loc(:,3))
-#ifdef PARABOLIC
+#if PARABOLIC
           ! for diffusion, we use the rotational invariance of the diffusion fluxes
           !   for this, we need to transform the gradients into the normal system (see GG Diss for details)
           !     First step: tranform the derivatives (dx,dy,dz) into normal system 
-          gradUn_loc  = N_loc(1,1)*gradUx_Minus(:,p,q,SideID) &
-                      + N_loc(2,1)*gradUy_Minus(:,p,q,SideID) &
-                      + N_loc(3,1)*gradUz_Minus(:,p,q,SideID)
-          gradUt1_loc = N_loc(1,2)*gradUx_Minus(:,p,q,SideID) &
-                      + N_loc(2,2)*gradUy_Minus(:,p,q,SideID) &
-                      + N_loc(3,2)*gradUz_Minus(:,p,q,SideID)
-          gradUt2_loc = N_loc(1,3)*gradUx_Minus(:,p,q,SideID) &
-                      + N_loc(2,3)*gradUy_Minus(:,p,q,SideID) &
-                      + N_loc(3,3)*gradUz_Minus(:,p,q,SideID)
+          gradUn_loc  = N_loc(1,1)*gradUx_Master(:,p,q,SideID) &
+                      + N_loc(2,1)*gradUy_Master(:,p,q,SideID) &
+                      + N_loc(3,1)*gradUz_Master(:,p,q,SideID)
+          gradUt1_loc = N_loc(1,2)*gradUx_Master(:,p,q,SideID) &
+                      + N_loc(2,2)*gradUy_Master(:,p,q,SideID) &
+                      + N_loc(3,2)*gradUz_Master(:,p,q,SideID)
+          gradUt2_loc = N_loc(1,3)*gradUx_Master(:,p,q,SideID) &
+                      + N_loc(2,3)*gradUy_Master(:,p,q,SideID) &
+                      + N_loc(3,3)*gradUz_Master(:,p,q,SideID)
           !     Second step: tranform the state of the gradients into normal system
    
           !TODO: actually only gradUx,y,z(1) and gradUx..(2,), gradUy..(3,), gradUz..(4) are needed
@@ -500,7 +500,7 @@ DO iBC=1,nBCs
       END DO ! q
       ! Compute 1D Euler Flux Fe_Face_loc
       CALL EvalEulerFlux1D(U_Face_loc,Flux(:,:,:,SideID))
-#ifdef PARABOLIC
+#if PARABOLIC
       ! Compute 1D diffusion Flux Fd_Face_loc
       !   Use: tau_12 = 0, tau_13 = 0, q1 = 0 (Paper POINSOT and LELE, JCP 1992, page 113, Table IV)
       !   We use special evalflux routine
@@ -532,7 +532,7 @@ END DO! SideID
 END SUBROUTINE GetBoundaryFlux
 
 
-#ifdef PARABOLIC
+#if PARABOLIC
 !==================================================================================================================================
 !> Computes the boundary fluxes for the lifting procedure for all sides.
 !==================================================================================================================================
@@ -541,8 +541,8 @@ SUBROUTINE Lifting_GetBoundaryFlux(tIn,Flux)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars    ,ONLY: nBCSides,nBCs,BoundaryType
-USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,BCFace_xGP
-USE MOD_DG_Vars      ,ONLY: U_Minus
+USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
+USE MOD_DG_Vars      ,ONLY: U_Master
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: ConsToPrim_aux,ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: Kappa,KappaM1,sKappaM1,sKappaP1,RefStatePrim,RefStateCons
@@ -586,7 +586,7 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,BCface_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
+            CALL ExactFunc(IniExactFunc,tIn,face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
           END DO ! p
         END DO ! q
       END DO !iSide=1,nBCloc
@@ -610,7 +610,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,BCface_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -620,16 +620,16 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          u_loc(1) = U_Minus(1,p,q,SideID)
-          u_loc(5) = U_Minus(5,p,q,SideID)
+          u_loc(1) = U_Master(1,p,q,SideID)
+          u_loc(5) = U_Master(5,p,q,SideID)
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
           N_loc(:,3) = TangVec2(:,p,q,SideID)
           ! rotate momentum in normal direction
-          U_loc(2)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,1))
-          U_loc(3)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,2))
-          U_loc(4)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,3))
+          U_loc(2)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,1))
+          U_loc(3)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,2))
+          U_loc(4)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,3))
           ! Compute the primitives
           CALL ConsToPrim_aux(Prim,u_loc)
           ! Compute the 1D wall Riemann problem pressure solution
@@ -657,16 +657,16 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          u_loc(1) = U_Minus(1,p,q,SideID)
-          u_loc(5) = U_Minus(5,p,q,SideID)
+          u_loc(1) = U_Master(1,p,q,SideID)
+          u_loc(5) = U_Master(5,p,q,SideID)
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
           N_loc(:,3) = TangVec2(:,p,q,SideID)
           ! rotate momentum in normal direction
-          U_loc(2)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,1))
-          U_loc(3)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,2))
-          U_loc(4)   = SUM(U_Minus(2:4,p,q,SideID)*N_loc(:,3))
+          U_loc(2)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,1))
+          U_loc(3)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,2))
+          U_loc(4)   = SUM(U_Master(2:4,p,q,SideID)*N_loc(:,3))
           ! Compute the primitives
           CALL ConsToPrim_aux(Prim,u_loc)
           ! Compute the 1D wall Riemann problem pressure solution
@@ -681,10 +681,10 @@ DO iBC=1,nBCs
           CALL PrimToCons(prim(1:5),u_loc)
           ! Compute Flux
           Flux(1,p,q,SideID)=u_loc(1)
-          Flux(5,p,q,SideID)=0.5*(u_loc(5)+U_Minus(5,p,q,SideID))
+          Flux(5,p,q,SideID)=0.5*(u_loc(5)+U_Master(5,p,q,SideID))
           ! Rotate momentum back in x,y,z coords
           Flux(2:4,p,q,SideID) = 0.5*(u_loc(2)*N_loc(:,1)+u_loc(3)*N_loc(:,2)+u_loc(4)*N_loc(:,3) &
-                                 +U_Minus(2:4,p,q,SideID))
+                                 +U_Master(2:4,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -693,7 +693,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          U_Loc = U_Minus(:,p,q,SideID)
+          U_Loc = U_Master(:,p,q,SideID)
           CALL ConsToPrim(Prim(1:5),U_Loc)
           Prim(5) = RefStatePrim(BCState,5)
           CALL PrimToCons(Prim(1:5),U_Loc)
@@ -709,7 +709,7 @@ END DO ! iBC
 !for BR1 and BR2, lifting is in strong form, flux=U-Uminus...
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N
-    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_Minus(:,p,q,SideID))*SurfElem(p,q,SideID)
+    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_Master(:,p,q,SideID))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
 END SUBROUTINE Lifting_GetBoundaryFlux

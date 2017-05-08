@@ -25,7 +25,7 @@ SAVE
 ! GLOBAL VARIABLES
 !---------------------------------------------------------------------------------------------------------------------------------
 LOGICAL                  :: doTCPreTimeStep=.FALSE.  !< compute something before the timestep
-LOGICAL                  :: doTCSource=.FALSE.       !< compute source terms for testcase
+LOGICAL                  :: doTCSource               !< compute source terms for testcase
 CHARACTER(LEN=255)       :: whichTestcase            !< input variable, to be able to check if wanted testcase was compiled
 LOGICAL                  :: EvalEquilibrium          !< switch for TC_exactfunc
 LOGICAL                  :: doCalcErrorToEquilibrium !< switch for TC_analyze: compute difference of |U-Ueq|

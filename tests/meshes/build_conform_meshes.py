@@ -30,7 +30,7 @@ parser.add_argument('prm',   help='path to parameter file')
 args = parser.parse_args()
 
 if not os.path.exists(args.prm) :
-    print "parameter-file '%s' not found" % args.prm 
+    print(  "parameter-file '%s' not found" % args.prm  )
     sys.exit(1)
 
 
@@ -54,9 +54,9 @@ for i in range(0,len(nElemsX)) :
 
     projectnameX = projectname+'_'+nElemsX[i]+'_'+nElemsY[i]+'_'+nElemsZ[i] 
     modify_prm(args.prm, {'ProjectName' : projectnameX})
-    print "               "
-    print "%03.0i === > ProjectName: %s" % (i,projectnameX)
-    print "               "
+    print(  "               " )
+    print(  "%03.0i === > ProjectName: %s" % (i,projectnameX) )
+    print(  "               " )
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
     modify_prm(args.prm, {'DEFVAR=(INT):ne_x  ' : nElemsX[i]})
@@ -66,17 +66,17 @@ for i in range(0,len(nElemsX)) :
 
     # execute hopr 
     start_time = time.time()
-    try :
-        execute(args.exe, args.prm, projectnameX, log = True, ntail = args.ntail ,\
+    #try :
+    execute(args.exe, args.prm, projectnameX, log = True, ntail = args.ntail ,\
                 mpi_procs = args.procs)
-    except :
-        print " crashed... "
-        shutil.rmtree(tmp_dir)
-        exit(1)
+    #except :
+    #    print(  " crashed... " )
+    #    shutil.rmtree(tmp_dir)
+    #    exit(1)
     end_time = time.time()
 
 
-    #print end_time - start_time
+    #print(  end_time - start_time )
     sys.stdout.flush()
 
 

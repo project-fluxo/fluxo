@@ -66,16 +66,16 @@ SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Equation_Vars ,ONLY:kappaM1,R
+USE MOD_Equation_Vars ,ONLY:kappaM1
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #if PARABOLIC
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
-USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s43,s23
+USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s23
 #if PP_VISC==1
-USE MOD_Equation_Vars ,ONLY:muSuth
+USE MOD_Equation_Vars ,ONLY:muSuth,R
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoPow
+USE MOD_Equation_Vars ,ONLY:ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
 #ifdef OPTIMIZED
@@ -93,12 +93,11 @@ REAL,DIMENSION(5,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                :: f(5),g(5),h(5)                          ! Cartesian fluxes (iVar)
-REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
+REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                              ! auxiliary variables
-REAL                :: Ep                                      ! E + p
 #if PARABOLIC
 REAL                :: f_visc(5),g_visc(5),h_visc(5)           ! viscous cartesian fluxes (iVar)
-REAL                :: muS,lambda                              ! viscosity,heat coeff.
+REAL                :: e,muS,lambda                              ! viscosity,heat coeff.
 REAL                :: gradv1x,gradv2x,gradv3x
 REAL                :: gradv1y,gradv2y,gradv3y
 REAL                :: gradv1z,gradv2z,gradv3z
@@ -312,15 +311,15 @@ END SUBROUTINE EvalEulerFlux1D
 SUBROUTINE EvalDiffFlux1D_Outflow(f,U_Face,gradRho,gradVel) !gradUx_Face,gradUy_Face,gradUz_Face)
 ! MODULES
 USE MOD_PreProc ! PP_N
-USE MOD_Equation_Vars,ONLY:kappaM1,s43,s23,KappasPr,R
+USE MOD_Equation_Vars,ONLY:s23
 #if PP_VISC==0
 USE MOD_Equation_Vars,ONLY:mu0
 #endif
 #if PP_VISC==1
-USE MOD_Equation_Vars,ONLY:muSuth
+USE MOD_Equation_Vars,ONLY:kappaM1,R,muSuth
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars,ONLY:ExpoPow,mu0
+USE MOD_Equation_Vars,ONLY:kappaM1,R,ExpoPow,mu0
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -337,7 +336,7 @@ REAL,INTENT(OUT)    :: f(5,0:PP_N,0:PP_N)                         !< Cartesian f
 REAL                :: Uin(5)
 REAL                :: muS                                        ! viscosity and Temperature,
 #if (PP_VISC == 1) || (PP_VISC == 2)
-REAL                :: T,pres
+REAL                :: T
 #endif
 REAL                :: srho                                       ! reciprocal values for density and the value of specific energy
 REAL                :: v(3)
@@ -359,8 +358,7 @@ DO q=0,PP_N
 #endif
 #if (PP_VISC == 1) || (PP_VISC == 2)
     ! Calculate temperature for Sutherland or power-law
-    pres = kappaM1*(Uin(5)-0.5*Uin(1)*(SUM(v(:)*v(:)))
-    T    = pres*srho/R                      ! T=p/(rho*R)
+    T    = kappaM1*(Uin(5)*srho-0.5*(SUM(v(:)*v(:))))/R                 ! T=p/(rho*R)
 #endif
 #if PP_VISC == 1
     ! compute viscosity with Sutherlands law
@@ -373,7 +371,7 @@ DO q=0,PP_N
     ! compute derivatives via product rule (a*b)'=a'*b+a*b' and multiply with viscosity
     gradv_diag = muS*srho*(gradVel(:,p,q) - v*gradRho(:,p,q))
     ! viscous fluxes in x-direction      
-    f(2,p,q)= s43*gradv_diag(1) - s23*(gradv_diag(2) + gradv_diag(3)) ! tau_11
+    f(2,p,q)= 2*gradv_diag(1) - s23*(gradv_diag(1)+gradv_diag(2) + gradv_diag(3)) ! tau_11
     f(5,p,q)=f(2,p,q)*v(1) !tau_11 * v1
   END DO ! p
 END DO ! q 
@@ -386,15 +384,15 @@ END SUBROUTINE EvalDiffFlux1D_Outflow
 SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face,gradUx_Face,gradUy_Face,gradUz_Face)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:kappaM1,s43,s23,KappasPr,R
+USE MOD_Equation_Vars ,ONLY:s23,KappasPr
 #if PP_VISC==0
 USE MOD_Equation_Vars ,ONLY:mu0
 #endif
 #if PP_VISC==1
-USE MOD_Equation_Vars ,ONLY:muSuth
+USE MOD_Equation_Vars ,ONLY:kappaM1,R,muSuth
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoPow,mu0
+USE MOD_Equation_Vars ,ONLY:kappaM1,R,ExpoPow,mu0
 #endif
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_face
@@ -524,7 +522,7 @@ USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
-USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s43,s23
+USE MOD_Equation_Vars ,ONLY:mu0,KappasPr,s23
 #if PP_VISC==1
 USE MOD_Equation_Vars ,ONLY:muSuth,kappaM1,R
 #endif

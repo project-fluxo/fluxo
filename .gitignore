@@ -27,6 +27,7 @@
 *.exe
 *.out
 *.app
+*.err
 
 # others
 build
@@ -41,3 +42,4 @@ log.*
 *.csv
 *.pyc
 tests/meshes/*mesh.h5
+tests/dirx_*

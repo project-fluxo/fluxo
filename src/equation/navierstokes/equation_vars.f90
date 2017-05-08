@@ -26,10 +26,12 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !----------------------------------------------------------------------------------------------------------------------------------
+LOGICAL             :: doCalcSource        !< logical to define if a source term (e.g. exactfunc) is added
 INTEGER             :: IniExactFunc        !< Exact Function for initialization
 INTEGER             :: IniRefState         !< RefState for initialization (case IniExactFunc=1 only)
-REAL,ALLOCATABLE    :: RefStatePrim(:,:)
-REAL,ALLOCATABLE    :: RefStateCons(:,:)
+REAL,ALLOCATABLE    :: RefStatePrim(:,:)   !< primitive reference states
+REAL,ALLOCATABLE    :: RefStateCons(:,:)   !< =primToCons(RefStatePrim)
+INTEGER,PARAMETER   :: nAuxVar=6           !< number of auxiliary variables for average flux
 ! Boundary condition arrays
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)
 INTEGER,ALLOCATABLE :: nBCByType(:)        !< Number of sides for each boundary
@@ -53,7 +55,7 @@ REAL                :: sKappaM1            !< = 1/(kappa -1)
 REAL                :: KappaP1             !< = kappa + 1
 REAL                :: sKappaP1            !< = 1/(kappa +1)
 REAL                :: R                   !< Gas constant
-REAL                :: s43,s23
+REAL                :: s23
 REAL                :: MachShock           !< Shoch Mach speed for ExactFunction = 6 (shock)
 REAL                :: PreShockDens        !< Pre-shock density for ExactFunction = 6 (shock)
 REAL                :: AdvVel(3)           !< Advection Velocity for the test cases
@@ -78,12 +80,9 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 INTEGER             :: WhichRiemannSolver       !< choose riemann solver
 PROCEDURE(),POINTER :: SolveRiemannProblem      !< procedure pointer to riemann solver 
-#if (PP_DiscType==2)
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
-INTEGER,PARAMETER   :: nAuxVar=6 
 PROCEDURE(),POINTER :: VolumeFluxAverage        !< procedure pointer to 1D two-point average flux
 PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to 3D two-point average flux
-#endif /*PP_DiscType==2*/
 !==================================================================================================================================
 
 INTERFACE ConsToPrim_aux
@@ -96,6 +95,10 @@ END INTERFACE
 
 INTERFACE PrimToCons
   MODULE PROCEDURE PrimToCons
+END INTERFACE
+
+INTERFACE SoundSpeed2
+  MODULE PROCEDURE SoundSpeed2
 END INTERFACE
 
 INTERFACE ConsToEntropy
@@ -206,6 +209,25 @@ cons(2:4)=prim(2:4)*prim(1)
 cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))
 ! inner energy
 END SUBROUTINE PrimToCons
+
+!==================================================================================================================================
+!> calculate soundspeed^2 ,c^2 = kappa*p/rho 
+!==================================================================================================================================
+FUNCTION SoundSpeed2(Cons) RESULT(cs2)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: cons(PP_nVar) !< vector of conservative variables, already rotated!
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: cs2      !< soundspeed^2
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+!==================================================================================================================================
+! p*rho=(kappa-1)*(E - 1/2*rho*|v|^2)*rho = (kappa-1)*(E*rho - 1/2(rho^2*|v|^2)
+cs2=kappa*kappaM1*(cons(5)*cons(1) -  0.5*SUM(cons(2:4)*cons(2:4)))/(cons(1)*cons(1)) !=(kappa*p*rho)/(rho^2)
+END FUNCTION SoundSpeed2
 
 
 !==================================================================================================================================

@@ -221,7 +221,7 @@ SUBROUTINE CalcBulkVelocity(BulkVel,BulkMom,BulkDensity)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -241,7 +241,7 @@ REAL                            :: box(7)
 BulkMom=0.
 BulkVel=0.
 BulkDensity  =0.
-DO iElem=1,PP_nElems
+DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
     Moment          =U(2:4,i,j,k,iElem)*IntegrationWeight
@@ -276,10 +276,10 @@ SUBROUTINE CalcWallVelocity(maxV,minV,meanV)
 ! MODULES
 USE MOD_Preproc
 USE MOD_Globals
-USE MOD_DG_Vars,           ONLY: U_Minus
+USE MOD_DG_Vars,           ONLY: U_Master
 USE MOD_Mesh_Vars,         ONLY: SurfElem
 USE MOD_Mesh_Vars,         ONLY: nBCSides,BC,BoundaryType,nBCs
-USE MOD_Analyze_Vars,      ONLY: wGPSurf,SurfBC
+USE MOD_Analyze_Vars,      ONLY: wGPSurf,Surf
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -298,7 +298,7 @@ DO SideID=1,nBCSides
   iBC=BC(SideID)
   IF((BoundaryType(iBC,BC_TYPE).EQ.4).OR.(BoundaryType(iBC,BC_TYPE).EQ.9))THEN
     DO j=0,PP_N; DO i=0,PP_N
-      Vel=U_Minus(2:4,i,j,SideID)/U_Minus(1,i,j,SideID)
+      Vel=U_Master(2:4,i,j,SideID)/U_Master(1,i,j,SideID)
       ! Calculate velocity magnitude
       locV=SQRT(Vel(1)*Vel(1)+Vel(2)*Vel(2)+Vel(3)*Vel(3))
       maxV(iBC)=MAX(maxV(iBC),locV)
@@ -322,7 +322,7 @@ END IF
 #endif /*MPI*/
 DO iBC=1,nBCs
   IF(Boundarytype(iBC,BC_TYPE) .EQ. 1) CYCLE
-  MeanV(iBC)=MeanV(iBC)/SurfBC(iBC)
+  MeanV(iBC)=MeanV(iBC)/Surf(iBC)
 END DO
 
 END SUBROUTINE CalcWallVelocity
@@ -335,9 +335,9 @@ SUBROUTINE CalcBodyForces(Time,BodyForce,Fp,Fv)
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
-USE MOD_DG_Vars,         ONLY: U_Minus
+USE MOD_DG_Vars,         ONLY: U_Master
 #if PARABOLIC
-USE MOD_Lifting_Vars,    ONLY: gradUx_Minus,gradUy_Minus,gradUz_Minus
+USE MOD_Lifting_Vars,    ONLY: gradUx_Master,gradUy_Master,gradUz_Master
 #endif /*PARABOLIC*/
 USE MOD_Mesh_Vars,       ONLY: NormVec,SurfElem
 USE MOD_Mesh_Vars,       ONLY: nBCSides,BC,BoundaryType
@@ -365,17 +365,17 @@ DO SideID=1,nBCSides
   BCType=Boundarytype(BC(SideID),BC_TYPE)
   ! Calculate pressure force (Euler wall / Navier-Stokes wall)
   IF((BCType .EQ. 9) .OR. (BCType .EQ. 4))THEN
-    CALL CalcPressureForce(Fp_loc,U_Minus(:,:,:,SideID),SurfElem(:,:,SideID),NormVec(:,:,:,SideID))
+    CALL CalcPressureForce(Fp_loc,U_Master(:,:,:,SideID),SurfElem(:,:,SideID),NormVec(:,:,:,SideID))
     Fp=Fp+Fp_loc
   END IF
 #if PARABOLIC
   ! Calculate viscous force (Navier-Stokes wall)
   IF(BCType .EQ. 4)THEN
     CALL CalcViscousForce(Fv_loc,                     &
-                          U_Minus(:,:,:,SideID),      &
-                          gradUx_Minus(:,:,:,SideID), &
-                          gradUy_Minus(:,:,:,SideID), &
-                          gradUz_Minus(:,:,:,SideID), &
+                          U_Master(:,:,:,SideID),      &
+                          gradUx_Master(:,:,:,SideID), &
+                          gradUy_Master(:,:,:,SideID), &
+                          gradUz_Master(:,:,:,SideID), &
                           SurfElem(:,:,SideID),       &
                           NormVec(:,:,:,SideID))
     Fv=Fv+Fv_loc
@@ -437,16 +437,16 @@ END SUBROUTINE CalcPressureForce
 SUBROUTINE CalcViscousForce(Fv,U_Face,gradUx_Face,gradUy_Face,gradUz_Face,SurfElem,NormVec)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:KappaM1,R
+USE MOD_Equation_Vars ,ONLY:s23
 USE MOD_Analyze_Vars  ,ONLY:wGPSurf
 #if PP_VISC == 0
 USE MOD_Equation_Vars ,ONLY:mu0
 #endif
 #if PP_VISC == 1
-USE MOD_Equation_Vars ,ONLY:muSuth
+USE MOD_Equation_Vars ,ONLY:KappaM1,R,muSuth
 #endif
 #if PP_VISC == 2
-USE MOD_Equation_Vars ,ONLY:mu0,ExpoPow
+USE MOD_Equation_Vars ,ONLY:KappaM1,R,mu0,ExpoPow
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -462,18 +462,15 @@ REAL, INTENT(IN)               :: NormVec(3,0:PP_N,0:PP_N)
 REAL, INTENT(OUT)              :: Fv(3)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                           :: srho,sR                   ! 1/rho, 1/R
+REAL                           :: srho                      ! 1/rho
 REAL                           :: tau(3,3)                  ! Viscous stress tensor
 REAL                           :: muS
 #if (PP_VISC == 1) || (PP_VISC == 2)
 REAL                           :: p,T
 #endif
 REAL                           :: GradV(3,3),vel(3),DivV
-REAL                           :: ZwoDrittl
 INTEGER                        :: i, j
 !==================================================================================================================================
-ZwoDrittl=2./3.
-sR       =1./R
 Fv       =0.
 
 DO j=0,PP_N; DO i=0,PP_N
@@ -486,7 +483,7 @@ DO j=0,PP_N; DO i=0,PP_N
   ! Calculate pressure
   p=KappaM1*(U_Face(5,i,j)-0.5*srho*SUM(U_Face(2:4,i,j)*U_Face(2:4,i,j)))
   ! Calculate temperature
-  T=srho*sR*p
+  T=srho*p/R
 #endif
 ! mu-Sutherland
 #if PP_VISC == 1
@@ -508,9 +505,9 @@ DO j=0,PP_N; DO i=0,PP_N
   DivV=GradV(1,1)+GradV(2,2)+GradV(3,3)
   ! Calculate shear stress tensor
   tau=muS*(GradV + TRANSPOSE(GradV))
-  tau(1,1)=tau(1,1)-ZwoDrittl*muS*DivV
-  tau(2,2)=tau(2,2)-ZwoDrittl*muS*DivV
-  tau(3,3)=tau(3,3)-ZwoDrittl*muS*DivV
+  tau(1,1)=tau(1,1)-s23*muS*DivV
+  tau(2,2)=tau(2,2)-s23*muS*DivV
+  tau(3,3)=tau(3,3)-s23*muS*DivV
   ! Calculate viscous force vector
   Fv=Fv+MATMUL(tau,NormVec(:,i,j))*wGPSurf(i,j)*SurfElem(i,j)
 END DO; END DO
