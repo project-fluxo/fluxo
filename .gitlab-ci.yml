@@ -1,3 +1,7 @@
+# =================================================================================================================================
+# Stages to be executed, each stage is a collection of jobs pointing to the stage
+# =================================================================================================================================
+
 stages:
   - build
   - short_runs
@@ -5,6 +9,19 @@ stages:
 # =================================================================================================================================
 # Stage "build"
 # v>9 artifacts: name: "${CI_PIPELINE_ID}_${CI_JOB_NAME}_${CI_COMMIT_REF_NAME}"
+#
+# SHORT SYNTAX EXPLANATIONS FOR THE JOB, FOR DETAILS VISIT:    ===> https://docs.gitlab.com/ce/ci/yaml/   <===
+# "stage:"         makes the job part of a stage defined above
+# "tags:"          selects the runner
+# "only:"          restricts the execution of the job to a git branch or tag
+# "before_script:" shell commands to be executed before the main script. 
+# "script:"        shell commands for the test. If a shell command exits with >0, the job is marked as "failed", else as "passed".
+#                  commands after a failing one are not executed anymore!
+# "after_script:"  shell commands after passed OR failed script. Careful, the current directory is always the root of the repo!
+# "cache:"         to reuse data in another job, the path to the data must be given in cache. the key allows to job using the 
+#                  data to choose exactly the cache with the given key (see short_runs below)
+# "artifacts:"     keep data from the job which is uploaded to gitlab.com. You really should set a duration to expiration.
+#                  "when:" can be either on_failure, on_success or always
 # =================================================================================================================================
 build_linadv:
   stage: build 
@@ -14,7 +31,6 @@ build_linadv:
     - testCI
   before_script:
     - module list
-    - rm -rf tests/dirx_* || true
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 100-199 
@@ -29,7 +45,7 @@ build_linadv:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/dirx_*
+    - tests/dirx_*/std.*
 
 #--------------------------------------------------------------------------------------------------------------------------------
 build_maxwell:
@@ -40,7 +56,6 @@ build_maxwell:
     - testCI
   before_script:
     - module list
-    - rm -rf tests/dirx_* || true
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 200-299 
@@ -55,7 +70,7 @@ build_maxwell:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/log.*
+    - tests/log_*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
 build_mhd:
@@ -66,7 +81,6 @@ build_mhd:
     - testCI
   before_script:
     - module list
-    - rm -rf tests/dirx_* || true
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 300-399 
@@ -81,7 +95,7 @@ build_mhd:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/log.*
+    - tests/log_*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
 build_nav-st:
@@ -92,7 +106,6 @@ build_nav-st:
     - testCI
   before_script:
     - module list
-    - rm -rf tests/dirx_* || true
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 400-499 
@@ -107,7 +120,7 @@ build_nav-st:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/log.*
+    - tests/log_*.txt
 
 # =================================================================================================================================
 # Stage "short_runs"
@@ -134,7 +147,7 @@ short_runs_linadv:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/freestream/log.LINADV*
+    - tests/freestream/log_LINADV*.txt
 
 
 #--------------------------------------------------------------------------------------------------------------------------------
@@ -160,7 +173,7 @@ short_runs_mhd:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/freestream/log.MHD*
+    - tests/freestream/log_MHD*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
 short_runs_nav-st:
@@ -185,4 +198,4 @@ short_runs_nav-st:
     expire_in: 1 hour
     when: always
     paths:
-    - tests/freestream/log.NAVIERSTOKES*
+    - tests/freestream/log_NAVIERSTOKES*.txt
