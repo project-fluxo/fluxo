@@ -24,7 +24,7 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
    cmd=cmd+" "+exec_path.strip()+" "+prm_path.strip()
    if log :
       #log_path = os.path.splitext(os.path.basename(prm_path))[0] + ".log"
-      log_path = "log."+projectname
+      log_path = "log_"+projectname+".txt"
       plines = open(prm_path, 'r').readlines()
       logf = open(log_path, 'w')
       for pline in plines :

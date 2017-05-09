@@ -23,7 +23,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
       return False
    # build directory
    builddir=("dirx_%d_%s" % (case,project))
-   log_path=("../log.%d_%s" % (case,project))
+   log_path=("../log_%d_%s.txt" % (case,project))
 
    cwd = os.getcwd()  #current working directory
    if (stage < 2) :
