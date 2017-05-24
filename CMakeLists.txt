@@ -75,9 +75,9 @@ SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
 
 OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
-OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
+#OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
-OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" ON)
+OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
@@ -410,14 +410,14 @@ ENDIF()
 # LAPACK/MKL library
 # =========================================================================
 # use Lapack/Blas for GNU
-MESSAGE(STATUS "Using BLAS/Lapack library")
-IF (FLUXO_BUILD_MKL)
-  SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
-ENDIF()
-FIND_PACKAGE(LAPACK QUIET)
-IF (LAPACK_FOUND)
-  LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
-ENDIF()
+#MESSAGE(STATUS "Using BLAS/Lapack library")
+#IF (FLUXO_BUILD_MKL)
+#  SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
+#ENDIF()
+#FIND_PACKAGE(LAPACK QUIET)
+#IF (LAPACK_FOUND)
+#  LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
+#ENDIF()
 
 # =========================================================================
 # MPI

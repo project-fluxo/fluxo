@@ -26,9 +26,9 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-INTERFACE INV
-   MODULE PROCEDURE INV
-END INTERFACE
+!INTERFACE INV
+!   MODULE PROCEDURE INV
+!END INTERFACE
 
 INTERFACE INV33
    MODULE PROCEDURE INV33
@@ -82,7 +82,7 @@ INTERFACE EQUALTOTOLERANCE
    MODULE PROCEDURE EQUALTOTOLERANCE
 END INTERFACE
 
-PUBLIC::INV
+!PUBLIC::INV
 PUBLIC::INV33
 PUBLIC::BuildLegendreVdm
 PUBLIC::InitializeVandermonde
@@ -107,61 +107,61 @@ CONTAINS
 !> Computes matrix inverse using LAPACK
 !> Input matrix should be a square matrix
 !==================================================================================================================================
-FUNCTION INV(A) RESULT(AINV)
-! MODULES
-IMPLICIT NONE
+!FUNCTION INV(A) RESULT(AINV)
+!! MODULES
+!IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-! INPUT/OUTPUT VARIABLES
-REAL,INTENT(IN)  :: A(:,:)                      !< input matrix
-REAL             :: AINV(SIZE(A,1),SIZE(A,2))   !< result: inverse of A
+!! INPUT/OUTPUT VARIABLES
+!REAL,INTENT(IN)  :: A(:,:)                      !< input matrix
+!REAL             :: AINV(SIZE(A,1),SIZE(A,2))   !< result: inverse of A
 !----------------------------------------------------------------------------------------------------------------------------------
-! External procedures defined in LAPACK
-EXTERNAL DGETRF
-EXTERNAL DGETRI
-! LOCAL VARIABLES
-REAL    :: work(SIZE(A,1))  ! work array for LAPACK
-INTEGER :: ipiv(SIZE(A,1))  ! pivot indices
-INTEGER :: n,info
+!! External procedures defined in LAPACK
+!EXTERNAL DGETRF
+!EXTERNAL DGETRI
+!! LOCAL VARIABLES
+!REAL    :: work(SIZE(A,1))  ! work array for LAPACK
+!INTEGER :: ipiv(SIZE(A,1))  ! pivot indices
+!INTEGER :: n,info
 !==================================================================================================================================
-! Store A in Ainv to prevent it from being overwritten by LAPACK
-Ainv = A
-n = size(A,1)
+!! Store A in Ainv to prevent it from being overwritten by LAPACK
+!Ainv = A
+!n = size(A,1)
+!
+!! DGETRF computes an LU factorization of a general M-by-N matrix A
+!! using partial pivoting with row interchanges.
+!CALL DGETRF(n, n, Ainv, n, ipiv, info)
+!
+!IF(info.NE.0)THEN
+!   STOP 'Matrix is numerically singular!'
+!END IF
+!
+!! DGETRI computes the inverse of a matrix using the LU factorization
+!! computed by DGETRF.
+!CALL DGETRI(n, Ainv, n, ipiv, work, n, info)
+!
+!IF(info.NE.0)THEN
+!   STOP 'Matrix inversion failed!'
+!END IF
+!END FUNCTION INV
 
-! DGETRF computes an LU factorization of a general M-by-N matrix A
-! using partial pivoting with row interchanges.
-CALL DGETRF(n, n, Ainv, n, ipiv, info)
-
-IF(info.NE.0)THEN
-   STOP 'Matrix is numerically singular!'
-END IF
-
-! DGETRI computes the inverse of a matrix using the LU factorization
-! computed by DGETRF.
-CALL DGETRI(n, Ainv, n, ipiv, work, n, info)
-
-IF(info.NE.0)THEN
-   STOP 'Matrix inversion failed!'
-END IF
-END FUNCTION INV
-
-!===================================================================================================================================
+!==================================================================================================================================
 !> Computes the inverse of a 3x3 matrix
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE INV33(M,MInv,detM_out)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)     :: M(3,3)  !< input 3x3 matrix
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: MInv(3,3) !<inverse 3x3
 REAL,INTENT(OUT),OPTIONAL ::detM_out !<determinant of matrix
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 REAL ::detM !<determinant of matrix
-!===================================================================================================================================
+!==================================================================================================================================
 detM =   M(1,1)*M(2,2)*M(3,3)  &
        - M(1,1)*M(2,3)*M(3,2)  &
        - M(1,2)*M(2,1)*M(3,3)  &
@@ -207,35 +207,37 @@ REAL,INTENT(OUT)   :: sVdm_Leg(0:N_In,0:N_In) !< Vandermonde from nodal basis to
 ! LOCAL VARIABLES
 INTEGER            :: i,j
 REAL               :: dummy
-!REAL               :: wBary_Loc(0:N_In)
-!REAL               :: xGauss(0:N_In),wGauss(0:N_In)
+REAL               :: wBary_Loc(0:N_In)
+REAL               :: xGauss(0:N_In),wGauss(0:N_In)
 !==================================================================================================================================
 ! Alternative to matrix inversion: Compute inverse Vandermonde directly
-! Direct inversion seems to be more accurate
 
-!CALL BarycentricWeights(N_In,xi_in,wBary_loc)
-!! Compute first the inverse (by projection)
-!CALL LegendreGaussNodesAndWeights(N_In,xGauss,wGauss)
-!!Vandermonde on xGauss
-!DO i=0,N_In
-!  DO j=0,N_In
-!    CALL LegendrePolynomialAndDerivative(j,xGauss(i),Vdm_Leg(i,j),dummy)
-!  END DO !i
-!END DO !j
-!Vdm_Leg=TRANSPOSE(Vdm_Leg)
-!DO j=0,N_In
-!  Vdm_Leg(:,j)=Vdm_Leg(:,j)*wGauss(j)
-!END DO
-!!evaluate nodal basis (depends on NodeType, for Gauss: unity matrix)
-!CALL InitializeVandermonde(N_In,N_In,wBary_Loc,xi_In,xGauss,sVdm_Leg)
-!sVdm_Leg=MATMUL(Vdm_Leg,sVdm_Leg)
+CALL BarycentricWeights(N_In,xi_in,wBary_loc)
+! Compute first the inverse (by projection)
+CALL LegendreGaussNodesAndWeights(N_In,xGauss,wGauss)
+!Vandermonde on xGauss
+DO i=0,N_In
+  DO j=0,N_In
+    CALL LegendrePolynomialAndDerivative(j,xGauss(i),Vdm_Leg(i,j),dummy)
+  END DO !i
+END DO !j
+Vdm_Leg=TRANSPOSE(Vdm_Leg)
+DO j=0,N_In
+  Vdm_Leg(:,j)=Vdm_Leg(:,j)*wGauss(j)
+END DO
+!evaluate nodal basis (depends on NodeType, for Gauss: unity matrix)
+CALL InitializeVandermonde(N_In,N_In,wBary_Loc,xi_In,xGauss,sVdm_Leg)
+sVdm_Leg=MATMUL(Vdm_Leg,sVdm_Leg)
 
 !compute the Vandermonde on xGP (Depends on NodeType)
 DO i=0,N_In; DO j=0,N_In
   CALL LegendrePolynomialAndDerivative(j,xi_In(i),Vdm_Leg(i,j),dummy)
 END DO; END DO !j
-sVdm_Leg=INV(Vdm_Leg)
+
+! Direct inversion might be more accurate
+!sVdm_Leg=INV(Vdm_Leg)
 !check (Vdm_Leg)^(-1)*Vdm_Leg := I
+
 dummy=ABS(SUM(ABS(MATMUL(sVdm_Leg,Vdm_Leg)))/(N_In+1.)-1.)
 IF(dummy.GT.10.*PP_RealTolerance) CALL abort(__STAMP__,&
                                          'problems in MODAL<->NODAL Vandermonde ',999,dummy)
@@ -243,10 +245,10 @@ END SUBROUTINE buildLegendreVdm
 
 
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Build a 1D Vandermonde matrix using the Lagrange basis functions of degree
 !> N_In, evaluated at the interpolation points xi_Out
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE InitializeVandermonde(N_In,N_Out,wBary_In,xi_In,xi_Out,Vdm)
 ! MODULES
 IMPLICIT NONE
@@ -269,11 +271,11 @@ END SUBROUTINE InitializeVandermonde
 
 
 
-!===================================================================================================================================
+!==================================================================================================================================
 !> Evaluate the Legendre polynomial L_N and its derivative at position x[-1,1]
 !> recursive algorithm using the N_in-1 N_in-2 Legendre polynomials
 !> algorithm 22, Kopriva book
-!===================================================================================================================================
+!==================================================================================================================================
 SUBROUTINE LegendrePolynomialAndDerivative(N_in,x,L,Lder)
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -692,10 +694,10 @@ REAL,INTENT(IN) :: x                !< (IN)  first scalar to be compared
 REAL,INTENT(IN) :: y                !< (IN)  second scalar to be compared
 REAL,INTENT(IN) :: tolerance        !< (IN)  Tolerance to be checked against
 LOGICAL         :: EqualToTolerance !< (OUT) TRUE if x and y are closer than tolerance 
-!-----------------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL            :: diff,maxInput
-!===================================================================================================================================
+!==================================================================================================================================
 EqualToTolerance = .FALSE.
 
 maxInput = MAX(ABS(x),ABS(y))
@@ -714,27 +716,27 @@ END FUNCTION EQUALTOTOLERANCE
 
 
 
-!============================================================================================================================
+!==================================================================================================================================
 !> Computes all Lagrange functions evaluated at position x in [-1,1]
 !> For details see paper Barycentric Lagrange Interpolation by Berrut and Trefethen (SIAM 2004)
 !> Uses function ALMOSTEQUAL
 !> Algorithm 34, Kopriva book
-!============================================================================================================================
+!==================================================================================================================================
 SUBROUTINE LagrangeInterpolationPolys(x,N_in,xGP,wBary,L)
 IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL, INTENT(IN)   :: x                !< Coordinate
 INTEGER,INTENT(IN) :: N_in             !< polynomial degree
 REAL,INTENT(IN)    :: xGP(0:N_in)      !< Gauss point positions for the reference interval [-1,1]
 REAL,INTENT(IN)    :: wBary(0:N_in)    !< Barycentric weights
 REAL,INTENT(OUT)   :: L(0:N_in)        !< Lagrange basis functions evaluated at x
-!----------------------------------------------------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: iGP
 LOGICAL            :: xEqualGP         ! is x equal to a Gauss Point
 REAL               :: DummySum
-!============================================================================================================================
+!==================================================================================================================================
 xEqualGP=.FALSE.
 DO iGP=0,N_in
   L(iGP)=0.
