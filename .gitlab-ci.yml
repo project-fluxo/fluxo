@@ -33,7 +33,7 @@ build_linadv:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 100-199 
@@ -54,7 +54,7 @@ build_maxwell:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 200-299 
@@ -75,7 +75,7 @@ build_mhd:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 300-399 
@@ -96,7 +96,7 @@ build_nav-st:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 400-499 
@@ -119,7 +119,7 @@ short_runs_linadv:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 2 -stage 2 -case 100-199 
@@ -141,7 +141,7 @@ short_runs_mhd:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 2 -stage 2 -case 300-399 
@@ -162,7 +162,7 @@ short_runs_nav-st:
   only:
     - testCI
   before_script:
-    - module list
+    - . ~/module_for_fluxo_intel
   script: 
     - cd tests; pwd
     - python build_tests.py -p 2 -stage 2 -case 400-499 
