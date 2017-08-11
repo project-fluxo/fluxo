@@ -137,7 +137,7 @@ CASE(0)
   EquilibriumStateIni=IniExactFunc
   SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &
                                              'set to IniExactFunc'    ,' | ',EquilibriumStateIni
-CASE(-3)
+CASE(-3,-4)
   EquilibriumStateFile=GETSTR('EquilibriumStateFile')
 END SELECT
 EquilibriumDivBcorr=GETLOGICAL('EquilibriumDivBcorr','.FALSE.')
