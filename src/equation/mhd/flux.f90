@@ -132,7 +132,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
             Etotal=>U(5,PP_IJK,iElem), &
             b1    =>U(6,PP_IJK,iElem), &
             b2    =>U(7,PP_IJK,iElem), &
-            b3    =>U(8,PP_IJK,iElem)  )
+            b3    =>U(8,PP_IJK,iElem)  &
+#ifdef PP_GLM
+           ,Psi   =>U(9,PP_IJK,iElem)  &
+#endif /*def PP_GLM*/
+            )
   ! auxiliary variables
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
@@ -141,8 +145,13 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   bb2  = (b1*b1+b2*b2+b3*b3)
   vb   = (b1*v1+b2*v2+b3*v3)
   !p = ptilde (includes magnetic pressure)
-  p    = kappaM1*(Etotal-0.5*rho*(v1*v1+v2*v2+v3*v3))-KappaM2*s2mu_0*bb2
+#ifdef PP_GLM
+  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)+psi*psi))-KappaM2*s2mu_0*bb2
+  Ep   = (Etotal-0.5*psi*psi + p)
+#else
+  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)))-KappaM2*s2mu_0*bb2
   Ep   = (Etotal + p)
+#endif /*def PP_GLM*/
   ! Advection part
   ! Advection fluxes x-direction
   f(1)=rhov1                     ! rho*u
@@ -213,6 +222,21 @@ ASSOCIATE( gradB1x => gradUx(6,PP_IJK,iElem), &
            gradB1z => gradUz(6,PP_IJK,iElem), & 
            gradB2z => gradUz(7,PP_IJK,iElem), & 
            gradB3z => gradUz(8,PP_IJK,iElem))
+#ifdef PP_GLM
+ASSOCIATE( gradPsix => gradUx(9,PP_IJK,iElem), & 
+           gradPsiy => gradUy(9,PP_IJK,iElem), & 
+           gradPsiz => gradUz(9,PP_IJK,iElem))
+  gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
+                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
+  gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
+                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
+  gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
+                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
+END ASSOCIATE
+#else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
                   -smu_0*srho*(b1*gradB1x+b2*gradB2x+b3*gradB3x     &
                                -0.5*bb2*sRho*gradUx(1,PP_IJK,iElem))
@@ -222,6 +246,8 @@ ASSOCIATE( gradB1x => gradUx(6,PP_IJK,iElem), &
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
                   -smu_0*srho*(b1*gradB1z+b2*gradB2z+b3*gradB3z     &
                                -0.5*bb2*sRho*gradUz(1,PP_IJK,iElem))
+#endif /*P_GLM*/
+
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu*KappasPr
@@ -339,15 +365,21 @@ v2   = U_Face(3)*srho ! v
 v3   = U_Face(4)*srho ! w
 ASSOCIATE( b1 => U_Face(6), &
            b2 => U_Face(7), &
-           b3 => U_Face(8)  )
+           b3 => U_Face(8), &
+#ifdef PP_GLM
+           Etotal => U_Face(5)-0.5*U_Face(9)**2  &
+#else
+           Etotal => U_Face(5)  &
+#endif
+)
 vb   = (b1*v1+b2*v2+b3*v3)
-p    = kappaM1*(U_Face(5)-0.5*U_Face(1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
+p    = kappaM1*(Etotal-0.5*U_Face(1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
 ! Advection fluxes x-direction
 F_Face(1)= U_Face(2)          ! rho*u
 F_Face(2)= U_Face(2)*v1+p    -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
 F_Face(3)= U_Face(2)*v2      -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
 F_Face(4)= U_Face(2)*v3      -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
-F_Face(5)=(U_Face(5) + p)*v1 -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
+F_Face(5)=(Etotal + p)*v1 -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
 F_Face(6)=0.
 F_Face(7)=v1*b2-b1*v2
 F_Face(8)=v1*b3-b1*v3
@@ -439,6 +471,22 @@ ASSOCIATE( gradB1x => gradUx_Face(6,i), &
            gradB1z => gradUz_Face(6,i), & 
            gradB2z => gradUz_Face(7,i), & 
            gradB3z => gradUz_Face(8,i) )
+#ifdef PP_GLM
+ASSOCIATE( Psi =>U_Face(9,i), &
+           gradPsix => gradUx_Face(9,i), & 
+           gradPsiy => gradUy_Face(9,i), & 
+           gradPsiz => gradUz_Face(9,i))
+  gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
+                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx_Face(1,i))
+  gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
+                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy_Face(1,i))
+  gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
+                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz_Face(1,i))
+END ASSOCIATE
+#else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
                   -smu_0*srho*(b1*gradB1x+b2*gradB2x+b3*gradB3x     &
                                -0.5*bb2*sRho*gradUx_Face(1,i))
@@ -448,6 +496,7 @@ ASSOCIATE( gradB1x => gradUx_Face(6,i), &
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
                   -smu_0*srho*(b1*gradB1z+b2*gradB2z+b3*gradB3z     &
                                -0.5*bb2*sRho*gradUz_Face(1,i))
+#endif /*P_GLM*/
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu*KappasPr
@@ -500,9 +549,9 @@ ASSOCIATE( gradB1x => gradUx_Face(6,i), &
   !energy
   h(5,i)=v1*h(2,i)+v2*h(3,i)+v3*h(4,i) +smu_0*(b1*h(6,i)+b2*h(7,i)+b3*h(8,i)) - Qz
 #ifdef PP_GLM
-  f(9,i) = 0. 
-  g(9,i) = 0. 
-  h(9,i) = 0. 
+  f(9,i) = 0.
+  g(9,i) = 0.
+  h(9,i) = 0.
 #endif /*PP_GLM*/
 END ASSOCIATE ! gradB1x => gradUx(6,....
 END ASSOCIATE ! b1 => UFace(6,i) ...
@@ -604,6 +653,22 @@ ASSOCIATE( gradB1x => gradUx(6,PP_IJK,iElem), &
            gradB1z => gradUz(6,PP_IJK,iElem), & 
            gradB2z => gradUz(7,PP_IJK,iElem), & 
            gradB3z => gradUz(8,PP_IJK,iElem))
+#ifdef PP_GLM
+ASSOCIATE( Psi =>U(9,PP_IJK,iElem), &
+           gradPsix => gradUx(9,PP_IJK,iElem), & 
+           gradPsiy => gradUy(9,PP_IJK,iElem), & 
+           gradPsiz => gradUz(9,PP_IJK,iElem))
+  gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
+                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
+  gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
+                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
+  gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
+                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
+END ASSOCIATE
+#else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
                   -smu_0*srho*(b1*gradB1x+b2*gradB2x+b3*gradB3x     &
                                -0.5*bb2*sRho*gradUx(1,PP_IJK,iElem))
@@ -613,6 +678,7 @@ ASSOCIATE( gradB1x => gradUx(6,PP_IJK,iElem), &
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
                   -smu_0*srho*(b1*gradB1z+b2*gradB2z+b3*gradB3z     &
                                -0.5*bb2*sRho*gradUz(1,PP_IJK,iElem))
+#endif /*P_GLM*/
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu*KappasPr

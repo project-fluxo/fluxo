@@ -82,7 +82,7 @@ diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
 #ifdef PP_GLM
-IF(.NOT.GLM_init) CALL InitTimeStep_GLMch1()
+IF(.NOT.GLM_init) CALL InitTimeStep_GLM() !called only once!
 #endif /*PP_GLM*/
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
@@ -182,7 +182,7 @@ END FUNCTION CALCTIMESTEP
 !> This is computed only once, then ch is computed frm the current timestep:
 !> dt~1/ch -> dt/dtch1 = 1/ch -> ch=dtch1/dt
 !==================================================================================================================================
-SUBROUTINE InitTimeStep_GLMch1()
+SUBROUTINE InitTimeStep_GLM()
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
@@ -214,8 +214,12 @@ END DO !iElem
 #if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,GLM_dtch1,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
+SWRITE(UNIT_StdOut,'(A)')       '  GLM correction speed from timestep, (GLM_ch=GLM_scale*GLM_dtch1/dt)'
+SWRITE(UNIT_StdOut,'(A,ES16.7)')'    GLM_dt for ch=1 : ', GLM_dtch1
+
 GLM_init=.TRUE.
-END SUBROUTINE InitTimeStep_GLMch1
+
+END SUBROUTINE InitTimeStep_GLM
 #endif /*PP_GLM*/
 
 END MODULE MOD_CalcTimeStep
