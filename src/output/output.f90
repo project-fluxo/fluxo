@@ -362,16 +362,16 @@ END IF !on_xGP
 SELECT CASE(OutputFormat)
 CASE(OUTPUTFORMAT_PARAVIEW)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
-  IF(Nin.EQ.PP_N)THEN
+  IF(on_xGP)THEN
     CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
                                 U_NVisu,TRIM(FileString))
-  ELSEIF(Nin.EQ.Nvisu)THEN
+  ELSE
     CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,:), &
                                 Uin,TRIM(FileString))
-  END IF!Nin
+  END IF!on_xGP
 END SELECT
 
-IF(Nin.EQ.PP_N)THEN
+IF(on_xGP)THEN
   DEALLOCATE(U_Nvisu)
   DEALLOCATE(Coords_NVisu)
 END IF!Nin
