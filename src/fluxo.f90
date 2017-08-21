@@ -129,9 +129,9 @@ CALL InitDG()
 CALL InitLifting()
 #endif /*PARABOLIC*/
 CALL InitTimeDisc()
-CALL InitAnalyze()
 CALL Restart()
 CALL InitTestcase()
+CALL InitAnalyze()
 ! initialization finished
 CALL IgnoredParameters()
 !
