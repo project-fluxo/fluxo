@@ -309,7 +309,7 @@ DO iElem=1,nElems
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
 END DO !iElem
-CALL VisualizeAny(OutputTime,nOutvars,Nvisu,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
+CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
 DEALLOCATE(U_NVisu)
 DEALLOCATE(Coords_NVisu)
 END SUBROUTINE Visualize
@@ -317,7 +317,7 @@ END SUBROUTINE Visualize
 !==================================================================================================================================
 !> Use any input to write to paraview
 !==================================================================================================================================
-SUBROUTINE VisualizeAny(OutputTime,nOutVars,NIn,CoordsIn,Uin,FileTypeStrIn,VarNamesIn)
+SUBROUTINE VisualizeAny(OutputTime,nOutVars,NIn,On_xGP,CoordsIn,Uin,FileTypeStrIn,VarNamesIn)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -330,6 +330,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)            :: nOutVars,Nin 
+LOGICAL,INTENT(IN)            :: On_xGP                    !< if input is on xGP points             
 REAL,INTENT(IN)               :: OutputTime               !< simulation time of output
 REAL,INTENT(IN)               :: CoordsIn(3,0:Nin,0:Nin,0:Nin,1:nElems) !< solution vector to be visualized
 REAL,INTENT(IN)               :: Uin(nOutVars,0:Nin,0:Nin,0:Nin,1:nElems) !< solution vector to be visualized
@@ -343,7 +344,7 @@ REAL,ALLOCATABLE              :: U_NVisu(:,:,:,:,:)
 CHARACTER(LEN=255)            :: FileString
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
-IF(Nin.EQ.PP_N)THEN
+IF(on_xGP)THEN
   ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
   ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))
   U_NVisu = 0.
@@ -353,26 +354,24 @@ IF(Nin.EQ.PP_N)THEN
     ! Interpolate solution onto visu grid
     CALL ChangeBasis3D(nOutVars,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:nOutVars,:,:,:,iElem),U_NVisu(1:nOutVars,:,:,:,iElem))
   END DO !iElem
-ELSEIF(Nin.EQ.Nvisu)THEN
-  !use input
-ELSE
-  STOP "PROBLEM VISUALIZE ANY"
-END IF !Nin
+!ELSE
+!  !use input
+END IF !on_xGP
 
 ! Visualize data
 SELECT CASE(OutputFormat)
 CASE(OUTPUTFORMAT_PARAVIEW)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
-  IF(Nin.EQ.PP_N)THEN
+  IF(on_xGP)THEN
     CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
                                 U_NVisu,TRIM(FileString))
-  ELSEIF(Nin.EQ.Nvisu)THEN
+  ELSE
     CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,:), &
                                 Uin,TRIM(FileString))
-  END IF!Nin
+  END IF!on_xGP
 END SELECT
 
-IF(Nin.EQ.PP_N)THEN
+IF(on_xGP)THEN
   DEALLOCATE(U_Nvisu)
   DEALLOCATE(Coords_NVisu)
 END IF!Nin

@@ -814,6 +814,22 @@ if(cases[0]==0 or (caseID in cases)) :
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage, run_test=None , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_navierstokes_type1_GL_nopara_TC_angmom"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+            ,"FLUXO_TESTCASE"         ,"ns_angularmomentum"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 
 #============================================================================
 #FINAL ERROR HANDLING:
