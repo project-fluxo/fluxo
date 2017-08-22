@@ -132,8 +132,15 @@ ELSEIF(EquilibriumStateIni.EQ.-2) THEN
   END IF
 ELSEIF(EquilibriumStateIni.EQ.-3) THEN
   EquilibriumDivBcorr=.FALSE. !Apot not there
-  CALL ReadEquilibriumFromMesh(Ueq)
+  !CALL ReadEquilibriumFromMesh(Ueq)
   CALL ReadEquilibriumFromState(EquilibriumStateFile,Ueq) !overwrite Ueq with U from Statefile
+ELSEIF(EquilibriumStateIni.EQ.-4) THEN 
+  EquilibriumDivBcorr=.FALSE. !Apot not there
+  CALL ReadEquilibriumFromMesh(Ueq)
+  CALL ConsToPrimVec(nTotal,U_tmp,Ueq) !use density, velocity and pressure from equilibrium
+  CALL ReadEquilibriumFromState(EquilibriumStateFile,Ueq) !overwrite Ueq with U from Statefile
+  U_tmp(6:PP_nVar,:,:,:,:)=Ueq(6:PP_nVar,:,:,:,:) !only use Bfield and psi=0
+  CALL PrimToConsVec(nTotal,U_tmp,Ueq)
 END IF !EquilibriumState
 
 IF(EquilibriumDivBcorr)THEN
@@ -245,6 +252,9 @@ USE MOD_Mesh_Vars, ONLY: Elem_xGP,nElems
 USE MOD_Mesh_Vars, ONLY: dXGL_N,Vdm_GLN_N
 USE MOD_DG_Vars,   ONLY: D
 USE MOD_Basis,     ONLY: INV33
+#if (PP_NodeType==1)
+USE MOD_ChangeBasis,ONLY: ChangeBasis3D
+#endif
 !!!USE MOD_output,    ONLY: VisualizeAny
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE

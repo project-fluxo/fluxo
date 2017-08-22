@@ -451,7 +451,7 @@ REAL,INTENT(OUT)          :: Flux(PP_nVar,0:PP_N,0:PP_N,1:nBCSides) !< lifting b
 ! LOCAL VARIABLES
 INTEGER                              :: iBC,iSide,p,q,SideID
 INTEGER                              :: BCType,BCState,nBCLoc
-REAL                                 :: U_Face_loc(PP_nVar)
+!REAL                                 :: U_Face_loc(PP_nVar)
 REAL,DIMENSION(1:PP_nVar)            :: U_L,U_R,PrimL,PrimR
 REAL                                 :: pstar,Bystar,Bzstar
 REAL                                 :: SL,cf,cf_Roe,RoeVelx
@@ -468,7 +468,8 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+BCdata(:,p,q,SideID))
+          !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+BCdata(:,p,q,SideID))
+          Flux(:,p,q,SideID)=BCdata(:,p,q,SideID)
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
@@ -481,8 +482,9 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
-            Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
+            !CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
+            !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
           END DO ! p
         END DO ! q
       END DO !iSide=1,nBCloc
@@ -492,7 +494,8 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         DO q=0,PP_N
           DO p=0,PP_N
-              Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+RefStateCons(BCState,:))
+              !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+RefStateCons(BCState,:))
+              Flux(:,p,q,SideID)=RefStateCons(BCState,:)
           END DO ! p
         END DO ! q
       END DO !iSide=1,nBCloc
@@ -506,8 +509,9 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
-          Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
+          !CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:))
+          !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_Face_loc(:))
+          CALL ExactFunc(BCState,tIn,Face_xGP(:,p,q,SideID),Flux(:,p,q,SideID))
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
