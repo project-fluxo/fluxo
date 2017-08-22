@@ -30,7 +30,7 @@ INTERFACE MortarBasis_BigToSmall
 END INTERFACE
 
 INTERFACE MortarBasis_SmallToBig
-  MODULE PROCEDURE MortarBasis_SmallToBig
+  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
 END INTERFACE
 
 INTERFACE FinalizeMortar
@@ -55,10 +55,8 @@ USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone,NodeType
 USE MOD_Mortar_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-#if (PP_NodeType==1)
 REAL                          :: error
-REAL,DIMENSION(0:PP_N)        :: test1,test2,xi_Gauss,w_Gauss  ! Gauss Nodes
-#endif
+REAL,DIMENSION(0:PP_N)        :: test1,test2,xi_GP,w_GP
 !==================================================================================================================================
 IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
    CALL CollectiveStop(__STAMP__,&
@@ -74,12 +72,11 @@ CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,   M_0_2)
 CALL MortarBasis_SmallToBig(PP_N,NodeType,   M_1_0,   M_2_0)
 
 !> TODO: Make a unit test out of this one
-#if (PP_NodeType==1)
 !Test mean value property 0.5*(0.5+1.5)=1.  !ONLY GAUSS
 test1=0.5
 test2=1.5
-CALL GetNodesAndWeights(PP_N,'GAUSS',xi_Gauss,w_Gauss) !Gauss nodes and integration weights
-error=ABS(0.25*SUM((MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2))*w_Gauss)-1.)
+CALL GetNodesAndWeights(PP_N,NodeType,xi_GP,w_GP) !Gauss nodes and integration weights
+error=ABS(0.25*SUM((MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2))*w_GP)-1.)
 
 IF(error.GT. 100.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
@@ -87,7 +84,6 @@ IF(error.GT. 100.*PP_RealTolerance) THEN
 ELSE
   SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
 END IF
-#endif
 
 MortarInitIsDone=.TRUE.
 END SUBROUTINE InitMortar
@@ -127,6 +123,55 @@ M_0_1=TRANSPOSE(M_0_1)
 M_0_2=TRANSPOSE(M_0_2)
 END SUBROUTINE MortarBasis_BigToSmall
 
+
+
+!==================================================================================================================================
+!> Build 1D operators for non-conforming interfaces:
+!>    M_1_0(:,:)  discrete projection    from left  interval 1: [-1,0] to full  interval 0: [-1,1]
+!>    M_2_0(:,:)  discrete projection    from right interval 1: [0, 1] to full  interval 0: [-1,1]
+!> integrals are approximated with the same collocation points (gauss/gauss-Lob) as the scheme. for gauss, collocation is exact.
+!> for GL, collocation makes scheme FSP and angular momentum conservation on cartesian mortars (exact projection doesnt!!!). 
+!==================================================================================================================================
+SUBROUTINE MortarBasis_SmallToBig_Collocation(N_In,NodeType_In,M_1_0,M_2_0)
+! MODULES
+USE MOD_Interpolation     ,ONLY: getNodesAndWeights
+USE MOD_Basis,             ONLY: InitializeVandermonde 
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)                                      :: N_In  !< polynomial degree
+CHARACTER(LEN=255),INTENT(IN)                           :: NodeType_In !< nodetype
+!> precomputed mortar matrices: small to big
+REAL,DIMENSION(0:N_In,0:N_in),INTENT(OUT)  :: M_1_0,M_2_0
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                       :: i,j
+REAL,DIMENSION(0:N_in)        :: xi_In,w_in,wBary_In
+REAL,DIMENSION(0:N_in,0:N_in) :: Vdm_0_1,Vdm_0_2
+!==================================================================================================================================
+CALL GetNodesAndWeights(N_in,NodeType_In,xi_In,wIP=w_in,wIPBary=wBary_In)
+
+write(*,*)'xi_in,w_in,wBary_in',xi_in,w_in,wBary_in
+! Vdm^{01}_{ij} = l^0_j (xi^1_i)
+! Vdm^{02}_{ij} = l^0_j (xi^2_i)
+CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_In-1.),Vdm_0_1)
+CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_In+1.),Vdm_0_2)
+
+!M^{10}_{ij} = w_j/w_i l^0_i(xi^1_j) !*0.5 accounted in shat
+!M^{20}_{ij} = w_j/w_i l^0_i(xi^2_j) !*0.5 accounted in shat
+
+DO i=0,N_in
+  DO j=0,N_in
+    M_1_0(i,j)=w_in(j)/w_in(i)*Vdm_0_1(j,i)
+    M_2_0(i,j)=w_in(j)/w_in(i)*Vdm_0_2(j,i)
+  END DO
+END DO
+! later the transposed version is mostly used
+! ATTENTION: MortarBasis_SmallToBig computes the transposed matrices, which is useful when they are used
+!            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
+M_1_0=TRANSPOSE(M_1_0)
+M_2_0=TRANSPOSE(M_2_0)
+END SUBROUTINE MortarBasis_SmallToBig_Collocation
 
 !==================================================================================================================================
 !> Build 1D operators for non-conforming interfaces:
@@ -183,7 +228,6 @@ M_2_0=MATMUL(Vdm_Leg,MATMUL(TRANSPOSE(Vphi2),VGP))
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
 END SUBROUTINE MortarBasis_SmallToBig
-
 
 !==================================================================================================================================
 !> Deallocate mortar interpolation matrices.
