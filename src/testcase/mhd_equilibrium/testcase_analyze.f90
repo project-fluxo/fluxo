@@ -46,6 +46,7 @@ SUBROUTINE InitAnalyzeTestcase()
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_VarNames
 USE MOD_Testcase_Vars,    ONLY:doCalcErrorToEquilibrium,doCalcDeltaBEnergy
+USE MOD_Testcase_Vars,    ONLY:doCalcAngularMomentum
 USE MOD_Equation_Vars,    ONLY:StrVarNames
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -69,10 +70,16 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     END DO
   END IF !CalcErrorToEquilibrium
   IF(doCalcDeltaBEnergy)THEN
-    DO iVar=1,PP_nVar
-      A2F_iVar=A2F_iVar+1
-      A2F_VarNames(A2F_iVar)='"DeltaB_Energy"'
-    END DO
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"DeltaB_Energy"'
+  END IF !CalcErrorToEquilibrium
+  IF(doCalcAngularMomentum)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"AngularMomentumX"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"AngularMomentumY"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"AngularMomentumZ"'
   END IF !CalcErrorToEquilibrium
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeTestcase
@@ -85,6 +92,7 @@ SUBROUTINE AnalyzeTestcase(Time)
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_Data,Analyze_dt
 USE MOD_Testcase_Vars,    ONLY:doCalcErrorToEquilibrium,doCalcDeltaBEnergy,deltaB_Energy
+USE MOD_Testcase_Vars,    ONLY:doCalcAngularMomentum
 USE MOD_Restart_Vars,     ONLY:RestartTime
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -96,7 +104,7 @@ REAL,INTENT(IN)                 :: time         !< current simulation time
 ! LOCAL VARIABLES
 CHARACTER(LEN=40)               :: formatStr
 REAL                            :: L2_eq_Error(PP_nVar),Linf_eq_Error(PP_nVar)
-REAL                            :: tmp
+REAL                            :: tmp,AngMom(3)
 !==================================================================================================================================
 IF(doCalcErrorToEquilibrium)THEN
   CALL CalcErrorToEquilibrium(L2_eq_Error,Linf_eq_Error)
@@ -127,6 +135,17 @@ IF(doCalcDeltaBEnergy)THEN
       A2F_Data(A2F_iVar)=deltaB_Energy
     END IF !doAnalyzeToFile  
   END IF !MPIroot
+END IF
+IF(doCalcAngularMomentum)THEN
+  CALL CalcAngMom(AngMom)
+  IF(MPIroot) THEN
+    WRITE(UNIT_StdOut,'(A28, E21.13)')' Total Angular Momentum   : ', SQRT(SUM(AngMom**2))
+    WRITE(UNIT_StdOut,'(A28,3E21.13)')' Angular Momentum (X,Y,Z) : ', AngMom(:)
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=AngMom(:)
+    END IF
+  END IF !MPIroot & doAnalyzeToFile
 END IF
 END SUBROUTINE AnalyzeTestcase
 
@@ -239,5 +258,46 @@ END IF
 #endif /*MPI*/
 dbEnergy= s2mu_0*dbEnergy/vol
 END SUBROUTINE CalcDeltaBEnergy
+
+!==================================================================================================================================
+!> Calculate the angular Momentum 
+!==================================================================================================================================
+SUBROUTINE CalcAngMom(AngMom)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems,Elem_xGP
+USE MOD_DG_Vars,            ONLY: U
+USE MOD_Testcase_Vars,      ONLY: RotationCenter
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: AngMom(3)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                         :: iElem,i,j,k
+REAL                            :: IntegrationWeight,r(3)
+!==================================================================================================================================
+AngMom=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    r=Elem_xGP(:,i,j,k,iElem)-RotationCenter(:)
+    AngMom(:)  = AngMom(:)+CROSS(r(:),U(2:4,i,j,k,iElem))*IntegrationWeight
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
+
+#if MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,AngMom,3,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(AngMom         ,0  ,3,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+#endif /*MPI*/
+END SUBROUTINE CalcAngMom
 
 END MODULE MOD_Testcase_Analyze

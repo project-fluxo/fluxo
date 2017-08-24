@@ -137,10 +137,13 @@ ELSEIF(EquilibriumStateIni.EQ.-3) THEN
 ELSEIF(EquilibriumStateIni.EQ.-4) THEN 
   EquilibriumDivBcorr=.FALSE. !Apot not there
   CALL ReadEquilibriumFromMesh(Ueq)
-  CALL ConsToPrimVec(nTotal,U_tmp,Ueq) !use density, velocity and pressure from equilibrium
   CALL ReadEquilibriumFromState(EquilibriumStateFile,Ueq) !overwrite Ueq with U from Statefile
-  U_tmp(6:PP_nVar,:,:,:,:)=Ueq(6:PP_nVar,:,:,:,:) !only use Bfield and psi=0
-  CALL PrimToConsVec(nTotal,U_tmp,Ueq)
+  U_tmp(  1,:,:,:,:) =InputEq(  1,:,:,:,:) !density
+  U_tmp(2:4,:,:,:,:) =0.
+  U_tmp(  5,:,:,:,:) =InputEq(  2,:,:,:,:) !pressure
+  U_tmp(6:8,:,:,:,:) =Ueq(6:8,:,:,:,:) 
+  U_tmp(  9,:,:,:,:) =0.
+
 END IF !EquilibriumState
 
 IF(EquilibriumDivBcorr)THEN
