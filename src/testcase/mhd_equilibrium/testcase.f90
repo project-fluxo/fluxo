@@ -74,6 +74,10 @@ CALL prms%CreateLogicalOption('CalcErrorToEquilibrium', &
      "switch for TC_analyze: compute difference of |U-Ueq|" , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcDeltaBEnergy', &
      "switch for TC_analyze: compute Energy of 1/(2mu0)|B-Beq|^2" , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcAngularMomentum', &
+     "switch for TC_analyze: compute total Angular momentum" , '.FALSE.')
+CALL prms%CreateRealArrayOption('TC_RotationCenter', &
+     "center around which the angular momentum will be computed.","0.,0.,0.")
 CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
      "=0: Default: disturbance case number = iniExactFunc"// &
      ">0: specific disturbance function added to initial state." &
@@ -88,7 +92,7 @@ SUBROUTINE InitTestcase()
 USE MOD_Globals
 USE MOD_Testcase_Vars
 USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
-USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
+USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR,GETREALARRAY
 USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
 USE MOD_Equation_Vars      ,ONLY: nBCByType
@@ -137,7 +141,7 @@ CASE(0)
   EquilibriumStateIni=IniExactFunc
   SWRITE(UNIT_StdOut,'(A,A33,A3,I22)') ' | EquilibriumStateIni changed!   | ', &
                                              'set to IniExactFunc'    ,' | ',EquilibriumStateIni
-CASE(-3)
+CASE(-3,-4)
   EquilibriumStateFile=GETSTR('EquilibriumStateFile')
 END SELECT
 EquilibriumDivBcorr=GETLOGICAL('EquilibriumDivBcorr','.FALSE.')
@@ -153,6 +157,9 @@ CALL InitEquilibriumState()
 !TESTCASE ANALYZE
 doCalcErrorToEquilibrium = GETLOGICAL('CalcErrorToEquilibrium','.FALSE.')
 doCalcDeltaBEnergy       = GETLOGICAL('CalcDeltaBEnergy','.FALSE.')
+doCalcAngularMomentum    = GETLOGICAL('CalcAngularMomentum','.FALSE.')
+
+RotationCenter=GETREALARRAY('TC_RotationCenter',3,'0.0,0.0,0.0')
 
 TestcaseInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'

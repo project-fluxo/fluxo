@@ -109,7 +109,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
             rhov1 =>U(2,PP_IJK,iElem), &
             rhov2 =>U(3,PP_IJK,iElem), &
             rhov3 =>U(4,PP_IJK,iElem), &
+#ifdef PP_GLM
+            Etotal=>U(5,PP_IJK,iElem)-0.5*U(9,PP_IJK,iElem)**2, &
+#else
             Etotal=>U(5,PP_IJK,iElem), &
+#endif /* PP_GLM */
             b1    =>U(6,PP_IJK,iElem), &
             b2    =>U(7,PP_IJK,iElem), &
             b3    =>U(8,PP_IJK,iElem)  )
@@ -156,12 +160,15 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
+  f(5) = f(5)+GLM_ch*b1*U(9,PP_IJK,iElem)
   f(6) = f(6)+GLM_ch*U(9,PP_IJK,iElem)
   f(9) = GLM_ch*b1
 
+  g(5) = g(5)+GLM_ch*b2*U(9,PP_IJK,iElem)
   g(7) = g(7)+GLM_ch*U(9,PP_IJK,iElem)
   g(9) = GLM_ch*b2
 
+  h(5) = h(5)+GLM_ch*b3*U(9,PP_IJK,iElem)
   h(8) = h(8)+GLM_ch*U(9,PP_IJK,iElem)
   h(9) = GLM_ch*b3
 #endif /* PP_GLM */
@@ -233,7 +240,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   Uaux(7  ,PP_IJK)  =SUM(U(6:8,PP_IJK,iElem)**2)               ! |B|^2
   Uaux(8  ,PP_IJK)  =SUM(Uaux(2:4,PP_IJK)*U(6:8,PP_IJK,iElem)) ! v*B
   !total pressure=gas pressure + magnetic pressure
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem)-0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK))-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
+  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*( U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
+#ifdef PP_GLM
+                                                    +U(9,PP_IJK,iElem)**2 &
+#endif /*PP_GLM*/
+                                                   ))-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
