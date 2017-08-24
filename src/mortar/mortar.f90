@@ -151,7 +151,6 @@ REAL,DIMENSION(0:N_in,0:N_in) :: Vdm_0_1,Vdm_0_2
 !==================================================================================================================================
 CALL GetNodesAndWeights(N_in,NodeType_In,xi_In,wIP=w_in,wIPBary=wBary_In)
 
-write(*,*)'xi_in,w_in,wBary_in',xi_in,w_in,wBary_in
 ! Vdm^{01}_{ij} = l^0_j (xi^1_i)
 ! Vdm^{02}_{ij} = l^0_j (xi^2_i)
 CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_In-1.),Vdm_0_1)
