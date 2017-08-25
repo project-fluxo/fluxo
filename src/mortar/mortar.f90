@@ -178,7 +178,7 @@ END SUBROUTINE MortarBasis_SmallToBig_Collocation
 !>    M_2_0(:,:)  projection    from right interval 1: [0, 1] to full  interval 0: [-1,1]
 !> see doc/mortar for details...
 !==================================================================================================================================
-SUBROUTINE MortarBasis_SmallToBig(N_In,NodeType_In,M_1_0,M_2_0)
+SUBROUTINE MortarBasis_SmallToBig_projection(N_In,NodeType_In,M_1_0,M_2_0)
 ! MODULES
 USE MOD_Basis,             ONLY: LegendrePolynomialAndDerivative
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights,GetVandermonde
@@ -226,7 +226,7 @@ M_2_0=MATMUL(Vdm_Leg,MATMUL(TRANSPOSE(Vphi2),VGP))
 !            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
-END SUBROUTINE MortarBasis_SmallToBig
+END SUBROUTINE MortarBasis_SmallToBig_projection
 
 !==================================================================================================================================
 !> Deallocate mortar interpolation matrices.
