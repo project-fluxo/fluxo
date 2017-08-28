@@ -70,14 +70,6 @@ CALL prms%CreateStringOption('EquilibriumStateFile', &
      "name of statefile to used for eq. solution (only if EquilibriumStateIni=-3)")
 CALL prms%CreateLogicalOption('EquilibriumDivBcorr', &
      "switch to compute B from a vector potential instead of using B directly" , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcErrorToEquilibrium', &
-     "switch for TC_analyze: compute difference of |U-Ueq|" , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcDeltaBEnergy', &
-     "switch for TC_analyze: compute Energy of 1/(2mu0)|B-Beq|^2" , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcAngularMomentum', &
-     "switch for TC_analyze: compute total Angular momentum" , '.FALSE.')
-CALL prms%CreateRealArrayOption('TC_RotationCenter', &
-     "center around which the angular momentum will be computed.","0.,0.,0.")
 CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
      "=0: Default: disturbance case number = iniExactFunc"// &
      ">0: specific disturbance function added to initial state." &
@@ -92,7 +84,7 @@ SUBROUTINE InitTestcase()
 USE MOD_Globals
 USE MOD_Testcase_Vars
 USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
-USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR,GETREALARRAY
+USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
 USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
 USE MOD_Equation_Vars      ,ONLY: nBCByType
@@ -121,21 +113,20 @@ IF(INDEX(TRIM(WhichTestcase),'mhd_equilibrium').EQ.0)THEN
 END IF !check whichtestcase
 doTCsource=.TRUE.
 !======EQUILIBRIUM STUFF====
-!boundary condition type 21: equlibrium data dirichlet
-BC21exists=.FALSE.
+!boundary condition type 21/29: equlibrium data dirichlet
+EqBCexists=.FALSE.
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
-  IF(BoundaryType(iBC,BC_TYPE) .EQ.21) THEN
-    BC21exists=.TRUE.
-  END IF
+  IF((BoundaryType(iBC,BC_TYPE) .EQ.21).OR. &
+     (BoundaryType(iBC,BC_TYPE) .EQ.29)     ) EqBCexists=.TRUE.
 END DO
 EquilibriumStateIni=GETINT('EquilibriumStateIni','-1')
 SELECT CASE(EquilibriumStateIni)
 CASE(-1) !sanity check
-  IF(BC21exists)THEN
+  IF(EqBCexists)THEN
   ! check that there is no BC 21, which can only be used with a given equilibrium state
       CALL abort(__STAMP__,&
-           "BC type=21 used but EquilibriumStateIni not specified!" )
+           "BC type=21/29 used but EquilibriumStateIni not specified!" )
   END IF
 CASE(0)
   EquilibriumStateIni=IniExactFunc
@@ -154,12 +145,7 @@ IF(.NOT.doRestart)THEN
   END IF
 END IF
 CALL InitEquilibriumState()
-!TESTCASE ANALYZE
-doCalcErrorToEquilibrium = GETLOGICAL('CalcErrorToEquilibrium','.FALSE.')
-doCalcDeltaBEnergy       = GETLOGICAL('CalcDeltaBEnergy','.FALSE.')
-doCalcAngularMomentum    = GETLOGICAL('CalcAngularMomentum','.FALSE.')
 
-RotationCenter=GETREALARRAY('TC_RotationCenter',3,'0.0,0.0,0.0')
 
 TestcaseInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'

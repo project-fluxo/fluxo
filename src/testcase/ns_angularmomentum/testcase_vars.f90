@@ -29,7 +29,6 @@ LOGICAL :: doTCSource=.FALSE.               !< compute source terms for testcase
 LOGICAL :: doTCanalyze                      !< switch on analyze routines
 CHARACTER(LEN=255)       :: whichTestcase   !< input variable, to be able to check if wanted testcase was compiled
 REAL    :: RotationCenter(3)                !< center around which the angular momentum will be computed
-REAL    :: AngMomInit(3) 
 LOGICAL :: TestcaseInitIsDone=.FALSE.       !< Switch to check TestcaseInit status
 !==================================================================================================================================
 
