@@ -130,8 +130,8 @@ CALL InitLifting()
 #endif /*PARABOLIC*/
 CALL InitTimeDisc()
 CALL Restart()
-CALL InitTestcase()
 CALL InitAnalyze()
+CALL InitTestcase()
 ! initialization finished
 CALL IgnoredParameters()
 !

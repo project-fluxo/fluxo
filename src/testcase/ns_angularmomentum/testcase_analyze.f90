@@ -14,6 +14,7 @@
 !==================================================================================================================================
 #include "defines.h"
 
+
 !==================================================================================================================================
 !> Subroutines defining one specific testcase with all necessary variables
 !==================================================================================================================================
@@ -33,10 +34,29 @@ INTERFACE AnalyzeTestCase
 END INTERFACE
 
 
+PUBLIC:: DefineParametersAnalyzeTestcase 
 PUBLIC:: InitAnalyzeTestCase
 PUBLIC:: AnalyzeTestCase
 
 CONTAINS
+
+!==================================================================================================================================
+!> Define parameters 
+!==================================================================================================================================
+SUBROUTINE DefineParametersAnalyzeTestcase()
+! MODULES
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+!==================================================================================================================================
+CALL prms%SetSection("AnalyzeTestcase")
+CALL prms%CreateLogicalOption('doTCanalyze', &
+     "switch off/on TC_analyze" , '.FALSE.')
+CALL prms%CreateRealArrayOption('TC_RotationCenter'   , "center around which the angular momentum will be computed.","0.,0.,0.")
+END SUBROUTINE DefineParametersAnalyzeTestcase
 
 
 !==================================================================================================================================
@@ -46,7 +66,8 @@ SUBROUTINE InitAnalyzeTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_VarNames
-USE MOD_Testcase_Vars,    ONLY:doTCanalyze
+USE MOD_Testcase_Vars,    ONLY:doTCanalyze,RotationCenter
+USE MOD_ReadInTools,      ONLY: GETLOGICAL,GETREALARRAY
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -55,10 +76,13 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+
+doTCanalyze = GETLOGICAL('doTCanalyze','.TRUE.')
+
+RotationCenter=GETREALARRAY('TC_RotationCenter',3,'0.0,0.0,0.0')
 !prepare AnalyzeToFile
 IF(MPIroot.AND.doAnalyzeToFile) THEN
   IF(doTCanalyze)THEN
-WRITE(*,*) 'INIT ANALYZE TESTCASE'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"AngularMomentumX"'
     A2F_iVar=A2F_iVar+1
@@ -66,11 +90,11 @@ WRITE(*,*) 'INIT ANALYZE TESTCASE'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"AngularMomentumZ"'
     A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"DiffAngularMomentumX"'
+    A2F_VarNames(A2F_iVar)='"AngularMomentum_t_X"'
     A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"DiffAngularMomentumY"'
+    A2F_VarNames(A2F_iVar)='"AngularMomentum_t_Y"'
     A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"DiffAngularMomentumZ"'
+    A2F_VarNames(A2F_iVar)='"AngularMomentum_t_Z"'
   END IF  !doTCanalyze
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeTestcase
@@ -82,7 +106,8 @@ SUBROUTINE AnalyzeTestcase(Time)
 ! MODULES
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_Data
-USE MOD_Testcase_Vars,    ONLY:doTCanalyze,AngMomInit
+USE MOD_Testcase_Vars,    ONLY:doTCanalyze
+USE MOD_DG_Vars,          ONLY: U,Ut
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -91,42 +116,40 @@ REAL,INTENT(IN)                 :: time         !< current simulation time
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                            :: AngMom(3)
+REAL                            :: AngMom(3),AngMom_t(3)
 !==================================================================================================================================
 IF(doTCanalyze)THEN
-  CALL CalcAngMom(AngMom)
+  CALL CalcAngMom(AngMom,U)
+  CALL CalcAngMom(AngMom_t,Ut)
   IF(MPIroot) THEN
-    IF(time.LT.1e-08)THEN
-      AngMomInit=AngMom
-    END IF
-    WRITE(UNIT_StdOut,'(A, E21.13)')'Total Angular Momentum   : ', SQRT(SUM(AngMom**2))
-    WRITE(UNIT_StdOut,'(A,3E21.13)')'Angular Momentum (X,Y,Z) : ', AngMom(:)
-    WRITE(UNIT_StdOut,'(A,3E21.13)')'Difference to init       : ', AngMom(:)-AngMomInit(:)
+    WRITE(UNIT_StdOut,'(A, E21.13)')' Total Angular Momentum     : ', SQRT(SUM(AngMom**2))
+    WRITE(UNIT_StdOut,'(A,3E21.13)')' Angular Momentum (X,Y,Z)   : ', AngMom(:)
+    WRITE(UNIT_StdOut,'(A,3E21.13)')' Angular Momentum_t (X,Y,Z) : ', AngMom_t(:) 
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+3
       A2F_Data(A2F_iVar-2:A2F_iVar)=AngMom(:)
       A2F_iVar=A2F_iVar+3
-      A2F_Data(A2F_iVar-2:A2F_iVar)=AngMom(:)-AngMomInit(:)
-    END IF
-  END IF !MPIroot & doAnalyzeToFile
+      A2F_Data(A2F_iVar-2:A2F_iVar)=AngMom_t(:)
+    END IF !doAnalyzeToFile
+  END IF !MPIroot 
 END IF  !doTCanalyze
 END SUBROUTINE AnalyzeTestcase
 
 !==================================================================================================================================
 !> Calculate the angular Momentum 
 !==================================================================================================================================
-SUBROUTINE CalcAngMom(AngMom)
+SUBROUTINE CalcAngMom(AngMom,U_in)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
+USE MOD_Analyze_Vars,       ONLY: wGPVol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems,Elem_xGP
-USE MOD_DG_Vars,            ONLY: U
 USE MOD_Testcase_Vars,      ONLY: RotationCenter
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
+REAL,INTENT(IN)                 :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: AngMom(3)
@@ -140,7 +163,7 @@ DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
     r=Elem_xGP(:,i,j,k,iElem)-RotationCenter(:)
-    AngMom(:)  = AngMom(:)+CROSS(r(:),U(2:4,i,j,k,iElem))*IntegrationWeight
+    AngMom(:)  = AngMom(:)+CROSS(r(:),U_in(2:4,i,j,k,iElem))*IntegrationWeight
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
 

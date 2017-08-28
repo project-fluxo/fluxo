@@ -57,9 +57,6 @@ IMPLICIT NONE
 CALL prms%SetSection("Testcase")
 CALL prms%CreateStringOption('WhichTestcase', &
      "name of the testcase that is supposed to be used in simulation. Check if its = current testcase.","ns_angularmomentum")
-CALL prms%CreateLogicalOption('doTCanalyze', &
-     "switch off/on TC_analyze" , '.FALSE.')
-CALL prms%CreateRealArrayOption('TC_RotationCenter'   , "center around which the angular momentum will be computed.","0.,0.,0.")
 
 END SUBROUTINE DefineParametersTestcase
 
@@ -71,7 +68,7 @@ SUBROUTINE InitTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Testcase_Vars
-USE MOD_ReadInTools,      ONLY: GETSTR,GETLOGICAL,GETREALARRAY
+USE MOD_ReadInTools,      ONLY: GETSTR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -89,10 +86,6 @@ IF(INDEX(TRIM(WhichTestcase),'ns_angularmomentum').EQ.0)THEN
        "compiled with testcase ns_angularmomentum, but specified testcase is : "//TRIM(whichTestcase))
 END IF
 
-
-doTCanalyze = GETLOGICAL('doTCanalyze','.TRUE.')
-
-RotationCenter=GETREALARRAY('TC_RotationCenter',3,'0.0,0.0,0.0')
 
 TestcaseInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT TESTCASE DONE!'

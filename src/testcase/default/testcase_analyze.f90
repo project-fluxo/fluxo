@@ -33,10 +33,28 @@ INTERFACE AnalyzeTestCase
 END INTERFACE
 
 
+PUBLIC:: DefineParametersAnalyzeTestcase 
 PUBLIC:: InitAnalyzeTestCase
 PUBLIC:: AnalyzeTestCase
 
 CONTAINS
+
+!==================================================================================================================================
+!> Define parameters 
+!==================================================================================================================================
+SUBROUTINE DefineParametersAnalyzeTestcase()
+! MODULES
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+!==================================================================================================================================
+CALL prms%SetSection("AnalyzeTestcase")
+CALL prms%CreateLogicalOption('doTCanalyze', &
+     "switch off/on TC_analyze" , '.FALSE.')
+END SUBROUTINE DefineParametersAnalyzeTestcase
 
 
 !==================================================================================================================================
@@ -47,6 +65,7 @@ SUBROUTINE InitAnalyzeTestcase()
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY:doAnalyzeToFile,A2F_iVar,A2F_VarNames
 USE MOD_Testcase_Vars,    ONLY:doTCanalyze
+USE MOD_ReadInTools,      ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -55,6 +74,8 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+doTCanalyze = GETLOGICAL('doTCanalyze','.FALSE.')
+
 !prepare AnalyzeToFile
 IF(MPIroot.AND.doAnalyzeToFile) THEN
   IF(doTCanalyze)THEN
