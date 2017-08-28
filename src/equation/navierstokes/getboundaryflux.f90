@@ -210,6 +210,7 @@ USE MOD_Flux         ,ONLY: EvalEulerFlux1D
 USE MOD_Lifting_Vars ,ONLY: gradUx_Master,gradUy_Master,gradUz_Master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D,EvalDiffFlux1D_Outflow
 #endif /*PARABOLIC*/
+USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -516,9 +517,8 @@ DO iBC=1,nBCs
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCLoc
-  CASE DEFAULT ! unknown BCType
-    CALL abort(__STAMP__,&
-         'no BC defined in navierstokes/getboundaryflux.f90!',999,999.)
+  CASE DEFAULT !  check for BCtypes in Testcase
+    CALL TestcaseGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO !iBC=1,nBCs
 ! Integrate over the surface
@@ -548,6 +548,7 @@ USE MOD_Equation_Vars,ONLY: ConsToPrim_aux,ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: Kappa,KappaM1,sKappaM1,sKappaP1,RefStatePrim,RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
+USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseLiftingGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -701,9 +702,8 @@ DO iBC=1,nBCs
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCloc
-  CASE DEFAULT ! unknown BCType
-    CALL abort(__STAMP__,&
-         'no BC defined in  Lifting_GetboundaryFlux navierstokes/getboundaryflux.f90!',999,999.)
+  CASE DEFAULT !  check for BCtypes in Testcase
+    CALL TestcaseLiftingGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO ! iBC
 !for BR1 and BR2, lifting is in strong form, flux=U-Uminus...

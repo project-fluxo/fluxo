@@ -122,6 +122,7 @@ USE MOD_DG_Vars      ,ONLY: U_master
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 #endif /*PARABOLIC*/
+USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN)         :: tIn       !< current time (provided by time integration scheme)
@@ -199,9 +200,8 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       Flux(:,:,:,SideID)=0.
     END DO !iSide
-  CASE DEFAULT ! unknown BCType
-    CALL abort(__STAMP__,&
-         'no BC defined in navierstokes/getboundaryflux.f90!',999,999.)
+  CASE DEFAULT !  check for BCtypes in Testcase
+    CALL TestcaseGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO !iBC=1,nBCs
 ! Integrate over the surface
@@ -229,6 +229,7 @@ USE MOD_Equation_Vars,ONLY: nBCByType,BCsideID
 USE MOD_Mesh_Vars    ,ONLY: nBCSides,nSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master
+USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseLiftingGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -273,9 +274,8 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       Flux(:,:,:,SideID)=U_master(:,:,:,SideID)
     END DO !iSide=1,nBCloc
-  CASE DEFAULT ! unknown BCType
-    CALL abort(__STAMP__,&
-         ' unknown BC Type in linearscalaradvection/getboundaryflux.f90!',BCType,999.)
+  CASE DEFAULT !  check for BCtypes in Testcase
+    CALL TestcaseLiftingGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO ! iBC
 !for BR1 and BR2, lifting is in strong form: Flux=Flux-U_master...

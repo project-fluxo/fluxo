@@ -174,7 +174,7 @@ END SUBROUTINE FillBCdata
 !>              SUBROUTINE CalcSurfInt
 !> Attention 2: U_FacePeriodic is only needed in the case of periodic boundary conditions
 !==================================================================================================================================
-SUBROUTINE GetBoundaryFlux(t,Flux)
+SUBROUTINE GetBoundaryFlux(tIn,Flux)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc
@@ -185,10 +185,11 @@ USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
+USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)  :: t                                  !< current time
+REAL,INTENT(IN)  :: tIn                                !< current time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT) :: Flux(PP_nVar,0:PP_N,0:PP_N,nSides) !< boundary flux array
@@ -218,7 +219,7 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          CALL ExactFunc(IniExactFunc,t,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
         END DO ! p
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
@@ -250,9 +251,8 @@ DO iBC=1,nBCs
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
   
     END DO !iSide=1,nBCloc
-  CASE DEFAULT ! unknown BCType
-    CALL abort(__STAMP__,&
-         'no BC defined in maxwell/getboundaryflux.f90!',999,999.)
+  CASE DEFAULT !  check for BCtypes in Testcase
+    CALL TestcaseGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO !iBC=1,nBCs
 ! Integrate over the surface
