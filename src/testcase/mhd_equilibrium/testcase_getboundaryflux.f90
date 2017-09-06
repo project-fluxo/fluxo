@@ -58,7 +58,7 @@ USE MOD_DG_Vars      ,ONLY: U_Master
 USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
 #endif /*PARABOLIC*/
 USE MOD_Riemann      ,ONLY: Riemann
-USE MOD_Equation_Vars,ONLY: ConsToPrim
+USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: smu_0,s2mu_0
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY: GLM_ch 
@@ -76,6 +76,7 @@ REAL,INTENT(OUT)                     :: Flux(PP_nVar,0:PP_N,0:PP_N,nSides)  !<Na
 INTEGER                              :: BCType,BCState,nBCLoc
 INTEGER                              :: iSide,p,q,SideID
 REAL,DIMENSION(1:PP_nVar)            :: PrimL,PrimR
+REAL                                 :: BR_n
 !==================================================================================================================================
 BCType =BoundaryType(iBC,BC_TYPE)
 BCState=BoundaryType(iBC,BC_STATE)
@@ -103,14 +104,14 @@ CASE(29) !steadyState BC using State from mhd_equilibriumTestcase,
         CALL ConsToPrim(PrimR(:),BCdata(:,p,q,SideID))
         CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
         PrimL(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
+        BR_n=SUM(PrimR(6:8)*nvec(:))
         Flux(1,  p,q,SideID) = 0.
-        Flux(2:4,p,q,SideID) = (PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2))*Nvec(:)
-        Flux(5,  p,q,SideID) = -smu_0*SUM(PrimR(6:8)*nvec(:))*SUM(PrimR(6:8)*PrimL(2:4)) !-1/mu_0(B.v)*(B.n)
-        Flux(6:8,p,q,SideID) =        SUM(PrimR(6:8)*nvec(:))*PrimL(2:4) ! (v.n)B - (B.n)v
+        Flux(2:4,p,q,SideID) = (PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2))*nvec(:)-smu_0*BR_n*PrimR(6:8)
+        Flux(5,  p,q,SideID) =  -smu_0*BR_n*SUM(PrimR(6:8)*PrimL(2:4)) !-1/mu_0(B.v)*(B.n)
+        Flux(6:8,p,q,SideID) =        -BR_n*PrimL(2:4) ! (v.n)B - (B.n)v
 #ifdef PP_GLM
-        Flux(9,p,q,SideID) =  0.5*GLM_ch*PrimL(9) !outflow for GLM (psi_outer=0, LF jump)
+        Flux(9,p,q,SideID) =  GLM_ch*BR_n !0.5*GLM_ch*PrimL(9) !outflow for GLM (psi_outer=0, LF jump)
 #endif /* PP_GLM */
-
         END ASSOCIATE !nvec
       END DO !p=0,PP_N
     END DO !q=0,PP_N

@@ -226,8 +226,8 @@ Ut=0.
 !check time derivative norms
 CALL EvalNorms(Uteq)
 CALL CalcAngMom(angMom_t,Uteq)
-WRITE(UNIT_StdOut,'(A,3E21.13)')' Angular Momentum of Uteq (X,Y,Z) : ', angMom_t(:)
-WRITE(UNIT_StdOut,'(66("-"))')
+SWRITE(UNIT_StdOut,'(A,3E21.13)')' Angular Momentum of Uteq (X,Y,Z) : ', angMom_t(:)
+SWRITE(UNIT_StdOut,'(66("-"))')
 
 IF(doRestart)THEN
   U=U_tmp !copy U back
