@@ -47,7 +47,7 @@ USE MOD_Output_vars,       ONLY: ProjectName
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
-!REAL                    :: Time                              !< Used to measure simulation time
+REAL                    :: Time                              !< Used to measure simulation time
 !!==================================================================================================================================
 CALL InitMPI()
 CALL ParseCommandlineArguments()
@@ -69,6 +69,7 @@ CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
+CALL DefineParametersAnalyzeAllStates()
 !
 ! check for command line argument --help or --markdown
 IF (doPrintHelp.GT.0) THEN
@@ -177,48 +178,68 @@ SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' FLUXO POST FINISHED! [',Time-StartTime,' sec 
 SWRITE(UNIT_stdOut,'(132("="))')
 
 CONTAINS
+SUBROUTINE DefineParametersAnalyzeAllStates()
+! MODULES
+USE MOD_Globals
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!==================================================================================================================================
+CALL prms%SetSection("FLUXO_POST")
+CALL prms%CreateLogicalOption( 'fluxo_post_withTimeDeriv',  "call time derivative in fluxo_post",'.TRUE.')
+END SUBROUTINE DefineParametersAnalyzeAllStates
 
 !==================================================================================================================================
-!> Loops through all given State files and calls Analyze 
+!> Loops through all given State files and calls Analyze & Visualize( which writes vtk files if outputMode>0) 
 !==================================================================================================================================
 SUBROUTINE AnalyzeAllStates()
 ! MODULES
 USE MOD_Globals
 USE MOD_Commandline_Arguments,ONLY:nArgs
-USE MOD_Restart_vars,      ONLY:RestartFile,RestartTime,doRestart
+USE MOD_Restart_vars,      ONLY: RestartFile,RestartTime
 USE MOD_DG,                ONLY: DGTimeDerivative
+USE MOD_DG_Vars,           ONLY: U
 USE MOD_Analyze,           ONLY: Analyze
 USE MOD_Analyze_Vars,      ONLY: Analyze_dt
+USE MOD_Output,             ONLY: Visualize
+USE MOD_TimeDisc_Vars,     ONLY: t
 USE MOD_CalcTimeStep,      ONLY: CalcTimeStep
 USE MOD_HDF5_Input,        ONLY: OpenDataFile,CloseDataFile,ReadAttribute,File_ID
+USE MOD_ReadInTools,       ONLY: GETLOGICAL
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
-!REAL                    :: Time                              !< Used to measure simulation time
 INTEGER                      :: iArg
 INTEGER                      :: errType
-REAL                         :: Time,OldTime
+REAL                         :: Old_t,dt_Min
+LOGICAL                      :: withTimeDeriv
 !!==================================================================================================================================
+withTimeDeriv=GETLOGICAL('fluxo_post_withTimeDeriv','.TRUE.')
 
-SWRITE(*,*)'Post-Analyze RestartFile: ',RestartFile
-Time=RestartTime
-dt_Min=CALCTIMESTEP(errType)
-CALL DGTimeDerivative(Time)
-CALL Analyze(Time,INT(0,8))
+SWRITE(*,*)'Post-Analyze RestartFile: ',TRIM(RestartFile)
+t=RestartTime
+IF(withTimeDeriv)THEN
+  dt_Min=CALCTIMESTEP(errType)
+  CALL DGTimeDerivative(t)
+  CALL Visualize(t,U)
+END IF
+CALL Analyze(t,INT(0,8))
 DO iArg=3,nArgs
+  Old_t=t
   RestartFile = ""
   CALL GET_COMMAND_ARGUMENT(iArg,RestartFile)
-  WRITE(UNIT_StdOut,'(132("-"))')
-  SWRITE(*,*)'Post-Analyze RestartFile: ',RestartFile
-  OldTime=Time
+  SWRITE(UNIT_StdOut,'(132("-"))')
+  SWRITE(*,*)'Post-Analyze RestartFile: ',TRIM(RestartFile)
   CALL Restart(doFlush_in=.FALSE.)
   CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
-  CALL ReadAttribute(File_ID,'Time',1,RealScalar=Time)
+  CALL ReadAttribute(File_ID,'Time',1,RealScalar=t)
   CALL CloseDataFile()
-  dt_Min=CALCTIMESTEP(errType)
-  CALL DGTimeDerivative(Time)
-  Analyze_dt=Time-OldTime
-  CALL Analyze(Time,INT(iArg-2,8))
+  IF(withTimeDeriv)THEN
+    dt_Min=CALCTIMESTEP(errType)
+    CALL DGTimeDerivative(t)
+  END IF
+  Analyze_dt=t-Old_t
+  CALL Analyze(t,INT(iArg-2,8))
+  CALL Visualize(t,U)
 END DO
 END SUBROUTINE AnalyzeAllStates
 
