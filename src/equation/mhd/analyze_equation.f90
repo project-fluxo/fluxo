@@ -62,7 +62,9 @@ CALL prms%CreateLogicalOption('CalcDivergence'   , "Set true to compute the curr
            , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcBulk',"Set true to compute the integrated mean value of each state variable over whole domain"&
            , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcEnergy', "Set true to compute the intergated kinetic and full and disturbed magnetic energy"&
+CALL prms%CreateLogicalOption('CalcEnergy', "Set true to compute the integrated kinetic and full and disturbed magnetic energy"&
+           , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcEntropy', "Set true to compute the integrated entropy"&
            , '.FALSE.')
 END SUBROUTINE DefineParametersAnalyzeEquation
 
@@ -88,8 +90,9 @@ INTEGER     :: iVar
 !==================================================================================================================================
 ! Get the various analysis/output variables 
 doCalcDivergence       = GETLOGICAL('CalcDivergence','.FALSE.')
-doCalcBulk             = GETLOGICAL('CalcBulk','.FALSE.')
-doCalcEnergy           = GETLOGICAL('CalcEnergy','.FALSE.')
+doCalcBulk             = GETLOGICAL('CalcBulk'      ,'.FALSE.')
+doCalcEnergy           = GETLOGICAL('CalcEnergy'    ,'.FALSE.')
+doCalcEntropy          = GETLOGICAL('CalcEntropy'   ,'.FALSE.')
 IF(doCalcEnergy)THEN
 END IF
 
@@ -112,6 +115,10 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"MagneticEnergy"'
   END IF !doCalcEnergy
+  IF(doCalcEntropy)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"Entropy"'
+  END IF !doCalcEntropy
 END IF !MPIroot & doAnalyzeToFile
 
 
@@ -189,6 +196,21 @@ IF(doCalcEnergy)THEN
   END IF !MPIroot
 END IF !doCalcEnergy
 
+IF(doCalcEntropy)THEN
+  tmp(1)=Entropy
+  CALL CalcEntropy(Entropy)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A)')'(A21,ES21.12)'
+    WRITE(UNIT_StdOut,formatStr)  ' Entropy      : ',Entropy
+    IF((time-RestartTime).GE.Analyze_dt)THEN
+      WRITE(UNIT_StdOut,formatStr)' dEntropy/dt  : ',(Entropy-tmp(1))/Analyze_dt
+    END IF !time>Analyze_dt
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Entropy
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF !doCalcEnergy
 END SUBROUTINE AnalyzeEquation
 
 
@@ -351,6 +373,48 @@ Energy(2)= s2mu_0*Energy(2)/vol
 
 
 END SUBROUTINE CalcEnergy
+!==================================================================================================================================
+!> Calculates  Entropy over whole domain Entropy=rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
+!==================================================================================================================================
+SUBROUTINE CalcEntropy(Entropy)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U
+USE MOD_Equation_Vars,      ONLY: kappa,sKappaM1,ConsToPrim
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: Entropy !< Entropy
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                         :: iElem,i,j,k
+REAL                            :: ent_loc,prim(PP_nVar)
+!==================================================================================================================================
+Entropy=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    CALL ConsToPrim(prim,U(:,i,j,k,iElem))
+    ent_loc=prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
+    Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
+
+#if MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,Entropy,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(Entropy     ,0      ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+#endif /*MPI*/
+Entropy=Entropy*sKappaM1
+
+
+END SUBROUTINE CalcEntropy
 
 
 !==================================================================================================================================
