@@ -53,7 +53,7 @@ CALL ParseCommandlineArguments()
 ! Check if the number of arguments is correct
 IF ((nArgs.LT.1).OR.(nArgs.GT.2)) THEN
   ! Print out error message containing valid syntax
-  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: flexi parameter.ini [restart.h5] or flexi --help'// &
+  CALL CollectiveStop(__STAMP__,'ERROR - Invalid syntax. Please use: fluxo parameter.ini [restart.h5] or fluxo --help'// &
   '[option/section name] to print help for a single parameter, parameter sections or all parameters.')
 END IF
 CALL DefineParametersMPI()
