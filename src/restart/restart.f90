@@ -144,7 +144,7 @@ END SUBROUTINE InitRestart
 !> All state files that would be re-written by the simulation (with the same project name and a time stamp after the restart time
 !> or all files with the same project name if no restart is performed) are deleted at the end of the routine.
 !==================================================================================================================================
-SUBROUTINE Restart()
+SUBROUTINE Restart(doFlush_in)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -161,6 +161,7 @@ USE MOD_Interpolation_Vars, ONLY: NodeType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
+LOGICAL,OPTIONAL   :: doFlush_in
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,ALLOCATABLE   :: U_local(:,:,:,:,:)
@@ -168,8 +169,14 @@ INTEGER            :: iElem,i,j,k
 REAL               :: JNR(1,0:N_Restart,0:N_Restart,0:N_Restart)
 REAL               :: Vdm_NRestart_N(0:PP_N,0:N_Restart)
 REAL               :: Vdm_3Ngeo_NRestart(0:N_Restart,0:3*NGeo)
+LOGICAL            :: doFlush
 
 !==================================================================================================================================
+IF(PRESENT(doFlush_in))THEN
+  doFlush=doFlush_in
+ELSE
+  doFlush=.TRUE.
+END IF
 IF(DoRestart)THEN
   CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
   ! Read in state
@@ -214,10 +221,10 @@ IF(DoRestart)THEN
   END IF
   CALL CloseDataFile()
   ! Delete all files that will be rewritten
-  CALL FlushFiles(RestartTime)
+  IF(doFlush) CALL FlushFiles(RestartTime)
 ELSE
   ! Delete all files since we are doing a fresh start
-  CALL FlushFiles()
+  IF(doFlush) CALL FlushFiles()
 END IF
 END SUBROUTINE Restart
 

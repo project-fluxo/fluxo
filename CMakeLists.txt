@@ -94,6 +94,8 @@ SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
 MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
+SET(_BUILD_FLUXO_POST  OFF  CACHE BOOL "switch to also build the fluxo_post executable (reads a collection of states and calls analyze).")
+
 # =========================================================================
 # PREPROCESSOR FLAGS
 # =========================================================================
@@ -506,6 +508,11 @@ ADD_DEPENDENCIES(fluxolibF90 HDF5)
 
 add_exec(fluxo ./src/fluxo.f90)
 ADD_DEPENDENCIES(fluxo fluxolib HDF5)
+
+IF (_BUILD_FLUXO_POST)
+  add_exec(fluxo_post ./src/fluxo_post.f90)
+  ADD_DEPENDENCIES(fluxo_post fluxolib HDF5)
+ENDIF()
 
 # special compiler flags to avoid warnings for empty functions of testcase.f90 and overwrite of intrinsic abort in globals.f90
 #...# IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
