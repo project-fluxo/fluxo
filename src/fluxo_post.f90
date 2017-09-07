@@ -215,7 +215,7 @@ LOGICAL                      :: withTimeDeriv
 !!==================================================================================================================================
 withTimeDeriv=GETLOGICAL('fluxo_post_withTimeDeriv','.TRUE.')
 
-SWRITE(*,*)'Post-Analyze RestartFile: ',TRIM(RestartFile)
+SWRITE(*,'(A,I4,A4,I4,A3,A)')'Post-Analyze RestartFile ',1,' of ',nArgs-1,' : ',TRIM(RestartFile)
 t=RestartTime
 IF(withTimeDeriv)THEN
   dt_Min=CALCTIMESTEP(errType)
@@ -228,7 +228,7 @@ DO iArg=3,nArgs
   RestartFile = ""
   CALL GET_COMMAND_ARGUMENT(iArg,RestartFile)
   SWRITE(UNIT_StdOut,'(132("-"))')
-  SWRITE(*,*)'Post-Analyze RestartFile: ',TRIM(RestartFile)
+  SWRITE(*,'(A,I4,A4,I4,A3,A)')'Post-Analyze RestartFile ',iArg-1,' of ',nArgs-1,' : ',TRIM(RestartFile)
   CALL Restart(doFlush_in=.FALSE.)
   CALL OpenDataFile(RestartFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
   CALL ReadAttribute(File_ID,'Time',1,RealScalar=t)
