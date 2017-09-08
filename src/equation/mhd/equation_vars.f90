@@ -127,6 +127,10 @@ END INTERFACE
 !  MODULE PROCEDURE PrimToConsVec
 !END INTERFACE
 
+INTERFACE ConsToEntropy
+  MODULE PROCEDURE ConsToEntropy
+END INTERFACE
+
 INTERFACE WaveSpeeds1D
   MODULE PROCEDURE WaveSpeeds1D
 END INTERFACE
@@ -253,6 +257,43 @@ DO i=1,dim2
   CALL PrimToCons(Prim(:,i),Cons(:,i))
 END DO!i
 END SUBROUTINE PrimToConsVec
+
+
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables a la Ismail and Roe
+!==================================================================================================================================
+SUBROUTINE ConsToEntropy(entropy,cons)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: p,v(3),beta2
+!==================================================================================================================================
+v(:)  = cons(2:4)/cons(1)
+v2=SUM(v*v)
+#ifdef PP_GLM
+p     = KappaM1*(cons(5)-0.5*(cons(1)*v2+cons(9)*cons(9))-s2mu_0*SUM(cons(6:8)*cons(6:8)) )
+#else
+p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:8)*cons(6:8)))
+#endif /*PP_GLM*/
+!s     = LOG(p) - kappa*LOG(cons(1))
+beta2 = cons(1)/p !/2
+
+! Convert to entropy variables
+entropy(1)   =  (kappa*(1.0+LOG(cons(1)))-LOG(p))*skappaM1 - 0.5*beta2*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(2:4) =  beta2*v(:)                         ! 2*beta*v
+entropy(5)   = -beta2                              !-2*beta
+entropy(6:PP_nVar) =  beta2*cons(6:PP_nVar)        ! 2*beta*B
+                                                   ! 2*beta*psi
+
+END SUBROUTINE ConsToEntropy
 
 
 !==================================================================================================================================
