@@ -173,7 +173,7 @@ prim(1)=cons(1)
 prim(2:4)=cons(2:4)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
 #ifdef PP_GLM
-prim(5)=KappaM1*(cons(5)-0.5*(SUM(cons(2:4)*prim(2:4))+cons(9)*cons(9))-s2mu_0*SUM(cons(6:8)*cons(6:8)) )
+prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
 #else
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*SUM(cons(6:8)*cons(6:8)))
 #endif /*PP_GLM*/
@@ -204,7 +204,7 @@ cons(1)=prim(1)
 cons(2:4)=prim(2:4)*prim(1)
 ! total energy
 #ifdef PP_GLM
-cons(5)=sKappaM1*prim(5)+0.5*(SUM(cons(2:4)*prim(2:4))+prim(9)*prim(9))+s2mu_0*SUM(prim(6:8)*prim(6:8))
+cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*(SUM(prim(6:8)*prim(6:8))+prim(9)*prim(9))
 #else
 cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*SUM(prim(6:8)*prim(6:8))
 #endif /*PP_GLM*/
@@ -279,7 +279,7 @@ REAL                                :: p,v(3),beta2
 v(:)  = cons(2:4)/cons(1)
 v2=SUM(v*v)
 #ifdef PP_GLM
-p     = KappaM1*(cons(5)-0.5*(cons(1)*v2+cons(9)*cons(9))-s2mu_0*SUM(cons(6:8)*cons(6:8)) )
+p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
 #else
 p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:8)*cons(6:8)))
 #endif /*PP_GLM*/
