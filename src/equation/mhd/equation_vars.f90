@@ -274,7 +274,7 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: p,v(3),beta2
+REAL                                :: p,v(3),v2,beta2
 !==================================================================================================================================
 v(:)  = cons(2:4)/cons(1)
 v2=SUM(v*v)

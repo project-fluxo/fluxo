@@ -146,8 +146,8 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   vb   = (b1*v1+b2*v2+b3*v3)
   !p = ptilde (includes magnetic pressure)
 #ifdef PP_GLM
-  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)+psi*psi))-KappaM2*s2mu_0*bb2
-  Ep   = (Etotal-0.5*psi*psi + p)
+  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)+smu_0*psi*psi))-KappaM2*s2mu_0*bb2
+  Ep   = (Etotal-0.5*smu_0*psi*psi + p)
 #else
   p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)))-KappaM2*s2mu_0*bb2
   Ep   = (Etotal + p)

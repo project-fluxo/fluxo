@@ -43,12 +43,22 @@ INTERFACE StandardDGFluxDealiasedMetricVec
   MODULE PROCEDURE StandardDGFluxDealiasedMetricVec
 END INTERFACE
 
+INTERFACE EntropyandKinEnergyConservingFlux
+  MODULE PROCEDURE EntropyandKinEnergyConservingFlux
+END INTERFACE
+
+INTERFACE EntropyandKinEnergyConservingFluxVec
+  MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec
+END INTERFACE
+
 
 PUBLIC::EvalEulerFluxTilde3D
 PUBLIC::EvalUaux
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
 PUBLIC::StandardDGFluxDealiasedMetricVec
+PUBLIC::EntropyandKinEnergyConservingFlux
+PUBLIC::EntropyandKinEnergyConservingFluxVec
 !==================================================================================================================================
 
 CONTAINS
@@ -62,7 +72,7 @@ SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:U
-USE MOD_Equation_Vars ,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
+USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
 USE MOD_Equation_vars ,ONLY:GLM_ch
@@ -79,7 +89,7 @@ INTEGER,INTENT(IN)                        :: iElem !< current element index in v
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux           !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b)
+REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux           !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
@@ -240,11 +250,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   Uaux(7  ,PP_IJK)  =SUM(U(6:8,PP_IJK,iElem)**2)               ! |B|^2
   Uaux(8  ,PP_IJK)  =SUM(Uaux(2:4,PP_IJK)*U(6:8,PP_IJK,iElem)) ! v*B
   !total pressure=gas pressure + magnetic pressure
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*( U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
+  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
 #ifdef PP_GLM
-                                                    +smu_0*U(9,PP_IJK,iElem)**2 &
+                                              -s2mu_0*U(9,PP_IJK,iElem)**2 &
 #endif /*PP_GLM*/
-                                                   ))-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
+                                                    )-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
@@ -256,7 +266,7 @@ END SUBROUTINE EvalUaux
 !==================================================================================================================================
 !> Computes the standard flux in x-direction for the hyperbolic part ( normally used with a rotated state)
 !==================================================================================================================================
-SUBROUTINE StandardDGFlux(Fstar,UL,UR)
+SUBROUTINE StandardDGFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
@@ -282,9 +292,9 @@ ASSOCIATE(  rho_L =>UL(1),  rho_R =>UR(1), &
            rhoV_L =>UL(3), rhoV_R =>UR(3), &
            rhoW_L =>UL(4), rhoW_R =>UR(4), &
 #ifdef PP_GLM
-             E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
 #else
-             E_L =>UL(5), E_R =>UR(5), &
+              E_L =>UL(5),    E_R =>UR(5), &
 #endif
              b1_L =>UL(6),   b1_R =>UR(6), &
              b2_L =>UL(7),   b2_R =>UR(7), &
@@ -307,8 +317,8 @@ rhoqL    = rho_L*v1_L
 rhoqR    = rho_R*v1_R
 Fstar(1) = 0.5*(rhoqL      + rhoqR)
 Fstar(2) = 0.5*(rhoqL*v1_L + rhoqR*v1_R +(pt_L + pt_R)-smu_0*(b1_L*b1_L+b1_R*b1_R))
-Fstar(3) = 0.5*(rhoqL*v2_L + rhoqR*v2_R             -smu_0*(b2_L*b2_L+b2_R*b2_R))
-Fstar(4) = 0.5*(rhoqL*v3_L + rhoqR*v3_R             -smu_0*(b3_L*b3_L+b3_R*b3_R))
+Fstar(3) = 0.5*(rhoqL*v2_L + rhoqR*v2_R               -smu_0*(b2_L*b1_L+b2_R*b1_R))
+Fstar(4) = 0.5*(rhoqL*v3_L + rhoqR*v3_R               -smu_0*(b3_L*b1_L+b3_R*b1_R))
 Fstar(5) = 0.5*((E_L + pt_L)*v1_L + (E_R + pt_R)*v1_R- smu_0*(b1_L*vb_L+b1_R*vb_R))
 Fstar(6) = 0.
 Fstar(7) = 0.5*(v1_L*b2_L-b1_L*v2_L + v1_R*b2_R-b1_R*v2_R)
@@ -519,16 +529,19 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 
 
 
-SUBROUTINE EntropyAndEnergyConservingFlux(Fstar,UL,UR)
+SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
 !==================================================================================================================================
-! Computes the entropy and kinetic energy conserving numerical 3D flux (in the
-! normal direction) for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-! TODO: could make it like EvalFlux3D and do every direction simutaneously
+! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+! following D.Dergs et al."a novel Entropy consistnet nie-wave field divergence diminishing ideal MHD system" 
+! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+! 
 !==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -539,69 +552,60 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: betaLN,beta_R,beta_L
-REAL                                :: sRho_L,sRho_R,p_L,p_R
-REAL                                :: pTilde
-REAL,DIMENSION(3)                   :: v_L,v_R,B_L,B_R,BAvg,vAvg,B2_L,B2_R,v2_L,v2_R
-REAL                                :: B1B1Avg,B2B2Avg,B3B3Avg
-REAL                                :: B1B2Avg,B1B3Avg
-REAL                                :: v1B1B1Avg,v1B2B2Avg,v1B3B3Avg
-REAL                                :: v2B2B1Avg,v3B3B1Avg
+REAL            :: betaLN,beta_R,beta_L
+REAL            :: rhoLN,sRho_L,sRho_R,B2_L,B2_R,v2_L,v2_R
+REAL            :: pTilde
+REAL            :: v_L(3),v_R(3)
+REAL            :: BAvg(3),vAvg(3),B1BAvg(3)
+REAL            :: v1_B2Avg
+REAL            :: vB_B1Avg
 #ifdef PP_GLM
-REAL                                :: psiAvg, B1psiAvg
+REAL            :: psiAvg
 #endif
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
 #ifdef PP_GLM
-             E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
+              E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
 #else
-             E_L =>UL(5), E_R =>UR(5), &
+              E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
               B_L => UL(6:8),    B_R => UR(6:8)  )
 ! Get the inverse density, velocity, and pressure on left and right
 sRho_L = 1./rho_L; v_L = sRho_L*rhoV_L(:)
 sRho_R = 1./rho_R; v_R = sRho_R*rhoV_R(:)
 
-v2_L = v_L(:)*v_L(:)
-v2_R = v_R(:)*v_R(:)
-B2_L = B_L(:)*B_L(:)
-B2_R = B_R(:)*B_R(:)
+v2_L = SUM(v_L(:)*v_L(:))
+v2_R = SUM(v_R(:)*v_R(:))
+B2_L = SUM(B_L(:)*B_L(:))
+B2_R = SUM(B_R(:)*B_R(:))
 
-p_L    = kappaM1*(E_L(5) - 0.5*(rho_L*SUM(v2_L)-smu_0*SUM(B2_L)))
-p_R    = kappaM1*(E_R(5) - 0.5*(rho_R*SUM(v2_R)-smu_0*SUM(B2_R)))
-beta_L = 0.5*rho_L/p_L
-beta_R = 0.5*rho_R/p_R
+!p_L    = kappaM1*(E_L - 0.5*(rho_L*v2_L-smu_0*B2_L))
+!p_R    = kappaM1*(E_R - 0.5*(rho_R*v2_R-smu_0*B2_R))
+beta_L = 0.5*rho_L/(kappaM1*(E_L - 0.5*(rho_L*v2_L-smu_0*B2_L)))
+beta_R = 0.5*rho_R/(kappaM1*(E_R - 0.5*(rho_R*v2_R-smu_0*B2_R)))
 
 ! Get the averages for the numerical flux
 
 rhoLN      = LN_MEAN( rho_L, rho_R)
 betaLN     = LN_MEAN(beta_L,beta_R)
-vAvg       = 0.5 * ( v_L + v_R)
-BAvg       = 0.5 * ( B_L + B_R)
-B1B1Avg    = 0.5 * (B2_L(1) + B2_R(1))
-B2B2Avg    = 0.5 * (B2_L(2) + B2_R(2))
-B3B3Avg    = 0.5 * (B2_L(3) + B2_R(3))
-B1B2Avg    = 0.5 * (B_L(1)*B_L(2) + B_R(1)*B_R(2))
-B1B3Avg    = 0.5 * (B_L(1)*B_L(3) + B_R(1)*B_R(3))
-v1B1B1Avg  = 0.5 * (v_L(1)*B2_L(1) + v_R(1)*B2_R(1))
-v1B2B2Avg  = 0.5 * (v_L(1)*B2_L(2) + v_R(1)*B2_R(2))
-v1B3B3Avg  = 0.5 * (v_L(1)*B2_L(3) + v_R(1)*B2_R(3))
+vAvg       = 0.5 * ( v_L +  v_R)
+BAvg       = 0.5 * ( B_L +  B_R)
+!B2Avg      = 0.5 * (B2_L + B2_R)
+B1BAvg    = 0.5 * (B_L(1)*B_L(:) + B_R(1)*B_R(:))
+v1_B2Avg   = 0.5 * (v_L(1)*B2_L + v_R(1)*B2_R)
+vB_B1Avg   = 0.5 * (SUM(V_L(:)*B_L(:))*B_L(1)+SUM(V_R(:)*B_R(:))*B_R(1))
                                                                    
-v2B2B1Avg  = 0.5 * (v_L(2)*B_L(2)*B_L(1) + v_R(2)*B_R(2)*B_R(1))
-v3B3B1Avg  = 0.5 * (v_L(3)*B_L(3)*B_L(1) + v_R(3)*B_R(3)*B_R(1))
-
-pTilde     = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*(B1B1Avg+B2B2Avg+B3B3Avg)) !rhoLN/(2*betaLN)+1/(2mu_0)({{B_1^2}}...)
+pTilde     = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*(0.5*(B2_L+B2_R))) !rhoLN/(2*betaLN)+1/(2mu_0)({{|B|^2}}...)
 #ifdef PP_GLM
 psiAvg     = 0.5*(UL(9)+UR(9))
-B1psiAvg   = 0.5*(B_L(1)*UL(9)+B_R(1)*UR(9))
 #endif
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*vAvg(1)
-Fstar(2) = Fstar(1)*vAvg(1) - smu_0*B1B1Avg + pTilde
-Fstar(3) = Fstar(1)*vAvg(2) - smu_0*B1B2Avg
-Fstar(4) = Fstar(1)*vAvg(3) - smu_0*B1B3Avg
+Fstar(2) = Fstar(1)*vAvg(1) - smu_0*B1BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*vAvg(2) - smu_0*B1BAvg(2)
+Fstar(4) = Fstar(1)*vAvg(3) - smu_0*B1BAvg(3)
 Fstar(7) = vAvg(1)*Bavg(2) - BAvg(1)*vAvg(2)
 Fstar(8) = vAvg(1)*Bavg(3) - BAvg(1)*vAvg(3)
 #ifdef PP_GLM
@@ -609,21 +613,20 @@ Fstar(6) = GLM_ch*psiAvg
 Fstar(9) = GLM_ch*BAvg(1)
 #endif
 
-Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(SUM(v2_L+v2_R)))  &
+Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R))  &
            + SUM(vAvg(:)*Fstar(2:4)) &
-           +smu_0*( SUM(BAvg(7:8)*Fstar(7:8)) &
-                   +(v1B1B1Avg + v2B2B1Avg + v3B3B1Avg)     &
-                   -0.5*(v1B1B1Avg + v1B2B2Avg + v1B3B3Avg) &
+           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+                   -0.5*v1_B2Avg +vB_B1Avg &
 #ifdef PP_GLM
-                   +GLM_ch*(2.0*BAvg(1)*psiAvg-B1psiAvg)    &
+                   +GLM_ch*(BAvg(1)*psiAvg-0.5*(B_L(1)*UL(9)+B_R(1)*UR(9)) )    &
 #endif
                    )
 
 END ASSOCIATE 
-END SUBROUTINE EntropyAndEnergyConservingFlux
+END SUBROUTINE EntropyAndKinEnergyConservingFlux
 
 
-SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
+SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
 #ifdef CARTESIANFLUX
                              metric, &
 #else
@@ -631,14 +634,19 @@ SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
 #endif
                              Fstar)
 !==================================================================================================================================
-! Computes the entropy and kinetic energy conserving flux transformed with the metrics
-! (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+! following D.Dergs et al."a novel Entropy consistnet nie-wave field divergence diminishing ideal MHD system" 
+! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+! firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
 ! for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
 USE MOD_Equation_Vars,ONLY:sKappaM1,s2mu_0,smu_0
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -657,71 +665,77 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: vAvg(3),BAvg(3),B2Avg,rhoLN,pTilde
-REAL                                :: rho_MEAN,beta_MEAN,betaLN,qHat
-REAL                                :: beta_R,beta_L,p_L,p_R
+REAL                   :: vAvg(3),BAvg(3),BBAvg(3,3)
+REAL                   :: rhoLN,betaLN
+REAL                   :: beta_R,beta_L
+REAL                   :: vm,Bm,pTilde
+#ifdef PP_GLM
+REAL                   :: PsiAvg
+#endif /*PP_GLM*/
 #ifndef CARTESIANFLUX
-REAL                                :: metric(3)
+REAL                   :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
 #endif /*ndef CARTESIANFLUX*/
-ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
-              B_L => UL(6:8),    B_R => UR(6:8), &
-          !srho_L =>UauxL(1), srho_R =>UauxR(1), &
+ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
+              B_L => UL(6:8),    B_R => UR(6:8)  , &
+#ifdef PP_GLM
+            psi_L => UL(9)  ,  psi_R => UR(9)    , &
+#endif /*PP_GLM*/
               v_L =>UauxL(2:4),  v_R =>UauxR(2:4), &
-             pt_L =>UauxL(5),   pt_R =>UauxR(5)  , &
-             v2_L =>UauxL(6),   v2_R =>UauxR(6)  , &
-             B2_L =>UauxL(7),   B2_R =>UauxR(7)  , &
+             pt_L =>UauxL(5),   pt_R =>UauxR(5)  , & !pt=p+1/(2mu_0)|B|^2
+             v2_L =>UauxL(6),   v2_R =>UauxR(6)  , & !|v|^2 left/right
+             B2_L =>UauxL(7),   B2_R =>UauxR(7)  , & !|B|^2 left/right
              vB_L =>UauxL(8),   vB_R =>UauxR(8)  )
-p_L=pt_L -s2mu_0*B2_L
-p_R=pt_R -s2mu_0*B2_R
-beta_L = 0.5*rho_L/p_L
-beta_R = 0.5*rho_R/p_R
+!p_L=pt_L -s2mu_0*B2_L
+!p_R=pt_R -s2mu_0*B2_R
+beta_L = 0.5*rho_L/(pt_L-s2mu_0*B2_L) !0.5*rho_L/p_L
+beta_R = 0.5*rho_R/(pt_R-s2mu_0*B2_R) !0.5*rho_R/p_R 
 
 ! Get the averages for the numerical flux
 
 !rho_MEAN  = 0.5*(   rho_L+rho_R)
 !beta_MEAN = 0.5*(    beta_L+beta_R)
-rhoLN    = LN_MEAN(rho_L,rho_R)
-betaLN  = LN_MEAN(beta_L,beta_R)
-vAvg      = 0.5*(v_L+v_R)
-BAvg      = 0.5*(B_L+B_R)
-B2Avg     = 0.5*(B2_L+B2_R)
-pTilde    = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*B2Avg)  !rho_MEAN/beta_MEAN
+rhoLN     = LN_MEAN( rho_L, rho_R)
+betaLN    = LN_MEAN(beta_L,beta_R)
+vAvg      = 0.5*( v_L+ v_R)
+BAvg      = 0.5*( B_L+ B_R)
+!B2Avg     = 0.5*(B2_L+B2_R)
+pTilde    = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R))  !rho_MEAN/(2*beta_MEAN) + 1/(2mu_0){{|B|^2}}
+BBAvg(:,1)   = 0.5*(B_L(:)*B_L(1)+B_R(:)*B_R(1))
+BBAvg(1,2)   = BBavg(2,1)
+BBAvg(2:3,2) = 0.5*(B_L(2:3)*B_L(2)+B_R(2:3)*B_R(2))
+BBAvg(1:2,3) = BBAvg(3,1:2)
+BBAvg(3,3)   = 0.5*(B_L(3)*B_L(3)+B_R(3)*B_R(3))
 
-qHat=SUM(vAvg(:)*metric(:))
+vm=SUM(vAvg(:)*metric(:))
+Bm=SUM(BAvg(:)*metric(:))
+#ifdef PP_GLM
+PsiAvg = 0.5*(psi_L+psi_R)
+#endif /*PP_GLM*/
 
 ! Entropy conserving and kinetic energy conserving flux
-Fstar(1) = rhoLN*qHat
-Fstar(2) = Fstar(1)*vAvg(1) + metric(1)*pTilde
-Fstar(3) = Fstar(1)*vAvg(2) + metric(2)*pTilde
-Fstar(4) = Fstar(1)*vAvg(3) + metric(3)*pTilde 
-
+Fstar(  1) = rhoLN*vm
+Fstar(2:4) = Fstar(1)*vAvg(1:3)-smu_0*(MATMUL(BBAvg(:,:),metric(:)))+ pTilde*metric(1:3)
+#ifdef PP_GLM
+Fstar(6:8) = vm*BAvg(1:3) - Bm*vAvg(1:3) + (GLM_ch*PsiAvg)*metric(1:3)
+Fstar(  9) = GLM_ch*Bm
+#else
+Fstar(6:8) = vm*BAvg(1:3) - Bm*vAvg(1:3)
+#endif /*PP_GLM*/
 
 
 Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R)) &
-           + SUM(vAvg(:)*Fstar(2:4))
-
-!! Entropy conserving and kinetic energy conserving flux
-!Fstar(1) = rhoLN*uHat
-!Fstar(2) = Fstar(1)*uHat + p1Hat
-!Fstar(3) = Fstar(1)*vHat 
-!Fstar(4) = Fstar(1)*wHat 
-!Fstar(5) = Fstar(1)*HHat + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
-!
-!Gstar(1) = rhoLN*vHat
-!Gstar(2) = Fstar(3)              !rhoLN*vHat*uHat 
-!Gstar(3) = Gstar(1)*vHat + p1Hat
-!Gstar(4) = Gstar(1)*wHat 
-!Gstar(5) = Gstar(1)*HHat + uHat*Gstar(2) + vHat*Gstar(3) + wHat*Gstar(4)
-!
-!Hstar(1) = rhoLN*wHat
-!Hstar(2) = Fstar(4)              !rhoLN*wHat*uHat 
-!Hstar(3) = Gstar(4)              !rhoLN*wHat*vHat 
-!Hstar(4) = Hstar(1)*wHat + p1Hat
-!Hstar(5) = Hstar(1)*HHat + uHat*Hstar(2) + vHat*Hstar(3) + wHat*Hstar(4)
+           + SUM(vAvg(:)*Fstar(2:4))  &
+           +smu_0*( SUM(BAvg(:)*Fstar(6:8))                        &
+                   - 0.25*SUM((B2_L*v_L(:)+B2_R*v_R(:))*metric(:)) & !0.5* {{|B|^2v(:)}}.{{m(:)}}
+                   + 0.5 *SUM((vb_L*B_L(:)+vb_R*B_R(:))*metric(:)) & !{{(v.B) B(:) }} . {{m(:)}}
+#ifdef PP_GLM
+                   +Fstar(9)*PsiAvg - (GLM_ch*0.5)*SUM((Psi_L*B_L(:)+Psi_R*B_R(:))*metric(:))  &
+#endif
+                  )
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
-END SUBROUTINE EntropyAndEnergyConservingFluxVec
+END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
 
 
 !==================================================================================================================================
