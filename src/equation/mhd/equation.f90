@@ -281,225 +281,6 @@ END SUBROUTINE InitEquation
 
 
 !==================================================================================================================================
-!> Check Riemann Solver and averga flux for consistency
-!==================================================================================================================================
-SUBROUTINE CheckFluxes()
-! MODULES
-USE MOD_Globals
-USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
-USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
-USE MOD_Flux_Average
-USE MOD_Riemann
-#if (PP_DiscType==2)
-USE MOD_Flux_Average , ONLY: standardDGFluxVec
-USE MOD_DG_Vars,       ONLY: DGinitIsDone,U
-USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde
-#endif /*PP_DiscType==2*/
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif /*PP_GLM*/
- IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
-REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
-REAL  :: check,absdiff
-INTEGER :: icase,i
-PROCEDURE(),POINTER :: fluxProc 
-CHARACTER(LEN=255)  :: fluxName
-#if PP_DiscType==2
-REAL  :: UauxElem(   nAuxVar,0:PP_N,0:PP_N,0:PP_N)
-REAL  :: ftildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-REAL  :: gtildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-REAL  :: htildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-REAL  :: metricL(3),metricR(3),mtmp(3,2),Utmp(PP_nVar,2)
-REAL  :: ULaux(1:nAuxVar),URaux(1:nAuxVar)
-LOGICAL :: failed_vol
-#endif /*PP_DiscType==2*/
-LOGICAL :: failed
-!==================================================================================================================================
-!test consistency, random state:
-PL(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
-PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
-#ifdef PP_GLM
-PL(9)= 0.31999469
-PR(9)= 0.
-GLM_ch = 0.5 !was not set yet
-#endif
-CALL PrimToCons(PL,UL)
-CALL PrimToCons(PR,UR)
-!use EvalAdvectionFlux1D as reference Flux
-CALL EvalAdvectionFlux1D(UL,FrefL)
-CALL EvalAdvectionFlux1D(UR,FrefR)
-failed=.FALSE.
-DO icase=0,5
-  NULLIFY(fluxProc)
-  SELECT CASE(icase)
-  CASE(0)
-    fluxProc => StandardDGFlux
-    fluxName = "StandardDGFlux"
-  CASE(1)
-    fluxProc => RiemannSolverByHLL
-    fluxName = "RiemannSolverByHLL"
-  CASE(2)
-    fluxProc => RiemannSolverByRoe
-    fluxName = "RiemannSolverByRoe"
-  CASE(3)
-    fluxProc => RiemannSolverByHLLC
-    fluxName = "RiemannSolverByHLLC"
-  CASE(4)
-    fluxProc => RiemannSolverByHLLD
-    fluxName = "RiemannSolverByHLLD"
-  CASE(5)
-    fluxProc => EntropyAndKinEnergyConservingFlux
-    fluxName = "EntropyAndKinEnergyConservingFlux"
-  END SELECT
-  !CONSISTENCY
-  CALL fluxProc(UL,UL,Fcheck)
-  check=1.0e-12
-  DO i=1,PP_nVar
-    absdiff=ABS(FrefL(i)-Fcheck(i))
-    IF(absdiff.GT.1.0e-12)THEN
-      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
-      check=max(check,absdiff)
-    END IF
-  END DO
-  CALL fluxProc(UR,UR,Fcheck)
-  DO i=1,PP_nVar
-    absdiff=ABS(FrefR(i)-Fcheck(i))
-    IF(absdiff.GT.1.0e-12)THEN
-      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
-      check=max(check,absdiff)
-    END IF
-  END DO
-  IF(check.GT.1.0e-12)THEN
-    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
-    failed=.TRUE.
-  END IF
-END DO !icase
-#if PP_DiscType==2
-metricL=(/1.5320,-0.05,4.895/)
-metricR=(/0.8715,0.594,2.531/)
-
-!use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
-IF(DGinitIsDone)THEN
-  Utmp(:,1)=U(:,0,0,0,1) !save U
-  Utmp(:,2)=U(:,0,0,1,1) !save U
-  U(:,0,0,0,1)=UL
-  U(:,0,0,1,1)=UR
-ELSE
-  ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1)) !DGinit not yet called!
-  DO i=1,PP_nVar
-    U(i,:,:,:,1)=UL(i)
-  END DO
-  U(:,0,0,1,1)=UR
-END IF
-mtmp(:,1)=Metrics_ftilde(:,0,0,0,1) !save metric
-mtmp(:,2)=Metrics_ftilde(:,0,0,1,1) !save metric
-!overwrite
-Metrics_ftilde(:,0,0,0,1)=metricL
-Metrics_ftilde(:,0,0,1,1)=metricR
-
-CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
-Metrics_fTilde(:,0,0,0,1)=mtmp(:,1) !put metric back
-Metrics_fTilde(:,0,0,1,1)=mtmp(:,2) !put metric back
-IF(DGinitIsDone)THEN
-  U(:,0,0,0,1)=Utmp(:,1) !put back U
-  U(:,0,0,1,1)=Utmp(:,2) !put back U
-ELSE
-  DEALLOCATE(U)
-END IF
-failed_vol=.FALSE.
-ULaux=UauxElem(:,0,0,0)
-URaux=UauxElem(:,0,0,1)
-FrefL = fTildeElem(:,0,0,0)
-FrefR = fTildeElem(:,0,0,1)
-DO icase=0,2
-  NULLIFY(fluxProc)
-  SELECT CASE(icase)
-  CASE(0)
-    fluxProc => StandardDGFluxVec
-    fluxName = "StandardDGFluxVec"
-  CASE(1)
-    fluxProc => StandardDGFluxDealiasedMetricVec
-    fluxName = "StandardDGFluxDealiasedMetricVec"
-  CASE(2)
-    fluxProc => EntropyandKinEnergyConservingFluxVec
-    fluxName = "EntropyandKinEnergyConservingFluxVec"
-  END SELECT
-  !CONSISTENCY
-  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL  & 
-#ifdef CARTESIANFLUX
-                                    ,metricL  &
-#endif          
-                                    ,Fcheck)
-  check=1.0e-12
-  DO i=1,PP_nVar
-    absdiff=ABS(FrefL(i)-Fcheck(i))
-    IF(absdiff.GT.1.0e-12)THEN
-      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
-      check=max(check,absdiff)
-    END IF
-  END DO
-  CALL fluxProc(   UR,UR,URaux,URaux,metricR  & 
-#ifdef CARTESIANFLUX
-                                    ,metricR  &
-#endif          
-                                    ,Fcheck)
-  DO i=1,PP_nVar
-    absdiff=ABS(FrefR(i)-Fcheck(i))
-    IF(absdiff.GT.1.0e-12)THEN
-      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
-      check=max(check,absdiff)
-    END IF
-  END DO
-  IF(check.GT.1.0e-12)THEN
-    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
-    failed_vol=.TRUE.
-  END IF
-  !SYMMETRY
-  CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
-#ifdef CARTESIANFLUX
-                                    ,metricR  &
-#endif          
-                                    ,Frefsym)
-  CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
-#ifdef CARTESIANFLUX
-                                    ,metricL  &
-#endif          
-                                    ,Fcheck)
-  check=1.0e-12
-  DO i=1,PP_nVar
-    absdiff=ABS(Frefsym(i)-Fcheck(i))
-    IF(absdiff.GT.1.0e-12)THEN
-      WRITE(*,*)'Frefsym /=Fcheck:',i,Frefsym(i),Fcheck(i)
-      check=max(check,absdiff)
-    END IF
-  END DO
-  IF(check.GT.1.0e-12)THEN
-    WRITE(*,*) "symmetry check for solver "//TRIM(fluxName)//" failed",icase,check
-    failed_vol=.TRUE.
-  END IF
-END DO !iCase
-IF(failed_vol) THEN
-  CALL ABORT(__STAMP__, &
-     "consistency/symmetry check for average volume flux failed")
-END IF !failed
-#endif /*PP_DiscType==2*/
-IF(failed) THEN
-  CALL ABORT(__STAMP__, &
-     "consistency check for riemann solver failed")
-END IF !failed
-
-END SUBROUTINE CheckFluxes
-
-
-!==================================================================================================================================
 !> Fill initial solution with IniExactFunc
 !==================================================================================================================================
 SUBROUTINE FillIni(IniExactFunc_in,U_in)
@@ -1223,5 +1004,227 @@ SDEALLOCATE(RefStatePrim)
 SDEALLOCATE(RefStateCons)
 EquationInitIsDone = .FALSE.
 END SUBROUTINE FinalizeEquation
+
+
+!==================================================================================================================================
+!> Check Riemann Solver  for consistency, two-point flux for consistency and symmetry
+!==================================================================================================================================
+SUBROUTINE CheckFluxes()
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
+USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
+USE MOD_Flux_Average
+USE MOD_Riemann
+#if (PP_DiscType==2)
+USE MOD_Flux_Average , ONLY: standardDGFluxVec
+USE MOD_DG_Vars,       ONLY: DGinitIsDone,nTotal_vol,U
+USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde
+#endif /*PP_DiscType==2*/
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif /*PP_GLM*/
+ IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
+REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
+REAL  :: check,absdiff
+INTEGER :: icase,i
+PROCEDURE(),POINTER :: fluxProc 
+CHARACTER(LEN=255)  :: fluxName
+#if PP_DiscType==2
+REAL  :: UauxElem(   nAuxVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: ftildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: gtildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: htildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: metricL(3),metricR(3),mtmp(3,2),Utmp(PP_nVar,2)
+REAL  :: ULaux(1:nAuxVar),URaux(1:nAuxVar)
+LOGICAL :: failed_vol
+#endif /*PP_DiscType==2*/
+LOGICAL :: failed
+!==================================================================================================================================
+WRITE(*,*)'    CHECK ALL FLUXES...'
+!test consistency, random state:
+PL(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
+PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
+#ifdef PP_GLM
+PL(9)= 0.31999469
+PR(9)= 0.
+GLM_ch = 0.5 !was not set yet
+#endif
+CALL PrimToCons(PL,UL)
+CALL PrimToCons(PR,UR)
+!use EvalAdvectionFlux1D as reference Flux
+CALL EvalAdvectionFlux1D(UL,FrefL)
+CALL EvalAdvectionFlux1D(UR,FrefR)
+failed=.FALSE.
+DO icase=0,5
+  NULLIFY(fluxProc)
+  SELECT CASE(icase)
+  CASE(0)
+    fluxProc => StandardDGFlux
+    fluxName = "StandardDGFlux"
+  CASE(1)
+    fluxProc => RiemannSolverByHLL
+    fluxName = "RiemannSolverByHLL"
+  CASE(2)
+    fluxProc => RiemannSolverByRoe
+    fluxName = "RiemannSolverByRoe"
+  CASE(3)
+    fluxProc => RiemannSolverByHLLC
+    fluxName = "RiemannSolverByHLLC"
+  CASE(4)
+    fluxProc => RiemannSolverByHLLD
+    fluxName = "RiemannSolverByHLLD"
+  CASE(5)
+    fluxProc => EntropyAndKinEnergyConservingFlux
+    fluxName = "EntropyAndKinEnergyConservingFlux"
+  END SELECT
+  !CONSISTENCY
+  CALL fluxProc(UL,UL,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefL(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  CALL fluxProc(UR,UR,Fcheck)
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefR(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
+    failed=.TRUE.
+  END IF
+END DO !icase
+#if PP_DiscType==2
+metricL=(/1.5320,-0.05,4.895/)
+metricR=(/0.8715,0.594,2.531/)
+
+!use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
+IF(DGinitIsDone)THEN
+  Utmp(:,1)=U(:,0,0,0,1) !save U
+  Utmp(:,2)=U(:,0,0,1,1) !save U
+  U(:,0,0,0,1)=UL
+  U(:,0,0,1,1)=UR
+ELSE
+  ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1)) !DGinit not yet called!
+  nTotal_vol=(PP_N+1)**3
+  DO i=1,PP_nVar
+    U(i,:,:,:,1)=UL(i)
+  END DO
+  U(:,0,0,1,1)=UR
+END IF
+mtmp(:,1)=Metrics_ftilde(:,0,0,0,1) !save metric
+mtmp(:,2)=Metrics_ftilde(:,0,0,1,1) !save metric
+!overwrite
+Metrics_ftilde(:,0,0,0,1)=metricL
+Metrics_ftilde(:,0,0,1,1)=metricR
+
+CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+Metrics_fTilde(:,0,0,0,1)=mtmp(:,1) !put metric back
+Metrics_fTilde(:,0,0,1,1)=mtmp(:,2) !put metric back
+IF(DGinitIsDone)THEN
+  U(:,0,0,0,1)=Utmp(:,1) !put back U
+  U(:,0,0,1,1)=Utmp(:,2) !put back U
+ELSE
+  DEALLOCATE(U)
+END IF
+failed_vol=.FALSE.
+ULaux=UauxElem(:,0,0,0)
+URaux=UauxElem(:,0,0,1)
+FrefL = fTildeElem(:,0,0,0)
+FrefR = fTildeElem(:,0,0,1)
+DO icase=0,2
+  NULLIFY(fluxProc)
+  SELECT CASE(icase)
+  CASE(0)
+    fluxProc => StandardDGFluxVec
+    fluxName = "StandardDGFluxVec"
+  CASE(1)
+    fluxProc => StandardDGFluxDealiasedMetricVec
+    fluxName = "StandardDGFluxDealiasedMetricVec"
+  CASE(2)
+    fluxProc => EntropyandKinEnergyConservingFluxVec
+    fluxName = "EntropyandKinEnergyConservingFluxVec"
+  END SELECT
+  !CONSISTENCY
+  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL  & 
+#ifndef CARTESIANFLUX
+                                    ,metricL  &
+#endif          
+                                    ,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefL(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  CALL fluxProc(   UR,UR,URaux,URaux,metricR  & 
+#ifndef CARTESIANFLUX
+                                    ,metricR  &
+#endif          
+                                    ,Fcheck)
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefR(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
+    failed_vol=.TRUE.
+  END IF
+  !SYMMETRY
+  CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
+#ifndef CARTESIANFLUX
+                                    ,metricR  &
+#endif          
+                                    ,Frefsym)
+  CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
+#ifndef CARTESIANFLUX
+                                    ,metricL  &
+#endif          
+                                    ,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(Frefsym(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'Frefsym /=Fcheck:',i,Frefsym(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*) "symmetry check for solver "//TRIM(fluxName)//" failed",icase,check
+    failed_vol=.TRUE.
+  END IF
+END DO !iCase
+IF(failed_vol) THEN
+  CALL ABORT(__STAMP__, &
+     "consistency/symmetry check for average volume flux failed")
+END IF !failed
+#endif /*PP_DiscType==2*/
+IF(failed) THEN
+  CALL ABORT(__STAMP__, &
+     "consistency check for riemann solver failed")
+END IF !failed
+WRITE(*,*)'    ...SUCESSFULL.'
+
+END SUBROUTINE CheckFluxes
 
 END MODULE MOD_Equation

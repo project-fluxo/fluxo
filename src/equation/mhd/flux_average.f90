@@ -120,7 +120,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
             rhov2 =>U(3,PP_IJK,iElem), &
             rhov3 =>U(4,PP_IJK,iElem), &
 #ifdef PP_GLM
-            Etotal=>U(5,PP_IJK,iElem)-0.5*smu_0*U(9,PP_IJK,iElem), &
+            Etotal=>U(5,PP_IJK,iElem)-0.5*smu_0*U(9,PP_IJK,iElem)**2, &
 #else
             Etotal=>U(5,PP_IJK,iElem), &
 #endif /*def PP_GLM*/
@@ -383,7 +383,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
            rhoW_L =>   UL(4), rhoW_R =>   UR(4), &
 #ifdef PP_GLM
-             E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
+             E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
 #else
              E_L =>UL(5), E_R =>UR(5), &
 #endif
@@ -395,8 +395,8 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
              v2_L =>UauxL(3),   v2_R =>UauxR(3), &
              v3_L =>UauxL(4),   v3_R =>UauxR(4), &
              pt_L =>UauxL(5),   pt_R =>UauxR(5), & !total pressure = gas pressure+magnetic pressure
-           !vv2_L =>UauxL(6),  vv2_R =>UauxR(6), &
-           !bb2_L =>UauxL(7),  bb2_R =>UauxR(7), &
+           ! v2_L =>UauxL(6),   v2_R =>UauxR(6), &
+           ! b2_L =>UauxL(7),   b2_R =>UauxR(7), &
              vb_L =>UauxL(8),   vb_R =>UauxR(8)  )
 
 !without metric dealiasing (=standard DG weak form on curved meshes)
@@ -483,7 +483,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
            rhoW_L =>   UL(4), rhoW_R =>   UR(4), &
 #ifdef PP_GLM
-             E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
+             E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
 #else
              E_L =>UL(5), E_R =>UR(5), &
 #endif
@@ -532,7 +532,7 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistnet nie-wave field divergence diminishing ideal MHD system" 
+! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 ! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 ! 
 !==================================================================================================================================
@@ -553,8 +553,8 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL            :: betaLN,beta_R,beta_L
-REAL            :: rhoLN,sRho_L,sRho_R,B2_L,B2_R,v2_L,v2_R
-REAL            :: pTilde
+REAL            :: rhoLN,B2_L,B2_R,v2_L,v2_R
+REAL            :: pTilde,p_L,p_R
 REAL            :: v_L(3),v_R(3)
 REAL            :: BAvg(3),vAvg(3),B1BAvg(3)
 REAL            :: v1_B2Avg
@@ -566,24 +566,25 @@ REAL            :: psiAvg
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
 #ifdef PP_GLM
-              E_L =>UL(5)-0.5*smu_0*UL(9), E_R =>UR(5)-0.5*smu_0*UR(9), &
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
               B_L => UL(6:8),    B_R => UR(6:8)  )
 ! Get the inverse density, velocity, and pressure on left and right
-sRho_L = 1./rho_L; v_L = sRho_L*rhoV_L(:)
-sRho_R = 1./rho_R; v_R = sRho_R*rhoV_R(:)
+v_L = rhoV_L(:)/rho_L
+v_R = rhoV_R(:)/rho_R
 
 v2_L = SUM(v_L(:)*v_L(:))
 v2_R = SUM(v_R(:)*v_R(:))
 B2_L = SUM(B_L(:)*B_L(:))
 B2_R = SUM(B_R(:)*B_R(:))
 
-!p_L    = kappaM1*(E_L - 0.5*(rho_L*v2_L-smu_0*B2_L))
-!p_R    = kappaM1*(E_R - 0.5*(rho_R*v2_R-smu_0*B2_R))
-beta_L = 0.5*rho_L/(kappaM1*(E_L - 0.5*(rho_L*v2_L-smu_0*B2_L)))
-beta_R = 0.5*rho_R/(kappaM1*(E_R - 0.5*(rho_R*v2_R-smu_0*B2_R)))
+!beta=rho/(2*p)
+p_L    = kappaM1*(E_L - 0.5*(rho_L*v2_L+smu_0*B2_L))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*v2_R+smu_0*B2_R))
+beta_L = 0.5*rho_L/p_L
+beta_R = 0.5*rho_R/P_R
 
 ! Get the averages for the numerical flux
 
@@ -592,11 +593,11 @@ betaLN     = LN_MEAN(beta_L,beta_R)
 vAvg       = 0.5 * ( v_L +  v_R)
 BAvg       = 0.5 * ( B_L +  B_R)
 !B2Avg      = 0.5 * (B2_L + B2_R)
-B1BAvg    = 0.5 * (B_L(1)*B_L(:) + B_R(1)*B_R(:))
-v1_B2Avg   = 0.5 * (v_L(1)*B2_L + v_R(1)*B2_R)
-vB_B1Avg   = 0.5 * (SUM(V_L(:)*B_L(:))*B_L(1)+SUM(V_R(:)*B_R(:))*B_R(1))
+B1BAvg     = 0.5 * (B_L(1)* B_L(:)           + B_R(1)* B_R(:))
+v1_B2Avg   = 0.5 * (v_L(1)*B2_L              + v_R(1)*B2_R)
+vB_B1Avg   = 0.5 * (B_L(1)*SUM(V_L(:)*B_L(:))+ B_R(1)*SUM(V_R(:)*B_R(:)))
                                                                    
-pTilde     = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*(0.5*(B2_L+B2_R))) !rhoLN/(2*betaLN)+1/(2mu_0)({{|B|^2}}...)
+pTilde     = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R)) !rhoLN/(2*betaLN)+1/(2mu_0)({{|B|^2}}...)
 #ifdef PP_GLM
 psiAvg     = 0.5*(UL(9)+UR(9))
 #endif
@@ -635,7 +636,7 @@ SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
                              Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistnet nie-wave field divergence diminishing ideal MHD system" 
+! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 ! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 ! firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
 ! for curved metrics, 1/2(metric_L+metric_R) is taken!
@@ -702,11 +703,11 @@ vAvg      = 0.5*( v_L+ v_R)
 BAvg      = 0.5*( B_L+ B_R)
 !B2Avg     = 0.5*(B2_L+B2_R)
 pTilde    = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R))  !rho_MEAN/(2*beta_MEAN) + 1/(2mu_0){{|B|^2}}
-BBAvg(:,1)   = 0.5*(B_L(:)*B_L(1)+B_R(:)*B_R(1))
-BBAvg(1,2)   = BBavg(2,1)
+BBAvg(  :,1) = 0.5*(B_L(:)*B_L(1)+B_R(:)*B_R(1))
+BBAvg(1  ,2) = BBavg(2,1)
 BBAvg(2:3,2) = 0.5*(B_L(2:3)*B_L(2)+B_R(2:3)*B_R(2))
 BBAvg(1:2,3) = BBAvg(3,1:2)
-BBAvg(3,3)   = 0.5*(B_L(3)*B_L(3)+B_R(3)*B_R(3))
+BBAvg(  3,3) = 0.5*(B_L(3)*B_L(3)+B_R(3)*B_R(3))
 
 vm=SUM(vAvg(:)*metric(:))
 Bm=SUM(BAvg(:)*metric(:))
