@@ -46,6 +46,10 @@ INTERFACE RiemannSolverByRusanov
   MODULE PROCEDURE RiemannSolverByRusanov
 END INTERFACE
 
+INTERFACE EntropyStableFlux
+  MODULE PROCEDURE EntropyStableFlux
+END INTERFACE
+
 
 PUBLIC :: Riemann
 PUBLIC :: RiemannSolverByHLL
@@ -53,6 +57,7 @@ PUBLIC :: RiemannSolverByHLLC
 PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
+PUBLIC :: EntropyStableFlux
 !==================================================================================================================================
 
 
@@ -921,5 +926,174 @@ Flux(:)=0.5*Flux(:)
 
 END SUBROUTINE RiemannSolverByRoe
 
+
+
+
+SUBROUTINE EntropyStableFlux(UL,UR,Fstar)
+!==================================================================================================================================
+! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+! 
+!==================================================================================================================================
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0,s2mu_0
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: betaLN,beta_R,beta_L
+REAL            :: rhoLN,B2_L,B2_R,v2_L,v2_R
+REAL            :: pTilde,p_L,p_R
+REAL            :: v_L(3),v_R(3)
+REAL            :: BAvg(3),vAvg(3),B1BAvg(3)
+REAL            :: v1_B2Avg
+REAL            :: vB_B1Avg
+#ifdef PP_GLM
+REAL            :: psiAvg
+#endif
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+#ifdef PP_GLM
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+#else
+              E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+              B_L => UL(6:8),    B_R => UR(6:8)  )
+! Get the inverse density, velocity, and pressure on left and right
+u_L = rhoU_L(:)/rho_L
+u_R = rhoU_R(:)/rho_R
+
+u2_L = SUM(u_L(:)*u_L(:))
+u2_R = SUM(u_R(:)*u_R(:))
+B2_L = SUM(B_L(:)*B_L(:))
+B2_R = SUM(B_R(:)*B_R(:))
+
+!beta=rho/(2*p)
+p_L    = kappaM1*(E_L - 0.5*(rho_L*v2_L+smu_0*B2_L))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*v2_R+smu_0*B2_R))
+beta_L = 0.5*rho_L/p_L
+beta_R = 0.5*rho_R/P_R
+
+! Get the averages for the numerical flux
+
+rhoLN      = LN_MEAN( rho_L, rho_R)
+betaLN     = LN_MEAN(beta_L,beta_R)
+uAvg       = 0.5 * ( u_L +  u_R)
+u2Avg      = 0.5 * (u2_L + u2_R)
+BAvg       = 0.5 * ( B_L +  B_R)
+B2Avg      = 0.5 * (B2_L + B2_R)
+B1BAvg     = 0.5 * (B_L(1)* B_L(:)           + B_R(1)* B_R(:))
+u1_B2Avg   = 0.5 * (u_L(1)*B2_L              + u_R(1)*B2_R)
+uB_B1Avg   = 0.5 * (B_L(1)*SUM(u_L(:)*B_L(:))+ B_R(1)*SUM(u_R(:)*B_R(:)))
+                                                                   
+pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
+pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+#ifdef PP_GLM
+psiAvg     = 0.5*(UL(9)+UR(9))
+#endif
+
+! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*uAvg(1)
+Fstar(2) = Fstar(1)*uAvg(1) - smu_0*B1BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*uAvg(2) - smu_0*B1BAvg(2)
+Fstar(4) = Fstar(1)*uAvg(3) - smu_0*B1BAvg(3)
+Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
+Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
+#ifdef PP_GLM
+Fstar(6) = GLM_ch*psiAvg
+Fstar(9) = GLM_ch*BAvg(1)
+#endif
+
+Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(u2_L+u2_R))  &
+           + SUM(uAvg(:)*Fstar(2:4)) &
+           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+                   -0.5*u1_B2Avg +uB_B1Avg &
+#ifdef PP_GLM
+                   +GLM_ch*(BAvg(1)*psiAvg-0.5*(B_L(1)*UL(9)+B_R(1)*UR(9)) )    &
+#endif
+                   )
+! MHD wavespeed
+pLN = 0.5*rhoLN/betaLN
+
+srhoLN = 1./rhoLN
+a2Avg  = kappa*pAvg*srhoLN
+va2Avg = B2Avg*sRhoLN
+ca2Avg = BAvg(1)*BAvg(1)*srhoLN
+
+cf     = SQRT(0.5 * ((a2Avg+va2Avg) + SQRT((a2Avg+va2Avg)**2 - 4.0*a2Avg*ca2Avg)))
+
+LambdaMax_s2 =0.5*(ABS(uAvg(1))+cf)
+
+! H matrix stabilization 
+
+uAvg2 = SUM(uAvg(:)*uAvg(:))
+Eavg = pLN*sKappaM1 + 0.5*rhoLN*(2.0*uAvg2-u2Avg)
+
+! Euler components as derived by Dominik, April 18-20, 2016
+! Hmatrix = 0.0
+Hmatrix(1:5,1)=(/rhoLN       , rhoLN*uAvg(1)            , rhoLN*uAvg(2)            , rhoLN*uAvg(3)            ,  Eavg               /)
+!               -------------       v                         v                           v 
+Hmatrix(1:5,2)=(/Hmatrix(2,1), Hmatrix(2,1)*uAvg(1)+pAvg, Hmatrix(3,1)*uAvg(1)     , Hmatrix(4,1)*uAvg(1)     , (Eavg+pAvg)*uAvg(1) /)
+!                             --------------------------      v                           v
+Hmatrix(1:5,3)=(/Hmatrix(3,1), Hmatrix(3,2)             , Hmatrix(3,1)*uAvg(2)+pAvg, Hmatrix(4,1)*uAvg(2)     , (Eavg+pAvg)*uAvg(2) /)
+!                                                        --------------------------       v                      
+Hmatrix(1:5,4)=(/Hmatrix(4,1), Hmatrix(4,2)             , Hmatrix(4,3)             , Hmatrix(4,1)*uAvg(3)+pAvg, (Eavg+pAvg)*uAvg(3) /)
+!                                                                                   --------------------------                               
+Hmatrix(1:4,5)=(/Hmatrix(5,1), Hmatrix(5,2)             , Hmatrix(5,3)             , Hmatrix(5,4)           /)  !Hmatrix(5,5)
+
+tau = 1./(beta_L+beta_R) !0.5/betaA
+!Hmatrix(5,5) = 0.25*rhoA/(betaL*betaR)*sKappaM1 + Eavg*Eavg/rhoLN + (u1A*u1A+v1A*v1A+w1A*w1A)*pAvg + tau*(B11A*B11A + B21A*B21A + B31A*B31A)
+!Special averaging such that RSRT-H = 0 in the Euler case
+Hmatrix(5,5) = (pLN*pLN*sKappaM1 + Eavg*Eavg)*srhoLN + uAvg2*pAvg &
+               + tau*( SUM(BAvg(:)*Bavg(:)) &
+#ifdef PP_GLM
+                      + psiAvg*psiAvg &
+#endif PP_GLM
+                     )
+                   
+
+!! Magnetic field components 
+!Hmatrix(6:8,5) = tau * Bavg(:)
+!Hmatrix(5,6:8) = Hmatrix(5,6:8)
+!
+!Hmatrix(6,6) = tau
+!Hmatrix(7,7) = tau
+!Hmatrix(8,8) = tau
+!
+!#ifdef PP_GLM
+!! Psi components 
+!Hmatrix(9,5) = tau*psiAvg
+!Hmatrix(5,9) = Hmatrix(9,5)
+!Hmatrix(9,9) = tau
+!#endif /*PP_GLM*/
+
+VL=consToEntropy(UL,VL)
+VR=consToEntropy(UR,VR)
+V_jump=VR-VL
+
+!Fstar(:) = Fstar -LambdaMax_s2*MATMUL(Hmatrix,(VR-VL))
+
+!Hmatrix has only non-zero entries (1:5,1:5) (5,6:9),(6:9,5),diag(6:9,6:9)
+Fstar(1:4) = Fstar(1:4) -LambdaMax_s2*MATMUL(Hmatrix(1:4,1:5      ),V_jump(1:5))
+Fstar(  5) = Fstar(  5) -LambdaMax_s2*MATMUL(Hmatrix(  5,1:PP_nVar),V_jump( : ))
+Fstar(6:8) = Fstar(6:8) -(LambdaMax_s2*tau)*(Bavg(1:3)*V_jump(5)  + V_jump(6:8))
+#ifdef PP_GLM
+Fstar(  9) = Fstar(  9) -(LambdaMax_s2*tau)*(   psiAvg*V_jump(5) + V_jump(  9))
+#endif
+
+END ASSOCIATE 
+END SUBROUTINE EntropyStableFlux
 
 END MODULE MOD_Riemann
