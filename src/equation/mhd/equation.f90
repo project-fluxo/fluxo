@@ -243,12 +243,17 @@ CASE(4)
   SolveRiemannProblem => RiemannSolverByHLL  
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLD'
-  IF(ABS(mu_0-1.).GT.1.0E-12) CALL abort(__STAMP__,&
+  IF(ABS(mu_0-1.).GT.1.0E-12) &
+   CALL abort(__STAMP__,&
   'HLLD solver only for mu_0=1 implemented!')
   SolveRiemannProblem => RiemannSolverByHLLD  
 CASE(10)
-  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux'
-  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy Stable flux'
+#ifndef PP_GLM
+  CALL abort(__STAMP__,&
+   'Entropy Stable flux can currently only be run with GLM!!!')
+#endif
+  SolveRiemannProblem => EntropyStableFlux  
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -1064,7 +1069,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,5
+DO icase=0,6
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1085,6 +1090,9 @@ DO icase=0,5
   CASE(5)
     fluxProc => EntropyAndKinEnergyConservingFlux
     fluxName = "EntropyAndKinEnergyConservingFlux"
+  CASE(6)
+    fluxProc => EntropyStableFlux
+    fluxName = "EntropyStableFlux"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)

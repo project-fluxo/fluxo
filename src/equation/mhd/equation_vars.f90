@@ -131,6 +131,10 @@ INTERFACE ConsToEntropy
   MODULE PROCEDURE ConsToEntropy
 END INTERFACE
 
+!INTERFACE ConsToEntropyVec
+!  MODULE PROCEDURE ConsToEntropyVec
+!END INTERFACE
+
 INTERFACE WaveSpeeds1D
   MODULE PROCEDURE WaveSpeeds1D
 END INTERFACE
@@ -262,7 +266,7 @@ END SUBROUTINE PrimToConsVec
 !==================================================================================================================================
 !> Transformation from conservative variables to primitive variables a la Ismail and Roe
 !==================================================================================================================================
-SUBROUTINE ConsToEntropy(entropy,cons)
+FUNCTION ConsToEntropy(cons) RESULT(Entropy)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -271,7 +275,7 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(PP_nVar),INTENT(OUT) :: entropy !< vector of entropy variables
+REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: p,v(3),v2,beta2
@@ -293,8 +297,29 @@ entropy(5)   = -beta2                              !-2*beta
 entropy(6:PP_nVar) =  beta2*cons(6:PP_nVar)        ! 2*beta*B
                                                    ! 2*beta*psi
 
-END SUBROUTINE ConsToEntropy
+END FUNCTION ConsToEntropy
 
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables
+!==================================================================================================================================
+FUNCTION ConsToEntropyVec(dim2,cons) RESULT(Entropy)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: Entropy(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  Entropy(:,i)=ConsToEntropy(Cons(:,i))
+END DO!i
+END FUNCTION ConsToEntropyVec
 
 !==================================================================================================================================
 !> calculate all wave speeds 

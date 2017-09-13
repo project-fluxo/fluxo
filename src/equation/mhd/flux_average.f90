@@ -51,6 +51,10 @@ INTERFACE EntropyandKinEnergyConservingFluxVec
   MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec
 END INTERFACE
 
+INTERFACE LN_MEAN 
+  MODULE PROCEDURE LN_MEAN
+END INTERFACE
+
 
 PUBLIC::EvalEulerFluxTilde3D
 PUBLIC::EvalUaux
@@ -59,6 +63,7 @@ PUBLIC::StandardDGFluxVec
 PUBLIC::StandardDGFluxDealiasedMetricVec
 PUBLIC::EntropyandKinEnergyConservingFlux
 PUBLIC::EntropyandKinEnergyConservingFluxVec
+PUBLIC::LN_MEAN
 !==================================================================================================================================
 
 CONTAINS
