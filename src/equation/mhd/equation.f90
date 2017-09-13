@@ -962,36 +962,40 @@ CASE(6) ! case 5 rotated
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
-
-#ifndef PP_GLM
 CASE DEFAULT
   ! No source -> do nothing
   doCalcSource=.FALSE. 
-#endif /*PP_GLM*/
 END SELECT ! ExactFunction
 
-#ifdef PP_GLM
-IF(DivBSource)THEN
-  sGLM_ch=1./GLM_ch
-  DO iElem=1,nElems
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
-      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
-      ! Ut(9)/ch = -divB
-      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
-      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
-      ! to B_t      : -v*divB
-      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
-      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
-      ! so that  energy source is  -1/mu_0* divB (v*B)  
-      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
-      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
-      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
-      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
-    END DO; END DO; END DO ! i,j,k
-  END DO ! iElem
-END IF !divBsource
-Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
-#endif /*PP_GLM*/
+!#ifndef PP_GLM
+!CASE DEFAULT
+!  ! No source -> do nothing
+!  doCalcSource=.FALSE. 
+!#endif /*PP_GLM*/
+!END SELECT ! ExactFunction
+!
+!#ifdef PP_GLM
+!IF(DivBSource)THEN
+!  sGLM_ch=1./GLM_ch
+!  DO iElem=1,nElems
+!    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
+!      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
+!      ! Ut(9)/ch = -divB
+!      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
+!      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
+!      ! to B_t      : -v*divB
+!      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
+!      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
+!      ! so that  energy source is  -1/mu_0* divB (v*B)  
+!      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
+!      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
+!      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
+!      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
+!    END DO; END DO; END DO ! i,j,k
+!  END DO ! iElem
+!END IF !divBsource
+!Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
+!#endif /*PP_GLM*/
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================
@@ -1051,7 +1055,7 @@ REAL  :: UauxElem(   nAuxVar,0:PP_N,0:PP_N,0:PP_N)
 REAL  :: ftildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 REAL  :: gtildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 REAL  :: htildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-REAL  :: metricL(3),metricR(3),mtmp(3,2),Utmp(PP_nVar,2)
+REAL  :: metricL(3),metricR(3),mtmp(3),Utmp(PP_nVar)
 REAL  :: ULaux(1:nAuxVar),URaux(1:nAuxVar)
 LOGICAL :: failed_vol
 #endif /*PP_DiscType==2*/
@@ -1121,43 +1125,46 @@ DO icase=0,6
   END IF
 END DO !icase
 #if PP_DiscType==2
+#ifdef CARTESIANFLUX
+metricL=(/1.5320,0.,0./)
+metricR=(/1.5320,0.,0./)
+#else
 metricL=(/1.5320,-0.05,4.895/)
 metricR=(/0.8715,0.594,2.531/)
+#endif
 
 !use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
 IF(DGinitIsDone)THEN
-  Utmp(:,1)=U(:,0,0,0,1) !save U
-  Utmp(:,2)=U(:,0,0,1,1) !save U
-  U(:,0,0,0,1)=UL
-  U(:,0,0,1,1)=UR
+  Utmp(:)=U(:,0,0,0,1) !save U
 ELSE
   ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1)) !DGinit not yet called!
   nTotal_vol=(PP_N+1)**3
   DO i=1,PP_nVar
     U(i,:,:,:,1)=UL(i)
   END DO
-  U(:,0,0,1,1)=UR
 END IF
-mtmp(:,1)=Metrics_ftilde(:,0,0,0,1) !save metric
-mtmp(:,2)=Metrics_ftilde(:,0,0,1,1) !save metric
+mtmp(:)=Metrics_ftilde(:,0,0,0,1) !save metric
 !overwrite
-Metrics_ftilde(:,0,0,0,1)=metricL
-Metrics_ftilde(:,0,0,1,1)=metricR
 
+U(:,0,0,0,1)=UL
+Metrics_ftilde(:,0,0,0,1)=metricL
 CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
-Metrics_fTilde(:,0,0,0,1)=mtmp(:,1) !put metric back
-Metrics_fTilde(:,0,0,1,1)=mtmp(:,2) !put metric back
+ULaux=UauxElem(:,0,0,0)
+FrefL = fTildeElem(:,0,0,0)
+
+U(:,0,0,0,1)=UR
+Metrics_ftilde(:,0,0,0,1)=metricR
+CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+URaux=UauxElem(:,0,0,0)
+FrefR = fTildeElem(:,0,0,0)
+
+Metrics_fTilde(:,0,0,0,1)=mtmp(:) !put metric back
 IF(DGinitIsDone)THEN
-  U(:,0,0,0,1)=Utmp(:,1) !put back U
-  U(:,0,0,1,1)=Utmp(:,2) !put back U
+  U(:,0,0,0,1)=Utmp(:) !put back U
 ELSE
   DEALLOCATE(U)
 END IF
 failed_vol=.FALSE.
-ULaux=UauxElem(:,0,0,0)
-URaux=UauxElem(:,0,0,1)
-FrefL = fTildeElem(:,0,0,0)
-FrefR = fTildeElem(:,0,0,1)
 DO icase=0,2
   NULLIFY(fluxProc)
   SELECT CASE(icase)
@@ -1205,12 +1212,12 @@ DO icase=0,2
   CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
 #ifndef CARTESIANFLUX
                                     ,metricR  &
-#endif          
+#endif
                                     ,Frefsym)
   CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
 #ifndef CARTESIANFLUX
                                     ,metricL  &
-#endif          
+#endif
                                     ,Fcheck)
   check=1.0e-12
   DO i=1,PP_nVar

@@ -32,8 +32,9 @@ INTERFACE VolInt
 #if (PP_DiscType==1)
   MODULE PROCEDURE VolInt_weakForm
 #elif (PP_DiscType==2)
+  MODULE PROCEDURE VolInt_SplitForm
   !new optimized version, using CARTESIANFLUX preproc flag for cartesian meshes, other versions are still here, see below
-  MODULE PROCEDURE VolInt_SplitForm3 
+  !MODULE PROCEDURE VolInt_SplitForm3 
 #endif /*PP_DiscType*/
 END INTERFACE
 
