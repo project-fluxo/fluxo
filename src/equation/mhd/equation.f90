@@ -254,6 +254,9 @@ CASE(10)
    'Entropy Stable flux can currently only be run with GLM!!!')
 #endif
   SolveRiemannProblem => EntropyStableFlux  
+CASE(11)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
