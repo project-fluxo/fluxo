@@ -682,7 +682,8 @@ REAL                   :: PsiAvg
 REAL                   :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
+#endif /*not Cartesianflux*/
+
 ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
               B_L => UL(6:8),    B_R => UR(6:8)  , &
 #ifdef PP_GLM
@@ -693,6 +694,7 @@ ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
              v2_L =>UauxL(6),   v2_R =>UauxR(6)  , & !|v|^2 left/right
              B2_L =>UauxL(7),   B2_R =>UauxR(7)  , & !|B|^2 left/right
              vB_L =>UauxL(8),   vB_R =>UauxR(8)  )
+
 !p_L=pt_L -s2mu_0*B2_L
 !p_R=pt_R -s2mu_0*B2_R
 beta_L = 0.5*rho_L/(pt_L-s2mu_0*B2_L) !0.5*rho_L/p_L
@@ -704,15 +706,15 @@ beta_R = 0.5*rho_R/(pt_R-s2mu_0*B2_R) !0.5*rho_R/p_R
 !beta_MEAN = 0.5*(    beta_L+beta_R)
 rhoLN     = LN_MEAN( rho_L, rho_R)
 betaLN    = LN_MEAN(beta_L,beta_R)
-vAvg      = 0.5*( v_L+ v_R)
-BAvg      = 0.5*( B_L+ B_R)
+vAvg      = 0.5*( v_L(:)+ v_R(:))
+BAvg      = 0.5*( B_L(:)+ B_R(:))
 !B2Avg     = 0.5*(B2_L+B2_R)
 pTilde    = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R))  !rho_MEAN/(2*beta_MEAN) + 1/(2mu_0){{|B|^2}}
 
 vm=SUM(vAvg(:)*metric(:))
 Bm=SUM(BAvg(:)*metric(:))
 #ifdef PP_GLM
-PsiAvg = 0.5*(psi_L+psi_R)
+PsiAvg = 0.5*(Psi_L+Psi_R)
 #endif /*PP_GLM*/
 
 ! Entropy conserving and kinetic energy conserving flux
