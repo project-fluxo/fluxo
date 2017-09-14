@@ -53,6 +53,10 @@ USE MOD_PreProc
 USE MOD_DG_Vars,            ONLY: L_HatMinus
 #elif (PP_NodeType==2)
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
+#if (PP_DiscType==2) && NONCONS
+USE MOD_DG_Vars,            ONLY: U_master,U_slave
+USE MOD_Mesh_Vars,          ONLY: NormVec,SurfElem 
+#endif /*NONCONS*/
 #endif /*PP_NodeType*/ 
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
@@ -73,6 +77,9 @@ INTEGER                         :: l
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
 INTEGER                         :: nbElemID,nblocSide,nbFlip
+#if (PP_DiscType==2) && NONCONS
+REAL                            :: Flux_NC(1:PP_nVar,0:PP_N,0:PP_N)
+#endif
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstSideID = firstMPISide_YOUR
@@ -99,12 +106,28 @@ DO SideID=firstSideID,lastSideID
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
+#if (PP_DiscType==2) && NONCONS
+    !Jahunen source term divB*u on B_t
+    !gauss-lobatto nodes
+    DO q=0,PP_N; DO p=0,PP_N
+      Flux_NC(  :,p,q)=Flux(:,p,q,SideID)
+      Flux_NC(6:8,p,q)=Flux_NC(6:8,p,q) &
+                   +(0.5*SUM(U_slave(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) &
+                              *SurfElem(p,q,SideID)/U_master(1,p,q,SideID))*U_master(2:4,p,q,SideID)
+    END DO; END DO !p,q=0,PP_N
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,flip,locSide)
+      Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
+                                        + Flux_NC(:,p,q)*L_hatMinus0
+    END DO; END DO !p,q=0,PP_N
+#else
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide)
       Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
                                         + Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO !p,q=0,PP_N
+#endif /*NONCONS*/
 #endif /*PP_NodeType*/
   END IF !master ElemID .NE. -1
 
@@ -124,12 +147,28 @@ DO SideID=firstSideID,lastSideID
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
+#if (PP_DiscType==2) && NONCONS
+    !Jahunen source term divB*u on B_t
+    DO q=0,PP_N; DO p=0,PP_N
+      Flux_NC(  :,p,q)=Flux(:,p,q,SideID)
+      Flux_NC(6:8,p,q)=Flux_NC(6:8,p,q) &
+                   +(0.5*SUM(U_master(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) & !minus for slave normal already below
+                                 *SurfElem(p,q,SideID)/U_slave(1,p,q,SideID))*U_slave(2:4,p,q,SideID) 
+    END DO; END DO !p,q=0,PP_N
+    !gauss-lobatto nodes
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
+      Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
+                                        - Flux_NC(:,p,q)*L_hatMinus0
+    END DO; END DO !p,q=0,PP_N
+#else
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
       Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
                                         - Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO !p,q=0,PP_N
+#endif /*NONCONS*/
 #endif /*PP_NodeType*/
   END IF !slave nbElemID .NE. -1
 END DO !SideID=firstSideID,lastSideID

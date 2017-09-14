@@ -70,6 +70,12 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
+#if MPI && NONCONS
+USE MOD_Mesh_Vars,          ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
+USE MOD_Mesh_Vars,          ONLY: FirstMPISide_YOUR,LastMPISide_YOUR
+USE MOD_MPI_Vars,           ONLY:MPIRequest_U,nNbProcs
+USE MOD_MPI,                ONLY:startReceiveMPIData,StartSendMPIdata,FinishExchangeMPIdata
+#endif /*MPI && NONCONS*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -78,6 +84,9 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+#if MPI && NONCONS
+REAL,ALLOCATABLE  :: geo(:,:,:,:)
+#endif /*MPI && NONCONS*/
 !===================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.(.NOT.MeshInitIsDone).OR.(.NOT.EquationInitIsDone) &
    .OR.(.NOT.RestartInitIsDone).OR.DGInitIsDone)THEN
@@ -130,6 +139,27 @@ IF(.NOT.DoRestart)THEN
   CALL FillIni(IniExactFunc,U)
 END IF
 
+#if MPI && NONCONS
+ALLOCATE(geo(13,0:PP_N,0:PP_N,1:nSides))
+geo(  1:3,:,:,:)=NormVec( :,:,:,:) 
+geo(  4:6,:,:,:)=TangVec1(:,:,:,:)
+geo(  7:9,:,:,:)=TangVec2(:,:,:,:)
+geo(   10,:,:,:)=SurfElem(  :,:,:)
+geo(11:13,:,:,:)=Face_xGP(:,:,:,:)
+!!start geo communication (not needed anymore)
+CALL StartReceiveMPIData(geo, 13*(PP_N+1)**2, 1,nSides,MPIRequest_U( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+CALL StartSendMPIData(   geo, 13*(PP_N+1)**2, 1,nSides,MPIRequest_U( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+!finish geo communication
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U )  ! Flux, MPI_MINE -> MPI_YOUR 
+ASSOCIATE(low=>FirstMPISide_YOUR,up=>LastMPISide_YOUR)
+NormVec (:,:,:,low:up)=geo(  1:3,:,:,low:up)
+TangVec1(:,:,:,low:up)=geo(  4:6,:,:,low:up)
+TangVec2(:,:,:,low:up)=geo(  7:9,:,:,low:up)
+SurfElem(  :,:,low:up)=geo(   10,:,:,low:up)
+Face_xGP(:,:,:,low:up)=geo(11:13,:,:,low:up)
+END ASSOCIATE
+DEALLOCATE(geo)
+#endif /*MPI && NONCONS*/
 DGInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT DG DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -265,7 +295,6 @@ REAL,INTENT(IN)                 :: tIn                    !< Current time
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)
 
-
 #if MPI
 ! Solution is always communicated on the U_Slave array
 ! start off with the receive command
@@ -309,6 +338,20 @@ CALL VolInt(Ut)
 CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
 #endif /*PARABOLIC && MPI*/
 
+#if MPI && NONCONS
+!!start U_master communication (not needed anymore)
+CALL StartReceiveMPIData(U_master, DataSizeSide, 1,nSides,MPIRequest_U( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+CALL StartSendMPIData(   U_master, DataSizeSide, 1,nSides,MPIRequest_U( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+#endif /* MPI && NONCONS*/
+
+
+! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
+CALL GetBoundaryFlux(tIn,Flux)
+CALL FillFlux(Flux,doMPISides=.FALSE.)
+! here, the weak flag is set, since small sides can be slave and must be added to big sides, which are always master!
+CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
+!??? CALL Flux_Mortar(U_Master,doMPISides=.FALSE.,weak=.TRUE.)
+
 
 #if MPI
 ! start off with the receive command
@@ -318,12 +361,6 @@ CALL FillFlux(Flux,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
 #endif /* MPI*/
-
-! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
-CALL GetBoundaryFlux(tIn,Flux)
-CALL FillFlux(Flux,doMPISides=.FALSE.)
-! here, the weak flag is set, since small sides can be slave and must be added to big sides, which are always master!
-CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
 ! add inner and BC side surface contibutions to time derivative 
 CALL SurfInt(Flux,Ut,doMPISides=.FALSE.)
 
@@ -332,6 +369,11 @@ CALL SurfInt(Flux,Ut,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
 CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
+#if NONCONS
+!finish U_master communication
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U )  ! Flux, MPI_MINE -> MPI_YOUR 
+!???? CALL Flux_Mortar(U_master,doMPISides=.TRUE.,weak=.TRUE.)
+#endif /*NONCONS*/
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux,Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
