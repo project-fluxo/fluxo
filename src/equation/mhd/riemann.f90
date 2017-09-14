@@ -941,9 +941,8 @@ REAL            :: u2_L,u2_R,u2Avg,uAvg2
 REAL            :: pTilde,p_L,p_R,pAvg,pLN
 REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
 REAL            :: u_L(3),u_R(3)
-REAL            :: BAvg(3),uAvg(3),B1BAvg(3)
-REAL            :: u1_B2Avg
-REAL            :: uB_B1Avg
+REAL            :: BAvg(3),uAvg(3)
+REAL            :: u1_B2Avg,uB_Avg
 REAL            :: Hmatrix(5,5),tau,Eavg
 REAL            :: V_jump(PP_nVar)
 #ifdef PP_GLM
@@ -954,6 +953,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
 #ifdef PP_GLM
               E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+            psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
@@ -983,21 +983,20 @@ uAvg       = 0.5 * ( u_L +  u_R)
 u2Avg      = 0.5 * (u2_L + u2_R)
 BAvg       = 0.5 * ( B_L +  B_R)
 B2Avg      = 0.5 * (B2_L + B2_R)
-B1BAvg     = 0.5 * (B_L(1)* B_L(:)           + B_R(1)* B_R(:))
-u1_B2Avg   = 0.5 * (u_L(1)*B2_L              + u_R(1)*B2_R)
-uB_B1Avg   = 0.5 * (B_L(1)*SUM(u_L(:)*B_L(:))+ B_R(1)*SUM(u_R(:)*B_R(:)))
+u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
                                                                    
 pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
 pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
 #ifdef PP_GLM
-psiAvg     = 0.5*(UL(9)+UR(9))
+psiAvg     = 0.5*(psi_L+psi_R)
 #endif
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*uAvg(1)
-Fstar(2) = Fstar(1)*uAvg(1) - smu_0*B1BAvg(1) + pTilde
-Fstar(3) = Fstar(1)*uAvg(2) - smu_0*B1BAvg(2)
-Fstar(4) = Fstar(1)*uAvg(3) - smu_0*B1BAvg(3)
+Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
 Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
 Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
 #ifdef PP_GLM
@@ -1008,9 +1007,9 @@ Fstar(9) = GLM_ch*BAvg(1)
 Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
            + SUM(uAvg(:)*Fstar(2:4)) &
            +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
-                   -0.5*u1_B2Avg +uB_B1Avg &
+                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
 #ifdef PP_GLM
-                   +GLM_ch*(BAvg(1)*psiAvg-0.5*(B_L(1)*UL(9)+B_R(1)*UR(9)) )    &
+                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
 #endif
                    )
 ! MHD wavespeed

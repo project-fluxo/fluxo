@@ -561,9 +561,9 @@ REAL            :: betaLN,beta_R,beta_L
 REAL            :: rhoLN,B2_L,B2_R,v2_L,v2_R
 REAL            :: pTilde,p_L,p_R
 REAL            :: v_L(3),v_R(3)
-REAL            :: BAvg(3),vAvg(3),B1BAvg(3)
+REAL            :: BAvg(3),vAvg(3)
 REAL            :: v1_B2Avg
-REAL            :: vB_B1Avg
+REAL            :: vB_Avg
 #ifdef PP_GLM
 REAL            :: psiAvg
 #endif
@@ -572,6 +572,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
 #ifdef PP_GLM
               E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+            psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
@@ -598,20 +599,19 @@ betaLN     = LN_MEAN(beta_L,beta_R)
 vAvg       = 0.5 * ( v_L +  v_R)
 BAvg       = 0.5 * ( B_L +  B_R)
 !B2Avg      = 0.5 * (B2_L + B2_R)
-B1BAvg     = 0.5 * (B_L(1)* B_L(:)           + B_R(1)* B_R(:))
 v1_B2Avg   = 0.5 * (v_L(1)*B2_L              + v_R(1)*B2_R)
-vB_B1Avg   = 0.5 * (B_L(1)*SUM(V_L(:)*B_L(:))+ B_R(1)*SUM(V_R(:)*B_R(:)))
+vB_Avg     = 0.5 * (SUM(V_L(:)*B_L(:))+ SUM(V_R(:)*B_R(:)))
                                                                    
 pTilde     = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R)) !rhoLN/(2*betaLN)+1/(2mu_0)({{|B|^2}}...)
 #ifdef PP_GLM
-psiAvg     = 0.5*(UL(9)+UR(9))
+psiAvg     = 0.5*(psi_L+psi_R)
 #endif
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*vAvg(1)
-Fstar(2) = Fstar(1)*vAvg(1) - smu_0*B1BAvg(1) + pTilde
-Fstar(3) = Fstar(1)*vAvg(2) - smu_0*B1BAvg(2)
-Fstar(4) = Fstar(1)*vAvg(3) - smu_0*B1BAvg(3)
+Fstar(2) = Fstar(1)*vAvg(1) - smu_0*BAvg(1)*BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*vAvg(2) - smu_0*BAvg(1)*BAvg(2)
+Fstar(4) = Fstar(1)*vAvg(3) - smu_0*BAvg(1)*BAvg(3)
 Fstar(7) = vAvg(1)*Bavg(2) - BAvg(1)*vAvg(2)
 Fstar(8) = vAvg(1)*Bavg(3) - BAvg(1)*vAvg(3)
 #ifdef PP_GLM
@@ -622,9 +622,9 @@ Fstar(9) = GLM_ch*BAvg(1)
 Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R))  &
            + SUM(vAvg(:)*Fstar(2:4)) &
            +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
-                   -0.5*v1_B2Avg +vB_B1Avg &
+                   -0.5*v1_B2Avg +BAvg(1)*vB_Avg &
 #ifdef PP_GLM
-                   +GLM_ch*(BAvg(1)*psiAvg-0.5*(B_L(1)*UL(9)+B_R(1)*UR(9)) )    &
+                   +Fstar(9)*psiAvg-GLM_ch*0.5*(psi_L*B_L(1)+psi_R*B_R(1))    &
 #endif
                    )
 
@@ -671,7 +671,7 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                   :: vAvg(3),BAvg(3),BBAvg(3,3)
+REAL                   :: vAvg(3),BAvg(3)
 REAL                   :: rhoLN,betaLN
 REAL                   :: beta_R,beta_L
 REAL                   :: vm,Bm,pTilde
@@ -708,11 +708,6 @@ vAvg      = 0.5*( v_L+ v_R)
 BAvg      = 0.5*( B_L+ B_R)
 !B2Avg     = 0.5*(B2_L+B2_R)
 pTilde    = 0.5*((rho_L+rho_R)/(beta_L+beta_R)+smu_0*0.5*(B2_L+B2_R))  !rho_MEAN/(2*beta_MEAN) + 1/(2mu_0){{|B|^2}}
-BBAvg(  :,1) = 0.5*(B_L(:)*B_L(1)+B_R(:)*B_R(1))
-BBAvg(1  ,2) = BBavg(2,1)
-BBAvg(2:3,2) = 0.5*(B_L(2:3)*B_L(2)+B_R(2:3)*B_R(2))
-BBAvg(1:2,3) = BBAvg(3,1:2)
-BBAvg(  3,3) = 0.5*(B_L(3)*B_L(3)+B_R(3)*B_R(3))
 
 vm=SUM(vAvg(:)*metric(:))
 Bm=SUM(BAvg(:)*metric(:))
@@ -722,7 +717,7 @@ PsiAvg = 0.5*(psi_L+psi_R)
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(  1) = rhoLN*vm
-Fstar(2:4) = Fstar(1)*vAvg(1:3)-smu_0*(MATMUL(BBAvg(:,:),metric(:)))+ pTilde*metric(1:3)
+Fstar(2:4) = Fstar(1)*vAvg(1:3)-(smu_0*Bm)*BAvg(:) + pTilde*metric(1:3)
 #ifdef PP_GLM
 Fstar(6:8) = vm*BAvg(1:3) - Bm*vAvg(1:3) + (GLM_ch*PsiAvg)*metric(1:3)
 Fstar(  9) = GLM_ch*Bm
@@ -734,10 +729,10 @@ Fstar(6:8) = vm*BAvg(1:3) - Bm*vAvg(1:3)
 Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R)) &
            + SUM(vAvg(:)*Fstar(2:4))  &
            +smu_0*( SUM(BAvg(:)*Fstar(6:8))                        &
-                   - 0.25*SUM((B2_L*v_L(:)+B2_R*v_R(:))*metric(:)) & !0.5* {{|B|^2v(:)}}.{{m(:)}}
-                   + 0.5 *SUM((vb_L*B_L(:)+vb_R*B_R(:))*metric(:)) & !{{(v.B) B(:) }} . {{m(:)}}
+                   - 0.25*SUM((B2_L*v_L(:)+B2_R*v_R(:))*metric(:)) & ! -0.5* {{|B|^2v(:)}}.{{m(:)}}
+                   + 0.5*(vb_L+vb_R)*bm                            & !{{(v.B)}}{{ B(:) }} . {{m(:)}}
 #ifdef PP_GLM
-                   +Fstar(9)*PsiAvg - (GLM_ch*0.5)*SUM((Psi_L*B_L(:)+Psi_R*B_R(:))*metric(:))  &
+                   +Fstar(9)*PsiAvg - (GLM_ch*0.5)*SUM((Psi_L*B_L(:)+Psi_R*B_R(:))*metric(:))  & !c_h{{psi B}}.{{m}}
 #endif
                   )
 END ASSOCIATE !rho_L/R,rhov1_L/R,...

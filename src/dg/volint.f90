@@ -234,13 +234,12 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   ! f(:)=0.5 PHI(:) B1 g(:)=0.5*PHI B2, h(:)=0.5*Phi*B3
   !Jahunen source term: divB*vel on B_t => two-point source: f(6:8)=-0.5v(:)_ijk B1_ljk g(6:8)*
   DO l=0,N
-    ASSOCIATE(mIL_f=>0.5*(Metrics_ftilde(:,i,j,k,iElem)+Metrics_ftilde(:,l,j,k,iElem)), & 
-              mJL_g=>0.5*(Metrics_gtilde(:,i,j,k,iElem)+Metrics_gtilde(:,i,l,k,iElem)), & 
-              mKL_h=>0.5*(Metrics_htilde(:,i,j,k,iElem)+Metrics_htilde(:,i,j,l,iElem)))   
-    ftilde(6:8,l,i,j,k) = ftilde(6:8,l,i,j,k)+(0.5*SUM(mIL_f(:)*U(6:8,l,j,k,iElem)))*Uaux(2:4,i,j,k) 
-    gtilde(6:8,l,i,j,k) = gtilde(6:8,l,i,j,k)+(0.5*SUM(mJL_g(:)*U(6:8,i,l,k,iElem)))*Uaux(2:4,i,j,k) 
-    htilde(6:8,l,i,j,k) = htilde(6:8,l,i,j,k)+(0.5*SUM(mKL_h(:)*U(6:8,i,j,l,iElem)))*Uaux(2:4,i,j,k) 
-    END ASSOCIATE !mAvg_f/g/h
+    ftilde(6:8,l,i,j,k) = ftilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Uaux(2:4,i,j,k) 
+    gtilde(6:8,l,i,j,k) = gtilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Uaux(2:4,i,j,k) 
+    htilde(6:8,l,i,j,k) = htilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Uaux(2:4,i,j,k) 
   END DO !l=0,N
 #endif /*NONCONS*/
 END DO; END DO; END DO ! i,j,k
