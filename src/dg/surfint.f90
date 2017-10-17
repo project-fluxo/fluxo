@@ -55,7 +55,7 @@ USE MOD_DG_Vars,            ONLY: L_HatMinus
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
 #if (PP_DiscType==2) && NONCONS
 USE MOD_DG_Vars,            ONLY: U_master,U_slave
-USE MOD_Mesh_Vars,          ONLY: NormVec,SurfElem 
+USE MOD_Mesh_Vars,          ONLY: NormVec,SurfElem,firstSlaveSide 
 #endif /*NONCONS*/
 #endif /*PP_NodeType*/ 
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
@@ -106,22 +106,29 @@ DO SideID=firstSideID,lastSideID
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
+    !gauss-lobatto nodes
 #if (PP_DiscType==2) && NONCONS
     !Jahunen source term divB*u on B_t
-    !gauss-lobatto nodes
-    DO q=0,PP_N; DO p=0,PP_N
-      Flux_NC(  :,p,q)=Flux(:,p,q,SideID)
-      Flux_NC(6:8,p,q)=Flux_NC(6:8,p,q) &
-                   +(0.5*SUM(U_slave(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) &
-                              *SurfElem(p,q,SideID)/U_master(1,p,q,SideID))*U_master(2:4,p,q,SideID)
-    END DO; END DO !p,q=0,PP_N
-    DO q=0,PP_N; DO p=0,PP_N
-      ijk(:)=S2V(:,0,p,q,flip,locSide)
-      Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                        + Flux_NC(:,p,q)*L_hatMinus0
-    END DO; END DO !p,q=0,PP_N
+    IF(SideID.LT.firstSlaveSide)THEN !for BCSides, no slave exists!
+      DO q=0,PP_N; DO p=0,PP_N
+        ijk(:)=S2V(:,0,p,q,flip,locSide)
+        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
+                                          + Flux(:,p,q,SideID)*L_hatMinus0
+      END DO; END DO !p,q=0,PP_N
+    ELSE
+      DO q=0,PP_N; DO p=0,PP_N
+        Flux_NC(  :,p,q)=Flux(:,p,q,SideID)
+        Flux_NC(6:8,p,q)=Flux_NC(6:8,p,q) &
+                     +(0.5*SUM(U_slave(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) &
+                                *SurfElem(p,q,SideID)/U_master(1,p,q,SideID))*U_master(2:4,p,q,SideID)
+      END DO; END DO !p,q=0,PP_N
+      DO q=0,PP_N; DO p=0,PP_N
+        ijk(:)=S2V(:,0,p,q,flip,locSide)
+        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
+                                          + Flux_NC(:,p,q)*L_hatMinus0
+      END DO; END DO !p,q=0,PP_N
+    END IF
 #else
-    !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide)
       Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
@@ -148,7 +155,7 @@ DO SideID=firstSideID,lastSideID
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
 #if (PP_DiscType==2) && NONCONS
-    !Jahunen source term divB*u on B_t
+    !Jahunen source term divB*u on B_t, slave side always has a master!
     DO q=0,PP_N; DO p=0,PP_N
       Flux_NC(  :,p,q)=Flux(:,p,q,SideID)
       Flux_NC(6:8,p,q)=Flux_NC(6:8,p,q) &
