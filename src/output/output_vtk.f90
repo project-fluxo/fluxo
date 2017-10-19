@@ -194,11 +194,11 @@ CALL MPI_BCAST(vecOffset(0:nValVec),nValVec+1,MPI_INTEGER,0,MPI_COMM_WORLD,iErro
 #endif /*MPI*/
 ! Write binary raw data into append section
 ! Solution data
-nBytes = nVTKPoints*SIZEOF_F(FLOATdummy)
-DO iValVec=1,nValVec 
+DO iValVec=1,nValVec
   iVal    = vecOffset(iValVec-1)
   nVal_loc= vecOffset(iValVec)-vecOffset(iValVec-1)
   IF(MPIroot)THEN    
+    nBytes = nVTKPoints*SIZEOF_F(FLOATdummy)
     WRITE(ivtk) nVal_loc*nBytes
     WRITE(ivtk)REAL(Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems),4)
 #if MPI
