@@ -817,6 +817,15 @@ CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0),
   Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
   
   CALL PrimToCons(Prim,Resu)
+CASE(311) ! Orzsag-Tang vortex
+  prim    = 0.
+  prim(1) = 1.
+  prim(2) = -SIN(2.*PP_Pi*x(2))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(5) =  1./kappa
+  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
