@@ -16,7 +16,7 @@ INCLUDE(CMakeDependentOption)
 
 
 # =========================================================================
-# Detect machine environements
+# Detect machine environments
 # =========================================================================
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)

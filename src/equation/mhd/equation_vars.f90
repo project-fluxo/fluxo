@@ -41,8 +41,9 @@ REAL                :: etasmu_0         !< =eta/mu0
 REAL                :: Pr               !< Prandtl number
 REAL                :: KappasPr         !< =kappa/Pr
 REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
+REAL                :: R                !< Gas constant
 #  ifdef PP_ANISO_HEAT
-REAL                :: kperp            !< perpendicular  (to magnetic field)heat diffusion coefficient
+REAL                :: kperp            !< perpendicular (to magnetic field) heat diffusion coefficient
 REAL                :: kpar             !< parallel (to magnetic field) heat diffusion coeffcient 
 #  endif /*PP_ANISO_HEAT*/             
 #endif /*PARABOLIC*/                   
@@ -67,7 +68,7 @@ REAL                :: GLM_dtch1        !< timestep for ch=1 (initialized in cal
 REAL                :: GLM_ch           !< Divergence correction speed
 REAL                :: GLM_scale        !< scaling of maximum divergence speed (timestep security)
 REAL                :: GLM_scr          !< 1/cr. damping of divergence error, factor chi=ch^2/cp^2,cr=cp^2/ch~0.18,chi=1/cr
-LOGICAL           :: divBSource         !< switch for adding source terms depending on diverngece errors
+LOGICAL             :: divBSource       !< switch for adding source terms depending on diverngece errors
 #endif /*PP_GLM*/
 
 

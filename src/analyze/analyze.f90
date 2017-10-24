@@ -112,9 +112,9 @@ IF(doCalcErrorNorms)THEN
 END IF
 doCalcMeanFlux   =GETLOGICAL('CalcMeanFlux','.FALSE.')
 
-Analyze_dt          =GETREAL('Analyze_dt','0.')
-nWriteData          =GETINT('nWriteData','1')
-NAnalyze          =GETINT('NAnalyze'   ,INTTOSTR(2*(PP_N+1))) 
+Analyze_dt       =GETREAL('Analyze_dt','0.')
+nWriteData       =GETINT('nWriteData','1')
+NAnalyze         =GETINT('NAnalyze'   ,INTTOSTR(2*(PP_N+1)))
 
 WriteData_dt = Analyze_dt*nWriteData
 

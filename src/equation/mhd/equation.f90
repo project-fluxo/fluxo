@@ -61,24 +61,25 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
-CALL prms%CreateIntOption(     "IniExactFunc",  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateIntOption(     "IniRefState",  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateRealArrayOption("IniWaveNumber"," For exactfunction: wavenumber of solution.")
-CALL prms%CreateRealArrayOption("IniCenter"," For exactfunction: center coordinates.","0.,0.,0.")
-CALL prms%CreateRealOption(   "IniAmplitude", " For exactfunction: amplitude","0.1")
-CALL prms%CreateRealOption(   "IniFrequency", " For exactfunction: Frequency","1.0")
-CALL prms%CreateRealOption(   "IniHalfwidth", " For exactfunction: Halfwidth","0.1")
-CALL prms%CreateRealOption(   "IniDisturbance", "For exactfunction: Strength of initial disturbance","0.")
-CALL prms%CreateRealOption(   "kappa", "ratio of specific heats","1.6666666666666667")
-CALL prms%CreateRealOption(   "mu_0", "magnetic permeability in vacuum","1.0")
+CALL prms%CreateIntOption(     "IniExactFunc"  , " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateIntOption(     "IniRefState"   , " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
+CALL prms%CreateRealArrayOption("IniCenter"    , " For exactfunction: center coordinates.","0.,0.,0.")
+CALL prms%CreateRealOption(   "IniAmplitude"   , " For exactfunction: amplitude","0.1")
+CALL prms%CreateRealOption(   "IniFrequency"   , " For exactfunction: Frequency","1.0")
+CALL prms%CreateRealOption(   "IniHalfwidth"   , " For exactfunction: Halfwidth","0.1")
+CALL prms%CreateRealOption(   "IniDisturbance" , " For exactfunction: Strength of initial disturbance","0.")
+CALL prms%CreateRealOption(   "kappa"          , " Ratio of specific heats","1.6666666666666667")
+CALL prms%CreateRealOption(     'R'            , " Gas constant.","287.058")
+CALL prms%CreateRealOption(   "mu_0"           , " Magnetic permeability in vacuum","1.0")
 #if PARABOLIC
-CALL prms%CreateRealOption(   "eta", "magnetic resistivity","0.")
-CALL prms%CreateRealOption(   "mu", "fluid viscosity","0.")
-CALL prms%CreateRealOption(   "s23", "stress tensor scaling (normally 2/3)","0.6666666666666667")
-CALL prms%CreateRealOption(   "Pr", "Prandtl number","0.72")
+CALL prms%CreateRealOption(   "eta"            , " Magnetic resistivity","0.")
+CALL prms%CreateRealOption(   "mu"             , " Fluid viscosity","0.")
+CALL prms%CreateRealOption(   "s23"            , " Stress tensor scaling (normally 2/3)","0.6666666666666667")
+CALL prms%CreateRealOption(   "Pr"             , " Prandtl number","0.72")
 #ifdef PP_ANISO_HEAT
-CALL prms%CreateRealOption(   "kpar", "If anisotropic heat terms enabled: diffusion parallel to magnetic field","0.")
-CALL prms%CreateRealOption(   "kperp", "If anisotropic heat terms enabled: diffusion perpendicular to magnetic field","0.")
+CALL prms%CreateRealOption(   "kpar"  , " If anisotropic heat terms enabled: diffusion parallel to magnetic field","0.")
+CALL prms%CreateRealOption(   "kperp" , " If anisotropic heat terms enabled: diffusion perpendicular to magnetic field","0.")
 #endif /*PP_ANISO_HEAT*/
 #endif /*PARABOLIC*/
 
@@ -96,13 +97,16 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "2: HLLC, "//&
                                            "3: Roe, "//&
                                            "4: HLL, "//&
-                                           "5: HLLD (only with mu_0=1), " )
+                                           "5: HLLD (only with mu_0=1), "//&
+                                           "10: LLF entropy stable flux, "//&
+                                           "11: entropy conservative flux,")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
-                                              "0: Standard DG Flux"//&
-                                              "1: standard DG Flux with metric dealiasing" &
+                                              "0:  Standard DG Flux"//&
+                                              "1:  standard DG Flux with metric dealiasing" //&
+                                              "10: entropy conservative flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
@@ -170,6 +174,7 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
+R        =GETREAL('R','287.058')
 KappasPr =Kappa/Pr
 !heat diffusion coefficients 
 #ifdef PP_ANISO_HEAT
