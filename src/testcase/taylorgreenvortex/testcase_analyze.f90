@@ -76,7 +76,6 @@ IMPLICIT NONE
 
 doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
 
-PRINT*,.NOT.doAnalyzeToFile
 
 IF(.NOT.doAnalyzeToFile)THEN
   CALL abort(__STAMP__,"Testcase analyze = T, but AnalyzeToFile = F")
