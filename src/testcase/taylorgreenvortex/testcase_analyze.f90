@@ -62,7 +62,7 @@ SUBROUTINE InitAnalyzeTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY: doAnalyzeToFile,A2F_iVar,A2F_VarNames
-USE MOD_Testcase_Vars,    ONLY: doTCanalyze
+USE MOD_Testcase_Vars,    ONLY: doTCanalyze,last_Ekin_comp
 USE MOD_ReadInTools,      ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -76,6 +76,7 @@ IMPLICIT NONE
 
 doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
 
+last_Ekin_comp = 0.
 
 IF(.NOT.doAnalyzeToFile)THEN
   CALL abort(__STAMP__,"Testcase analyze = T, but AnalyzeToFile = F")
