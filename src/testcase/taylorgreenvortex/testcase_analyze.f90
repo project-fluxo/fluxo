@@ -134,7 +134,7 @@ USE MOD_Restart_Vars,   ONLY: RestartTime
 USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp
 USE MOD_Mesh_Vars,      ONLY: sJ,nElems
 USE MOD_Equation_Vars,  ONLY: R,KappaM1,sKappaM1,Kappa
-USE MOD_Equation_Vars,  ONLY: mu_0
+USE MOD_Equation_Vars,  ONLY: mu_0,s2mu_0
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -157,7 +157,7 @@ REAL                            :: eps3                          !< Integrand: p
 REAL                            :: u_tens, s_tens, sd_tens       !< matrix : matrix product, integrands of Gradvel, S, Sd
 REAL                            :: Intfactor                     !< Integrationweights with Jacobian
 REAL                            :: rho,srho                      !< rho,1/rho
-REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_comp
+REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_comp,mag_comp
 REAL                            :: DR_u,DR_S,DR_Sd,DR_p          !< Contributions to dissipation rate
 REAL                            :: Pressure,rho0,negdEdt
 #ifdef MPI
@@ -188,7 +188,7 @@ DO iElem=1,nElems
         GradVel(:,2)=srho*(GradUy(2:4,i,j,k,iElem)-Vel(1:3)*GradUy(1,i,j,k,iElem))
         GradVel(:,3)=srho*(GradUz(2:4,i,j,k,iElem)-Vel(1:3)*GradUz(1,i,j,k,iElem))
         ! Pressure
-        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3)))
+        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*SUM(BField(1:3)*BField(1:3)))
         ! compute divergence of velocity
         divU=GradVel(1,1)+GradVel(2,2)+GradVel(3,3)
         ! compute tensor of velocity gradients
@@ -203,7 +203,7 @@ DO iElem=1,nElems
         ! compute kinetic energy integrand (compr)
         kE_comp=rho*kE
         ! compute the magnetic energy integrand (incomp or comp)
-        magE_comp=0.5*SUM(BField(1:3)*BField(1:3))
+        mag_comp=s2mu_0*SUM(BField(1:3)*BField(1:3))
         ! compute vorticity and max(vorticity)
         Vorticity(1)=GradVel(3,2) - GradVel(2,3)
         Vorticity(2)=GradVel(1,3) - GradVel(3,1)
@@ -231,7 +231,7 @@ DO iElem=1,nElems
           ! Kinetic Energy compressible
         Ekin_comp=Ekin_comp+kE_comp*IntFactor
           ! Magnetic Energy compressible
-        Emag_comp=Emag_comp+magE_comp*IntFactor
+        Emag_comp=Emag_comp+mag_comp*IntFactor
           ! Enstrophy compressible
         Enstrophy_comp=Enstrophy_comp+ens*IntFactor
           ! Entropy compressible
@@ -295,7 +295,8 @@ IF(MPIroot)THEN
   rho0=1.
   Ekin=Ekin/Vol
   Ekin_comp=Ekin_comp/(rho0*Vol)
-  
+  Emag_comp=Emag_comp/(rho0*Vol)
+
   Enstrophy_comp=Enstrophy_comp/(rho0*Vol)
   Entropy_comp=Entropy_comp/(rho0*Vol)
   DR_u=DR_u*mu_0/Vol
@@ -313,7 +314,7 @@ IF(MPIroot)THEN
     WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEkin_comp/dt : ',negdEdt
   END IF !time>Analyze_dt
   WRITE(UNIT_StdOut,'(A,E21.11)')  ' TGV Analyze    Emag_comp   : ',Emag_comp
-  
+
   !output to out file (doAnalyzeToFile must be T, already checked in initAnalyzeTestcase), write is done in analyzetofile
   A2F_iVar=A2F_iVar+1
   A2F_data(A2F_iVar)=DR_S             !"Dissipation Rate Incompressible"'
@@ -345,7 +346,6 @@ IF(MPIroot)THEN
   A2F_data(A2F_iVar)=negdEdt          !'"-dE/dt"'
   A2F_iVar=A2F_iVar+1
   A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
-
 END IF !MPIroot
 
 END SUBROUTINE AnalyzeTestCase

@@ -837,8 +837,8 @@ CASE(24601) ! Insulating Taylor-Green vortex from Brachet et al. Derivation of t
   prim(1) =  1.
   prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
   prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
-  prim(5) = 100./kappa + 0.0625*((COS(2.*x(1))+COS(2.*x(2)))*(COS(2.*x(3))+2.))+ &
-             0.5*((COS(2.*x(1))+COS(2.*x(2)))*(1.-0.2*COS(4.*x(3))))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(COS(2.*x(3))+2.)+ &
+             0.1*(COS(2.*x(1))+COS(2.*x(2)))*(5.-COS(4.*x(3)))
   prim(6) =  COS(2.*x(1))*SIN(2.*x(2))*SIN(2.*x(3))
   prim(7) = -SIN(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
   CALL PrimToCons(Prim,Resu)

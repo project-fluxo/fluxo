@@ -178,7 +178,7 @@ prim(1)=cons(1)
 prim(2:4)=cons(2:4)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
 #ifdef PP_GLM
-prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
+prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*(SUM(cons(6:8)*cons(6:8))+cons(9)*cons(9)))
 #else
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*SUM(cons(6:8)*cons(6:8)))
 #endif /*PP_GLM*/
