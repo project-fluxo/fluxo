@@ -832,16 +832,49 @@ CASE(311) ! Orzsag-Tang vortex
   prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
-            ! is found in the appendix of Bohm et al.
+            ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
+!  r       =  1. so we don't need it, but include it here to see the similarities between these test cases
+!
   prim(1) =  1.
   prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
   prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
-  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3)))+ &
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
              0.0625*(COS(4.*x(1))+COS(4.*x(2)))*(2.-COS(4.*x(3)))
   prim(6) =  COS(2.*x(1))*SIN(2.*x(2))*SIN(2.*x(3))
   prim(7) = -SIN(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
   CALL PrimToCons(Prim,Resu)
+CASE(24602) ! Original insulating Taylor-Green vortex (I) from Brachet et al. Constant chosen such that initial Mach number is 0.1
+  prim    =  0.
+  r       =  1./SQRT(3.)
+!
+  prim(1) =  1.
+  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
+             r*0.0625*(COS(2.*x(2))+COS(2.*x(3)))*(2.-COS(2.*x(1))) + &
+             r*0.0625*(COS(2.*x(1))+COS(2.*x(3)))*(2.-COS(2.*x(2))) + &
+             r*0.25*COS(2.*x(3)) - r*0.125*COS(2.*x(1))*COS(2.*x(2))
+  prim(6) =  r*COS(x(1))*SIN(x(2))*SIN(x(3))
+  prim(7) =  r*SIN(x(1))*COS(x(2))*SIN(x(3))
+  prim(8) = -r*2.*SIN(x(1))*SIN(x(2))*COS(x(3))
+  CALL PrimToCons(Prim,Resu)
+CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant chosen such that initial Mach number is 0.1
+  prim    =  0.
+  r       =  1./SQRT(3.) ! Brachet et al. proposed SQRT(2./3.) but that doesn't make sense to me as the initial kinetic
+                        ! and magnetic energies don't match
+!
+  prim(1) =  1.
+  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) - &
+             r*0.0625*(COS(4.*x(2))+COS(4.*x(3)))*(2.+COS(4.*x(1))) - &
+             r*0.0625*(COS(4.*x(1))+COS(4.*x(3)))*(2.+COS(4.*x(2))) - &
+             r*0.25*COS(4.*x(3)) - r*0.125*COS(4.*x(1))*COS(4.*x(2))
+  prim(6) =  r*SIN(2.*x(1))*COS(2.*x(2))*COS(2.*x(3))
+  prim(7) =  r*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
+  prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
+CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
