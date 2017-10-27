@@ -862,7 +862,7 @@ CASE(24602) ! Original insulating Taylor-Green vortex (I) from Brachet et al. Co
 CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
   r       =  1./SQRT(3.) ! Brachet et al. proposed SQRT(2./3.) but that doesn't make sense to me as the initial kinetic
-                        ! and magnetic energies don't match
+                         ! and magnetic energies don't match
 !
   prim(1) =  1.
   prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))

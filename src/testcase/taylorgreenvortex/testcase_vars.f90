@@ -28,7 +28,8 @@ LOGICAL            :: doTCPreTimeStep=.FALSE.    !< compute something before the
 LOGICAL            :: doTCSource     =.FALSE.    !< compute source terms for testcase
 LOGICAL            :: doTCanalyze                !< switch on analyze routines
 CHARACTER(LEN=255) :: whichTestcase              !< input variable, to be able to check if wanted testcase was compiled
-REAL               :: last_Ekin_comp             !< used in analyze to compute -dE/dt
+REAL               :: last_Ekin_comp             !< used in analyze to compute -dEkin/dt
+REAL               :: last_Emag_comp             !< used in analyze to compute -dEmag/dt
 LOGICAL            :: TestcaseInitIsDone=.FALSE. !< Switch to check TestcaseInit status
 !==================================================================================================================================
 

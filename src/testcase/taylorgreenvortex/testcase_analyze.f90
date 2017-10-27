@@ -62,7 +62,7 @@ SUBROUTINE InitAnalyzeTestcase()
 ! MODULES
 USE MOD_Globals
 USE MOD_Analyze_Vars,     ONLY: doAnalyzeToFile,A2F_iVar,A2F_VarNames
-USE MOD_Testcase_Vars,    ONLY: doTCanalyze,last_Ekin_comp
+USE MOD_Testcase_Vars,    ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
 USE MOD_ReadInTools,      ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -77,6 +77,7 @@ IMPLICIT NONE
 doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
 
 last_Ekin_comp = 0.
+last_Emag_comp = 0.
 
 IF(.NOT.doAnalyzeToFile)THEN
   CALL abort(__STAMP__,"Testcase analyze = T, but AnalyzeToFile = F")
@@ -110,9 +111,11 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Entropy comp"'
   A2F_iVar=A2F_iVar+1
-  A2F_VarNames(A2F_iVar)='"-dE/dt"'
+  A2F_VarNames(A2F_iVar)='"-dEkin/dt"'
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Emag comp"'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar)='"-dEmag/dt"'
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeTestcase
 
@@ -131,7 +134,7 @@ USE MOD_Analyze_Vars,   ONLY: wGPVol,Vol
 USE MOD_Analyze_Vars,   ONLY: A2F_iVar,A2F_Data
 USE MOD_Analyze_Vars,   ONLY: Analyze_dt
 USE MOD_Restart_Vars,   ONLY: RestartTime
-USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp
+USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
 USE MOD_Mesh_Vars,      ONLY: sJ,nElems
 USE MOD_Equation_Vars,  ONLY: R,KappaM1,sKappaM1,Kappa
 USE MOD_Equation_Vars,  ONLY: mu_0,s2mu_0
@@ -159,7 +162,7 @@ REAL                            :: Intfactor                     !< Integrationw
 REAL                            :: rho,srho                      !< rho,1/rho
 REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_comp,mag_comp
 REAL                            :: DR_u,DR_S,DR_Sd,DR_p          !< Contributions to dissipation rate
-REAL                            :: Pressure,rho0,negdEdt
+REAL                            :: Pressure,rho0,negdEkindt,negdEmagdt
 #ifdef MPI
 REAL                            :: buf(11)
 #endif
@@ -307,13 +310,17 @@ IF(MPIroot)THEN
   mean_temperature=mean_temperature/Vol
   
   WRITE(UNIT_StdOut,'(A,E21.11)')  ' TGV Analyze    Ekin_comp   : ',Ekin_comp
-  negdEdt = 0.
-  IF((time-RestartTime).GE.Analyze_dt)THEN
-    negdEdt = -(Ekin_comp - last_Ekin_comp)/Analyze_dt
-    last_Ekin_comp=Ekin_comp
-    WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEkin_comp/dt : ',negdEdt
-  END IF !time>Analyze_dt
   WRITE(UNIT_StdOut,'(A,E21.11)')  ' TGV Analyze    Emag_comp   : ',Emag_comp
+  negdEkindt = 0.
+  negdEmagdt = 0.
+  IF((time-RestartTime).GE.Analyze_dt)THEN
+    negdEkindt = -(Ekin_comp - last_Ekin_comp)/Analyze_dt
+    last_Ekin_comp=Ekin_comp
+    WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEkin_comp/dt : ',negdEkindt
+    negdEmagdt = -(Emag_comp - last_Emag_comp)/Analyze_dt
+    last_Emag_comp=Emag_comp
+    WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEmag_comp/dt : ',negdEmagdt
+  END IF !time>Analyze_dt
 
   !output to out file (doAnalyzeToFile must be T, already checked in initAnalyzeTestcase), write is done in analyzetofile
   A2F_iVar=A2F_iVar+1
@@ -343,9 +350,11 @@ IF(MPIroot)THEN
   A2F_iVar=A2F_iVar+1           
   A2F_data(A2F_iVar)=Entropy_comp     !"Entropy comp"'
   A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=negdEdt          !'"-dE/dt"'
+  A2F_data(A2F_iVar)=negdEkindt       !'"-dEkin/dt"'
   A2F_iVar=A2F_iVar+1
   A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
+  A2F_iVar=A2F_iVar+1
+  A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
 END IF !MPIroot
 
 END SUBROUTINE AnalyzeTestCase
