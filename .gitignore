@@ -29,6 +29,10 @@
 *.app
 *.err
 
+# scripts needed for the CHEOPS cluster in Cologne
+*.sh
+ini/mhd/TGV/*.sh
+
 # others
 build
 share
@@ -42,6 +46,7 @@ log.*
 *.csv
 *.pyc
 tests/meshes/*mesh.h5
+ini/mhd/TGV/*mesh.h5
 tests/dirx_*
 CMakeCache.txt
 CMakeFiles/
