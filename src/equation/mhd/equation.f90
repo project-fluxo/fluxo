@@ -441,12 +441,10 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
-  END IF 
-  
+  END IF
   Omega=PP_Pi*IniFrequency
-
   ! g(t)
-  Resu(1:3)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(1:3)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   Resu(4)           = 0.
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
   Resu(6)           = Resu(1)
@@ -470,13 +468,11 @@ CASE(6) ! case 5 rotated
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
-  END IF 
-  
+  END IF
   Omega=PP_Pi*IniFrequency
-
   ! g(t)
   Resu              = 0.
-  Resu(1:2)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(1:2)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   !Resu(3)           = 0.
   Resu(4)           = Resu(1)
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
@@ -932,7 +928,7 @@ REAL                            :: Ut_src(PP_nVar)
 INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
-REAL                            :: rho,rho_x,rho_xx
+REAL                            :: rho,rho_x,rho_xx,rho_t
 #ifdef PP_GLM
 REAL                            :: v(3),divB,sGLM_ch
 #endif /*PP_GLM*/
@@ -969,31 +965,31 @@ CASE(4) ! navierstokes exact function
 CASE(5) ! mhd exact function, KAPPA==2!!!
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC
-  tmp(1)=6*mu/Pr
+  tmp(1)=6.*mu/Pr
 #endif
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
-      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
-      rho_xx =-omega*omega*rho
-      rho    = rho+2.
-      Ut_src=0.
-      Ut_src(1  )   =  rho_x 
-      Ut_src(2:3)   =  rho_x +  4.*rho*rho_x 
-      Ut_src(4  )   =        +  4.*rho*rho_x
-      Ut_src(5  )   =  rho_x + 12.*rho*rho_x
-      Ut_src(6  )   =  rho_x 
-      Ut_src(7  )   = -rho_x
+      rho    = IniAmplitude*SIN(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho_x  = IniAmplitude*Omega*COS(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho    = rho + 2.
+      Ut_src = 0.
+!
+      Ut_src(1  )  =  rho_x
+      Ut_src(2:3)  =  rho_x +  4.*rho*rho_x
+      Ut_src(4  )  =  4.*rho*rho_x
+      Ut_src(5  )  =  rho_x + 12.*rho*rho_x
+      Ut_src(6  )  =  rho_x
+      Ut_src(7  )  = -rho_x
 #if PARABOLIC
-      Ut_src(5  )   =-tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6  )   =-3*eta*rho_xx 
-      Ut_src(7  )   = 3*eta*rho_xx
+      rho_xx       = -Omega*Omega*(rho - 2.)
+      Ut_src(5  )  =  Ut_src(5) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(6  )  =  Ut_src(6) - 3.*eta*rho_xx
+      Ut_src(7  )  =  Ut_src(7) + 3.*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
-    !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
-CASE(6) ! case 5 rotated 
+CASE(6) ! case 5 rotated
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC
   tmp(1)=6*mu/Pr
@@ -1013,9 +1009,9 @@ CASE(6) ! case 5 rotated
       Ut_src(6)   =  rho_x 
       Ut_src(8)   =  -rho_x
 #if PARABOLIC
-      Ut_src(5)   = Ut_src(5)   -tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6)   = Ut_src(6)   -3*eta*rho_xx 
-      Ut_src(8)   = Ut_src(8)   +3*eta*rho_xx
+      Ut_src(5)   = Ut_src(5) - tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(6)   = Ut_src(6) - 3*eta*rho_xx
+      Ut_src(8)   = Ut_src(8) + 3*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
