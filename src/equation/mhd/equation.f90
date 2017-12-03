@@ -928,7 +928,7 @@ REAL                            :: Ut_src(PP_nVar)
 INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
-REAL                            :: rho,rho_x,rho_xx,rho_t
+REAL                            :: rho,rho_x,rho_xx
 #ifdef PP_GLM
 REAL                            :: v(3),divB,sGLM_ch
 #endif /*PP_GLM*/
