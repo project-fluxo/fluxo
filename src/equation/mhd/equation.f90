@@ -422,9 +422,10 @@ CASE(3) ! alfven wave
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
 
-CASE(31,32) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
+CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
          !IniAmplitude should be small compare to density and pressure (1e-08)
+         !31: backward moving, 32: forward moving, 33: standing (31+32!)
   b0(3)=0.
   IF(IniWavenumber(2).LT.0.01) THEN
     b0(1:2)=(/1.,0./)
@@ -438,24 +439,29 @@ CASE(31,32) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inir
   a=SQRT(mu_0*rho_0)  !=|B_0|/va = sqrt(mu_0*rho_0)
   IF(Exactfunction.EQ.32) a=-a ! case(32) -va!
   va=q0/a      !(+va)=|B_0|/sqrt(mu_0*rho_0)
-  xc(1:3)=x(1:3)-b0(1:3)/a*tEval ! b_0/a = B_0/|B_0|*va
+  IF(Exactfunction.EQ.33)THEN
+    r0=0. !switch for standing wave
+  ELSE
+    r0=1.
+  END IF
+  xc(1:3)=x(1:3)-r0*b0(1:3)/a*tEval ! b_0/a = B_0/|B_0|*va
   e=IniAmplitude*SIN(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))
   Prim=0.
   Prim(1)  =rho_0
   Prim(2:3)=(/-b0(2),b0(1)/)*(e/q0) !vperp
   Prim(5)  =p_0
-  Prim(6:7)=b0(1:2)-Prim(2:3)*a !-B0/(+va)=sqrt(mu0*rho_0) 
+  Prim(6:7)=b0(1:2)-r0*Prim(2:3)*a !-B0/(+va)=sqrt(mu0*rho_0) 
   CALL PrimToCons(Prim,Resu)
   !second time derivative
   Resu_tt     =0.
   e=e*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))**2
   Resu_tt(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
-  Resu_tt(6:7)=-Resu_tt(2:3)*a
+  Resu_tt(6:7)=-Resu_tt(2:3)*r0*a
   !first time derivative
   Resu_t     =0.
   e=IniAmplitude*COS(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))
   Resu_t(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
-  Resu_t(6:7)=-Resu_t(2:3)*a
+  Resu_t(6:7)=-Resu_t(2:3)*r0*a
 
   END ASSOCIATE !rho_0,p_0
 CASE(4) ! navierstokes exact function
