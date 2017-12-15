@@ -361,6 +361,7 @@ REAL                            :: r, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
+REAL                            :: b0(3),xc(3)
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
@@ -381,7 +382,7 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(5)=6.0
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
-CASE(3) ! alven wave 
+CASE(3) ! alfven wave 
   Omega=PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
@@ -421,6 +422,42 @@ CASE(3) ! alven wave
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
 
+CASE(31,32) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
+         !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
+         !IniAmplitude should be small compare to density and pressure (1e-08)
+  b0(3)=0.
+  IF(IniWavenumber(2).LT.0.01) THEN
+    b0(1:2)=(/1.,0./)
+  ELSEIF(IniWavenumber(1).LT.0.01) THEN
+    b0(1:2)=(/0.,1./)
+  ELSE
+    b0(1:2)=(/MIN(1.,IniWavenumber(1)/IniWavenumber(2)),MIN(1.,IniWavenumber(2)/IniWavenumber(1)) /)
+  END IF
+  ASSOCIATE(rho_0=>RefStatePrim(IniRefState,1),p_0=>RefStatePrim(IniRefState,5))
+  q0=SQRT(SUM(b0(:)**2))        !=|B_0|
+  a=SQRT(mu_0*rho_0)  !=|B_0|/va = sqrt(mu_0*rho_0)
+  IF(Exactfunction.EQ.32) a=-a ! case(32) -va!
+  va=q0/a      !(+va)=|B_0|/sqrt(mu_0*rho_0)
+  xc(1:3)=x(1:3)-b0(1:3)/a*tEval ! b_0/a = B_0/|B_0|*va
+  e=IniAmplitude*SIN(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))
+  Prim=0.
+  Prim(1)  =rho_0
+  Prim(2:3)=(/-b0(2),b0(1)/)*(e/q0) !vperp
+  Prim(5)  =p_0
+  Prim(6:7)=b0(1:2)-Prim(2:3)*a !-B0/(+va)=sqrt(mu0*rho_0) 
+  CALL PrimToCons(Prim,Resu)
+  !second time derivative
+  Resu_tt     =0.
+  e=e*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))**2
+  Resu_tt(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_tt(6:7)=-Resu_tt(2:3)*a
+  !first time derivative
+  Resu_t     =0.
+  e=IniAmplitude*COS(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))
+  Resu_t(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_t(6:7)=-Resu_t(2:3)*a
+
+  END ASSOCIATE !rho_0,p_0
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
   a=RefStatePrim(IniRefState,2)*2.*PP_Pi
