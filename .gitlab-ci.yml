@@ -30,8 +30,6 @@ build_linadv:
   stage: build 
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -51,8 +49,6 @@ build_maxwell:
   stage: build 
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -72,8 +68,6 @@ build_mhd:
   stage: build 
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -93,8 +87,6 @@ build_nav-st:
   stage: build 
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -116,8 +108,6 @@ short_runs_linadv:
   stage: short_runs
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -138,8 +128,6 @@ short_runs_mhd:
   stage: short_runs
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
@@ -159,8 +147,6 @@ short_runs_nav-st:
   stage: short_runs
   tags:
     - vm_linux
-  only:
-    - testCI
   before_script:
     - . ~/environments/modules_for_fluxo_intel
   script: 
