@@ -1,5 +1,19 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#==================================================================================================================================
+# Copyright (c) 2016 - 2017 Gregor Gassner
+# Copyright (c) 2016 - 2017 Florian Hindenlang
+# Copyright (c) 2016 - 2017 Andrew Winters
+#
+# This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 
+# of the License, or (at your option) any later version.
+#
+# FLUXO is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+#
+# You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
+#==================================================================================================================================
 
 import os
 import sys
@@ -23,7 +37,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
       return False
    # build directory
    builddir=("dirx_%d_%s" % (case,project))
-   log_path=("../log.%d_%s" % (case,project))
+   log_path=("../log_%d_%s.txt" % (case,project))
 
    cwd = os.getcwd()  #current working directory
    if (stage < 2) :
@@ -858,6 +872,22 @@ if(cases[0]==0 or (caseID in cases)) :
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage, run_test=None , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_navierstokes_type1_GL_nopara_TC_angmom"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+            ,"FLUXO_TESTCASE"         ,"ns_angularmomentum"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 
 #============================================================================
 #FINAL ERROR HANDLING:

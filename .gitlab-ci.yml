@@ -1,0 +1,176 @@
+# =================================================================================================================================
+# Stages to be executed, each stage is a collection of jobs pointing to the stage
+# =================================================================================================================================
+
+stages:
+  - build
+  - short_runs
+
+# global paths to be kept between jobs
+cache:
+  paths:
+  - tests
+
+# =================================================================================================================================
+# Stage "build"
+# v>9 artifacts: name: "${CI_PIPELINE_ID}_${CI_JOB_NAME}_${CI_COMMIT_REF_NAME}"
+#
+# SHORT SYNTAX EXPLANATIONS FOR THE JOB, FOR DETAILS VISIT:    ===> https://docs.gitlab.com/ce/ci/yaml/   <===
+# "stage:"         makes the job part of a stage defined above
+# "tags:"          selects the runner
+# "only:"          restricts the execution of the job to a git branch or tag
+# "before_script:" shell commands to be executed before the main script. 
+# "script:"        shell commands for the test. If a shell command exits with >0, the job is marked as "failed", else as "passed".
+#                  commands after a failing one are not executed anymore!
+# "after_script:"  shell commands after passed OR failed script. Careful, the current directory is always the root of the repo!
+# "artifacts:"     keep data from the job which is uploaded to gitlab.com. You really should set a duration to expiration.
+#                  "when:" can be either on_failure, on_success or always
+# =================================================================================================================================
+build_linadv:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 100-199 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/log_1*.txt
+
+#--------------------------------------------------------------------------------------------------------------------------------
+build_maxwell:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 200-299 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/log_2*.txt
+
+#--------------------------------------------------------------------------------------------------------------------------------
+build_mhd:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 300-399 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/log_3*.txt
+
+#--------------------------------------------------------------------------------------------------------------------------------
+build_nav-st:
+  stage: build 
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 400-499 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/log_4*.txt
+
+# =================================================================================================================================
+# Stage "short_runs"
+# =================================================================================================================================
+short_runs_linadv:
+  stage: short_runs
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 2 -stage 2 -case 100-199 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/freestream/log_LINADV*.txt
+
+
+#--------------------------------------------------------------------------------------------------------------------------------
+short_runs_mhd:
+  stage: short_runs
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 2 -stage 2 -case 300-399 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/freestream/log_MHD*.txt
+
+#--------------------------------------------------------------------------------------------------------------------------------
+short_runs_nav-st:
+  stage: short_runs
+  tags:
+    - vm_linux
+  only:
+    - testCI
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel
+  script: 
+    - cd tests; pwd
+    - python build_tests.py -p 2 -stage 2 -case 400-499 
+  after_script:
+    - pwd 
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_BUILD_REF_NAME}_${CI_BUILD_NAME}"
+    expire_in: 1 hour
+    when: always
+    paths:
+    - tests/freestream/log_NAVIERSTOKES*.txt
