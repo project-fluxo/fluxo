@@ -24,7 +24,7 @@ If you use FLUXO, please cite one of the articles mentioned in [REFERENCES.md](R
 
 For installation instructions see [INSTALL.md](INSTALL.md)
 
-##License 
+## License 
 FLUXO is released under the terms of the GNU General Public License v3.0. 
 For the full license terms see the included license file [LICENSE.md](LICENSE.md).
 
