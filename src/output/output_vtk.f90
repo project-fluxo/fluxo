@@ -65,7 +65,7 @@ CHARACTER(LEN=35)  :: StrOffset,TempStr1,TempStr2
 CHARACTER(LEN=200) :: Buffer
 CHARACTER(LEN=1)   :: lf
 CHARACTER(LEN=255) :: tmpVarName,tmpVarNameY,tmpVarNameZ
-REAL(KIND=4)       :: FLOATdummy
+REAL(KIND=8)       :: FLOAT64dummy
 INTEGER            :: StrLen,iValVec,nValVec,nVal_loc,VecOffset(0:nVal)
 #if MPI
 INTEGER            :: iProc,nElems_proc,nElemsMax
@@ -135,16 +135,16 @@ IF(MPIROOT)THEN
        (INDEX(tmpVarNameY(:StrLen),TRIM(tmpVarName(:StrLen-1))//"Y").NE.0).AND. &
        (INDEX(tmpVarNameZ(:StrLen),TRIM(tmpVarName(:StrLen-1))//"Z").NE.0))THEN !variable is a vector!
       tmpVarName=tmpVarName(:StrLen-1)
-      Buffer='        <DataArray type="Float32" Name="'//TRIM(tmpVarName)//'" NumberOfComponents="3" &
+      Buffer='        <DataArray type="Float64" Name="'//TRIM(tmpVarName)//'" NumberOfComponents="3" &
              &format="appended" offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
-      Offset=Offset+SIZEOF_F(INTdummy)+3*nVTKPoints*SIZEOF_F(FLOATdummy)
+      Offset=Offset+SIZEOF_F(INTdummy)+3*nVTKPoints*SIZEOF_F(FLOAT64dummy)
       WRITE(StrOffset,'(I16)')Offset
       VecOffset(iValVec)=VecOffset(iValVec-1)+3
       iVal=iVal+2 !skip the Y & Z components
     ELSE
-      Buffer='        <DataArray type="Float32" Name="'//TRIM(tmpVarName)//'" &
+      Buffer='        <DataArray type="Float64" Name="'//TRIM(tmpVarName)//'" &
              &format="appended" offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
-      Offset=Offset+SIZEOF_F(INTdummy)+nVTKPoints*SIZEOF_F(FLOATdummy)
+      Offset=Offset+SIZEOF_F(INTdummy)+nVTKPoints*SIZEOF_F(FLOAT64dummy)
       WRITE(StrOffset,'(I16)')Offset
       VecOffset(iValVec)=VecOffset(iValVec-1)+1
     END IF
@@ -158,9 +158,9 @@ IF(MPIROOT)THEN
   Buffer='      <CellData> </CellData>'//lf;WRITE(ivtk) TRIM(Buffer)
   ! Specify coordinate data
   Buffer='      <Points>'//lf;WRITE(ivtk) TRIM(Buffer)
-  Buffer='        <DataArray type="Float32" Name="Coordinates" NumberOfComponents="3" format="appended" &
+  Buffer='        <DataArray type="Float64" Name="Coordinates" NumberOfComponents="3" format="appended" &
          &offset="'//TRIM(ADJUSTL(StrOffset))//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
-  Offset=Offset+SIZEOF_F(INTdummy)+3*nVTKPoints*SIZEOF_F(FLOATdummy)
+  Offset=Offset+SIZEOF_F(INTdummy)+3*nVTKPoints*SIZEOF_F(FLOAT64dummy)
   WRITE(StrOffset,'(I16)')Offset
   Buffer='      </Points>'//lf;WRITE(ivtk) TRIM(Buffer)
   ! Specify necessary cell data
@@ -194,19 +194,19 @@ CALL MPI_BCAST(vecOffset(0:nValVec),nValVec+1,MPI_INTEGER,0,MPI_COMM_WORLD,iErro
 #endif /*MPI*/
 ! Write binary raw data into append section
 ! Solution data
-nBytes = nVTKPoints*SIZEOF_F(FLOATdummy)
-DO iValVec=1,nValVec 
+DO iValVec=1,nValVec
   iVal    = vecOffset(iValVec-1)
   nVal_loc= vecOffset(iValVec)-vecOffset(iValVec-1)
   IF(MPIroot)THEN    
+    nBytes = nVTKPoints*SIZEOF_F(FLOAT64dummy)
     WRITE(ivtk) nVal_loc*nBytes
-    WRITE(ivtk)REAL(Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems),4)
+    WRITE(ivtk)REAL(Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems),8)
 #if MPI
     DO iProc=1,nProcessors-1
       nElems_proc=nElems_glob(iProc)
       CALL MPI_RECV(     buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
                            nVal_loc*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
-      WRITE(ivtk) REAL(  buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),4)
+      WRITE(ivtk) REAL(  buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),8)
     END DO !iProc
   ELSE
     CALL MPI_SEND(  Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
@@ -217,15 +217,15 @@ END DO       ! iValVec=1,nValVec
 
 ! Coordinates
 IF(MPIRoot)THEN
-  nBytes = nVTKPoints*SIZEOF_F(FLOATdummy) * 3
+  nBytes = nVTKPoints*SIZEOF_F(FLOAT64dummy) * 3
   WRITE(ivtk) nBytes
-  WRITE(ivtk) REAL( Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems),4)
+  WRITE(ivtk) REAL( Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems),8)
 #if MPI
   DO iProc=1,nProcessors-1
     nElems_proc=nElems_glob(iProc)
     CALL MPI_RECV(   buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
                       3*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
-    WRITE(ivtk) REAL(buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),4)
+    WRITE(ivtk) REAL(buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),8)
   END DO !iProc
 ELSE
   CALL MPI_SEND(    Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems), &

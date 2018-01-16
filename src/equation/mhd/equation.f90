@@ -61,24 +61,25 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
-CALL prms%CreateIntOption(     "IniExactFunc",  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateIntOption(     "IniRefState",  " Specifies exactfunc to be used for initialization ")
-CALL prms%CreateRealArrayOption("IniWaveNumber"," For exactfunction: wavenumber of solution.")
-CALL prms%CreateRealArrayOption("IniCenter"," For exactfunction: center coordinates.","0.,0.,0.")
-CALL prms%CreateRealOption(   "IniAmplitude", " For exactfunction: amplitude","0.1")
-CALL prms%CreateRealOption(   "IniFrequency", " For exactfunction: Frequency","1.0")
-CALL prms%CreateRealOption(   "IniHalfwidth", " For exactfunction: Halfwidth","0.1")
-CALL prms%CreateRealOption(   "IniDisturbance", "For exactfunction: Strength of initial disturbance","0.")
-CALL prms%CreateRealOption(   "kappa", "ratio of specific heats","1.6666666666666667")
-CALL prms%CreateRealOption(   "mu_0", "magnetic permeability in vacuum","1.0")
+CALL prms%CreateIntOption(     "IniExactFunc"  , " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateIntOption(     "IniRefState"   , " Specifies exactfunc to be used for initialization ")
+CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
+CALL prms%CreateRealArrayOption("IniCenter"    , " For exactfunction: center coordinates.","0.,0.,0.")
+CALL prms%CreateRealOption(   "IniAmplitude"   , " For exactfunction: amplitude","0.1")
+CALL prms%CreateRealOption(   "IniFrequency"   , " For exactfunction: Frequency","1.0")
+CALL prms%CreateRealOption(   "IniHalfwidth"   , " For exactfunction: Halfwidth","0.1")
+CALL prms%CreateRealOption(   "IniDisturbance" , " For exactfunction: Strength of initial disturbance","0.")
+CALL prms%CreateRealOption(   "kappa"          , " Ratio of specific heats","1.6666666666666667")
+CALL prms%CreateRealOption(     'R'            , " Gas constant.","287.058")
+CALL prms%CreateRealOption(   "mu_0"           , " Magnetic permeability in vacuum","1.0")
 #if PARABOLIC
-CALL prms%CreateRealOption(   "eta", "magnetic resistivity","0.")
-CALL prms%CreateRealOption(   "mu", "fluid viscosity","0.")
-CALL prms%CreateRealOption(   "s23", "stress tensor scaling (normally 2/3)","0.6666666666666667")
-CALL prms%CreateRealOption(   "Pr", "Prandtl number","0.72")
+CALL prms%CreateRealOption(   "eta"            , " Magnetic resistivity","0.")
+CALL prms%CreateRealOption(   "mu"             , " Fluid viscosity","0.")
+CALL prms%CreateRealOption(   "s23"            , " Stress tensor scaling (normally 2/3)","0.6666666666666667")
+CALL prms%CreateRealOption(   "Pr"             , " Prandtl number","0.72")
 #ifdef PP_ANISO_HEAT
-CALL prms%CreateRealOption(   "kpar", "If anisotropic heat terms enabled: diffusion parallel to magnetic field","0.")
-CALL prms%CreateRealOption(   "kperp", "If anisotropic heat terms enabled: diffusion perpendicular to magnetic field","0.")
+CALL prms%CreateRealOption(   "kpar"  , " If anisotropic heat terms enabled: diffusion parallel to magnetic field","0.")
+CALL prms%CreateRealOption(   "kperp" , " If anisotropic heat terms enabled: diffusion perpendicular to magnetic field","0.")
 #endif /*PP_ANISO_HEAT*/
 #endif /*PARABOLIC*/
 
@@ -119,10 +120,7 @@ USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars 
 USE MOD_Riemann
-#if (PP_DiscType==2)
-USE MOD_Flux_Average, ONLY: standardDGFluxVec
-USE MOD_Flux_Average, ONLY: standardDGFluxDealiasedMetricVec
-#endif /*PP_DiscType==2*/
+USE MOD_Flux_Average
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -173,6 +171,7 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
+R        =GETREAL('R','287.058')
 KappasPr =Kappa/Pr
 !heat diffusion coefficients 
 #ifdef PP_ANISO_HEAT
@@ -246,7 +245,8 @@ CASE(4)
   SolveRiemannProblem => RiemannSolverByHLL  
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLD'
-  IF(ABS(mu_0-1.).GT.1.0E-12) CALL abort(__STAMP__,&
+  IF(ABS(mu_0-1.).GT.1.0E-12) &
+   CALL abort(__STAMP__,&
   'HLLD solver only for mu_0=1 implemented!')
   SolveRiemannProblem => RiemannSolverByHLLD  
 CASE DEFAULT
@@ -269,11 +269,12 @@ CASE DEFAULT
 END SELECT
 #endif /*PP_DiscType==2*/
 
+IF(MPIroot) CALL CheckFluxes()
+
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
-
 
 
 !==================================================================================================================================
@@ -344,6 +345,7 @@ REAL                            :: r, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
+REAL                            :: b0(3),xc(3)
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
@@ -364,7 +366,7 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(5)=6.0
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
-CASE(3) ! alven wave 
+CASE(3) ! alfven wave 
   Omega=PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
@@ -404,6 +406,48 @@ CASE(3) ! alven wave
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
 
+CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
+         !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
+         !IniAmplitude should be small compare to density and pressure (1e-08)
+         !31: backward moving, 32: forward moving, 33: standing (31+32!)
+  b0(3)=0.
+  IF(IniWavenumber(2).LT.0.01) THEN
+    b0(1:2)=(/1.,0./)
+  ELSEIF(IniWavenumber(1).LT.0.01) THEN
+    b0(1:2)=(/0.,1./)
+  ELSE
+    b0(1:2)=(/MIN(1.,IniWavenumber(1)/IniWavenumber(2)),MIN(1.,IniWavenumber(2)/IniWavenumber(1)) /)
+  END IF
+  ASSOCIATE(rho_0=>RefStatePrim(IniRefState,1),p_0=>RefStatePrim(IniRefState,5))
+  q0=SQRT(SUM(b0(:)**2))        !=|B_0|
+  a=SQRT(mu_0*rho_0)  !=|B_0|/va = sqrt(mu_0*rho_0)
+  IF(Exactfunction.EQ.32) a=-a ! case(32) -va!
+  va=q0/a      !(+va)=|B_0|/sqrt(mu_0*rho_0)
+  IF(Exactfunction.EQ.33)THEN
+    r0=0. !switch for standing wave
+  ELSE
+    r0=1.
+  END IF
+  xc(1:3)=x(1:3)-r0*b0(1:3)/a*tEval ! b_0/a = B_0/|B_0|*va
+  e=IniAmplitude*SIN(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))
+  Prim=0.
+  Prim(1)  =rho_0
+  Prim(2:3)=(/-b0(2),b0(1)/)*(e/q0) !vperp
+  Prim(5)  =p_0
+  Prim(6:7)=b0(1:2)-r0*Prim(2:3)*a !-B0/(+va)=sqrt(mu0*rho_0) 
+  CALL PrimToCons(Prim,Resu)
+  !second time derivative
+  Resu_tt     =0.
+  e=e*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))**2
+  Resu_tt(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_tt(6:7)=-Resu_tt(2:3)*r0*a
+  !first time derivative
+  Resu_t     =0.
+  e=IniAmplitude*COS(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))
+  Resu_t(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_t(6:7)=-Resu_t(2:3)*r0*a
+
+  END ASSOCIATE !rho_0,p_0
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
   a=RefStatePrim(IniRefState,2)*2.*PP_Pi
@@ -424,12 +468,10 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
-  END IF 
-  
+  END IF
   Omega=PP_Pi*IniFrequency
-
   ! g(t)
-  Resu(1:3)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(1:3)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   Resu(4)           = 0.
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
   Resu(6)           = Resu(1)
@@ -453,13 +495,11 @@ CASE(6) ! case 5 rotated
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
-  END IF 
-  
+  END IF
   Omega=PP_Pi*IniFrequency
-
   ! g(t)
   Resu              = 0.
-  Resu(1:2)         = 2.+ IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(1:2)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
   !Resu(3)           = 0.
   Resu(4)           = Resu(1)
   Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
@@ -805,6 +845,59 @@ CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0),
   Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
   
   CALL PrimToCons(Prim,Resu)
+CASE(311) ! Orzsag-Tang vortex
+  prim    = 0.
+  prim(1) = 1.
+  prim(2) = -SIN(2.*PP_Pi*x(2))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(5) =  1./kappa
+  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  CALL PrimToCons(Prim,Resu)
+CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
+            ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
+  prim    =  0.
+!  r       =  1. so we don't need it, but include it here to see the similarities between these test cases
+!
+  prim(1) =  1.
+  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
+             0.0625*(COS(4.*x(1))+COS(4.*x(2)))*(2.-COS(4.*x(3)))
+  prim(6) =  COS(2.*x(1))*SIN(2.*x(2))*SIN(2.*x(3))
+  prim(7) = -SIN(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
+  CALL PrimToCons(Prim,Resu)
+CASE(24602) ! Original insulating Taylor-Green vortex (I) from Brachet et al. Constant chosen such that initial Mach number is 0.1
+  prim    =  0.
+  r       =  1./SQRT(3.)
+!
+  prim(1) =  1.
+  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
+             r*0.0625*(COS(2.*x(2))+COS(2.*x(3)))*(2.-COS(2.*x(1))) + &
+             r*0.0625*(COS(2.*x(1))+COS(2.*x(3)))*(2.-COS(2.*x(2))) + &
+             r*0.25*COS(2.*x(3)) - r*0.125*COS(2.*x(1))*COS(2.*x(2))
+  prim(6) =  r*COS(x(1))*SIN(x(2))*SIN(x(3))
+  prim(7) =  r*SIN(x(1))*COS(x(2))*SIN(x(3))
+  prim(8) = -r*2.*SIN(x(1))*SIN(x(2))*COS(x(3))
+  CALL PrimToCons(Prim,Resu)
+CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant chosen such that initial Mach number is 0.1
+  prim    =  0.
+  r       =  1./SQRT(3.) ! Brachet et al. proposed SQRT(2./3.) but that doesn't make sense to me as the initial kinetic
+                         ! and magnetic energies don't match
+!
+  prim(1) =  1.
+  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) - &
+             r*0.0625*(COS(4.*x(2))+COS(4.*x(3)))*(2.+COS(4.*x(1))) - &
+             r*0.0625*(COS(4.*x(1))+COS(4.*x(3)))*(2.+COS(4.*x(2))) - &
+             r*0.25*COS(4.*x(3)) - r*0.125*COS(4.*x(1))*COS(4.*x(2))
+  prim(6) =  r*SIN(2.*x(1))*COS(2.*x(2))*COS(2.*x(3))
+  prim(7) =  r*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
+  prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
+CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
@@ -899,31 +992,31 @@ CASE(4) ! navierstokes exact function
 CASE(5) ! mhd exact function, KAPPA==2!!!
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC
-  tmp(1)=6*mu/Pr
+  tmp(1)=6.*mu/Pr
 #endif
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      rho    = IniAmplitude*SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
-      rho_x  = IniAmplitude*omega*COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
-      rho_xx =-omega*omega*rho
-      rho    = rho+2.
-      Ut_src=0.
-      Ut_src(1  )   =  rho_x 
-      Ut_src(2:3)   =  rho_x +  4.*rho*rho_x 
-      Ut_src(4  )   =        +  4.*rho*rho_x
-      Ut_src(5  )   =  rho_x + 12.*rho*rho_x
-      Ut_src(6  )   =  rho_x 
-      Ut_src(7  )   = -rho_x
+      rho    = IniAmplitude*SIN(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho_x  = IniAmplitude*Omega*COS(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho    = rho + 2.
+      Ut_src = 0.
+!
+      Ut_src(1  )  =  rho_x
+      Ut_src(2:3)  =  rho_x +  4.*rho*rho_x
+      Ut_src(4  )  =  4.*rho*rho_x
+      Ut_src(5  )  =  rho_x + 12.*rho*rho_x
+      Ut_src(6  )  =  rho_x
+      Ut_src(7  )  = -rho_x
 #if PARABOLIC
-      Ut_src(5  )   =-tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6  )   =-3*eta*rho_xx 
-      Ut_src(7  )   = 3*eta*rho_xx
+      rho_xx       = -Omega*Omega*(rho - 2.)
+      Ut_src(5  )  =  Ut_src(5) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(6  )  =  Ut_src(6) - 3.*eta*rho_xx
+      Ut_src(7  )  =  Ut_src(7) + 3.*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
-    !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
-CASE(6) ! case 5 rotated 
+CASE(6) ! case 5 rotated
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC
   tmp(1)=6*mu/Pr
@@ -943,43 +1036,47 @@ CASE(6) ! case 5 rotated
       Ut_src(6)   =  rho_x 
       Ut_src(8)   =  -rho_x
 #if PARABOLIC
-      Ut_src(5)   = Ut_src(5)   -tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6)   = Ut_src(6)   -3*eta*rho_xx 
-      Ut_src(8)   = Ut_src(8)   +3*eta*rho_xx
+      Ut_src(5)   = Ut_src(5) - tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(6)   = Ut_src(6) - 3*eta*rho_xx
+      Ut_src(8)   = Ut_src(8) + 3*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
-
-#ifndef PP_GLM
 CASE DEFAULT
   ! No source -> do nothing
   doCalcSource=.FALSE. 
-#endif /*PP_GLM*/
 END SELECT ! ExactFunction
 
-#ifdef PP_GLM
-IF(DivBSource)THEN
-  sGLM_ch=1./GLM_ch
-  DO iElem=1,nElems
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
-      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
-      ! Ut(9)/ch = -divB
-      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
-      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
-      ! to B_t      : -v*divB
-      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
-      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
-      ! so that  energy source is  -1/mu_0* divB (v*B)  
-      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
-      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
-      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
-      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
-    END DO; END DO; END DO ! i,j,k
-  END DO ! iElem
-END IF !divBsource
-Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
-#endif /*PP_GLM*/
+!#ifndef PP_GLM
+!CASE DEFAULT
+!  ! No source -> do nothing
+!  doCalcSource=.FALSE. 
+!#endif /*PP_GLM*/
+!END SELECT ! ExactFunction
+!
+!#ifdef PP_GLM
+!IF(DivBSource)THEN
+!  sGLM_ch=1./GLM_ch
+!  DO iElem=1,nElems
+!    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
+!      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
+!      ! Ut(9)/ch = -divB
+!      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
+!      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
+!      ! to B_t      : -v*divB
+!      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
+!      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
+!      ! so that  energy source is  -1/mu_0* divB (v*B)  
+!      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
+!      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
+!      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
+!      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
+!    END DO; END DO; END DO ! i,j,k
+!  END DO ! iElem
+!END IF !divBsource
+!Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
+!#endif /*PP_GLM*/
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================
@@ -1000,5 +1097,237 @@ SDEALLOCATE(RefStatePrim)
 SDEALLOCATE(RefStateCons)
 EquationInitIsDone = .FALSE.
 END SUBROUTINE FinalizeEquation
+
+
+!==================================================================================================================================
+!> Check Riemann Solver  for consistency, two-point flux for consistency and symmetry
+!==================================================================================================================================
+SUBROUTINE CheckFluxes()
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
+USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
+USE MOD_Flux_Average
+USE MOD_Riemann
+#if (PP_DiscType==2)
+USE MOD_Flux_Average , ONLY: standardDGFluxVec
+USE MOD_DG_Vars,       ONLY: DGinitIsDone,nTotal_vol,U
+USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde
+#endif /*PP_DiscType==2*/
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif /*PP_GLM*/
+ IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
+REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
+REAL  :: check,absdiff
+INTEGER :: icase,i
+PROCEDURE(),POINTER :: fluxProc 
+CHARACTER(LEN=255)  :: fluxName
+#if PP_DiscType==2
+REAL  :: UauxElem(   nAuxVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: ftildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: gtildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: htildeElem( PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+REAL  :: metricL(3),metricR(3),mtmp(3),Utmp(PP_nVar)
+REAL  :: ULaux(1:nAuxVar),URaux(1:nAuxVar)
+LOGICAL :: failed_vol
+#endif /*PP_DiscType==2*/
+LOGICAL :: failed
+!==================================================================================================================================
+WRITE(*,*)'    CHECK ALL FLUXES...'
+!test consistency, random state:
+PL(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
+PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
+#ifdef PP_GLM
+PL(9)= 0.31999469
+PR(9)= 0.
+GLM_ch = 0.5 !was not set yet
+#endif
+CALL PrimToCons(PL,UL)
+CALL PrimToCons(PR,UR)
+!use EvalAdvectionFlux1D as reference Flux
+CALL EvalAdvectionFlux1D(UL,FrefL)
+CALL EvalAdvectionFlux1D(UR,FrefR)
+failed=.FALSE.
+DO icase=0,6
+  NULLIFY(fluxProc)
+  SELECT CASE(icase)
+  CASE(0)
+    fluxProc => StandardDGFlux
+    fluxName = "StandardDGFlux"
+  CASE(1)
+    fluxProc => RiemannSolverByHLL
+    fluxName = "RiemannSolverByHLL"
+  CASE(2)
+    fluxProc => RiemannSolverByRoe
+    fluxName = "RiemannSolverByRoe"
+  CASE(3)
+    fluxProc => RiemannSolverByHLLC
+    fluxName = "RiemannSolverByHLLC"
+  CASE(4)
+    fluxProc => RiemannSolverByHLLD
+    fluxName = "RiemannSolverByHLLD"
+!  CASE(5)
+!    fluxProc => EntropyAndKinEnergyConservingFlux
+!    fluxName = "EntropyAndKinEnergyConservingFlux"
+!  CASE(6)
+!    fluxProc => EntropyStableFlux
+!    fluxName = "EntropyStableFlux"
+  CASE DEFAULT
+    CYCLE
+  END SELECT
+  !CONSISTENCY
+  CALL fluxProc(UL,UL,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefL(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  CALL fluxProc(UR,UR,Fcheck)
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefR(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
+    failed=.TRUE.
+  END IF
+END DO !icase
+#if PP_DiscType==2
+#ifdef CARTESIANFLUX
+metricL=(/1.5320,0.,0./)
+metricR=(/1.5320,0.,0./)
+#else
+metricL=(/1.5320,-0.05,4.895/)
+metricR=(/0.8715,0.594,2.531/)
+#endif
+
+!use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
+IF(DGinitIsDone)THEN
+  Utmp(:)=U(:,0,0,0,1) !save U
+ELSE
+  ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1)) !DGinit not yet called!
+  nTotal_vol=(PP_N+1)**3
+  DO i=1,PP_nVar
+    U(i,:,:,:,1)=UL(i)
+  END DO
+END IF
+mtmp(:)=Metrics_ftilde(:,0,0,0,1) !save metric
+!overwrite
+
+U(:,0,0,0,1)=UL
+Metrics_ftilde(:,0,0,0,1)=metricL
+CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+ULaux=UauxElem(:,0,0,0)
+FrefL = fTildeElem(:,0,0,0)
+
+U(:,0,0,0,1)=UR
+Metrics_ftilde(:,0,0,0,1)=metricR
+CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+URaux=UauxElem(:,0,0,0)
+FrefR = fTildeElem(:,0,0,0)
+
+Metrics_fTilde(:,0,0,0,1)=mtmp(:) !put metric back
+IF(DGinitIsDone)THEN
+  U(:,0,0,0,1)=Utmp(:) !put back U
+ELSE
+  DEALLOCATE(U)
+END IF
+failed_vol=.FALSE.
+DO icase=0,2
+  NULLIFY(fluxProc)
+  SELECT CASE(icase)
+  CASE(0)
+    fluxProc => StandardDGFluxVec
+    fluxName = "StandardDGFluxVec"
+  CASE(1)
+    fluxProc => StandardDGFluxDealiasedMetricVec
+    fluxName = "StandardDGFluxDealiasedMetricVec"
+!  CASE(2)
+!    fluxProc => EntropyandKinEnergyConservingFluxVec
+!    fluxName = "EntropyandKinEnergyConservingFluxVec"
+  CASE DEFAULT
+    CYCLE
+  END SELECT
+  !CONSISTENCY
+  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL  & 
+#ifndef CARTESIANFLUX
+                                    ,metricL  &
+#endif          
+                                    ,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefL(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefL /=Fcheck:',i,FrefL(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  CALL fluxProc(   UR,UR,URaux,URaux,metricR  & 
+#ifndef CARTESIANFLUX
+                                    ,metricR  &
+#endif          
+                                    ,Fcheck)
+  DO i=1,PP_nVar
+    absdiff=ABS(FrefR(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'FrefR /=Fcheck:',i,FrefR(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
+    failed_vol=.TRUE.
+  END IF
+  !SYMMETRY
+  CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
+#ifndef CARTESIANFLUX
+                                    ,metricR  &
+#endif
+                                    ,Frefsym)
+  CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
+#ifndef CARTESIANFLUX
+                                    ,metricL  &
+#endif
+                                    ,Fcheck)
+  check=1.0e-12
+  DO i=1,PP_nVar
+    absdiff=ABS(Frefsym(i)-Fcheck(i))
+    IF(absdiff.GT.1.0e-12)THEN
+      WRITE(*,*)'Frefsym /=Fcheck:',i,Frefsym(i),Fcheck(i)
+      check=max(check,absdiff)
+    END IF
+  END DO
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*) "symmetry check for solver "//TRIM(fluxName)//" failed",icase,check
+    failed_vol=.TRUE.
+  END IF
+END DO !iCase
+IF(failed_vol) THEN
+  CALL ABORT(__STAMP__, &
+     "consistency/symmetry check for average volume flux failed")
+END IF !failed
+#endif /*PP_DiscType==2*/
+IF(failed) THEN
+  CALL ABORT(__STAMP__, &
+     "consistency check for riemann solver failed")
+END IF !failed
+WRITE(*,*)'    ...SUCESSFULL.'
+
+END SUBROUTINE CheckFluxes
 
 END MODULE MOD_Equation

@@ -16,7 +16,7 @@ INCLUDE(CMakeDependentOption)
 
 
 # =========================================================================
-# Detect machine environements
+# Detect machine environments
 # =========================================================================
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
@@ -166,7 +166,7 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   ENDIF()
   SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
   IF(FLUXO_EQN_ANISO_HEAT)
-    ADD_DEFINITIONS(-DPP_ANISO_HEAT=T)
+    ADD_DEFINITIONS(-DPP_ANISO_HEAT=1)
   ENDIF()
 ELSE()
   UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd

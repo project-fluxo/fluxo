@@ -62,7 +62,7 @@ SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:U
-USE MOD_Equation_Vars ,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
+USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
 USE MOD_Equation_vars ,ONLY:GLM_ch
@@ -79,7 +79,7 @@ INTEGER,INTENT(IN)                        :: iElem !< current element index in v
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux           !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b)
+REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
@@ -110,13 +110,13 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
             rhov2 =>U(3,PP_IJK,iElem), &
             rhov3 =>U(4,PP_IJK,iElem), &
 #ifdef PP_GLM
-            Etotal=>U(5,PP_IJK,iElem)-0.5*U(9,PP_IJK,iElem)**2, &
+            Etotal=>U(5,PP_IJK,iElem)-0.5*smu_0*U(9,PP_IJK,iElem)**2, &
 #else
             Etotal=>U(5,PP_IJK,iElem), &
-#endif /* PP_GLM */
+#endif /*def PP_GLM*/
             b1    =>U(6,PP_IJK,iElem), &
             b2    =>U(7,PP_IJK,iElem), &
-            b3    =>U(8,PP_IJK,iElem)  )
+            b3    =>U(8,PP_IJK,iElem)  ) 
   ! auxiliary variables
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
@@ -160,15 +160,15 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+GLM_ch*b1*U(9,PP_IJK,iElem)
+  f(5) = f(5)+smu_0*GLM_ch*b1*U(9,PP_IJK,iElem)
   f(6) = f(6)+GLM_ch*U(9,PP_IJK,iElem)
   f(9) = GLM_ch*b1
 
-  g(5) = g(5)+GLM_ch*b2*U(9,PP_IJK,iElem)
+  g(5) = g(5)+smu_0*GLM_ch*b2*U(9,PP_IJK,iElem)
   g(7) = g(7)+GLM_ch*U(9,PP_IJK,iElem)
   g(9) = GLM_ch*b2
 
-  h(5) = h(5)+GLM_ch*b3*U(9,PP_IJK,iElem)
+  h(5) = h(5)+smu_0*GLM_ch*b3*U(9,PP_IJK,iElem)
   h(8) = h(8)+GLM_ch*U(9,PP_IJK,iElem)
   h(9) = GLM_ch*b3
 #endif /* PP_GLM */
@@ -240,11 +240,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   Uaux(7  ,PP_IJK)  =SUM(U(6:8,PP_IJK,iElem)**2)               ! |B|^2
   Uaux(8  ,PP_IJK)  =SUM(Uaux(2:4,PP_IJK)*U(6:8,PP_IJK,iElem)) ! v*B
   !total pressure=gas pressure + magnetic pressure
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*( U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
+  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
 #ifdef PP_GLM
-                                                    +U(9,PP_IJK,iElem)**2 &
+                                              -s2mu_0*U(9,PP_IJK,iElem)**2 &
 #endif /*PP_GLM*/
-                                                   ))-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
+                                                    )-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
@@ -256,7 +256,7 @@ END SUBROUTINE EvalUaux
 !==================================================================================================================================
 !> Computes the standard flux in x-direction for the hyperbolic part ( normally used with a rotated state)
 !==================================================================================================================================
-SUBROUTINE StandardDGFlux(Fstar,UL,UR)
+SUBROUTINE StandardDGFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
@@ -274,14 +274,18 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar !< 1D flux in x direction
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: rhoqL,rhoqR
-REAL                                :: sRho_L,sRho_R,v1_L,v2_L,v3_L,v1_R,v2_R,v3_R,bb2_L,bb2_R,vb_L,vb_R,p_L,p_R
+REAL                                :: sRho_L,sRho_R,v1_L,v2_L,v3_L,v1_R,v2_R,v3_R,bb2_L,bb2_R,vb_L,vb_R,pt_L,pt_R
 !==================================================================================================================================
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>UL(1),  rho_R =>UR(1), &
            rhoU_L =>UL(2), rhoU_R =>UR(2), &
            rhoV_L =>UL(3), rhoV_R =>UR(3), &
            rhoW_L =>UL(4), rhoW_R =>UR(4), &
-           rhoE_L =>UL(5), rhoE_R =>UR(5), &
+#ifdef PP_GLM
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+#else
+              E_L =>UL(5),    E_R =>UR(5), &
+#endif
              b1_L =>UL(6),   b1_R =>UR(6), &
              b2_L =>UL(7),   b2_R =>UR(7), &
              b3_L =>UL(8),   b3_R =>UR(8)  )
@@ -292,8 +296,8 @@ v1_R = sRho_R*rhoU_R;  v2_R = sRho_R*rhoV_R ; v3_R = sRho_R*rhoW_R
 bb2_L  = (b1_L*b1_L+b2_L*b2_L+b3_L*b3_L)
 bb2_R  = (b1_R*b1_R+b2_R*b2_R+b3_R*b3_R)
 
-p_L    = (kappaM1)*(rhoE_L - 0.5*(rhoU_L*v1_L + rhoV_L*v2_L + rhoW_L*v3_L))-kappaM2*s2mu_0*bb2_L
-p_R    = (kappaM1)*(rhoE_R - 0.5*(rhoU_R*v1_R + rhoV_R*v2_R + rhoW_R*v3_R))-kappaM2*s2mu_0*bb2_R
+pt_L    = (kappaM1)*(E_L - 0.5*(rhoU_L*v1_L + rhoV_L*v2_L + rhoW_L*v3_L))-kappaM2*s2mu_0*bb2_L
+pt_R    = (kappaM1)*(E_R - 0.5*(rhoU_R*v1_R + rhoV_R*v2_R + rhoW_R*v3_R))-kappaM2*s2mu_0*bb2_R
 
 vb_L  = v1_L*b1_L+v2_L*b2_L+v3_L*b3_L
 vb_R  = v1_R*b1_R+v2_R*b2_R+v3_R*b3_R
@@ -302,17 +306,17 @@ vb_R  = v1_R*b1_R+v2_R*b2_R+v3_R*b3_R
 rhoqL    = rho_L*v1_L
 rhoqR    = rho_R*v1_R
 Fstar(1) = 0.5*(rhoqL      + rhoqR)
-Fstar(2) = 0.5*(rhoqL*v1_L + rhoqR*v1_R +(p_L + p_R)-smu_0*(b1_L*b1_L+b1_R*b1_R))
-Fstar(3) = 0.5*(rhoqL*v2_L + rhoqR*v2_R             -smu_0*(b2_L*b2_L+b2_R*b2_R))
-Fstar(4) = 0.5*(rhoqL*v3_L + rhoqR*v3_R             -smu_0*(b3_L*b3_L+b3_R*b3_R))
-Fstar(5) = 0.5*((rhoE_L + p_L)*v1_L + (rhoE_R + p_R)*v1_R- smu_0*(b1_L*vb_L+b1_R*vb_R))
+Fstar(2) = 0.5*(rhoqL*v1_L + rhoqR*v1_R +(pt_L + pt_R)-smu_0*(b1_L*b1_L+b1_R*b1_R))
+Fstar(3) = 0.5*(rhoqL*v2_L + rhoqR*v2_R               -smu_0*(b2_L*b1_L+b2_R*b1_R))
+Fstar(4) = 0.5*(rhoqL*v3_L + rhoqR*v3_R               -smu_0*(b3_L*b1_L+b3_R*b1_R))
+Fstar(5) = 0.5*((E_L + pt_L)*v1_L + (E_R + pt_R)*v1_R- smu_0*(b1_L*vb_L+b1_R*vb_R))
 Fstar(6) = 0.
 Fstar(7) = 0.5*(v1_L*b2_L-b1_L*v2_L + v1_R*b2_R-b1_R*v2_R)
 Fstar(8) = 0.5*(v1_L*b3_L-b1_L*v3_L + v1_R*b3_R-b1_R*v3_R)
 #ifdef PP_GLM
-Fstar(5) = Fstar(5)+0.5*GLM_ch*(b1_L*UL(9)+b1_R*UR(9))
-Fstar(6) = Fstar(6)+0.5*GLM_ch*(     UL(9)+     UR(9))
-Fstar(9) =          0.5*GLM_ch*(b1_L      +b1_R      )
+Fstar(5) = Fstar(5)+0.5*smu_0*GLM_ch*(b1_L*UL(9)+b1_R*UR(9))
+Fstar(6) = Fstar(6)+0.5      *GLM_ch*(     UL(9)+     UR(9))
+Fstar(9) =          0.5      *GLM_ch*(b1_L      +b1_R      )
 #endif /* PP_GLM */
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE StandardDGFlux
@@ -368,7 +372,11 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
            rhoW_L =>   UL(4), rhoW_R =>   UR(4), &
-           rhoE_L =>   UL(5), rhoE_R =>   UR(5), &
+#ifdef PP_GLM
+             E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+#else
+             E_L =>UL(5), E_R =>UR(5), &
+#endif
              b1_L =>   UL(6),   b1_R =>   UR(6), &
              b2_L =>   UL(7),   b2_R =>   UR(7), &
              b3_L =>   UL(8),   b3_R =>   UR(8), &
@@ -377,8 +385,8 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
              v2_L =>UauxL(3),   v2_R =>UauxR(3), &
              v3_L =>UauxL(4),   v3_R =>UauxR(4), &
              pt_L =>UauxL(5),   pt_R =>UauxR(5), & !total pressure = gas pressure+magnetic pressure
-           !vv2_L =>UauxL(6),  vv2_R =>UauxR(6), &
-           !bb2_L =>UauxL(7),  bb2_R =>UauxR(7), &
+           ! v2_L =>UauxL(6),   v2_R =>UauxR(6), &
+           ! b2_L =>UauxL(7),   b2_R =>UauxR(7), &
              vb_L =>UauxL(8),   vb_R =>UauxR(8)  )
 
 !without metric dealiasing (=standard DG weak form on curved meshes)
@@ -394,7 +402,7 @@ Fstar(1) = 0.5*( rho_L*qv_L +  rho_R*qv_R )
 Fstar(2) = 0.5*(rhoU_L*qv_L + rhoU_R*qv_R + metric_L(1)*pt_L+metric_R(1)*pt_R -smu_0*(qb_L*b1_L+qb_R*b1_R) )
 Fstar(3) = 0.5*(rhoV_L*qv_L + rhoV_R*qv_R + metric_L(2)*pt_L+metric_R(2)*pt_R -smu_0*(qb_L*b2_L+qb_R*b2_R) )
 Fstar(4) = 0.5*(rhoW_L*qv_L + rhoW_R*qv_R + metric_L(3)*pt_L+metric_R(3)*pt_R -smu_0*(qb_L*b3_L+qb_R*b3_R) )
-Fstar(5) = 0.5*((rhoE_L + pt_L)*qv_L  + (rhoE_R + pt_R)*qv_R      -smu_0*(qb_L*vb_L+qb_R*vb_R) )
+Fstar(5) = 0.5*((E_L + pt_L)*qv_L  + (E_R + pt_R)*qv_R      -smu_0*(qb_L*vb_L+qb_R*vb_R) )
 Fstar(6) = 0.5*(qv_L*b1_L-qb_L*v1_L + qv_R*b1_R-qb_R*v1_R)
 Fstar(7) = 0.5*(qv_L*b2_L-qb_L*v2_L + qv_R*b2_R-qb_R*v2_R)
 Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)
@@ -464,7 +472,11 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
            rhoW_L =>   UL(4), rhoW_R =>   UR(4), &
-           rhoE_L =>   UL(5), rhoE_R =>   UR(5), &
+#ifdef PP_GLM
+             E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+#else
+             E_L =>UL(5), E_R =>UR(5), &
+#endif
              b1_L =>   UL(6),   b1_R =>   UR(6), &
              b2_L =>   UL(7),   b2_R =>   UR(7), &
              b3_L =>   UL(8),   b3_R =>   UR(8), &
@@ -488,7 +500,7 @@ Fstar(1) = 0.5*( rho_L*qv_L +  rho_R*qv_R )
 Fstar(2) = 0.5*(rhoU_L*qv_L + rhoU_R*qv_R + metric(1)*(pt_L+pt_R) -smu_0*(qb_L*b1_L+qb_R*b1_R) )
 Fstar(3) = 0.5*(rhoV_L*qv_L + rhoV_R*qv_R + metric(2)*(pt_L+pt_R) -smu_0*(qb_L*b2_L+qb_R*b2_R) )
 Fstar(4) = 0.5*(rhoW_L*qv_L + rhoW_R*qv_R + metric(3)*(pt_L+pt_R) -smu_0*(qb_L*b3_L+qb_R*b3_R) )
-Fstar(5) = 0.5*((rhoE_L + pt_L)*qv_L  + (rhoE_R + pt_R)*qv_R      -smu_0*(qb_L*vb_L+qb_R*vb_R) )
+Fstar(5) = 0.5*((E_L + pt_L)*qv_L  + (E_R + pt_R)*qv_R      -smu_0*(qb_L*vb_L+qb_R*vb_R) )
 Fstar(6) = 0.5*(qv_L*b1_L-qb_L*v1_L + qv_R*b1_R-qb_R*v1_R)
 Fstar(7) = 0.5*(qv_L*b2_L-qb_L*v2_L + qv_R*b2_R-qb_R*v2_R)
 Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)

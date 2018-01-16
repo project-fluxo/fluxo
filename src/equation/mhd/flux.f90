@@ -146,8 +146,8 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   vb   = (b1*v1+b2*v2+b3*v3)
   !p = ptilde (includes magnetic pressure)
 #ifdef PP_GLM
-  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)+psi*psi))-KappaM2*s2mu_0*bb2
-  Ep   = (Etotal-0.5*psi*psi + p)
+  p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)+smu_0*psi*psi))-KappaM2*s2mu_0*bb2
+  Ep   = (Etotal-0.5*smu_0*psi*psi + p)
 #else
   p    = kappaM1*(Etotal-0.5*(rho*(v1*v1+v2*v2+v3*v3)))-KappaM2*s2mu_0*bb2
   Ep   = (Etotal + p)
@@ -182,15 +182,15 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+GLM_ch*b1*U(9,PP_IJK,iElem)
+  f(5) = f(5)+smu_0*GLM_ch*b1*U(9,PP_IJK,iElem)
   f(6) = f(6)+GLM_ch   *U(9,PP_IJK,iElem)
   f(9) =      GLM_ch*b1
 
-  g(5) = g(5)+GLM_ch*b2*U(9,PP_IJK,iElem)
+  g(5) = g(5)+smu_0*GLM_ch*b2*U(9,PP_IJK,iElem)
   g(7) = g(7)+GLM_ch   *U(9,PP_IJK,iElem)
   g(9) =      GLM_ch*b2
 
-  h(5) = h(5)+GLM_ch*b3*U(9,PP_IJK,iElem)
+  h(5) = h(5)+smu_0*GLM_ch*b3*U(9,PP_IJK,iElem)
   h(8) = h(8)+GLM_ch   *U(9,PP_IJK,iElem)
   h(9) =      GLM_ch*b3
 #endif /* PP_GLM */
@@ -227,14 +227,14 @@ ASSOCIATE( gradPsix => gradUx(9,PP_IJK,iElem), &
            gradPsiy => gradUy(9,PP_IJK,iElem), & 
            gradPsiz => gradUz(9,PP_IJK,iElem))
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
-                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
   gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
-                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
-                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
 END ASSOCIATE
 #else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
@@ -367,7 +367,7 @@ ASSOCIATE( b1 => U_Face(6), &
            b2 => U_Face(7), &
            b3 => U_Face(8), &
 #ifdef PP_GLM
-           Etotal => U_Face(5)-0.5*U_Face(9)**2  &
+           Etotal => U_Face(5)-0.5*smu_0*U_Face(9)**2  &
 #else
            Etotal => U_Face(5)  &
 #endif
@@ -384,7 +384,7 @@ F_Face(6)=0.
 F_Face(7)=v1*b2-b1*v2
 F_Face(8)=v1*b3-b1*v3
 #ifdef PP_GLM
-F_Face(5)=F_Face(5)+GLM_ch*b1*U_Face(9)
+F_Face(5)=F_Face(5)+smu_0*GLM_ch*b1*U_Face(9)
 F_Face(6)=F_Face(6)+GLM_ch   *U_Face(9)
 F_Face(9)=          GLM_ch*b1
 #endif /* PP_GLM */
@@ -477,14 +477,14 @@ ASSOCIATE( Psi =>U_Face(9,i), &
            gradPsiy => gradUy_Face(9,i), & 
            gradPsiz => gradUz_Face(9,i))
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
-                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx_Face(1,i))
+                  -srho*smu_0*((b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUx_Face(1,i))
   gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
-                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy_Face(1,i))
+                  -srho*smu_0*((b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUy_Face(1,i))
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
-                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz_Face(1,i))
+                  -srho*smu_0*((b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUz_Face(1,i))
 END ASSOCIATE
 #else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
@@ -659,14 +659,14 @@ ASSOCIATE( Psi =>U(9,PP_IJK,iElem), &
            gradPsiy => gradUy(9,PP_IJK,iElem), & 
            gradPsiz => gradUz(9,PP_IJK,iElem))
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 
-                  -srho*(smu_0*(b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1x+b2*gradB2x+b3*gradB3x)+Psi*gradPsix     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUx(1,PP_IJK,iElem))
   gradTy  = gradey           -(v1*gradv1y+v2*gradv2y+v3*gradv3y)    &
-                  -srho*(smu_0*(b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1y+b2*gradB2y+b3*gradB3y)+Psi*gradPsiy     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUy(1,PP_IJK,iElem))
   gradTz  = gradez           -(v1*gradv1z+v2*gradv2z+v3*gradv3z)    &
-                  -srho*(smu_0*(b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
-                               -0.5*(smu_0*bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
+                  -srho*smu_0*((b1*gradB1z+b2*gradB2z+b3*gradB3z)+Psi*gradPsiz     &
+                               -0.5*(bb2+Psi*Psi)*sRho*gradUz(1,PP_IJK,iElem))
 END ASSOCIATE
 #else
   gradTx  = gradex           -(v1*gradv1x+v2*gradv2x+v3*gradv3x)    &  !=cv*gradT 

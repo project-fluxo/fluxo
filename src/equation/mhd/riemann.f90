@@ -67,7 +67,6 @@ SUBROUTINE Riemann(F,UL,UR,                                                     
                    nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
-USE MOD_Equation_vars,ONLY: ConsToPrim,PrimToCons
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif
@@ -94,8 +93,6 @@ REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 ! LOCAL VARIABLES
 REAL             :: ConsL(1:PP_nVar)
 REAL             :: ConsR(1:PP_nVar)
-REAL             :: PrimL(1:PP_nVar)
-REAL             :: PrimR(1:PP_nVar)
 #if PARABOLIC
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N) :: k_L,g_L,j_L,k_R,g_R,j_R
 INTEGER          :: iVar
@@ -121,11 +118,8 @@ DO j = 0,PP_N
     ConsR(7) = SUM(UR(6:8,i,j)*t1(:,i,j))
     ConsR(8) = SUM(UR(6:8,i,j)*t2(:,i,j))
 
-    CALL ConsToPrim(PrimL(:),ConsL(:))
-    CALL ConsToPrim(PrimR(:),ConsR(:))
 
-
-    CALL SolveRiemannProblem(ConsL(:),ConsR(:),PrimL(:),PrimR(:),F(:,i,j))
+    CALL SolveRiemannProblem(ConsL(:),ConsR(:),F(:,i,j))
 
     ! Back Rotate the normal flux into Cartesian direction
     F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
@@ -158,18 +152,17 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> Lax-friedrichs / rusanov flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,PrimL,PrimR,Flux)
+SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
+USE MOD_Equation_vars, ONLY: ConsToPrim
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state  
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
-REAL,INTENT(IN)  :: PrimL(1:PP_nVar) !<  left primitive state
-REAL,INTENT(IN)  :: PrimR(1:PP_nVar) !< right primitive state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
@@ -177,6 +170,7 @@ REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
 ! LOCAL VARIABLES                                                                                                               !
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL             :: FluxL(1:PP_nVar), FluxR(1:PP_nVar)
+REAL             :: PrimL(1:PP_nVar), PrimR(1:PP_nVar) !< left/right primitive state
 REAL             :: LambdaMax
 REAL             :: cf_L 
 REAL             :: cf_R 
@@ -184,6 +178,8 @@ REAL             :: cf_R
 
 CALL EvalAdvectionFlux1D(ConsL(1:PP_nVar),FluxL(1:PP_nVar))
 CALL EvalAdvectionFlux1D(ConsR(1:PP_nVar),FluxR(1:PP_nVar))
+CALL ConsToPrim(PrimL(:),ConsL(:))
+CALL ConsToPrim(PrimR(:),ConsR(:))
 CALL FastestWave1D(PrimL(1:PP_nVar),cf_L)
 CALL FastestWave1D(PrimR(1:PP_nVar),cf_R)
 
@@ -197,19 +193,18 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,PrimL,PrimR,Flux)
+SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
 USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
+USE MOD_Equation_vars, ONLY: ConsToPrim
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state  
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
-REAL,INTENT(IN)  :: PrimL(1:PP_nVar) !<  left primitive state
-REAL,INTENT(IN)  :: PrimR(1:PP_nVar) !< right primitive state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
@@ -217,10 +212,13 @@ REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
 ! LOCAL VARIABLES                                                                                                               !
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL             :: FluxL(1:PP_nVar), FluxR(1:PP_nVar)
+REAL             :: PrimL(1:PP_nVar), PrimR(1:PP_nVar) !< left/right primitive state
 REAL             :: SL, SR
 REAL             :: cf_L,cf_R,cf_Roe,RoeVelx 
 !==================================================================================================================================
 
+CALL ConsToPrim(PrimL(:),ConsL(:))
+CALL ConsToPrim(PrimR(:),ConsR(:))
 
 CALL FastestWave1D(PrimL,cf_L)
 CALL FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
@@ -252,12 +250,16 @@ END SUBROUTINE RiemannSolverByHLL
 !==================================================================================================================================
 !> HLLC solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,PrimL,PrimR,Flux)
+SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
 USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
 USE MOD_Equation_vars, ONLY: smu_0,s2mu_0
+USE MOD_Equation_vars, ONLY: ConsToPrim
+#ifdef PP_GLM
+USE MOD_Equation_vars, ONLY: GLM_ch
+#endif /*PP_GLM*/
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -266,8 +268,6 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state  
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
-REAL,INTENT(IN)  :: PrimL(1:PP_nVar) !<  left primitive state
-REAL,INTENT(IN)  :: PrimR(1:PP_nVar) !< right primitive state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
@@ -275,6 +275,7 @@ REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
 ! LOCAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL             :: FluxL(PP_nVar), FluxR(PP_nVar)
+REAL             :: PrimL(1:PP_nVar), PrimR(1:PP_nVar) !< left/right primitive state
 REAL             :: U_HLL(PP_nVar)
 REAL             :: U_star_L(PP_nVar), U_star_R(PP_nVar)
 REAL             :: SL, SR, SM, s_SL_SM, s_SR_SM
@@ -286,6 +287,8 @@ REAL             :: vx_L, vx_R
 REAL             :: Bx_L, Bx_R
 REAL             :: cf_L,cf_R,cf_Roe,RoeVelx 
 !==================================================================================================================================
+CALL ConsToPrim(PrimL(:),ConsL(:))
+CALL ConsToPrim(PrimR(:),ConsR(:))
 
 
 !--------------------------------------------------------------------------------
@@ -336,7 +339,11 @@ Bx_star  = U_HLL(6)
 By_star  = U_HLL(7)
 Bz_star  = U_HLL(8)
 p_star   = ptot_L + rho_L*(vx_L-SL)*(vx_L-SM)-s2mu_0*(Bx_L*Bx_L-Bx_star*Bx_star)
-E_star   = p_star*SM - smu_0*Bx_star*SUM(U_HLL(6:8)*U_HLL(2:4))*sRho_HLL
+E_star   = p_star*SM + smu_0*(-Bx_star*SUM(U_HLL(6:8)*U_HLL(2:4))*sRho_HLL  &
+#ifdef PP_GLM
+                              +U_HLL(9)*(GLM_ch*Bx_star-0.5*U_HLL(9)*SM  )&
+#endif /* PP_GLM */
+                             )
 
 
 !-------------------------------------------------
@@ -348,7 +355,7 @@ IF ((SL .LE. 0.0) .AND. (0.0 .LT. SM)) THEN
   U_star_L(2) = U_star_L(1)*SM
   U_star_L(3) = (ConsL(3)*SL-FluxL(3) -smu_0*Bx_star*By_star)*s_SL_SM
   U_star_L(4) = (ConsL(4)*SL-FluxL(4) -smu_0*Bx_star*Bz_star)*s_SL_SM
-  U_star_L(5) = (E_star + ConsL(5)*SL-FluxL(5) )*s_SL_SM
+  U_star_L(5) = (E_star+ ConsL(5)*SL-FluxL(5) )*s_SL_SM
   U_star_L(6) = Bx_star 
   U_star_L(7) = By_star
   U_star_L(8) = Bz_star
@@ -383,19 +390,18 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and 
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,PrimL_in,PrimR_in,Flux)
+SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
 USE MOD_Equation_vars, ONLY: PrimToCons
+USE MOD_Equation_vars, ONLY: ConsToPrim
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: ConsL_in(1:PP_nVar) !<  left conservative state ,not used here 
 REAL,INTENT(IN)  :: ConsR_in(1:PP_nVar) !< right conservative state ,not used here
-REAL,INTENT(IN)  :: PrimL_in(1:PP_nVar) !<  left primitive state
-REAL,INTENT(IN)  :: PrimR_in(1:PP_nVar) !< right primitive state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
@@ -426,9 +432,9 @@ REAL,DIMENSION(1:PP_nVar)  :: U_RS, U_RSS
 REAL, PARAMETER      :: hlld_eps = 1.0e-8
 REAL, PARAMETER      :: hlld_small_eps = 1.0e-12
 !==================================================================================================================================
+CALL ConsToPrim(PrimL(:),ConsL_in(:))
+CALL ConsToPrim(PrimR(:),ConsR_in(:))
 ! make B_n continuous 
-PrimL=PrimL_in
-PrimR=PrimR_in
 Bn=0.5*(PrimL(6)+PrimR(6))
 PrimR(6)=Bn
 
@@ -636,19 +642,18 @@ END SUBROUTINE EvalHLLState
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,PrimL,PrimR,Flux)
+SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: WaveSpeeds1D
 USE MOD_Equation_vars, ONLY: Kappa,KappaM1,KappaM2,sKappaM1,smu_0,s2mu_0
+USE MOD_Equation_vars, ONLY: ConsToPrim
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state  
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
-REAL,INTENT(IN)  :: PrimL(1:PP_nVar) !<  left primitive state
-REAL,INTENT(IN)  :: PrimR(1:PP_nVar) !< right primitive state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
@@ -657,6 +662,7 @@ REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 INTEGER          :: i
 REAL             :: FluxL(PP_nVar), FluxR(PP_nVar)
+REAL             :: PrimL(PP_nVar), PrimR(PP_nVar)
 REAL             :: ptot_L, ptot_R
 REAL             :: SqrtRho_L,SqrtRho_R,sSqrtRoe_LR
 REAL             :: Roe_L,Roe_R
@@ -673,6 +679,8 @@ REAL             :: efix_delta,sefix_delta
 efix_delta=1.0E-06
 sefix_delta=1.0E+06
 
+CALL ConsToPrim(PrimL(:),ConsL(:))
+CALL ConsToPrim(PrimR(:),ConsR(:))
 !--------------------------------------------------------------------------------
 !use Roe mean wavespeeds from  Roe meanvalues 
 !   (paper by Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997)
@@ -893,23 +901,6 @@ DO i=1,7
   Flux(1:8)=Flux(1:8) - eta(i)*ABS(lambda(i))*EVr(1:8,i)
 END DO
 Flux(:)=0.5*Flux(:)
-
-
-!IF(SUM(ABS(Flux)).NE.SUM(ABS(Flux))) THEN
-!  WRITE(*,*)'Roe Flux is NAN !!',Flux(:)
-!  WRITE(*,*)'Rho_Roe=',Rho_Roe
-!  WRITE(*,*)'cs_Roe =',cs_Roe
-!  WRITE(*,*)'c_Roe  =',c_Roe
-!  DO i=1,7
-!    WRITE(*,*)'i         =',i
-!    WRITE(*,*)'eta(i)    =',eta(i)
-!    WRITE(*,*)'lambda(i) =',lambda(i)
-!  END DO
-!  STOP
-!END IF
-
-  
-
 
 END SUBROUTINE RiemannSolverByRoe
 

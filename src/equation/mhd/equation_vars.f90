@@ -41,8 +41,9 @@ REAL                :: etasmu_0         !< =eta/mu0
 REAL                :: Pr               !< Prandtl number
 REAL                :: KappasPr         !< =kappa/Pr
 REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
+REAL                :: R                !< Gas constant
 #  ifdef PP_ANISO_HEAT
-REAL                :: kperp            !< perpendicular  (to magnetic field)heat diffusion coefficient
+REAL                :: kperp            !< perpendicular (to magnetic field) heat diffusion coefficient
 REAL                :: kpar             !< parallel (to magnetic field) heat diffusion coeffcient 
 #  endif /*PP_ANISO_HEAT*/             
 #endif /*PARABOLIC*/                   
@@ -67,7 +68,7 @@ REAL                :: GLM_dtch1        !< timestep for ch=1 (initialized in cal
 REAL                :: GLM_ch           !< Divergence correction speed
 REAL                :: GLM_scale        !< scaling of maximum divergence speed (timestep security)
 REAL                :: GLM_scr          !< 1/cr. damping of divergence error, factor chi=ch^2/cp^2,cr=cp^2/ch~0.18,chi=1/cr
-LOGICAL           :: divBSource         !< switch for adding source terms depending on diverngece errors
+LOGICAL             :: divBSource       !< switch for adding source terms depending on diverngece errors
 #endif /*PP_GLM*/
 
 
@@ -127,6 +128,14 @@ END INTERFACE
 !  MODULE PROCEDURE PrimToConsVec
 !END INTERFACE
 
+INTERFACE ConsToEntropy
+  MODULE PROCEDURE ConsToEntropy
+END INTERFACE
+
+!INTERFACE ConsToEntropyVec
+!  MODULE PROCEDURE ConsToEntropyVec
+!END INTERFACE
+
 INTERFACE WaveSpeeds1D
   MODULE PROCEDURE WaveSpeeds1D
 END INTERFACE
@@ -169,7 +178,7 @@ prim(1)=cons(1)
 prim(2:4)=cons(2:4)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
 #ifdef PP_GLM
-prim(5)=KappaM1*(cons(5)-0.5*(SUM(cons(2:4)*prim(2:4))+cons(9)*cons(9))-s2mu_0*SUM(cons(6:8)*cons(6:8)) )
+prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*(SUM(cons(6:8)*cons(6:8))+cons(9)*cons(9)))
 #else
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*SUM(cons(6:8)*cons(6:8)))
 #endif /*PP_GLM*/
@@ -200,7 +209,7 @@ cons(1)=prim(1)
 cons(2:4)=prim(2:4)*prim(1)
 ! total energy
 #ifdef PP_GLM
-cons(5)=sKappaM1*prim(5)+0.5*(SUM(cons(2:4)*prim(2:4))+prim(9)*prim(9))+s2mu_0*SUM(prim(6:8)*prim(6:8))
+cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*(SUM(prim(6:8)*prim(6:8))+prim(9)*prim(9))
 #else
 cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*SUM(prim(6:8)*prim(6:8))
 #endif /*PP_GLM*/
@@ -254,6 +263,64 @@ DO i=1,dim2
 END DO!i
 END SUBROUTINE PrimToConsVec
 
+
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables a la Ismail and Roe
+!==================================================================================================================================
+FUNCTION ConsToEntropy(cons) RESULT(Entropy)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: p,v(3),v2,beta2
+!==================================================================================================================================
+v(:)  = cons(2:4)/cons(1)
+v2=SUM(v*v)
+#ifdef PP_GLM
+p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
+#else
+p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:8)*cons(6:8)))
+#endif /*PP_GLM*/
+!s     = LOG(p) - kappa*LOG(cons(1))
+beta2 = cons(1)/p !/2
+
+! Convert to entropy variables
+entropy(1)   =  (kappa*(1.0+LOG(cons(1)))-LOG(p))*skappaM1 - 0.5*beta2*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(2:4) =  beta2*v(:)                         ! 2*beta*v
+entropy(5)   = -beta2                              !-2*beta
+entropy(6:PP_nVar) =  beta2*cons(6:PP_nVar)        ! 2*beta*B
+                                                   ! 2*beta*psi
+
+END FUNCTION ConsToEntropy
+
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables
+!==================================================================================================================================
+FUNCTION ConsToEntropyVec(dim2,cons) RESULT(Entropy)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: Entropy(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  Entropy(:,i)=ConsToEntropy(Cons(:,i))
+END DO!i
+END FUNCTION ConsToEntropyVec
 
 !==================================================================================================================================
 !> calculate all wave speeds 

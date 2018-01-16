@@ -83,6 +83,10 @@ INTERFACE CreateErrFile
   MODULE PROCEDURE CreateErrFile
 END INTERFACE CreateErrFile
 
+INTERFACE NORMALIZE
+  MODULE PROCEDURE NORMALIZE
+END INTERFACE NORMALIZE
+
 INTERFACE CROSS
   MODULE PROCEDURE CROSS
 END INTERFACE CROSS
@@ -324,6 +328,24 @@ IF(connected)THEN
   END DO
 END IF
 END FUNCTION GETFREEUNIT
+
+
+
+!==================================================================================================================================
+!> computes the cross product of to 3 dimensional vectpors: cross=v1 x v2
+!==================================================================================================================================
+PURE FUNCTION NORMALIZE(v1)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN) :: v1(3)    !< input vector
+REAL            :: NORMALIZE(3) !< cross product of vectors
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+NORMALIZE=v1/SQRT(SUM(v1*v1))
+END FUNCTION NORMALIZE
 
 
 !==================================================================================================================================
