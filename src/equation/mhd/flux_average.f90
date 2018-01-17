@@ -617,6 +617,8 @@ Fstar(8) = vAvg(1)*Bavg(3) - BAvg(1)*vAvg(3)
 #ifdef PP_GLM
 Fstar(6) = GLM_ch*psiAvg
 Fstar(9) = GLM_ch*BAvg(1)
+#else
+Fstar(6) =0.
 #endif
 
 Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R))  &
