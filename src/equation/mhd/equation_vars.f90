@@ -28,6 +28,7 @@ LOGICAL             :: doCalcSource      !< logical to define if a source term (
 INTEGER             :: IniExactFunc      !< Exact Function for initialization
 INTEGER             :: IniRefState       !< RefState for initialization (case IniExactFunc=1 only)
 INTEGER,PARAMETER   :: nAuxVar=8         !< number of auxiliary variables for average flux
+INTEGER             :: nRefState         !< number of RefState in inifile
 REAL,ALLOCATABLE    :: RefStatePrim(:,:) !< primitive reference states
 REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 ! Boundary condition arrays

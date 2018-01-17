@@ -132,7 +132,7 @@ USE MOD_Flux_Average
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i,iSide
-INTEGER :: MaxBCState,locType,locState,nRefState
+INTEGER :: MaxBCState,locType,locState
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -334,7 +334,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState,nRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
@@ -861,6 +861,15 @@ CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0),
   Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
   
   CALL PrimToCons(Prim,Resu)
+CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplitude, radius=IniHalfwidth 
+  IF(nRefState.LT.2) CALL abort(__STAMP__, &
+         ' 2 states needed for case 201')
+  r=SQRT(SUM((x-IniCenter(:))**2))
+  a=EXP(5.*(r-IniHalfwidth)/IniAmplitude)
+  a=a/(a+1.)
+  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  CALL PrimToCons(Prim,Resu)
+
 CASE(311) ! Orzsag-Tang vortex
   prim    = 0.
   prim(1) = 1.
