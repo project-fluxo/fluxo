@@ -1,5 +1,19 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#==================================================================================================================================
+# Copyright (c) 2016 - 2017 Gregor Gassner
+# Copyright (c) 2016 - 2017 Florian Hindenlang
+# Copyright (c) 2016 - 2017 Andrew Winters
+#
+# This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 
+# of the License, or (at your option) any later version.
+#
+# FLUXO is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+#
+# You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
+#==================================================================================================================================
 
 import os
 import sys
@@ -24,7 +38,7 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
    cmd=cmd+" "+exec_path.strip()+" "+prm_path.strip()
    if log :
       #log_path = os.path.splitext(os.path.basename(prm_path))[0] + ".log"
-      log_path = "log."+projectname
+      log_path = "log_"+projectname+".txt"
       plines = open(prm_path, 'r').readlines()
       logf = open(log_path, 'w')
       for pline in plines :

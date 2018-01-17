@@ -46,7 +46,7 @@ USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLift
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
-!REAL                    :: Time                              !< Used to measure simulation time
+REAL                    :: Time                              !< Used to measure simulation time
 !!==================================================================================================================================
 CALL InitMPI()
 CALL ParseCommandlineArguments()

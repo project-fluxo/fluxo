@@ -1,5 +1,5 @@
 ## Build the Meshes
-You need to have the current hopr (https://fhinde@bitbucket.org/fhinde/hopr.git) installed to build theses meshes!
+You need to have the most current hopr (https://github.com/fhindenlang/hopr.git) installed to build theses meshes!
 
 | Parameterfile                             | Element with mapping      | Boundary Conditions | Description                             :|
 |:-----------------------------------------:|:-------------------------:|:-------------------:|:----------------------------------------:|
