@@ -27,13 +27,14 @@ INTERFACE EvalFluxTilde3D
   MODULE PROCEDURE EvalFluxTilde3D
 END INTERFACE
 
-
 #if PARABOLIC
 INTERFACE EvalDiffFluxTilde3D
   MODULE PROCEDURE EvalDiffFluxTilde3D
 END INTERFACE
+#endif /*PARABOLIC*/
 
 PUBLIC::EvalFluxTilde3D
+#if PARABOLIC
 PUBLIC::EvalDiffFluxTilde3D
 #endif /*PARABOLIC*/
 !==================================================================================================================================
