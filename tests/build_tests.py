@@ -228,8 +228,8 @@ parser.add_argument('-p','--procs',type=int,default=1, help='    number of proce
 parser.add_argument('-withmpi', type=int, default=1,   help="1 : DEFAULT ,compile with mpi\n"
                                                             "0 : compile without mpi  ")
 
-parser.add_argument('-buildhdf5', type=int, default=1, help="1 : DEFAULT, build hdf5 locally,\n"
-                                                            "0 : use external hdf5 (modules)")
+parser.add_argument('-buildhdf5', type=int, default=0, help="0 : DEFAULT, use external hdf5 (modules),\n"
+                                                            "1 : build hdf5 locally")
 
 parser.add_argument('-hostname', type=str, default="", help="    cmake hostname, only needed if compiling on a cluster" )
 
@@ -386,6 +386,22 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+   pname="build_linadv_type1_GL_nopara"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Debug"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
