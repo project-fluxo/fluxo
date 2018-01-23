@@ -124,8 +124,7 @@ short_runs_linadv:
   script: 
     - cd tests; pwd
     -  
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199 
-    - else python build_tests.py -p 2 -stage 2 -case 101;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199 ; else python build_tests.py -p 2 -stage 2 -case 101 ;  fi
   after_script:
     - pwd 
   artifacts:
