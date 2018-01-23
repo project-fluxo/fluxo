@@ -34,7 +34,7 @@ build_linadv:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 100-199 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199 ; else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 101;  fi
   after_script:
     - pwd 
   artifacts:
@@ -53,7 +53,7 @@ build_maxwell:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 200-299 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 200-299 ; else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 201;  fi
   after_script:
     - pwd 
   artifacts:
@@ -72,7 +72,7 @@ build_mhd:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 300-399 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 300-399 ; else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 301;  fi
   after_script:
     - pwd 
   artifacts:
@@ -91,7 +91,7 @@ build_nav-st:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 4 -stage 0 -buildhdf5 0 -case 400-499 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 400-499 ; else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401;  fi
   after_script:
     - pwd 
   artifacts:
@@ -112,7 +112,7 @@ short_runs_linadv:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 2 -stage 2 -case 100-199 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 100-199 ; else python build_tests.py -p 2 -stage 2 -case 101;  fi
   after_script:
     - pwd 
   artifacts:
@@ -132,7 +132,7 @@ short_runs_mhd:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 2 -stage 2 -case 300-399 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 300-399 ; else python build_tests.py -p 2 -stage 2 -case 301;  fi
   after_script:
     - pwd 
   artifacts:
@@ -151,7 +151,7 @@ short_runs_nav-st:
     - . ~/environments/modules_for_fluxo_intel
   script: 
     - cd tests; pwd
-    - python build_tests.py -p 2 -stage 2 -case 400-499 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 400-499 ; else python build_tests.py -p 2 -stage 2 -case 401;  fi
   after_script:
     - pwd 
   artifacts:
