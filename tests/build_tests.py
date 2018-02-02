@@ -168,7 +168,7 @@ def test_fluxo( buildopts=None , case=0, project="test" , ntail = 0 ,
            return False
      
         projectname = read_prm(run_test[1],'ProjectName')
-        projectnamex=("%s_%d_%s" % (projectname,case,project))
+        projectnamex=("%d_%s_%s" % (case,project,projectname))
         success = False
         try :
            [L2,Linf,PID] = execute(cwd+"/"+builddir+"/bin/fluxo", run_test[1], projectnamex,\
@@ -506,6 +506,10 @@ baseopts=[
 # relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
 TEST.extend(["freestream","parameter_freestream_mhd.ini", "1.0e-10" ])
+TEST_NONCONS=[]
+TEST_NONCONS.extend(["freestream","parameter_freestream_mhd_nomortar.ini", "1.0e-10" ]) # for noncons=ON, mortar not yet working!!!
+TEST_CART=[]
+TEST_CART.extend(["freestream","parameter_freestream_mhd_cart.ini", "1.0e-10" ]) # for cartesian flux =ON 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -585,7 +589,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+                          stage=args.stage , run_test=TEST_NONCONS , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -705,7 +709,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+                          stage=args.stage , run_test=TEST_NONCONS , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -718,7 +722,7 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_DISCTYPE"         ,"2"
             ,"FLUXO_EQN_GLM"          ,"OFF"
             ,"FLUXO_EQN_NONCONS"      ,"ON"
-            ,"FLUXO_DISC_CARTESIANFLUX","ON"           #=> runtest off
+            ,"FLUXO_DISC_CARTESIANFLUX","ON" 
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
@@ -726,7 +730,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=None , mpi_procs = args.procs , err=builderr )
+                          stage=args.stage , run_test=TEST_CART , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -742,6 +746,8 @@ baseopts=[
 # relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
 TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-10" ])
+TEST_CART=[]
+TEST_CART.extend(["freestream","parameter_freestream_navierstokes_cart.ini", "1.0e-10" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -875,14 +881,14 @@ if(cases[0]==0 or (caseID in cases)) :
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
             ,"FLUXO_DISCTYPE"         ,"2"
-            ,"FLUXO_DISC_CARTESIANFLUX","ON"           #=> runtest off
+            ,"FLUXO_DISC_CARTESIANFLUX","ON"        
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"OFF"
             ,"FLUXO_TESTCASE"         ,"default"
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage, run_test=None , mpi_procs = args.procs , err=builderr )
+                          stage=args.stage, run_test=TEST_CART , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :

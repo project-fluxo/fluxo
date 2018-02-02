@@ -206,28 +206,35 @@ REAL,INTENT(OUT)   :: sVdm_Leg(0:N_In,0:N_In) !< Vandermonde from nodal basis to
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: i,j
+INTEGER            :: Ngauss
 REAL               :: dummy
 REAL               :: wBary_Loc(0:N_In)
-REAL               :: xGauss(0:N_In),wGauss(0:N_In)
+REAL,ALLOCATABLE   :: xGauss(:),wGauss(:),Vdm_Leg_GP_T(:,:),Vdm_GP_gauss(:,:)
+!REAL               :: xGauss(0:Ngauss),wGauss(0:Ngauss)
+!REAL               :: Vdm_Leg_GP_T(0:N_In,0:Ngauss)
+!REAL               :: Vdm_GP_gauss(0:Ngauss,0:N_In)
 !==================================================================================================================================
 ! Alternative to matrix inversion: Compute inverse Vandermonde directly
+Ngauss=3*N_in/2+1
+ALLOCATE(xGauss(0:Ngauss),wGauss(0:Ngauss),Vdm_Leg_GP_T(0:N_In,0:Ngauss),Vdm_GP_gauss(0:Ngauss,0:N_In))
 
 CALL BarycentricWeights(N_In,xi_in,wBary_loc)
 ! Compute first the inverse (by projection)
-CALL LegendreGaussNodesAndWeights(N_In,xGauss,wGauss)
+CALL LegendreGaussNodesAndWeights(Ngauss,xGauss,wGauss)
 !Vandermonde on xGauss
-DO i=0,N_In
+DO i=0,Ngauss
   DO j=0,N_In
-    CALL LegendrePolynomialAndDerivative(j,xGauss(i),Vdm_Leg(i,j),dummy)
+    CALL LegendrePolynomialAndDerivative(j,xGauss(i),Vdm_Leg_GP_T(j,i),dummy)
   END DO !i
 END DO !j
-Vdm_Leg=TRANSPOSE(Vdm_Leg)
-DO j=0,N_In
-  Vdm_Leg(:,j)=Vdm_Leg(:,j)*wGauss(j)
+DO i=0,Ngauss
+  Vdm_Leg_GP_T(:,i)=Vdm_Leg_GP_T(:,i)*wGauss(i)
 END DO
 !evaluate nodal basis (depends on NodeType, for Gauss: unity matrix)
-CALL InitializeVandermonde(N_In,N_In,wBary_Loc,xi_In,xGauss,sVdm_Leg)
-sVdm_Leg=MATMUL(Vdm_Leg,sVdm_Leg)
+CALL InitializeVandermonde(N_In,Ngauss,wBary_Loc,xi_In,xGauss,Vdm_GP_gauss)
+sVdm_Leg=MATMUL(Vdm_Leg_GP_T,Vdm_GP_gauss)
+
+DEALLOCATE(xGauss,wGauss,Vdm_Leg_GP_T,Vdm_GP_gauss)
 
 !compute the Vandermonde on xGP (Depends on NodeType)
 DO i=0,N_In; DO j=0,N_In
@@ -238,8 +245,8 @@ END DO; END DO !j
 !sVdm_Leg=INV(Vdm_Leg)
 !check (Vdm_Leg)^(-1)*Vdm_Leg := I
 
-dummy=ABS(SUM(ABS(MATMUL(sVdm_Leg,Vdm_Leg)))/(N_In+1.)-1.)
-IF(dummy.GT.10.*PP_RealTolerance) CALL abort(__STAMP__,&
+dummy=ABS(SUM(ABS(MATMUL(sVdm_Leg,Vdm_Leg)))/REAL(N_In+1)-1.)
+IF(dummy.GT.100.*PP_RealTolerance) CALL abort(__STAMP__,&
                                          'problems in MODAL<->NODAL Vandermonde ',999,dummy)
 END SUBROUTINE buildLegendreVdm
 

@@ -139,6 +139,7 @@ short_runs_linadv:
   <<: *job_def_short_runs_intel
   script: 
     - cd tests; pwd
+    - rm -f freestream/log_1*.txt
     - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}/dirx_1* . 
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 100-199 
     - else python build_tests.py -p 2 -stage 2 -case 101,103 ;  fi
@@ -149,13 +150,14 @@ short_runs_linadv:
     expire_in: 1 hour
     when: on_failure
     paths:
-    - tests/freestream/log_LINADV*.txt
+    - tests/freestream/log_1*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
 short_runs_mhd:
   <<: *job_def_short_runs_intel
   script: 
     - cd tests; pwd
+    - rm -f freestream/log_3*.txt
     - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}/dirx_3* . 
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 300-399 
     - else python build_tests.py -p 2 -stage 2 -case 301,304 ;  fi
@@ -166,13 +168,14 @@ short_runs_mhd:
     expire_in: 1 hour
     when: on_failure
     paths:
-    - tests/freestream/log_MHD*.txt
+    - tests/freestream/log_3*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
 short_runs_nav-st:
   <<: *job_def_short_runs_intel
   script: 
     - cd tests; pwd
+    - rm -f freestream/log_4*.txt
     - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}/dirx_4* . 
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 400-499 
     - else python build_tests.py -p 2 -stage 2 -case 401,403 ;  fi
@@ -183,7 +186,7 @@ short_runs_nav-st:
     expire_in: 1 hour
     when: on_failure
     paths:
-    - tests/freestream/log_NAVIERSTOKES*.txt
+    - tests/freestream/log_4*.txt
 
 # =================================================================================================================================
 # Stage "cleanup"
