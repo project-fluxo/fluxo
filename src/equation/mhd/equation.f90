@@ -879,6 +879,28 @@ CASE(311) ! Orzsag-Tang vortex
   prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
   prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
+CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but rescaled so the runtime is shorter)
+  prim    = 0.
+  prim(1) =  1.
+  prim(2) = -(1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(2))
+  prim(3) =  (1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(1))
+  prim(4) =  0.2*SIN(2.*PP_Pi*x(3))
+  prim(5) =  1./kappa
+  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  CALL PrimToCons(Prim,Resu)
+CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov 
+          ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
+  prim    = 0.
+  prim(1) =  25./(36.*PP_Pi)
+  prim(2) = -SIN(2.*PP_Pi*x(3))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(4) =  SIN(2.*PP_Pi*x(2))
+  prim(5) =  5./(12*PP_Pi)
+  prim(6) = -SIN(2.*PP_Pi*x(3))/SQRT(4.*PP_Pi)
+  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
             ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
