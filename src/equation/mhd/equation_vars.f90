@@ -266,7 +266,7 @@ END SUBROUTINE PrimToConsVec
 
 
 !==================================================================================================================================
-!> Transformation from conservative variables to primitive variables a la Ismail and Roe
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
 FUNCTION ConsToEntropy(cons) RESULT(Entropy)
 ! MODULES
@@ -280,29 +280,28 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: p,v(3),v2,beta2
+REAL                                :: p,v(3),v2,rho_sp,s
 !==================================================================================================================================
-v(:)  = cons(2:4)/cons(1)
-v2=SUM(v*v)
+v(:)   = cons(2:4)/cons(1)
+v2     = SUM(v*v)
 #ifdef PP_GLM
-p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
+p      = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*(SUM(cons(6:8)*cons(6:8)) +cons(9)*cons(9)))
 #else
-p     = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:8)*cons(6:8)))
+p      = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:8)*cons(6:8)))
 #endif /*PP_GLM*/
-!s     = LOG(p) - kappa*LOG(cons(1))
-beta2 = cons(1)/p !/2
+s      = LOG(p) - kappa*LOG(cons(1))
+rho_sp = cons(1)/p
 
 ! Convert to entropy variables
-entropy(1)   =  (kappa*(1.0+LOG(cons(1)))-LOG(p))*skappaM1 - 0.5*beta2*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
-entropy(2:4) =  beta2*v(:)                         ! 2*beta*v
-entropy(5)   = -beta2                              !-2*beta
-entropy(6:PP_nVar) =  beta2*cons(6:PP_nVar)        ! 2*beta*B
-                                                   ! 2*beta*psi
+entropy(1)         =  (kappa-s)*skappaM1 - 0.5*rho_sp*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(2:4)       =  rho_sp*v(:)                  ! 2*beta*v
+entropy(5)         = -rho_sp                       !-2*beta
+entropy(6:PP_nVar) =  rho_sp*cons(6:PP_nVar)       ! 2*beta*B +2*beta*psi
 
 END FUNCTION ConsToEntropy
 
 !==================================================================================================================================
-!> Transformation from conservative variables to primitive variables
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
 FUNCTION ConsToEntropyVec(dim2,cons) RESULT(Entropy)
 ! MODULES

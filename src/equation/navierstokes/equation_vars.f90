@@ -105,6 +105,10 @@ INTERFACE ConsToEntropy
   MODULE PROCEDURE ConsToEntropy
 END INTERFACE
 
+!INTERFACE ConsToEntropyVec
+!  MODULE PROCEDURE ConsToEntropyVec
+!END INTERFACE
+
 #if PARABOLIC
 #if PP_VISC==1
 INTERFACE muSuth
@@ -231,41 +235,56 @@ END FUNCTION SoundSpeed2
 
 
 !==================================================================================================================================
-!> Transformation from conservative variables to primitive variables a la Ismail and Roe
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
-SUBROUTINE ConsToEntropy(entropy,cons)
+FUNCTION ConsToEntropy(cons) RESULT(Entropy)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(5),INTENT(IN)  :: cons    !< vector of conservative variables
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(5),INTENT(OUT) :: entropy !< vector of entropy variables
+REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: sRho ! 1/rho
-REAL                                :: s,p,u,v,w,rho,rho_p
+REAL                                :: v(3),v2,rho_sp,p,s
 !==================================================================================================================================
-! Pull the conservative variables and extra constants
-
-sRho  = 1./cons(1)
-rho   = cons(1)
-u     = cons(2)*sRho
-v     = cons(3)*sRho
-w     = cons(4)*sRho
-p     = KappaM1*(cons(5) - 0.5*rho*(u*u + v*v + w*w))
-s     = LOG(p) - kappa*LOG(rho)
-rho_p = rho/p
+v(:)   = cons(2:4)/cons(1)
+v2     = SUM(v*v)
+p      = KappaM1*(cons(5)-0.5*cons(1)*v2)
+s      = LOG(p) - kappa*LOG(cons(1))
+rho_sp = cons(1)/p   !=2*beta
 
 ! Convert to entropy variables
-entropy(1) =  (kappa-s)/kappaM1 - 0.5*rho_p*(u*u + v*v * w*w)
-entropy(2) =  rho_p*u
-entropy(3) =  rho_p*v
-entropy(4) =  rho_p*w
-entropy(5) = -rho_p
-END SUBROUTINE ConsToEntropy
+entropy(1)   =  (kappa-s)*skappaM1 - 0.5*rho_sp*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(2:4) =  rho_sp*v(:)  ! 2*beta*v
+entropy(5)   = -rho_sp       !-2*beta
+END FUNCTION ConsToEntropy
+
+
+!==================================================================================================================================
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+FUNCTION ConsToEntropyVec(dim2,cons) RESULT(Entropy)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: Entropy(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  Entropy(:,i)=ConsToEntropy(Cons(:,i))
+END DO!i
+END FUNCTION ConsToEntropyVec
 
 
 #if PARABOLIC

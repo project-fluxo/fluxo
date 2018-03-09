@@ -126,7 +126,7 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"Entropy"'
     A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"EntropyVar_Ut"'
+    A2F_VarNames(A2F_iVar)='"dSdU_Ut"'
   END IF !doCalcEntropy
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeEquation
@@ -154,89 +154,87 @@ REAL,INTENT(IN)                 :: Time
 CHARACTER(LEN=40)               :: formatStr
 REAL                            :: Fv(3),Fp(3),BodyForce(3) ! Viscous force, pressure force and surface area, resulting body force
 REAL                            :: bulkVel(3),bulkDensity,bulkMom(3)
-REAL                            :: tmp(1),EntropyVar_Ut 
+REAL                            :: tmp(1),dSdU_Ut 
 INTEGER                         :: i
 !==================================================================================================================================
 ! Attention: during the initialization phase no face data / gradients available!
-IF(ABS(Time-RestartTime) .GT. 1.E-12) THEN
-  ! Calculate body forces  ! Attention: during the initialization phase no face data / gradients available!
-  IF(doCalcBodyforces)THEN
-    CALL CalcBodyforces(Time,Bodyforce,Fp,Fv)
-    IF(MPIroot) THEN
-      WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
-      WRITE(UNIT_StdOut,formatStr)' BodyForce  : ',BodyForce
-      WRITE(UNIT_StdOut,formatStr)' BodyForceP : ',Fp
-      WRITE(UNIT_StdOut,formatStr)' BodyForceV : ',Fv
-      IF(doAnalyzeToFile)THEN
-        A2F_iVar=A2F_iVar+3
-        A2F_Data(A2F_iVar-2:A2F_iVar)=BodyForce
-        A2F_iVar=A2F_iVar+3
-        A2F_Data(A2F_iVar-2:A2F_iVar)=Fp
-        A2F_iVar=A2F_iVar+3
-        A2F_Data(A2F_iVar-2:A2F_iVar)=Fv
-      END IF !doAnalyzeToFile
-    END IF
-  END IF  !(doCalcBodyforces)
+IF(doCalcBodyforces)THEN
+  CALL CalcBodyforces(Time,Bodyforce,Fp,Fv)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)' BodyForce  : ',BodyForce
+    WRITE(UNIT_StdOut,formatStr)' BodyForceP : ',Fp
+    WRITE(UNIT_StdOut,formatStr)' BodyForceV : ',Fv
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=BodyForce
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=Fp
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=Fv
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF  !(doCalcBodyforces)
 
-  ! Calculate bulk velocity 
-  IF(doCalcBulkVelocity)THEN
-    CALL CalcBulkVelocity(bulkVel,bulkMom,bulkDensity)
-    IF(MPIroot) THEN
-      WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
-      WRITE(UNIT_StdOut,formatStr)' Bulk Vel   : ',bulkVel
-      WRITE(UNIT_StdOut,formatStr)' Bulk Mom   : ',bulkMom
-      WRITE(formatStr,'(A5,I1,A7)')'(A14,',1,'ES16.7)'
-      WRITE(UNIT_StdOut,formatStr)' Bulk Dens  : ',bulkDensity
-      IF(doAnalyzeToFile)THEN
-        A2F_iVar=A2F_iVar+3
-        A2F_Data(A2F_iVar-2:A2F_iVar)=bulkVel
-        A2F_iVar=A2F_iVar+3
-        A2F_Data(A2F_iVar-2:A2F_iVar)=bulkMom
-        A2F_iVar=A2F_iVar+1
-        A2F_Data(A2F_iVar)=bulkDensity
-      END IF !doAnalyzeToFile
-    END IF
+! Calculate bulk velocity 
+IF(doCalcBulkVelocity)THEN
+  CALL CalcBulkVelocity(bulkVel,bulkMom,bulkDensity)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)' Bulk Vel   : ',bulkVel
+    WRITE(UNIT_StdOut,formatStr)' Bulk Mom   : ',bulkMom
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',1,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)' Bulk Dens  : ',bulkDensity
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=bulkVel
+      A2F_iVar=A2F_iVar+3
+      A2F_Data(A2F_iVar-2:A2F_iVar)=bulkMom
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=bulkDensity
+    END IF !doAnalyzeToFile
   END IF
-
-  ! Calculate wall velocities / only terminal output 
-  IF(doCalcWallVelocity)THEN
-    CALL CalcWallVelocity(maxV,minV,meanV)
-    IF(MPIroot) THEN
-      WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
-      DO i=1,nBCs
-        IF((BoundaryType(i,BC_TYPE).NE.4).AND.((BoundaryType(i,BC_TYPE).NE.9))) CYCLE
-        WRITE(UNIT_StdOut,*)'Wall velocities for ',TRIM(BoundaryName(i)),' (mean/min/max) : '
-        WRITE(UNIT_StdOut,formatStr)'              ',meanV(i), minV(i), maxV(i)
-        IF(doAnalyzeToFile)THEN
-          A2F_iVar=A2F_iVar+1
-          A2F_Data(A2F_iVar)=meanV(i)
-          A2F_iVar=A2F_iVar+1
-          A2F_Data(A2F_iVar)=minV(i)
-          A2F_iVar=A2F_iVar+1
-          A2F_Data(A2F_iVar)=maxV(i)
-        END IF !doAnalyzeToFile
-      END DO !i=1,nBCs
-    END IF
-  END IF  !(doCalcWallVelocity)
 END IF
+
+! Calculate wall velocities / only terminal output 
+IF(doCalcWallVelocity)THEN
+  CALL CalcWallVelocity(maxV,minV,meanV)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',3,'ES16.7)'
+    DO i=1,nBCs
+      IF((BoundaryType(i,BC_TYPE).NE.4).AND.((BoundaryType(i,BC_TYPE).NE.9))) CYCLE
+      WRITE(UNIT_StdOut,*)'Wall velocities for ',TRIM(BoundaryName(i)),' (mean/min/max) : '
+      WRITE(UNIT_StdOut,formatStr)'              ',meanV(i), minV(i), maxV(i)
+      IF(doAnalyzeToFile)THEN
+        A2F_iVar=A2F_iVar+1
+        A2F_Data(A2F_iVar)=meanV(i)
+        A2F_iVar=A2F_iVar+1
+        A2F_Data(A2F_iVar)=minV(i)
+        A2F_iVar=A2F_iVar+1
+        A2F_Data(A2F_iVar)=maxV(i)
+      END IF !doAnalyzeToFile
+    END DO !i=1,nBCs
+  END IF
+END IF  !(doCalcWallVelocity)
+
 IF(doCalcEntropy)THEN
   tmp(1)=Entropy
-  CALL CalcEntropy(Entropy,EntropyVar_Ut)
+  CALL CalcEntropy(Entropy,dSdU_Ut)
   IF(MPIroot) THEN
     WRITE(formatStr,'(A)')'(A21,ES21.12)'
     WRITE(UNIT_StdOut,formatStr)  ' Entropy      : ',Entropy
     IF((time-RestartTime).GE.Analyze_dt)THEN
       WRITE(UNIT_StdOut,formatStr)' dEntropy/dt  : ',(Entropy-tmp(1))/Analyze_dt
     END IF !time>Analyze_dt
-    WRITE(UNIT_StdOut,formatStr)  ' q*Ut         : ',EntropyVar_Ut
+    WRITE(UNIT_StdOut,formatStr)  ' dSdU*Ut         : ',dSdU_Ut
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=Entropy
       A2F_iVar=A2F_iVar+1
-      A2F_Data(A2F_iVar)=EntropyVar_Ut
+      A2F_Data(A2F_iVar)=dSdU_Ut
     END IF !doAnalyzeToFile
   END IF !MPIroot
-END IF !doCalcEnergy
+END IF !doCalcEntropy
 !
 END SUBROUTINE AnalyzeEquation
 
@@ -548,7 +546,7 @@ END SUBROUTINE CalcViscousForce
 !> Calculates  Entropy over whole domain Entropy=-rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
 !> and integral of q^T*Ut, which is the semi-discrete entropy update
 !==================================================================================================================================
-SUBROUTINE CalcEntropy(Entropy,EntropyVar_Ut)
+SUBROUTINE CalcEntropy(Entropy,dSdU_Ut)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -561,36 +559,36 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)                :: Entropy !< Entropy
-REAL,INTENT(OUT)                :: EntropyVar_Ut !< Entropy
+REAL,INTENT(OUT)            :: Entropy !< Entropy
+REAL,INTENT(OUT)            :: dSdU_Ut !< dS/dU * U_t
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER                         :: iElem,i,j,k
-REAL                            :: ent_loc,prim(PP_nVar),entVars(PP_nVar)
+INTEGER                     :: iElem,i,j,k
+REAL                        :: ent_loc,prim(PP_nVar),dSdU(PP_nVar)
 #if MPI
-REAL                            :: box(2)
+REAL                        :: box(2)
 #endif 
 !==================================================================================================================================
 Entropy=0.
-EntropyVar_Ut=0.
+dSdU_Ut=0.
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     CALL ConsToPrim(prim,U(:,i,j,k,iElem))
-    ent_loc=-prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
+    ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
     Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    CALL ConsToEntropy(entVars(:),U(:,i,j,k,iElem))
-    ent_loc=SUM(entVars(:)*Ut(:,i,j,k,iElem))
-    EntropyVar_Ut  = EntropyVar_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    dSdU(:)  = ConsToEntropy(U(:,i,j,k,iElem))
+    ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
+    dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
 
 #if MPI
-box(1)=Entropy
-box(2)=EntropyVar_Ut
+box(1) = Entropy
+box(2) = dSdU_Ut
 IF(MPIRoot)THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  Entropy      =box(1)
-  EntropyVar_Ut=box(2)
+  Entropy = box(1)
+  dSdU_Ut = box(2)
 ELSE
   CALL MPI_REDUCE(Box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
