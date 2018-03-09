@@ -583,7 +583,7 @@ ELSE
 END IF
 A2F_Data(4)=PID
 ! Create format string for the variable output
-WRITE(formatStr,'(A10,I3,A14)')'(E23.14E5,',A2F_nVars-1,'(1X,E23.14E5))'
+WRITE(formatStr,'(A10,I3,A14)')'(E26.17E4,',A2F_nVars-1,'(1X,E26.17E4))'
 WRITE(ioUnit,formatStr) A2F_Data(1:A2F_nVars)
 CLOSE(ioUnit) ! outputfile
 END SUBROUTINE AnalyzeToFile

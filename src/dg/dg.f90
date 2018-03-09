@@ -172,27 +172,26 @@ END SUBROUTINE InitDG
 SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
-USE MOD_Basis,ONLY:LegendreGaussNodesAndWeights,LegGaussLobNodesAndWeights,BarycentricWeights
-USE MOD_Basis,ONLY:PolynomialDerivativeMatrix,LagrangeInterpolationPolys
-USE MOD_DG_Vars,ONLY:D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
+USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
 #if PP_DiscType==2
-USE MOD_DG_Vars,ONLY:DvolSurf
+USE MOD_DG_Vars,            ONLY: DvolSurf
 #endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                             :: N_in                   !< Polynomial degree
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: xGP                    !< Gauss/Gauss-Lobatto Nodes 
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: wGP                    !< Gauss/Gauss-Lobatto Weights
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: wBary                  !< Barycentric weights to evaluate the Gauss/Gauss-Lobatto lagrange basis
+INTEGER,INTENT(IN)                 :: N_in      !< Polynomial degree
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: xGP       !< Gauss/Gauss-Lobatto Nodes 
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: wGP       !< Gauss/Gauss-Lobatto Weights
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evaluate the Gauss/Gauss-Lobatto lagrange basis
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL,DIMENSION(0:N_in,0:N_in)              :: M,Minv     
-REAL,DIMENSION(0:N_in)                     :: L_Minus,L_Plus
-INTEGER                                    :: iMass         
+REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
+REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
+INTEGER                            :: iMass         
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
@@ -214,9 +213,9 @@ D_Hat_T= TRANSPOSE(D_hat)
 #if PP_DiscType==2
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
-Dvolsurf=2.*D
-Dvolsurf(0,0)=2*D(0,0)+1./wGP(0)
-Dvolsurf(N_in,N_in)=2*D(N_in,N_in)-1./wGP(N_in)
+Dvolsurf=2.0*D
+Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
+Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
 #endif /*PP_DiscType==2*/
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
