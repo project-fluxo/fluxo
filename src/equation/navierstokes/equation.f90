@@ -174,7 +174,7 @@ IniRefState  = 0
 SELECT CASE (IniExactFunc)
 CASE(1,11,12)
   IniRefState  =GETINT('IniRefState')
-CASE(2,21,4,8) ! synthetic test cases
+CASE(2,21,8) ! synthetic test cases
   AdvVel = GETREALARRAY('AdvVel',3)
 CASE(6) ! shock
   MachShock    = GETREAL('MachShock','1.5')
@@ -557,16 +557,15 @@ CASE(3) !Alfen Wave without Magnetic Field
   Resu_tt(5) = 0.5*Resu(1)*2.*SUM(Resu(2:4)*Resu_tt(2:4) + Resu_t(2:4)*Resu_t(2:4))
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
 
   ! g(t)
-  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu(1:4)=2.+ IniAmplitude*sin(Omega*(SUM(x) - tEval))
   Resu(5)=Resu(1)*Resu(1)
   ! g'(t)
-  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
+  Resu_t(1:4)=(-omega)*IniAmplitude*cos(Omega*(SUM(x) - tEval))
   Resu_t(5)=2.*Resu(1)*Resu_t(1)
   ! g''(t)
-  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu_tt(1:4)=-omega*omega*IniAmplitude*sin(Omega*(SUM(x) - tEval))
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
 CASE(5)
   Resu(2:4) = 1.+x(1)+2.*x(2)-7.*x(3) 
@@ -744,33 +743,31 @@ REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                            :: Omega,a
+REAL                            :: Omega
 INTEGER                         :: i,j,k,iElem
 REAL                            :: Ut_src(5)
-REAL                            :: sinXGP,sinXGP2,cosXGP,at
+REAL                            :: sinXGP,sinXGP2,cosXGP
 REAL                            :: tmp(6)
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
-  tmp(1)=-a+3*Omega
-  tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
+  tmp(1)=-Omega+3*Omega
+  tmp(2)=-Omega+0.5*Omega*(1.+kappa*5.)
   tmp(3)=IniAmplitude*Omega*KappaM1
-  tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a)
-  tmp(5)=IniAmplitude*(3.*Omega*Kappa-a)
+  tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*Omega)
+  tmp(5)=IniAmplitude*(3.*Omega*Kappa-Omega)
 #if PARABOLIC
   tmp(6)=3.*mu0*Kappa*Omega*Omega/Pr
 #else
   tmp(6)=0.
 #endif
   tmp=tmp*IniAmplitude
-  at=a*tIn
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-      sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*t))
+      cosXGP=COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      sinXGP=SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-omega*t))
       Ut_src(1)   = tmp(1)*cosXGP
       Ut_src(2:4) = tmp(2)*cosXGP + tmp(3)*sinXGP2
       Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
