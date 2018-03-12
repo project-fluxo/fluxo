@@ -217,7 +217,7 @@ CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPx,sJ) !gradPx(:,i)=gradPx(:,i)*sJ(i)
 !TODO entropy: "gradWx" -> gradPx back, berofre P2F (since GL only copies point data to surfaces)
 
 ! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
-CALL ConvertToGradPrimVec(nTotal_IP,gradPx ,U,gradPx) !overwrites gradPx!
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPx) !overwrites gradPx!
 
 #if MPI
 !prolongtoface and start send/receive gradPx_slave
@@ -249,7 +249,7 @@ CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.TRUE.)
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPy,sJ) !gradPy(:,i)=gradPy(:,i)*sJ(i)
 
 ! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
-CALL ConvertToGradPrimVec(nTotal_IP,gradPy ,U,gradPy) !overwrites gradPy!
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPy) !overwrites gradPy!
 
 #if MPI
 !ProlongToFace and start send/receive gradPy_slave
@@ -281,7 +281,7 @@ CALL Lifting_SurfInt(FluxZ,gradPz,doMPISides=.TRUE.)
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPz,sJ) !gradPz(:,i)=gradPz(:,i)*sJ(i)
 
 ! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
-CALL ConvertToGradPrimVec(nTotal_IP,gradPz ,U,gradPz) !overwrites gradPz!
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPz) !overwrites gradPz!
 
 #if MPI
 !ProlongToFace and start send/receive gradPz_slave

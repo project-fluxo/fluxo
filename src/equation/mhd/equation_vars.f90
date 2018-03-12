@@ -339,7 +339,6 @@ REAL  :: sRho,v(3),gradv(3)
 REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
 #endif /*PP_Lifting_Var*/
 !==================================================================================================================================
-
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
   sRho      = 1./cons(1)
@@ -351,9 +350,9 @@ REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
   !velocity gradient
   gradP(2:4)= gradv(:)
   !pressure gradient
-  gradP(5)  = KappaM1*(grad_in(5)                                      & !gradE
-                       -0.5*grad_in(1)*SUM(v*v) + SUM(cons(2:4)*gradv) & !-grad_Ekin
-                       -smu_0*SUM(cons(6:PP_nVar)*grad_in(6:PP_nVar))  ) !-grad_Emag
+  gradP(5)  = KappaM1*(grad_in(5)                                        & !gradE
+                       -(0.5*grad_in(1)*SUM(v*v) + SUM(cons(2:4)*gradv)) & !-grad_Ekin
+                       - smu_0*SUM(cons(6:PP_nVar)*grad_in(6:PP_nVar))   ) !-grad_Emag
   !gradient of B,psi same in primitive
   gradP(6:PP_nVar)=grad_in(6:PP_nVar) 
 #elif (PP_Lifting_Var==2) 
@@ -390,23 +389,22 @@ END FUNCTION ConvertToGradPrim
 !==================================================================================================================================
 !> transform gradient from conservative / primitive or entropy variables to primitive variables 
 !==================================================================================================================================
-SUBROUTINE ConvertToGradPrimVec(dim2,gradP,cons,grad_in)
+SUBROUTINE ConvertToGradPrimVec(dim2,cons,gradP)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN)  :: dim2 
 REAL,INTENT(IN)     :: cons(PP_nVar,dim2)    !< conservative state 
-REAL,INTENT(IN)     :: grad_in(PP_nVar,dim2) !< can be gradient of conservative / primivite /entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: gradP(PP_nVar,dim2) !<  gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
 !==================================================================================================================================
 DO i=1,dim2
-  gradP(:,i)=ConvertToGradPrim(cons(:,i),grad_in(:,i))
+  gradP(:,i)=ConvertToGradPrim(cons(:,i),gradP(:,i))
 END DO!i
 END SUBROUTINE ConvertToGradPrimVec
 

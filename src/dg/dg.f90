@@ -105,7 +105,6 @@ U=0.
 Ut=0.
 
 nDOFElem=(PP_N+1)**3
-nTotalU=PP_nVar*nDOFElem*nElems
 nTotal_face=(PP_N+1)*(PP_N+1)
 nTotal_vol=nTotal_face*(PP_N+1)
 nTotal_IP=nTotal_vol*nElems
