@@ -84,6 +84,8 @@ DO SideID = firstSideID,lastSideID
   DO q=0,PP_N; DO p=0,PP_N
     !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_slave( :,p,q,SideID))*NormVec(dir,p,q,SideID)*SurfElem(p,q,SideID)
     ! 1/2(UR+UL)-UL=1/2(UR-UL)
+!  TODO entropy: UL,UR -> WL,WR, U* = 1/2(WL+WR)
+
     F_loc(:)=0.5*(U_slave(:,p,q,SideID)-U_master( :,p,q,SideID))*SurfElem(p,q,SideID)
     FluxX(:,p,q,SideID)=F_loc(:)*NormVec(1,p,q,SideID)
     FluxY(:,p,q,SideID)=F_loc(:)*NormVec(2,p,q,SideID)
@@ -123,6 +125,7 @@ INTEGER            :: SideID,p,q
 ! fill flux for boundary sides (surface element is already added in getboundaryflux
 CALL Lifting_GetBoundaryFlux(t,FluxZ) ! uses the current U_master at the boundary
 
+!TODO entropy U* -> W* 
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N
     FluxX(:,p,q,SideID)=FluxZ(:,p,q,SideID)*NormVec(1,p,q,SideID)

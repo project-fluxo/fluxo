@@ -47,8 +47,8 @@ USE MOD_Mesh_Vars,       ONLY: nSides
 USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,lastMPISide_MINE
 USE MOD_Riemann,         ONLY: Riemann
 #if PARABOLIC
-USE MOD_Lifting_Vars,    ONLY: gradUx_Master,gradUy_Master,gradUz_Master
-USE MOD_Lifting_Vars,    ONLY: gradUx_Slave ,gradUy_Slave ,gradUz_Slave
+USE MOD_Lifting_Vars,    ONLY: gradPx_Master,gradPy_Master,gradPz_Master
+USE MOD_Lifting_Vars,    ONLY: gradPx_Slave ,gradPy_Slave ,gradPz_Slave
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -76,9 +76,9 @@ END IF
 DO SideID=firstSideID,lastSideID
   CALL Riemann(Flux(:,:,:,SideID),     U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID), &
 #if PARABOLIC
-                                  gradUx_Master(:,:,:,SideID),gradUx_Slave(:,:,:,SideID), &
-                                  gradUy_Master(:,:,:,SideID),gradUy_Slave(:,:,:,SideID), &
-                                  gradUz_Master(:,:,:,SideID),gradUz_Slave(:,:,:,SideID), &
+                                  gradPx_Master(:,:,:,SideID),gradPx_Slave(:,:,:,SideID), &
+                                  gradPy_Master(:,:,:,SideID),gradPy_Slave(:,:,:,SideID), &
+                                  gradPz_Master(:,:,:,SideID),gradPz_Slave(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                                   NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
   DO q=0,PP_N
