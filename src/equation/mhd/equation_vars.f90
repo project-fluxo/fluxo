@@ -318,6 +318,8 @@ DO i=1,dim2
 END DO!i
 END SUBROUTINE ConsToEntropyVec
 
+
+#if PARABOLIC
 !==================================================================================================================================
 !> transform gradient from conservative / primitive or entropy variables to primitive variables 
 !==================================================================================================================================
@@ -382,8 +384,6 @@ gradP(:)=grad_in(:)
   !gradient of B,psi: 
   gradP(6:PP_nVar) = p_sRho * (grad_in(6:PP_nVar) +cons(6:PP_nVar)*grad_in(5))
 #endif /*PP_Lifting_Var*/
-
-
 END FUNCTION ConvertToGradPrim
 
 !==================================================================================================================================
@@ -407,6 +407,7 @@ DO i=1,dim2
   gradP(:,i)=ConvertToGradPrim(cons(:,i),gradP(:,i))
 END DO!i
 END SUBROUTINE ConvertToGradPrimVec
+#endif /*PARABOLIC*/
 
 !==================================================================================================================================
 !> calculate all wave speeds 

@@ -345,7 +345,7 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars    ,ONLY: nBCSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,SurfElem,Face_xGP
-USE MOD_DG_Vars      ,ONLY: U_master
+USE MOD_DG_Vars      ,ONLY: U_master,nTotal_face
 USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
@@ -353,6 +353,11 @@ USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: FastestWave1D
 USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
+#if PP_Lifting_Var==2
+USE MOD_Equation_Vars,ONLY: ConsToPrimVec
+#elif PP_Lifting_Var==3
+USE MOD_Equation_Vars,ONLY: ConsToEntropyVec
+#endif /*PP_Lifting_Var**/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseLiftingGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -363,9 +368,10 @@ REAL,INTENT(IN)           :: tIn       !< evaluation time
 REAL,INTENT(OUT)          :: Flux(PP_nVar,0:PP_N,0:PP_N,1:nBCSides) !< lifting boundary flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                              :: iBC,iSide,p,q,SideID
-INTEGER                              :: BCType,BCState,nBCLoc
-REAL,DIMENSION(1:PP_nVar)            :: PrimL,PrimR
+INTEGER                   :: iBC,iSide,p,q,SideID
+INTEGER                   :: BCType,BCState,nBCLoc
+REAL,DIMENSION(1:PP_nVar) :: PrimL,PrimR
+REAL                      :: P_m(PP_nVar,0:PP_N,0:PP_N) !< conservative / primitive /entropy variable
 !==================================================================================================================================
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
@@ -450,11 +456,22 @@ DO iBC=1,nBCs
     CALL TestcaseLiftingGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
 END DO ! iBC
-!for BR1 and BR2, lifting is in strong form: Flux=Flux-U_master
 
 DO SideID=1,nBCSides
+  !for BR1 and BR2, lifting is in strong form: Flux=Flux-U_master
+#if PP_Lifting_Var==1
+  P_m(:,:,:)=U_master(:,:,:,SideID)
+#elif PP_Lifting_Var==2
+  !convert BC lifting flux to primitive variables
+  CALL ConsToPrimVec(nTotal_face,P_m,U_master(:,:,:,SideID)) !prim_var
+  CALL ConsToPrimVec(nTotal_face,Flux,Flux(:,:,:,SideID)) !prim_var
+#elif PP_Lifting_Var==3
+  !convert BC lifting flux to entropy variables, 
+  CALL ConsToEntropyVec(nTotal_face,P_m,U_master(:,:,:,SideID)) !entropy_var
+  CALL ConsToEntropyVec(nTotal_face,Flux,Flux(:,:,:,SideID)) !entropy_var
+#endif /*PP_Lifting_Var**/
   DO q=0,PP_N; DO p=0,PP_N
-    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-U_master(:,p,q,SideID))*SurfElem(p,q,SideID)
+    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-P_m(:,p,q))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
 END SUBROUTINE Lifting_GetBoundaryFlux

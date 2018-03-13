@@ -42,6 +42,14 @@ END INTERFACE
 INTERFACE EvalDiffFluxTilde3D
   MODULE PROCEDURE EvalDiffFluxTilde3D
 END INTERFACE
+
+INTERFACE EvalLiftingVolumeFlux
+  MODULE PROCEDURE EvalLiftingVolumeFlux
+END INTERFACE
+
+INTERFACE EvalLiftingSurfFlux
+  MODULE PROCEDURE EvalLiftingSurfFlux
+END INTERFACE
 #endif /*PARABOLIC*/
 
 PUBLIC::EvalFluxTilde3D
@@ -49,6 +57,9 @@ PUBLIC::EvalAdvectionFlux1D
 #if PARABOLIC
 PUBLIC::EvalDiffFlux3D
 PUBLIC::EvalDiffFluxTilde3D
+
+PUBLIC::EvalLiftingVolumeFlux
+PUBLIC::EvalLiftingSurfFlux
 #endif /*PARABOLIC*/
 
 !==================================================================================================================================
@@ -649,7 +660,89 @@ END DO ! i
 END DO; END DO; END DO ! i,j,k
 #endif /*OPTIMIZED*/
 END SUBROUTINE EvalDiffFluxTilde3D
-#endif /*PARABOLIC*/
 
+
+!==================================================================================================================================
+!> Compute the lifting flux depending on the variable to be used for the gradient: cons_var / prim_var / entropy_var 
+!==================================================================================================================================
+SUBROUTINE EvalLiftingVolumeFlux(iElem,Flux)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars,ONLY:nTotal_vol,U
+#if PP_Lifting_Var==2
+USE MOD_Equation_Vars,ONLY: ConsToPrimVec
+#elif PP_Lifting_Var==3
+USE MOD_Equation_Vars,ONLY: ConsToEntropyVec
+#endif /*PP_Lifting_Var**/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)     :: iElem       !< current element
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< lifting flux, depending on lifting_var
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i 
+!==================================================================================================================================
+#if PP_Lifting_Var==1
+  Flux=U(:,:,:,:,iElem)
+#elif PP_Lifting_Var==2
+  CALL ConsToPrimVec(nTotal_vol,Flux,U(:,:,:,:,iElem)) !prim_var
+#elif PP_Lifting_Var==3
+  CALL ConsToEntropyVec(nTotal_vol,Flux,U(:,:,:,:,iElem)) !entropy_var
+#endif /*PP_Lifting_Var**/
+
+END SUBROUTINE EvalLiftingVolumeFlux
+
+
+!==================================================================================================================================
+!> Compute the average lifting surface flux in strong form U*=1/2(U_s+U_m)  (BR1/BR2),
+!> careful, we use the strong form, so that the surface flux becomes: F=U^*-U_m = 1/2(U_s-U_m)
+!> depending on the variable to be used for the gradient: 
+!> cons_var / prim_var / entropy_var 
+!==================================================================================================================================
+SUBROUTINE EvalLiftingSurfFlux(SideID,Flux)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars   ,ONLY:nTotal_face
+USE MOD_DG_Vars   ,ONLY: U_master,U_slave
+USE MOD_Mesh_Vars ,ONLY: SurfElem
+#if (PP_Lifting_Var==2)
+USE MOD_Equation_Vars,ONLY: ConsToPrimVec
+#elif (PP_Lifting_Var==3)
+USE MOD_Equation_Vars,ONLY: ConsToEntropyVec
+#endif /*PP_Lifting_Var**/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)     :: SideID       !< current side index
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N) !< lifting surface flux, depending on lifting_var
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER  :: p,q 
+REAL     :: F_m(PP_nVar,0:PP_N,0:PP_N)
+REAL     :: F_s(PP_nVar,0:PP_N,0:PP_N)
+!==================================================================================================================================
+#if (PP_Lifting_Var==1)
+  F_m=U_master(:,:,:,SideID)
+  F_s=U_slave(:,:,:,SideID)
+#elif (PP_Lifting_Var==2)
+  CALL ConsToPrimVec(nTotal_face,F_m,U_master(:,:,:,SideID)) !prim_var
+  CALL ConsToPrimVec(nTotal_face,F_s,U_slave( :,:,:,SideID)) !prim_var
+#elif (PP_Lifting_Var==3)
+  CALL ConsToEntropyVec(nTotal_face,F_m,U_master(:,:,:,SideID)) !prim_var
+  CALL ConsToEntropyVec(nTotal_face,F_s,U_slave( :,:,:,SideID)) !prim_var
+#endif /*PP_Lifting_Var**/
+  !strong lifting flux: 
+  DO q=0,PP_N; DO p=0,PP_N
+      Flux(:,p,q)=0.5*(F_s(:,p,q)-F_m(:,p,q))*SurfElem(p,q,SideID)
+  END DO; END DO
+
+END SUBROUTINE EvalLiftingSurfFlux
+
+#endif /*PARABOLIC*/
 
 END MODULE MOD_Flux

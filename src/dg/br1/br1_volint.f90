@@ -48,6 +48,12 @@ SUBROUTINE Lifting_VolInt(U,gradPx,gradPy,gradPz)
 USE MOD_DG_Vars            ,ONLY:D_T
 USE MOD_Mesh_Vars          ,ONLY:nElems,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde   ! metrics
 USE MOD_PreProc
+USE MOD_Flux               ,ONLY: EvalLiftingVolumeFlux
+!#if PP_Lifting_Var==2
+!USE MOD_Equation_Vars, ONLY: ConsToPrimVec
+!#elif PP_Lifting_Var==3
+!USE MOD_Equation_Vars, ONLY: ConsToEntropyVec
+!#endif /*PP_Lifting_Var**/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -61,6 +67,7 @@ REAL,INTENT(INOUT)                           :: gradPz(PP_nVar,0:PP_N,0:PP_N,0:P
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(PP_nVar)                      :: gradPxi,gradPeta,gradPzeta
+REAL                                         :: Flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 INTEGER                                      :: iElem,i,j,k
 INTEGER                                      :: l
 !===================================================================================================================================
@@ -70,18 +77,17 @@ INTEGER                                      :: l
 !gradPz=0.
 
 DO iElem=1,nElems
-  !TODO entropy: U -> W as flux for gradient
-
+  CALL EvalLiftingVolumeFlux(iElem,Flux)
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
-        gradPxi(:)   = D_T(0,i)*U(:,0,j,k,iElem)
-        gradPeta(:)  = D_T(0,j)*U(:,i,0,k,iElem)
-        gradPzeta(:) = D_T(0,k)*U(:,i,j,0,iElem)
+        gradPxi(:)   = D_T(0,i)*Flux(:,0,j,k)
+        gradPeta(:)  = D_T(0,j)*Flux(:,i,0,k)
+        gradPzeta(:) = D_T(0,k)*Flux(:,i,j,0)
         DO l=1,PP_N
-          gradPxi(:)   = gradPxi(:)   +D_T(l,i)*U(:,l,j,k,iElem)
-          gradPeta(:)  = gradPeta(:)  +D_T(l,j)*U(:,i,l,k,iElem)
-          gradPzeta(:) = gradPzeta(:) +D_T(l,k)*U(:,i,j,l,iElem)
+          gradPxi(:)   = gradPxi(:)   +D_T(l,i)*Flux(:,l,j,k)
+          gradPeta(:)  = gradPeta(:)  +D_T(l,j)*Flux(:,i,l,k)
+          gradPzeta(:) = gradPzeta(:) +D_T(l,k)*Flux(:,i,j,l)
         END DO !i
         gradPx(:,i,j,k,iElem) = gradPx(:,i,j,k,iElem) + ( Metrics_fTilde(1,i,j,k,iElem)*gradPxi(:)    &
                                                          +Metrics_gTilde(1,i,j,k,iElem)*gradPeta(:)   &

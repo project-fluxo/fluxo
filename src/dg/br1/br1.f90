@@ -95,6 +95,14 @@ IF((.NOT.DGInitIsDone).OR.LiftingInitIsDone)THEN
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT LIFTING WITH BR1 ...'
+#if (PP_Lifting_Var==1)
+SWRITE(UNIT_stdOut,'(A)') '    USING CONSERVATIVE VARIABLES FOR GRADIENT!'
+#elif (PP_Lifting_Var==2)
+SWRITE(UNIT_stdOut,'(A)') '    USING PRIMITIVE VARIABLES FOR GRADIENT!'
+#elif (PP_Lifting_Var==3)
+SWRITE(UNIT_stdOut,'(A)') '    USING ENTROPY VARIABLES FOR GRADIENT!'
+#endif
+
 
 ! We store the interior gradients at the each element face
 ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
