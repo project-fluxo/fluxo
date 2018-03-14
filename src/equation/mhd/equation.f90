@@ -162,6 +162,7 @@ KappaM2  =Kappa-2.
 sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
+R        =GETREAL('R','287.058')
 !permeability
 mu_0    =GETREAL('mu_0','1.')
 smu_0  = 1./(mu_0)
@@ -174,7 +175,6 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
-R        =GETREAL('R','287.058')
 KappasPr =Kappa/Pr
 !heat diffusion coefficients 
 #ifdef PP_ANISO_HEAT
@@ -637,6 +637,23 @@ CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
   !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 
+CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1]
+        ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
+  Prim=0.
+  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(8)=1.0
+  
+  Prim(1)=1.0
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=REAL(1+0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
+    END DO
+  END DO
+  Prim(3)=IniDisturbance*ABS(Prim(6))*Prim(3)
+  Prim(5)=0.2  +0.5*(1.0-Prim(6)**2)  !beta~0.2
+  CALL PrimToCons(Prim,Resu)
+
 CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
         ! from L.Chacon "A non-staggered, conservative, ∇ · B = 0, finite-volume scheme for 3D implicit extended MHD..",2004
         ! assuming rho_0=p_0=1
@@ -901,6 +918,31 @@ CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
   prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
   prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
   CALL PrimToCons(Prim,Resu)
+
+CASE(666) ! random initialization for velocity and B field
+  prim =  0.
+  !CALL RANDOM_NUMBER(prim(2:4))
+  prim(1) = RAND(NINT(100000000*a))
+  CALL CPU_TIME(a)
+  prim(2) = RAND(NINT(10000000*a))
+  CALL CPU_TIME(a)
+  prim(3) = RAND(NINT(100000*a))
+  CALL CPU_TIME(a)
+  prim(4) = RAND(NINT(100000*a))
+  prim(5) = RAND(NINT(1000000*a))
+  CALL CPU_TIME(a)
+  prim(6) = RAND(NINT(100000000*a))
+  CALL CPU_TIME(a)
+  prim(7) = RAND(NINT(1000000*a))
+  CALL CPU_TIME(a)
+  prim(8) = RAND(NINT(10000*a))
+  !CALL RANDOM_NUMBER(prim(6:8))
+  prim(1)  = 1.+0.8*2.*(prim(1)-0.5)
+  prim(5)  = 1.+0.9*2.*(prim(5)-0.5)
+  prim(2:4)=(/0.1,0.05,0.04/)+(prim(2:4)-0.5)*IniAmplitude
+  prim(6:8)=(prim(6:8)-0.5)*IniHalfwidth
+  CALL PrimToCons(Prim,Resu)
+
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
             ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.

@@ -534,13 +534,16 @@ IF(fileExists .AND. Time .NE. 0.0)THEN ! File exists and append data
     stat=0
     DO WHILE ((ABS(Dummytime-RestartTime).GT.1.0E-8*RestartTime) .AND. (stat.eq.0))
       READ(ioUnit,'(A1)',IOSTAT=stat) DummyFirst
-      IF(INDEX(' "VZT',DummyFirst) .NE.0) THEN
+      IF(INDEX('"VZT',DummyFirst) .NE.0) THEN
         CYCLE
       ELSE
         BACKSPACE(ioUnit)
       END IF
       READ(ioUnit,*,IOSTAT=stat) Dummytime,DummyIter,CalcTimeRestart,DummyPID
     END DO
+    IF(stat.ne.0)THEN
+      BACKSPACE(ioUnit)
+    END IF
     IterRestart = INT(DummyIter)
     PID         = DummyPID
     WRITE(UNIT_stdOut,*)' Found. time: ' ,Dummytime,' with ', IterRestart,' timesteps and CPU time: ', &

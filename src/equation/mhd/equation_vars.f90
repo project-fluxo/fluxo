@@ -35,6 +35,7 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)  !< data for steady state boundary conditions
 INTEGER,ALLOCATABLE :: nBCByType(:)     !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)    !< SideIDs for BC types
+REAL                :: R                !< Gas constant
 #if PARABOLIC
 REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navier-stokes ANYMORE!!!!
 REAL                :: eta              !< Current resistivity
@@ -42,7 +43,6 @@ REAL                :: etasmu_0         !< =eta/mu0
 REAL                :: Pr               !< Prandtl number
 REAL                :: KappasPr         !< =kappa/Pr
 REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
-REAL                :: R                !< Gas constant
 #  ifdef PP_ANISO_HEAT
 REAL                :: kperp            !< perpendicular (to magnetic field) heat diffusion coefficient
 REAL                :: kpar             !< parallel (to magnetic field) heat diffusion coeffcient 
@@ -137,6 +137,7 @@ END INTERFACE
 !  MODULE PROCEDURE ConsToEntropyVec
 !END INTERFACE
 
+#if PARABOLIC
 INTERFACE ConvertToGradPrim
   MODULE PROCEDURE ConvertToGradPrim
 END INTERFACE
@@ -144,6 +145,7 @@ END INTERFACE
 !INTERFACE ConvertToGradPrimVec
 !  MODULE PROCEDURE ConvertToGradPrimVec
 !END INTERFACE
+#endif /*PARABOLIC*/
 
 INTERFACE WaveSpeeds1D
   MODULE PROCEDURE WaveSpeeds1D
@@ -341,6 +343,7 @@ REAL  :: sRho,v(3),gradv(3)
 REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
 #endif /*PP_Lifting_Var*/
 !==================================================================================================================================
+
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
   sRho      = 1./cons(1)
@@ -398,7 +401,8 @@ INTEGER,INTENT(IN)  :: dim2
 REAL,INTENT(IN)     :: cons(PP_nVar,dim2)    !< conservative state 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  on intput: can be gradient of conservative / primivite /entropy variables
+                                             !<  on output: gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i

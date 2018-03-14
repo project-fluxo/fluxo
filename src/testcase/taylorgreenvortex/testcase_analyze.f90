@@ -79,10 +79,6 @@ doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
 last_Ekin_comp = 0.
 last_Emag_comp = 0.
 
-IF(.NOT.doAnalyzeToFile)THEN
-  CALL abort(__STAMP__,"Testcase analyze = T, but AnalyzeToFile = F")
-END IF
-
 IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Dissipation Rate Incompressible"'
@@ -129,10 +125,12 @@ SUBROUTINE AnalyzeTestCase(Time)
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_DG_Vars,        ONLY: U
-USE MOD_Lifting_Vars,   ONLY: GradUx,GradUy,GradUz
+#if PARABOLIC
+USE MOD_Lifting_Vars,   ONLY: GradPx,GradPy,GradPz
+#endif
 USE MOD_Analyze_Vars,   ONLY: wGPVol,Vol
 USE MOD_Analyze_Vars,   ONLY: A2F_iVar,A2F_Data
-USE MOD_Analyze_Vars,   ONLY: Analyze_dt
+USE MOD_Analyze_Vars,   ONLY: doAnalyzeToFile,Analyze_dt
 USE MOD_Restart_Vars,   ONLY: RestartTime
 USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
 USE MOD_Mesh_Vars,      ONLY: sJ,nElems
@@ -187,9 +185,13 @@ DO iElem=1,nElems
         ! compute primitive gradients (of u,v,w) at each GP
         Vel(1:3)    =U(2:4,i,j,k,iElem)*srho
         BField(1:3) =U(6:8,i,j,k,iElem)
-        GradVel(:,1)=srho*(GradUx(2:4,i,j,k,iElem)-Vel(1:3)*GradUx(1,i,j,k,iElem))
-        GradVel(:,2)=srho*(GradUy(2:4,i,j,k,iElem)-Vel(1:3)*GradUy(1,i,j,k,iElem))
-        GradVel(:,3)=srho*(GradUz(2:4,i,j,k,iElem)-Vel(1:3)*GradUz(1,i,j,k,iElem))
+#if PARABOLIC
+        GradVel(:,1)=GradPx(2:4,i,j,k,iElem)
+        GradVel(:,2)=GradPy(2:4,i,j,k,iElem)
+        GradVel(:,3)=GradPz(2:4,i,j,k,iElem)
+#else
+        GradVel=0.
+#endif
         ! Pressure
         Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*SUM(BField(1:3)*BField(1:3)))
         ! compute divergence of velocity
@@ -322,39 +324,40 @@ IF(MPIroot)THEN
     WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEmag_comp/dt : ',negdEmagdt
   END IF !time>Analyze_dt
 
-  !output to out file (doAnalyzeToFile must be T, already checked in initAnalyzeTestcase), write is done in analyzetofile
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=DR_S             !"Dissipation Rate Incompressible"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_Sd+DR_p       !"Dissipation Rate Compressible"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Ekin             !"Ekin incomp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Ekin_comp        !"Ekin comp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Enstrophy_comp   !"Enstrophy comp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_u             !"DR_u"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_S             !"DR_S"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_Sd            !"DR_Sd"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_p             !"DR_p"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=max_Vorticity    !"Maximum Vorticity"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=mean_temperature !"Mean Temperature"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=uprime           !"uprime"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=Entropy_comp     !"Entropy comp"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=negdEkindt       !'"-dEkin/dt"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
+  IF(doAnalyzeToFile) THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=DR_S             !"Dissipation Rate Incompressible"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_Sd+DR_p       !"Dissipation Rate Compressible"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Ekin             !"Ekin incomp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Ekin_comp        !"Ekin comp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Enstrophy_comp   !"Enstrophy comp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_u             !"DR_u"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_S             !"DR_S"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_Sd            !"DR_Sd"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_p             !"DR_p"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=max_Vorticity    !"Maximum Vorticity"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=mean_temperature !"Mean Temperature"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=uprime           !"uprime"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=Entropy_comp     !"Entropy comp"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=negdEkindt       !'"-dEkin/dt"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
+  END IF !doAnalyzeToFile
 END IF !MPIroot
 
 END SUBROUTINE AnalyzeTestCase
