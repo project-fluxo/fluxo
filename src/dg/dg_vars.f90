@@ -79,9 +79,10 @@ REAL,ALLOCATABLE                      :: U_master(:,:,:,:)      !< 2D Solution o
                                                                 !< size \([1..nVar,0..N,0..N,all\_master\_sides]\) 
 
 REAL,ALLOCATABLE                      :: U_slave(:,:,:,:)       !< 2D Solution on face nodes for the slave sides, 
-REAL,ALLOCATABLE                      :: Flux(:,:,:,:)          !< Fluxes computed with U_master, U_slave,
+REAL,ALLOCATABLE                      :: Flux_master(:,:,:,:)   !< Fluxes  on master
                                                                 !< on the processor that has the master sides
                                                                 !< size \([1..nVar,0..N,0..N,allsides]\). 
+REAL,ALLOCATABLE                      :: Flux_slave(:,:,:,:)    !< Fluxes on slave = Flux_master for conservative pde. no BC sides
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 LOGICAL                               :: DGInitIsDone=.FALSE.   !< Switch to check DGInit status

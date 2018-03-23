@@ -44,7 +44,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !==================================================================================================================================
-SUBROUTINE SurfInt(Flux,Ut,doMPISides)
+SUBROUTINE SurfInt(Flux_master,Flux_slave,Ut,doMPISides)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
@@ -60,12 +60,14 @@ USE MOD_Mesh_Vars,          ONLY: NormVec,SurfElem,firstSlaveSide
 #endif /*PP_NodeType*/ 
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
+USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only YOUR MPISides are filled, =.FALSE. BCSides+InnerSides+MPISides MINE  
-REAL,INTENT(IN)    :: Flux(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(IN)    :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(IN)    :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
@@ -77,10 +79,6 @@ INTEGER                         :: l
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
 INTEGER                         :: nbElemID,nblocSide,nbFlip
-#if (PP_DiscType==2) && NONCONS
-REAL                            :: Flux_NC(1:PP_nVar,0:PP_N,0:PP_N)
-REAL                            :: phi(1:PP_nVar)
-#endif
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstSideID = firstMPISide_YOUR
@@ -103,51 +101,16 @@ DO SideID=firstSideID,lastSideID
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
         Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + Flux(:,p,q,SideID)*L_hatMinus(l)
+                                          + Flux_master(:,p,q,SideID)*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
     !gauss-lobatto nodes
-#if (PP_DiscType==2) && NONCONS
-    !Jahunen source term divB*u on B_t
-    IF(SideID.LT.firstSlaveSide)THEN !for BCSides, no slave exists!
-      DO q=0,PP_N; DO p=0,PP_N
-        ijk(:)=S2V(:,0,p,q,flip,locSide)
-        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + Flux(:,p,q,SideID)*L_hatMinus0
-      END DO; END DO !p,q=0,PP_N
-    ELSE
-      phi  =0.
-      DO q=0,PP_N; DO p=0,PP_N
-        !Powell
-        phi(6:8)=U_master(2:4,p,q,SideID)/U_master(1,p,q,SideID) !v
-        phi(2:4)=U_master(6:8,p,q,SideID)
-        phi(5)  =SUM(phi(2:4)*phi(6:8))
-        
-        Flux_NC(  :,p,q)=Flux(:,p,q,SideID)  &
-                         +(0.5*SUM(U_slave(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) & 
-                                    *SurfElem(p,q,SideID))*phi(:)                  !B_slave*n*Phi_master
-#ifdef PP_GLM
-        !nonconservative term to restore galilein invariance for GLM term
-        Flux_NC((/5,PP_nVar/),p,q)=Flux_NC((/5,PP_nVar/),p,q)  &
-                         +(0.5*SUM(phi(6:8)*NormVec(:,p,q,SideID)) & !v_master*n 
-                                    *SurfElem(p,q,SideID))  &
-                          *U_slave(PP_nVar,p,q,SideID)*(/U_master(PP_nVar,p,q,SideID),1./)
-#endif /*PP_GLM*/
-      END DO; END DO !p,q=0,PP_N
-      DO q=0,PP_N; DO p=0,PP_N
-        ijk(:)=S2V(:,0,p,q,flip,locSide)
-        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + Flux_NC(:,p,q)*L_hatMinus0
-      END DO; END DO !p,q=0,PP_N
-    END IF
-#else
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide)
       Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                        + Flux(:,p,q,SideID)*L_hatMinus0
+                                        + Flux_master(:,p,q,SideID)*L_hatMinus0
     END DO; END DO !p,q=0,PP_N
-#endif /*NONCONS*/
 #endif /*PP_NodeType*/
   END IF !master ElemID .NE. -1
 
@@ -163,43 +126,16 @@ DO SideID=firstSideID,lastSideID
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
         Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) &
-                                          - Flux(:,p,q,SideID)*L_hatMinus(l)
+                                          - Flux_slave(:,p,q,SideID)*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
-#if (PP_DiscType==2) && NONCONS
-    !Jahunen source term divB*u on B_t, slave side always has a master!
-    phi  =0.
-    DO q=0,PP_N; DO p=0,PP_N
-      !Powell
-      phi(6:8)=U_slave(2:4,p,q,SideID)/U_slave(1,p,q,SideID)
-      phi(2:4)=U_slave(6:8,p,q,SideID)
-      phi(5)  =SUM(phi(2:4)*phi(6:8))
-      Flux_NC(  :,p,q)=Flux(:,p,q,SideID) &
-                       +(0.5*SUM(U_master(6:8,p,q,SideID)*NormVec(:,p,q,SideID)) & !minus for slave normal already below
-                                     *SurfElem(p,q,SideID))*phi(:)
-#ifdef PP_GLM
-      !nonconservative term to restore galilein invariance for GLM term
-      Flux_NC((/5,PP_nVar/),p,q)=Flux_NC((/5,PP_nVar/),p,q)  &
-                       +(0.5*SUM(phi(6:8)*NormVec(:,p,q,SideID)) & !v_slave*n
-                                  *SurfElem(p,q,SideID))  &
-                        *U_master(PP_nVar,p,q,SideID)*(/U_slave(PP_nVar,p,q,SideID),1./)
-#endif /*PP_GLM*/
-    END DO; END DO !p,q=0,PP_N
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
       Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
-                                        - Flux_NC(:,p,q)*L_hatMinus0
+                                        - Flux_slave(:,p,q,SideID)*L_hatMinus0
     END DO; END DO !p,q=0,PP_N
-#else
-    !gauss-lobatto nodes
-    DO q=0,PP_N; DO p=0,PP_N
-      ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
-      Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
-                                        - Flux(:,p,q,SideID)*L_hatMinus0
-    END DO; END DO !p,q=0,PP_N
-#endif /*NONCONS*/
 #endif /*PP_NodeType*/
   END IF !slave nbElemID .NE. -1
 END DO !SideID=firstSideID,lastSideID

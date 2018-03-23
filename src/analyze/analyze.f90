@@ -430,7 +430,7 @@ SUBROUTINE CalcMeanFlux(Time,MeanFlux)
 USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Analyze_Vars,      ONLY: wGPSurf
-USE MOD_DG_Vars,           ONLY: Flux
+USE MOD_DG_Vars,           ONLY: Flux_master
 USE MOD_Mesh_Vars,         ONLY: nSides,nBCs,AnalyzeSide
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -452,7 +452,7 @@ DO iSide=1,nSides
   iSurf=AnalyzeSide(iSide)
   IF(iSurf.EQ.0) CYCLE
   DO j=0,PP_N; DO i=0,PP_N
-    MeanFlux(:,iSurf)=MeanFlux(:,iSurf)+Flux(:,i,j,iSide)*wGPSurf(i,j)
+    MeanFlux(:,iSurf)=MeanFlux(:,iSurf)+Flux_master(:,i,j,iSide)*wGPSurf(i,j)
   END DO; END DO !i,j
 END DO !iSide
 

@@ -27,6 +27,12 @@ INTERFACE EvalEulerFluxTilde3D
   MODULE PROCEDURE EvalEulerFluxTilde3D
 END INTERFACE
 
+#if NONCONS
+INTERFACE AddNonConsFluxTilde3D
+  MODULE PROCEDURE AddNonConsFluxTilde3D
+END INTERFACE
+#endif /*NONCONS*/
+
 INTERFACE EvalUaux
   MODULE PROCEDURE EvalUaux
 END INTERFACE
@@ -57,6 +63,9 @@ END INTERFACE
 
 
 PUBLIC::EvalEulerFluxTilde3D
+#if NONCONS
+PUBLIC::AddNonConsFluxTilde3D
+#endif /*NONCONS*/
 PUBLIC::EvalUaux
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
@@ -216,6 +225,63 @@ END DO; END DO; END DO ! i,j,k
 END SUBROUTINE EvalEulerFluxTilde3D
 
 
+#if NONCONS
+!==================================================================================================================================
+!> Compute transformed nonconservative MHD fluxes 
+!==================================================================================================================================
+SUBROUTINE AddNonConsFluxTilde3D(iElem,Uaux,ftilde,gtilde,htilde)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars       ,ONLY:U
+USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_Equation_Vars ,ONLY:nAuxVar
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)           :: iElem  !< Determines the actual element
+REAL   ,INTENT(IN)           :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N)   !auxiliary variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: ftilde !< add to transformed flux f(iVar,l,i,j,k)
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: gtilde !< add to transformed flux g(iVar,l,i,j,k)
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: htilde !< add to transformed flux h(iVar,l,i,j,k)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i,j,k,l
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  :: phi 
+!==================================================================================================================================
+Phi=0.
+! Powell
+Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
+Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
+Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  DO l=0,N
+    ftilde(:,l,i,j,k) = ftilde(:,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi(:,i,j,k) 
+    gtilde(:,l,i,j,k) = gtilde(:,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi(:,i,j,k) 
+    htilde(:,l,i,j,k) = htilde(:,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi(:,i,j,k) 
+#ifdef PP_GLM
+    !nonconservative term to restore galilein invariance for GLM term
+    ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => 1/2 vec{Ja^d}_{(m,i),j,k} . vec{v}_ijk \psi_l,j,k
+    ftilde((/5,PP_nVar/),l,i,j,k) = ftilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                                                                            +Metrics_ftilde(:,l,j,k,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,l,j,k,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+    gtilde((/5,PP_nVar/),l,i,j,k) = gtilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                                                                            +Metrics_gtilde(:,i,l,k,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,i,l,k,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+    htilde((/5,PP_nVar/),l,i,j,k) = htilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                                                                            +Metrics_htilde(:,i,j,l,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,i,j,l,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+#endif /*PP_GLM*/
+  END DO !l=0,N
+END DO; END DO; END DO ! i,j,k
+
+END SUBROUTINE AddNonConsFluxTilde3D
+
+#endif /*NONCONS*/
 
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
