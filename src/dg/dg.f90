@@ -339,23 +339,13 @@ CALL VolInt(Ut)
 CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
 #endif /*PARABOLIC && MPI*/
 
-#if MPI && NONCONS
-!!start U_master communication (not needed anymore)
-CALL StartReceiveMPIData(U_master, DataSizeSide, 1,nSides,MPIRequest_U( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
-CALL StartSendMPIData(   U_master, DataSizeSide, 1,nSides,MPIRequest_U( :,RECV),SendID=1) ! Send MINE (SendID=1) 
-#endif /* MPI && NONCONS*/
-
 
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
 
-
 ! here, the weak flag is set, since small sides can be slave and must be added to big sides, which are always master!
-CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
-
-!??? CALL Flux_Mortar(U_Master,doMPISides=.FALSE.,weak=.TRUE.)
-
+!TODO CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
 
 #if MPI
 ! start off with the receive command
@@ -372,13 +362,10 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 #if MPI
 ! Complete send / receive for  Flux array
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
+
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
-CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.)
-#if NONCONS
-!finish U_master communication
-CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U )  ! Flux, MPI_MINE -> MPI_YOUR 
-!???? CALL Flux_Mortar(U_master,doMPISides=.TRUE.,weak=.TRUE.)
-#endif /*NONCONS*/
+!TODO CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.)
+
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
