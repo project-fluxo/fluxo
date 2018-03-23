@@ -637,7 +637,7 @@ CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
   !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 
-CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1]
+CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1], with pressure gradient
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
   Prim=0.
   Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
@@ -646,12 +646,29 @@ CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1]
   Prim(1)=1.0
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
-      a=REAL(1+0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
+      a=REAL(0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
       Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
     END DO
   END DO
-  Prim(3)=IniDisturbance*ABS(Prim(6))*Prim(3)
+  Prim(3)=IniDisturbance*Prim(3)
   Prim(5)=0.2  +0.5*(1.0-Prim(6)**2)  !beta~0.2
+  CALL PrimToCons(Prim,Resu)
+
+CASE(74) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1], without pressure gradient
+        ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
+  Prim=0.
+  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(8)=SQRT(1.0-Prim(6)*Prim(6))
+  
+  Prim(1)=1.0
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=REAL(0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
+    END DO
+  END DO
+  Prim(3)=IniDisturbance*Prim(3)
+  Prim(5)=0.2  !beta~0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]

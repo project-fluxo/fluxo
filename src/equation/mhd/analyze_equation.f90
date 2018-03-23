@@ -114,6 +114,12 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_VarNames(A2F_iVar)='"KineticEnergy"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"MagneticEnergy"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"TotalEnergy"'
+#ifdef PP_GLM
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"PsiEnergy"'
+#endif /*PP_GLM*/
   END IF !doCalcEnergy
   IF(doCalcEntropy)THEN
     A2F_iVar=A2F_iVar+1
@@ -183,8 +189,13 @@ IF(doCalcEnergy)THEN
   tmp(1:2)=Energy(1:2)
   CALL CalcEnergy(Energy)
   IF(MPIroot) THEN
+#ifdef PP_GLM
+    WRITE(formatStr,'(A5,I1,A7)')'(A21,',4,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)' kin./magn./total/psi Energy : ',Energy(1:4)
+#else
     WRITE(formatStr,'(A5,I1,A7)')'(A21,',3,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)' kin./magn. Energy : ',Energy(1:2)
+    WRITE(UNIT_StdOut,formatStr)' kin./magn./total Energy : ',Energy(1:3)
+#endif 
     IF((time-RestartTime).GE.Analyze_dt)THEN
       tmp(1:2)=LOG(Energy(1:2) /tmp(1:2))/Analyze_dt
       WRITE(UNIT_StdOut,formatStr)' growth rates    : ',tmp(1:2)
@@ -194,6 +205,12 @@ IF(doCalcEnergy)THEN
       A2F_Data(A2F_iVar)=Energy(1) !kineticEnergy
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=Energy(2) !magneticEnergy
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Energy(3) !totalEnergy
+#ifdef PP_GLM
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Energy(4) !PsiEnergy
+#endif 
     END IF !doAnalyzeToFile
   END IF !MPIroot
 END IF !doCalcEnergy
@@ -351,7 +368,7 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)                :: Energy(2) !< kinetic and magnetic energy
+REAL,INTENT(OUT)                :: Energy(4) !< kinetic and magnetic energy / total and psi divcorr
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER                         :: iElem,i,j,k
@@ -363,21 +380,26 @@ DO iElem=1,nElems
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
     Energy(1)  = Energy(1)+SUM(U(2:4,i,j,k,iElem)**2)/U(1,i,j,k,iElem)*IntegrationWeight
     Energy(2)  = Energy(2)+SUM(U(6:8,i,j,k,iElem)**2)*IntegrationWeight
+    Energy(3)  = Energy(3)+U(5,i,j,k,iElem)*IntegrationWeight
+#ifdef PP_GLM
+    Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)*IntegrationWeight
+#endif
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
 
 #if MPI
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,Energy,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,Energy,4,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ELSE
-  CALL MPI_REDUCE(Energy         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(Energy         ,0  ,4,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
 #endif /*MPI*/
 Energy(1)=0.5*Energy(1)/vol
 Energy(2)= s2mu_0*Energy(2)/vol
-
-
+Energy(4)= 0.5*Energy(4)/vol
 END SUBROUTINE CalcEnergy
+
+
 !==================================================================================================================================
 !> Calculates  Entropy over whole domain Entropy=rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
 !==================================================================================================================================

@@ -177,6 +177,9 @@ REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtil
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !central euler flux at ijk 
 REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
+#if NONCONS
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  :: phi 
+#endif
 INTEGER             :: i,j,k,l
 #ifdef CARTESIANFLUX 
 REAL                :: X_xi,Y_eta,Z_zeta
@@ -189,6 +192,15 @@ Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
 #endif 
 ! due to consisteny, if left and right are the same, its just the transformed eulerflux
 CALL EvalEulerFluxTilde3D(iElem,ftilde_c,gtilde_c,htilde_c,Uaux)
+
+#if NONCONS
+Phi=0.
+! Powell
+Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
+Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
+Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+#endif /*NONCONS*/
+
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
@@ -232,14 +244,26 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   ! source term on the RHS -divB*PHI is written as
   !two-point source term of the form -1/2*PHI_i B1_l:
   ! f(:)=0.5 PHI(:) B1 g(:)=0.5*PHI B2, h(:)=0.5*Phi*B3
-  !Jahunen source term: divB*vel on B_t => two-point source: f(6:8)=-0.5v(:)_ijk B1_ljk g(6:8)*
   DO l=0,N
-    ftilde(6:8,l,i,j,k) = ftilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
-                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Uaux(2:4,i,j,k) 
-    gtilde(6:8,l,i,j,k) = gtilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
-                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Uaux(2:4,i,j,k) 
-    htilde(6:8,l,i,j,k) = htilde(6:8,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
-                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Uaux(2:4,i,j,k) 
+    ftilde(:,l,i,j,k) = ftilde(:,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi(:,i,j,k) 
+    gtilde(:,l,i,j,k) = gtilde(:,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi(:,i,j,k) 
+    htilde(:,l,i,j,k) = htilde(:,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi(:,i,j,k) 
+#ifdef PP_GLM
+    !nonconservative term to restore galilein invariance for GLM term
+    ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => 1/2 vec{Ja^d}_{(m,i),j,k} . vec{v}_ijk \psi_l,j,k
+    ftilde((/5,PP_nVar/),l,i,j,k) = ftilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                                                                            +Metrics_ftilde(:,l,j,k,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,l,j,k,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+    gtilde((/5,PP_nVar/),l,i,j,k) = gtilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                                                                            +Metrics_gtilde(:,i,l,k,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,i,l,k,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+    htilde((/5,PP_nVar/),l,i,j,k) = htilde((/5,PP_nVar/),l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                                                                            +Metrics_htilde(:,i,j,l,iElem))*Uaux(2:4,i,j,k))) &
+                                         *U(PP_nVar,i,j,l,iElem)*(/U(PP_nVar,i,j,k,iElem),1./)
+#endif /*PP_GLM*/
   END DO !l=0,N
 #endif /*NONCONS*/
 END DO; END DO; END DO ! i,j,k
