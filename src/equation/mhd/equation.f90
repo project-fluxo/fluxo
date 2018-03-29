@@ -933,29 +933,29 @@ CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
   prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
   CALL PrimToCons(Prim,Resu)
 
-CASE(666) ! random initialization for velocity and B field
-  prim =  0.
-  !CALL RANDOM_NUMBER(prim(2:4))
-  prim(1) = RAND(NINT(100000000*a))
-  CALL CPU_TIME(a)
-  prim(2) = RAND(NINT(10000000*a))
-  CALL CPU_TIME(a)
-  prim(3) = RAND(NINT(100000*a))
-  CALL CPU_TIME(a)
-  prim(4) = RAND(NINT(100000*a))
-  prim(5) = RAND(NINT(1000000*a))
-  CALL CPU_TIME(a)
-  prim(6) = RAND(NINT(100000000*a))
-  CALL CPU_TIME(a)
-  prim(7) = RAND(NINT(1000000*a))
-  CALL CPU_TIME(a)
-  prim(8) = RAND(NINT(10000*a))
-  !CALL RANDOM_NUMBER(prim(6:8))
-  prim(1)  = 1.+0.8*2.*(prim(1)-0.5)
-  prim(5)  = 1.+0.9*2.*(prim(5)-0.5)
-  prim(2:4)=(/0.1,0.05,0.04/)+(prim(2:4)-0.5)*IniAmplitude
-  prim(6:8)=(prim(6:8)-0.5)*IniHalfwidth
-  CALL PrimToCons(Prim,Resu)
+!CASE(666) ! random initialization for velocity and B field, only works with GNU
+!  prim =  0.
+!  !CALL RANDOM_NUMBER(prim(2:4))
+!  prim(1) = RAND(NINT(100000000*a))
+!  CALL CPU_TIME(a)
+!  prim(2) = RAND(NINT(10000000*a))
+!  CALL CPU_TIME(a)
+!  prim(3) = RAND(NINT(100000*a))
+!  CALL CPU_TIME(a)
+!  prim(4) = RAND(NINT(100000*a))
+!  prim(5) = RAND(NINT(1000000*a))
+!  CALL CPU_TIME(a)
+!  prim(6) = RAND(NINT(100000000*a))
+!  CALL CPU_TIME(a)
+!  prim(7) = RAND(NINT(1000000*a))
+!  CALL CPU_TIME(a)
+!  prim(8) = RAND(NINT(10000*a))
+!  !CALL RANDOM_NUMBER(prim(6:8))
+!  prim(1)  = 1.+0.8*2.*(prim(1)-0.5)
+!  prim(5)  = 1.+0.9*2.*(prim(5)-0.5)
+!  prim(2:4)=(/0.1,0.05,0.04/)+(prim(2:4)-0.5)*IniAmplitude
+!  prim(6:8)=(prim(6:8)-0.5)*IniHalfwidth
+!  CALL PrimToCons(Prim,Resu)
 
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
             ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
