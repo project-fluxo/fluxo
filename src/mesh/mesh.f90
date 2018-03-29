@@ -200,10 +200,6 @@ SideToElem  = -1   !mapping side to elem, sorted by side ID (for surfint)
 BC          = 0
 AnalyzeSide = 0
 
-#ifdef NONCONS
-  IF(nMortarSides.GT.0) CALL abort(__STAMP__, & 
-             "found Mortar sides, but NONCONS=ON flag does not yet work with Mortar meshes.")
-#endif /*NONCONS*/
 !NOTE: nMortarSides=nMortarInnerSides+nMortarMPISides
 ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
 ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides)) ! [1]: 1: Neighbour sides, 2: Flip, [2]: small sides

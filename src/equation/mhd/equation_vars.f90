@@ -362,7 +362,7 @@ REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
   gradP(6:PP_nVar)=grad_in(6:PP_nVar) 
 #elif (PP_Lifting_Var==2) 
   !grad_in is gradient of primitive variable, do nothing
-gradP(:)=grad_in(:)
+  gradP(:)=grad_in(:)
 #elif (PP_Lifting_Var==3) 
   !grad_in is gradient of entropy variable,  entropy variables are:
   ! w(1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(2:4)=(rho/p)*v, w(5)=-(rho/p), w(6:8)=(rho/p)*B(:) , w(9)=(rho/p)*psi 

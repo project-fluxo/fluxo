@@ -44,4 +44,40 @@ PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-poin
 #endif /*PP_DiscType==2*/
 
 !==================================================================================================================================
+
+#if PARABOLIC
+!INTERFACE ConvertToGradPrimVec
+!  MODULE PROCEDURE ConvertToGradPrimVec
+!END INTERFACE
+#endif /*PARABOLIC*/
+
+CONTAINS
+
+
+#if PARABOLIC
+!==================================================================================================================================
+!> transform gradient from conservative variables, placeholder for linadv
+!==================================================================================================================================
+SUBROUTINE ConvertToGradPrimVec(dim2,cons,gradP)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2)    !< conservative state 
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  on intput: can be gradient of conservative / primivite /entropy variables
+                                             !<  on output: gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  gradP(:,i)=cons(:,i)
+END DO!i
+END SUBROUTINE ConvertToGradPrimVec
+#endif /*PARABOLIC*/
+
+
 END MODULE MOD_Equation_Vars

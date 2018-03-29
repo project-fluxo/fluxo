@@ -42,54 +42,56 @@ CONTAINS
 !> and then transformed to the x,y,z gradients all together, including the Jacobian!
 !> the transpose of the D matrix  (D_T) is only used because of memory access
 !===================================================================================================================================
-SUBROUTINE Lifting_VolInt(U,gradUx,gradUy,gradUz)
+SUBROUTINE Lifting_VolInt(gradPx,gradPy,gradPz)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_DG_Vars            ,ONLY:D_T
 USE MOD_Mesh_Vars          ,ONLY:nElems,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,sJ   ! metrics
+USE MOD_Flux               ,ONLY: EvalLiftingVolumeFlux
 USE MOD_PreProc
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                              :: U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< conservative  state
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT)                           :: gradUx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in x
-REAL,INTENT(INOUT)                           :: gradUy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in y
-REAL,INTENT(INOUT)                           :: gradUz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in z
+REAL,INTENT(INOUT)                           :: gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in x
+REAL,INTENT(INOUT)                           :: gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in y
+REAL,INTENT(INOUT)                           :: gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in z
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL,DIMENSION(PP_nVar)                      :: gradUxi,gradUeta,gradUzeta
+REAL,DIMENSION(PP_nVar)                      :: gradPxi,gradPeta,gradPzeta
+REAL                                         :: Flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 INTEGER                                      :: iElem,i,j,k
 INTEGER                                      :: l
 !===================================================================================================================================
 ! volume integral, gradients should already be initialized =0
-!gradUx=0.
-!gradUy=0.
-!gradUz=0.
+!gradPx=0.
+!gradPy=0.
+!gradPz=0.
 
 DO iElem=1,nElems
+  CALL EvalLiftingVolumeFlux(iElem,Flux)
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
-        gradUxi(:)   = D_T(0,i)*U(:,0,j,k,iElem)
-        gradUeta(:)  = D_T(0,j)*U(:,i,0,k,iElem)
-        gradUzeta(:) = D_T(0,k)*U(:,i,j,0,iElem)
+        gradPxi(:)   = D_T(0,i)*Flux(:,0,j,k)
+        gradPeta(:)  = D_T(0,j)*Flux(:,i,0,k)
+        gradPzeta(:) = D_T(0,k)*Flux(:,i,j,0)
         DO l=1,PP_N
-          gradUxi(:)   = gradUxi(:)   +D_T(l,i)*U(:,l,j,k,iElem)
-          gradUeta(:)  = gradUeta(:)  +D_T(l,j)*U(:,i,l,k,iElem)
-          gradUzeta(:) = gradUzeta(:) +D_T(l,k)*U(:,i,j,l,iElem)
+          gradPxi(:)   = gradPxi(:)   +D_T(l,i)*Flux(:,l,j,k)
+          gradPeta(:)  = gradPeta(:)  +D_T(l,j)*Flux(:,i,l,k)
+          gradPzeta(:) = gradPzeta(:) +D_T(l,k)*Flux(:,i,j,l)
         END DO !i
-        gradUx(:,i,j,k,iElem) = gradUx(:,i,j,k,iElem) + ( Metrics_fTilde(1,i,j,k,iElem)*gradUxi(:)    &
-                                                         +Metrics_gTilde(1,i,j,k,iElem)*gradUeta(:)   &
-                                                         +Metrics_hTilde(1,i,j,k,iElem)*gradUzeta(:) )*sJ(i,j,k,iElem)
-        gradUy(:,i,j,k,iElem) = gradUy(:,i,j,k,iElem) + ( Metrics_fTilde(2,i,j,k,iElem)*gradUxi(:)    &
-                                                         +Metrics_gTilde(2,i,j,k,iElem)*gradUeta(:)   &
-                                                         +Metrics_hTilde(2,i,j,k,iElem)*gradUzeta(:) )*sJ(i,j,k,iElem)
-        gradUz(:,i,j,k,iElem) = gradUz(:,i,j,k,iElem) + ( Metrics_fTilde(3,i,j,k,iElem)*gradUxi(:)    &
-                                                         +Metrics_gTilde(3,i,j,k,iElem)*gradUeta(:)   &
-                                                         +Metrics_hTilde(3,i,j,k,iElem)*gradUzeta(:) )*sJ(i,j,k,iElem)
+        gradPx(:,i,j,k,iElem) = gradPx(:,i,j,k,iElem) + ( Metrics_fTilde(1,i,j,k,iElem)*gradPxi(:)    &
+                                                         +Metrics_gTilde(1,i,j,k,iElem)*gradPeta(:)   &
+                                                         +Metrics_hTilde(1,i,j,k,iElem)*gradPzeta(:) )*sJ(i,j,k,iElem)
+        gradPy(:,i,j,k,iElem) = gradPy(:,i,j,k,iElem) + ( Metrics_fTilde(2,i,j,k,iElem)*gradPxi(:)    &
+                                                         +Metrics_gTilde(2,i,j,k,iElem)*gradPeta(:)   &
+                                                         +Metrics_hTilde(2,i,j,k,iElem)*gradPzeta(:) )*sJ(i,j,k,iElem)
+        gradPz(:,i,j,k,iElem) = gradPz(:,i,j,k,iElem) + ( Metrics_fTilde(3,i,j,k,iElem)*gradPxi(:)    &
+                                                         +Metrics_gTilde(3,i,j,k,iElem)*gradPeta(:)   &
+                                                         +Metrics_hTilde(3,i,j,k,iElem)*gradPzeta(:) )*sJ(i,j,k,iElem)
       END DO ! i
     END DO ! j
   END DO ! k

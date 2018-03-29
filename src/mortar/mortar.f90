@@ -30,7 +30,9 @@ INTERFACE MortarBasis_BigToSmall
 END INTERFACE
 
 INTERFACE MortarBasis_SmallToBig
-  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
+!  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
+!  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation2
+  MODULE PROCEDURE MortarBasis_SmallToBig_Projection
 END INTERFACE
 
 INTERFACE FinalizeMortar
@@ -171,6 +173,64 @@ END DO
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
 END SUBROUTINE MortarBasis_SmallToBig_Collocation
+
+
+
+!==================================================================================================================================
+!> Build 1D operators for non-conforming interfaces:
+!>    M_1_0(:,:)  discrete projection    from left  interval 1: [-1,0] to full  interval 0: [-1,1]
+!>    M_2_0(:,:)  discrete projection    from right interval 1: [0, 1] to full  interval 0: [-1,1]
+!> integrals are approximated with the same collocation points (gauss/gauss-Lob) as the scheme. for gauss, collocation is exact.
+!> for GL, collocation makes scheme FSP and angular momentum conservation on cartesian mortars (exact projection doesnt!!!). 
+!==================================================================================================================================
+SUBROUTINE MortarBasis_SmallToBig_Collocation2(N_In,NodeType_In,M_1_0,M_2_0)
+! MODULES
+USE MOD_Interpolation     ,ONLY: getNodesAndWeights
+USE MOD_Basis,             ONLY: InitializeVandermonde 
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)                                      :: N_In  !< polynomial degree
+CHARACTER(LEN=255),INTENT(IN)                           :: NodeType_In !< nodetype
+!> precomputed mortar matrices: small to big
+REAL,DIMENSION(0:N_In,0:N_in),INTENT(OUT)  :: M_1_0,M_2_0
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                       :: i,j
+REAL,DIMENSION(0:N_in)        :: xi_In,w_in,wBary_In
+REAL,DIMENSION(0:N_in,0:N_in) :: Vdm_0_1,Vdm_0_2,Vdm_in_Gauss
+REAL,DIMENSION(0:N_in)        :: xi_Gauss,w_Gauss  ! Gauss Nodes
+!==================================================================================================================================
+CALL GetNodesAndWeights(N_in,NodeType_In,xi_In,wIP=w_in,wIPBary=wBary_In)
+CALL GetNodesAndWeights(N_in,'GAUSS',xi_Gauss,wIP=w_Gauss) !Gauss nodes and integration weights
+
+! Vdm^{01}_{ij} = l^0_j (xi^1_i)
+! Vdm^{02}_{ij} = l^0_j (xi^2_i)
+CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_gauss-1.),Vdm_0_1)
+CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,0.5*(xi_gauss+1.),Vdm_0_2)
+
+CALL InitializeVandermonde(N_In,N_In,wBary_In,xi_In,xi_gauss,Vdm_in_gauss)
+
+DO i=0,N_in
+  Vdm_0_1(i,:)=w_gauss(i)*Vdm_0_1(i,:)
+  Vdm_0_2(i,:)=w_gauss(i)*Vdm_0_2(i,:)
+END DO
+M_1_0=MATMUL(TRANSPOSE(Vdm_0_1),Vdm_in_Gauss)
+M_2_0=MATMUL(TRANSPOSE(Vdm_0_2),Vdm_in_Gauss)
+
+
+DO i=0,N_in
+  DO j=0,N_in
+    M_1_0(i,j)=M_1_0(i,j)/w_in(i)   !*0.5 accounted by surfelem
+    M_2_0(i,j)=M_2_0(i,j)/w_in(i)
+  END DO
+END DO
+! later the transposed version is mostly used
+! ATTENTION: MortarBasis_SmallToBig computes the transposed matrices, which is useful when they are used
+!            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
+M_1_0=TRANSPOSE(M_1_0)
+M_2_0=TRANSPOSE(M_2_0)
+END SUBROUTINE MortarBasis_SmallToBig_Collocation2
 
 !==================================================================================================================================
 !> Build 1D operators for non-conforming interfaces:

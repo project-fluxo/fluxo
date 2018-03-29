@@ -26,11 +26,9 @@ INTERFACE Riemann
   MODULE PROCEDURE Riemann
 END INTERFACE
 
-#if NONCONS
-INTERFACE AddNonConsFluxes
-  MODULE PROCEDURE AddNonConsFluxes 
-END INTERFACE
-#endif /*NONCONS*/
+!INTERFACE AddNonConsFlux
+!  MODULE PROCEDURE AddNonConsFlux
+!END INTERFACE
 
 INTERFACE RiemannSolverByHLL
   MODULE PROCEDURE RiemannSolverByHLL
@@ -59,7 +57,7 @@ END INTERFACE
 
 PUBLIC :: Riemann
 #if NONCONS
-PUBLIC :: AddNonConsFluxes 
+PUBLIC :: AddNonConsFlux
 #endif /*NONCONS*/
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
@@ -165,59 +163,43 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> nonconservative fluxes 
 !==================================================================================================================================
-SUBROUTINE AddNonConsFluxes(Fm,Fs,Um,Us,nv,t1,t2)
+SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
+USE MOD_DG_Vars,ONLY:nTotal_Face
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN) :: Um(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
-REAL,INTENT(IN) :: Us(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
-REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
-REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
-REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,nTotal_Face) !< right state on face
+REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,nTotal_Face) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,nTotal_Face) !< 2nd tangential vector of face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT):: Fm(       PP_nVar,0:PP_N,0:PP_N) !< nonconservative flux on master
-REAL,INTENT(OUT):: Fs(       PP_nVar,0:PP_N,0:PP_N) !< nonconservative flux on slave
+REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< nonconservative flux on UL side
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: p,q
-REAL    :: phi_m(PP_nVar),v_m(3)
-REAL    :: phi_s(PP_nVar),v_s(3)
+INTEGER :: i
+REAL    :: phi_L(PP_nVar),v_L(3)
 !==================================================================================================================================
-phi_m  =0.
-DO q=0,PP_N; DO p=0,PP_N
-  v_m=Um(2:4,p,q)/Um(1,p,q)
+phi_L  =0.
+DO i=1,nTotal_Face
+  v_L=UL(2:4,i)/UL(1,i)
   !Powell
-  phi_m(6:8)=v_m(:)
-  phi_m(2:4)=Um(6:8,p,q)
-  phi_m(5)  =SUM(phi_m(2:4)*phi_m(6:8))
+  phi_L(6:8)=v_L(:)
+  phi_L(2:4)=UL(6:8,i)
+  phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
   
-  Fm(  :,p,q)=Fm(:,p,q) +(0.5*SUM(Us(6:8,p,q)*nv(:,p,q)))*phi_m(:)    !B_slave*n*Phi_master
+  FL(  :,i)=FL(:,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*phi_L(:)    !B_R*n*phi_L
 #ifdef PP_GLM
   !nonconservative term to restore galilein invariance for GLM term
-  Fm((/5,PP_nVar/),p,q)=Fm((/5,PP_nVar/),p,q)  &
-                   +(0.5*SUM(v_m(:)*nv(:,p,q)))*(/Um(PP_nVar,p,q)*Us(PP_nVar,p,q),Us(PP_nVar,p,q)/)
+  FL((/5,PP_nVar/),i)=FL((/5,PP_nVar/),i)  &
+                   +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(PP_nVar,i)*UR(PP_nVar,i),UR(PP_nVar,i)/)
 #endif /*PP_GLM*/
 
-END DO; END DO !p,q=0,PP_N
+END DO !i=1,nTotal_Face
 
-phi_s  =0.
-DO q=0,PP_N; DO p=0,PP_N
-      v_s=Us(2:4,p,q)/Us(1,p,q)
-      !Powell
-      phi_s(6:8)=v_s(:)
-      phi_s(2:4)=Us(6:8,p,q)
-      phi_s(5)  =SUM(phi_s(2:4)*phi_s(6:8))
-      Fs(  :,p,q)=Fs(:,p,q) +(0.5*SUM(Um(6:8,p,q)*nv(:,p,q)))*phi_s(:)
-#ifdef PP_GLM
-      !nonconservative term to restore galilein invariance for GLM term
-      Fs((/5,PP_nVar/),p,q)=Fs((/5,PP_nVar/),p,q)  &
-                       +(0.5*SUM(v_s(:)*nv(:,p,q)))*(/Us(PP_nVar,p,q)*Um(PP_nVar,p,q),Um(PP_nVar,p,q)/)
-#endif /*PP_GLM*/
-END DO; END DO !p,q=0,PP_N
-
-END SUBROUTINE AddNonConsFluxes
+END SUBROUTINE AddNonConsFlux
 #endif /*NONCONS*/
 
 !==================================================================================================================================

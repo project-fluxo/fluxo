@@ -119,7 +119,7 @@ CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with dealiased metric'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&

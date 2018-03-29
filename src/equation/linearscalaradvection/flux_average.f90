@@ -77,12 +77,6 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux                
 ! LOCAL VARIABLES
 !==================================================================================================================================
 Uaux=0.
-#ifdef CARTESIANFLUX
-!for cartesian meshes, metric tensor is constant and diagonal:
-ftilde(1,:,:,:) = AdvVel(1)*Metrics_fTilde(1,0,0,0,iElem)*U(1,:,:,:,iElem)
-gtilde(1,:,:,:) = AdvVel(2)*Metrics_gTilde(2,0,0,0,iElem)*U(1,:,:,:,iElem)
-htilde(1,:,:,:) = AdvVel(3)*Metrics_hTilde(3,0,0,0,iElem)*U(1,:,:,:,iElem)
-#else /* CURVED FLUX*/
 ftilde(1,:,:,:) = ( AdvVel(1)*Metrics_fTilde(1,:,:,:,iElem) &
                    +AdvVel(2)*Metrics_fTilde(2,:,:,:,iElem) &
                    +AdvVel(3)*Metrics_fTilde(3,:,:,:,iElem)) *U(1,:,:,:,iElem)
@@ -92,7 +86,6 @@ gtilde(1,:,:,:) = ( AdvVel(1)*Metrics_gTilde(1,:,:,:,iElem) &
 htilde(1,:,:,:) = ( AdvVel(1)*Metrics_hTilde(1,:,:,:,iElem) &
                    +AdvVel(2)*Metrics_hTilde(2,:,:,:,iElem) &
                    +AdvVel(3)*Metrics_hTilde(3,:,:,:,iElem)) *U(1,:,:,:,iElem)
-#endif /*CARTESIANFLUX*/
 END SUBROUTINE EvalEulerFluxTilde3D
 
 
@@ -143,13 +136,7 @@ END SUBROUTINE StandardDGFlux
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the scalar advection eq.
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:AdvVel
@@ -161,12 +148,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
@@ -175,15 +158,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
 !==================================================================================================================================
 
 !without metric dealising (standard DG flux on curved meshes)
-#ifdef CARTESIANFLUX
-Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &
-           + AdvVel(2)*metric(2)*(UL+UR) &
-           + AdvVel(3)*metric(3)*(UL+UR) )
-#else
 Fstar=0.5*(  AdvVel(1)*(metric_L(1)*UL+metric_R(1)*UR) &
            + AdvVel(2)*(metric_L(2)*UL+metric_R(2)*UR) &
            + AdvVel(3)*(metric_L(3)*UL+metric_R(3)*UR) )
-#endif /*def CARTESIANFLUX*/
 
 END SUBROUTINE StandardDGFluxVec
 
@@ -191,13 +168,7 @@ END SUBROUTINE StandardDGFluxVec
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the scalar adv. equation
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:AdvVel
@@ -209,22 +180,16 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right mertric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 !Fstar=SUM(AdvVel(1:3)*metric(1:3))*0.5*(UL+UR)
 
 Fstar=0.5*(  AdvVel(1)*metric(1)*(UL+UR) &

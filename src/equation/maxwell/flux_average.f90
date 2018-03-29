@@ -75,9 +75,6 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux                
 ! LOCAL VARIABLES
 REAL                :: f(8),g(8),h(8)    ! Cartesian fluxes 
 INTEGER             :: i,j,k 
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
 Uaux=0.
 CALL EvalFluxTilde3D(iElem,ftilde,gtilde,htilde) !no parabolic terms
@@ -186,13 +183,7 @@ END SUBROUTINE StandardDGFlux
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
@@ -203,12 +194,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
 REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
 REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)   !< constant metric terms for the Cartesian case
-#else
 REAL,INTENT(IN)                     :: metric_L(3) !< metric terms from the curvilinear left element
 REAL,INTENT(IN)                     :: metric_R(3) !< metric terms from the curvilinear right element
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar
@@ -271,12 +258,8 @@ hR(7) = UR(6)*c_corr_c2    ! B3*c_corr*c^2
 hR(8) = UR(3)*c_corr       ! E3*c_corr
 
 !without metric dealiasing
-#ifdef CARTESIANFLUX
-Fstar=0.5*(metric(1)*(fL+fR)+metric(2)*(gL+gR)+metric(3)*(hL+hR))
-#else
 Fstar=0.5*( metric_L(1)*fL+metric_L(2)*gL+metric_L(3)*hL &
            +metric_R(1)*fR+metric_R(2)*gR+metric_R(3)*hR )
-#endif /*CARTESIANFLUX*/
 
 END SUBROUTINE StandardDGFluxVec
 
@@ -285,13 +268,7 @@ END SUBROUTINE StandardDGFluxVec
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
@@ -302,23 +279,17 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
 REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
 REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)   !< constant metric terms for the Cartesian case
-#else
 REAL,INTENT(IN)                     :: metric_L(3) !< metric terms from the curvilinear left element
 REAL,INTENT(IN)                     :: metric_R(3) !< metric terms from the curvilinear right element
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(PP_nVar)             :: fL,gL,hL,fR,gR,hR
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 fL(1) = UL(8)*c_corr_c2    ! phi*chi*c^2
 fL(2) = UL(6)*c2           ! B3*c^2
 fL(3) =-UL(5)*c2           ! -B2*c^2

@@ -181,15 +181,7 @@ INTEGER             :: i
 #ifndef OPTIMIZED
 INTEGER             :: j,k
 #endif
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 #ifdef OPTIMIZED
 DO i=0,nTotal_vol-1
 #else /*OPTIMIZED*/
@@ -229,13 +221,6 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(5)=(rhoE+p)*v3  
   END ASSOCIATE !rho,rhov1,rhov2,rhov3,rhoE
   !now transform fluxes to reference ftilde,gtilde,htilde
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,PP_IJK) =  f(:)*X_xi
-  gtilde(:,PP_IJK) =  g(:)*Y_eta
-  htilde(:,PP_IJK) =  h(:)*Z_zeta
-#else /* CURVED FLUX*/
-  ! general curved metrics
   ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
@@ -245,7 +230,6 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#endif /*CARTESIANFLUX*/
 
 #ifdef OPTIMIZED
 END DO ! i
@@ -357,13 +341,7 @@ END SUBROUTINE StandardDGFlux
 !> Computes the standard DG euler flux transformed with the metrics 
 !> fstar=1/2((fL*metric1L+gL*metric2L+h*metric3L)+(fR*metric1R+gR*metric2R+h*metric3R)  )
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -374,12 +352,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
@@ -401,18 +375,6 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
               p_L =>UauxL(5),    p_R =>UauxR(5)  )
 
 
-#ifdef CARTESIANFLUX
-! Standard DG flux 
-q_L   = VelU_L*metric(1) + VelV_L*metric(2) + VelW_L*metric(3)
-q_R   = VelU_R*metric(1) + VelV_R*metric(2) + VelW_R*metric(3)
-Fstar(1) = 0.5*( rho_L*q_L  +  rho_R*q_R                         )
-Fstar(2) = 0.5*(rhoU_L*q_L  + rhoU_R*q_R + metric(1)*(p_L+p_R)   )
-Fstar(3) = 0.5*(rhoV_L*q_L  + rhoV_R*q_R + metric(2)*(p_L+p_R)   )
-Fstar(4) = 0.5*(rhoW_L*q_L  + rhoW_R*q_R + metric(3)*(p_L+p_R)   )
-Fstar(5) = 0.5*((rhoE_L + p_L)*q_L    + (rhoE_R + p_R)*q_R )
-
-#else 
-
 !curved, without metric dealiasing (=standard DG weak form on curved meshes)
 q_L   = VelU_L*metric_L(1) + VelV_L*metric_L(2) + VelW_L*metric_L(3)
 q_R   = VelU_R*metric_R(1) + VelV_R*metric_R(2) + VelW_R*metric_R(3)
@@ -422,7 +384,6 @@ Fstar(2) = 0.5*(rhoU_L*q_L  + rhoU_R*q_R + metric_L(1)*p_L+metric_R(1)*p_R   )
 Fstar(3) = 0.5*(rhoV_L*q_L  + rhoV_R*q_R + metric_L(2)*p_L+metric_R(2)*p_R   )
 Fstar(4) = 0.5*(rhoW_L*q_L  + rhoW_R*q_R + metric_L(3)*p_L+metric_R(3)*p_R   )
 Fstar(5) = 0.5*((rhoE_L + p_L)*q_L    + (rhoE_R + p_R)*q_R )
-#endif /*CARTESIANFLUX*/
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE StandardDGFluxVec
@@ -432,13 +393,7 @@ END SUBROUTINE StandardDGFluxVec
 !> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 ) 
 !> where for curved metrics, metric=1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R, Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -449,23 +404,17 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: q_L,q_R
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -572,13 +521,7 @@ END SUBROUTINE TwoPointEntropyConservingFlux
 !> derived by Ismail and Roe
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE TwoPointEntropyConservingFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE TwoPointEntropyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -590,12 +533,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed flux
@@ -605,11 +544,9 @@ REAL                                :: z1L,z1R,z2L,z2R,z3L,z3R,z4L,z4R,z5L,z5R
 REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,z1LN,z2Mean,z5Mean
 REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat,rhoHat_HHat
 REAL                                :: qHat
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
@@ -686,11 +623,11 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE TwoPointEntropyConservingFluxVec
 
 
+!==================================================================================================================================
+!> Computes the skew-symmetric 3D flux (in the normal direction) of Kennedy and Gruber for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!==================================================================================================================================
 SUBROUTINE KennedyAndGruberFlux1(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the skew-symmetric 3D flux (in the normal direction) of Kennedy and Gruber for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -741,13 +678,7 @@ END SUBROUTINE KennedyAndGruberFlux1
 !> derived by Kennedy and Gruber
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE KennedyAndGruberFluxVec1(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE KennedyAndGruberFluxVec1(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -758,12 +689,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -771,11 +698,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat
 REAL                                :: eHat,qHat
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
@@ -828,11 +753,11 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE KennedyAndGruberFluxVec1
 
 
+!==================================================================================================================================
+!> Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!==================================================================================================================================
 SUBROUTINE KennedyAndGruberFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -875,17 +800,11 @@ Fstar(5) = Fstar(1)*HHat
 END SUBROUTINE KennedyAndGruberFlux2
 
 
-SUBROUTINE KennedyAndGruberFluxVec2(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE KennedyAndGruberFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -896,23 +815,17 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: rhoHat,uHat,vHat,wHat,HHat,p1Hat,qHat
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -966,12 +879,12 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE KennedyAndGruberFluxVec2
 
 
+!==================================================================================================================================
+!> Computes the skew-symmetric flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> derived by Ducros
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
 SUBROUTINE DucrosFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the skew-symmetric flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! derived by Ducros
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -1016,17 +929,11 @@ Fstar(5) = qLR*((UL(5) + UR(5)) + (p1Hat+p1Hat))
 END SUBROUTINE DucrosFlux
 
 
-SUBROUTINE DucrosFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the skew-symmetric 3D flux (in the normal direction) of Ducros' flux for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!> Computes the skew-symmetric 3D flux (in the normal direction) of Ducros' flux for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !==================================================================================================================================
+SUBROUTINE DucrosFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1037,12 +944,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1050,11 +953,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat
 REAL                                :: rhouHat,rhovHat,rhowHat,rhoEHat,qHat
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -1108,11 +1009,11 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE DucrosFluxVec
 
 
+!==================================================================================================================================
+!> Computes the skew-symmetric 3D flux (in the normal direction) of Morinishi flux for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!==================================================================================================================================
 SUBROUTINE MorinishiFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the skew-symmetric 3D flux (in the normal direction) of Morinishi flux for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,sKappaM1
@@ -1162,18 +1063,12 @@ Fstar(5) = 0.5*( kappa*skappaM1*(p_L*qL + p_R*qR) -(rhoqs2_L*vel2_L + rhoqs2_R*v
 END SUBROUTINE MorinishiFlux
 
 
-SUBROUTINE MorinishiFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the skew-symmetric flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! derived by Morinishi
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes the skew-symmetric flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> derived by Morinishi
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE MorinishiFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1185,12 +1080,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1198,11 +1089,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat
 REAL                                :: q_L,q_R,rhoqs2_L,rhoqs2_R
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -1266,13 +1155,13 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE MorinishiFluxVec
 
 
+!==================================================================================================================================
+!> Computes the entropy and kinetic energy conserving numerical 3D flux (in the
+!> normal direction) for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!> TODO: could make it like EvalFlux3D and do every direction simutaneously
+!==================================================================================================================================
 SUBROUTINE EntropyAndEnergyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the entropy and kinetic energy conserving numerical 3D flux (in the
-! normal direction) for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-! TODO: could make it like EvalFlux3D and do every direction simutaneously
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1
@@ -1330,18 +1219,12 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - Vel2_M)  &
 END SUBROUTINE EntropyAndEnergyConservingFlux
 
 
-SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the entropy and kinetic energy conserving flux transformed with the metrics
-! (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes the entropy and kinetic energy conserving flux transformed with the metrics
+!> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1353,12 +1236,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1367,11 +1246,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat
 REAL                                :: rho_MEAN,beta_MEAN,beta_Hat,qHat
 REAL                                :: beta_R,beta_L
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -1429,13 +1306,13 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE EntropyAndEnergyConservingFluxVec
 
 
+!==================================================================================================================================
+!> Computes the entropy and kinetic energy conserving numerical 3D flux (in the
+!> normal direction) for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!> TODO: could make it like EvalFlux3D and do every direction simutaneously
+!==================================================================================================================================
 SUBROUTINE EntropyAndEnergyConservingFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the entropy and kinetic energy conserving numerical 3D flux (in the
-! normal direction) for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-! TODO: could make it like EvalFlux3D and do every direction simutaneously
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,sKappaM1
@@ -1492,18 +1369,12 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1*sbeta_MEAN - Vel2_M) &
 END SUBROUTINE EntropyAndEnergyConservingFlux2
 
 
-SUBROUTINE EntropyAndEnergyConservingFluxVec2(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the entropy and kinetic energy conserving flux transformed with the metrics
-! (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes the entropy and kinetic energy conserving flux transformed with the metrics
+!> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE EntropyAndEnergyConservingFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1515,12 +1386,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1529,11 +1396,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 REAL                                :: uHat,vHat,wHat,p1Hat,qHat
 REAL                                :: rho_MEAN,sbeta_MEAN
 REAL                                :: beta_R,beta_L
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -1589,13 +1454,13 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE EntropyAndEnergyConservingFluxVec2
 
 
+!==================================================================================================================================
+!> Computes the entropy and kinetic energy conserving numerical 3D flux (in the
+!> normal direction) for the Euler equations
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!> TODO: could make it like EvalFlux3D and do every direction simutaneously
+!==================================================================================================================================
 SUBROUTINE ggflux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the entropy and kinetic energy conserving numerical 3D flux (in the
-! normal direction) for the Euler equations
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-! TODO: could make it like EvalFlux3D and do every direction simutaneously
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1
@@ -1652,18 +1517,12 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - Vel2_M) &
 END SUBROUTINE ggFlux
 
 
-SUBROUTINE ggfluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the entropy and kinetic energy conserving flux transformed with the metrics
-! (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes the entropy and kinetic energy conserving flux transformed with the metrics
+!> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE ggfluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1675,12 +1534,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1689,11 +1544,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat,qHat
 REAL                                :: rho_MEAN,beta_Hat
 REAL                                :: beta_R,beta_L
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
@@ -1750,12 +1603,12 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE ggFluxVec
 
 
+!==================================================================================================================================
+!> Computes the GW^2 flux for the Rho variables split form
+!> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
+!> TODO: could make it like EvalFlux3D and do every direction simutaneously
+!==================================================================================================================================
 SUBROUTINE GassnerWintersWalchFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-!==================================================================================================================================
-! Computes the GW^2 flux for the Rho variables split form
-! Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
-! TODO: could make it like EvalFlux3D and do every direction simutaneously
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,sKappa
@@ -1813,18 +1666,12 @@ Fstar(5) = qhat*Hhat
 END SUBROUTINE GassnerWintersWalchFlux
 
 
-SUBROUTINE GassnerWintersWalchFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! Computes the GW^2 flux for the Rho variables split form
-! transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> Computes the GW^2 flux for the Rho variables split form
+!> transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE GassnerWintersWalchFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1836,12 +1683,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -1849,11 +1692,9 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat,Hhat,qHat
 REAL                                :: sqrtRhoL,sqrtRhoR
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
            rhoV_L =>   UL(3), rhoV_R =>   UR(3), &

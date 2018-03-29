@@ -57,7 +57,6 @@ PUBLIC::EvalAdvectionFlux1D
 #if PARABOLIC
 PUBLIC::EvalDiffFlux3D
 PUBLIC::EvalDiffFluxTilde3D
-
 PUBLIC::EvalLiftingVolumeFlux
 PUBLIC::EvalLiftingSurfFlux
 #endif /*PARABOLIC*/
@@ -117,15 +116,7 @@ INTEGER             :: i
 #ifndef OPTIMIZED
 INTEGER             :: j,k
 #endif
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 #ifdef OPTIMIZED
 DO i=0,nTotal_vol-1
 #else /*OPTIMIZED*/
@@ -202,15 +193,15 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
 
 #if PARABOLIC
   ! Viscous part
-ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem), & 
-           gradv2x => gradPx(3,PP_IJK,iElem), gradB2x => gradPx(7,PP_IJK,iElem), & 
-           gradv3x => gradPx(4,PP_IJK,iElem), gradB3x => gradPx(8,PP_IJK,iElem), & 
-           gradv1y => gradPy(2,PP_IJK,iElem), gradB1y => gradPy(6,PP_IJK,iElem), & 
-           gradv2y => gradPy(3,PP_IJK,iElem), gradB2y => gradPy(7,PP_IJK,iElem), & 
-           gradv3y => gradPy(4,PP_IJK,iElem), gradB3y => gradPy(8,PP_IJK,iElem), & 
-           gradv1z => gradPz(2,PP_IJK,iElem), gradB1z => gradPz(6,PP_IJK,iElem), & 
-           gradv2z => gradPz(3,PP_IJK,iElem), gradB2z => gradPz(7,PP_IJK,iElem), & 
-           gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem)  )
+  ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem), & 
+             gradv2x => gradPx(3,PP_IJK,iElem), gradB2x => gradPx(7,PP_IJK,iElem), & 
+             gradv3x => gradPx(4,PP_IJK,iElem), gradB3x => gradPx(8,PP_IJK,iElem), & 
+             gradv1y => gradPy(2,PP_IJK,iElem), gradB1y => gradPy(6,PP_IJK,iElem), & 
+             gradv2y => gradPy(3,PP_IJK,iElem), gradB2y => gradPy(7,PP_IJK,iElem), & 
+             gradv3y => gradPy(4,PP_IJK,iElem), gradB3y => gradPy(8,PP_IJK,iElem), & 
+             gradv1z => gradPz(2,PP_IJK,iElem), gradB1z => gradPz(6,PP_IJK,iElem), & 
+             gradv2z => gradPz(3,PP_IJK,iElem), gradB2z => gradPz(7,PP_IJK,iElem), & 
+             gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem)  )
            
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -279,13 +270,6 @@ END ASSOCIATE ! gradB1x => gradPx(6 ...
 END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,PP_IJK) =  f(:)*X_xi
-  gtilde(:,PP_IJK) =  g(:)*Y_eta
-  htilde(:,PP_IJK) =  h(:)*Z_zeta
-#else /* CURVED FLUX*/
-  ! general curved metrics
   ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
@@ -295,7 +279,6 @@ END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
   htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#endif /*CARTESIANFLUX*/
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
@@ -531,15 +514,7 @@ INTEGER             :: i
 #ifndef OPTIMIZED
 INTEGER             :: j,k
 #endif
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 #ifdef OPTIMIZED
 DO i=0,nTotal_vol-1
 #else /*OPTIMIZED*/
@@ -637,13 +612,6 @@ END ASSOCIATE ! gradB1x => gradPx(6 ...
 END ASSOCIATE ! b1 = U(6,....
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,PP_IJK) =  f_visc(:)*X_xi
-  gtilde(:,PP_IJK) =  g_visc(:)*Y_eta
-  htilde(:,PP_IJK) =  h_visc(:)*Z_zeta
-#else /* CURVED FLUX*/
-  ! general curved metrics
   ftilde(:,PP_IJK) =   f_visc(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
                      + g_visc(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
                      + h_visc(:)*Metrics_fTilde(3,PP_IJK,iElem)
@@ -653,7 +621,6 @@ END ASSOCIATE ! b1 = U(6,....
   htilde(:,PP_IJK) =   f_visc(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
                      + g_visc(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
                      + h_visc(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#endif /*CARTESIANFLUX*/
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
@@ -683,7 +650,6 @@ INTEGER,INTENT(IN)     :: iElem       !< current element
 REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< lifting flux, depending on lifting_var
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER             :: i 
 !==================================================================================================================================
 #if PP_Lifting_Var==1
   Flux=U(:,:,:,:,iElem)

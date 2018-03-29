@@ -219,9 +219,11 @@ USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,LastSlaveSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)                       !< on input: flux from small mortar sides 
-                                                                                         !< on output: flux on big mortar sides filled
-REAL,INTENT(INOUT)   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+REAL,INTENT(INOUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: has flux from small mortar sides 
+                                                                      !< on output: flux on big mortar sides filled
+REAL,INTENT(IN   )   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) !<has flux from small mortar sides,
+                                                                      !< set -F_slave in call if surfint is weak (dg.f90)
+                                                                      !< set +F_slave in call if surfint is strong (lifting)
                                                             
 LOGICAL,INTENT(IN) :: doMPISides                                    !< flag whether MPI sides are processed
 LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
@@ -252,7 +254,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     SideID = MortarInfo(MI_SIDEID,iMortar,iSide)
     flip   = MortarInfo(MI_FLIP,iMortar,iSide)
     SELECT CASE(flip)
-    CASE(0) ! master side
+    CASE(0) ! small master side
       Flux_m(:,:,:,iMortar)=Flux_master(:,:,:,SideID)
     CASE(1:4) ! slave sides (should only occur for MPI)
       IF(weak)THEN
@@ -266,8 +268,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       END IF !weak
     END SELECT !slave sides
   END DO
-WRITE(*,*)'WHATEVER!!!! MORTAR DOES NOT WORK YET!!!' 
-STOP
   SELECT CASE(MortarType(1,MortarSideID))
   CASE(1) !1->4
     ! first in xi

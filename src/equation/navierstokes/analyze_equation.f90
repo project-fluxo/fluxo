@@ -363,7 +363,7 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_DG_Vars,         ONLY: U_Master
 #if PARABOLIC
-USE MOD_Lifting_Vars,    ONLY: gradUx_Master,gradUy_Master,gradUz_Master
+USE MOD_Lifting_Vars,    ONLY: gradPx_Master,gradPy_Master,gradPz_Master
 #endif /*PARABOLIC*/
 USE MOD_Mesh_Vars,       ONLY: NormVec,SurfElem
 USE MOD_Mesh_Vars,       ONLY: nBCSides,BC,BoundaryType
@@ -399,9 +399,9 @@ DO SideID=1,nBCSides
   IF(BCType .EQ. 4)THEN
     CALL CalcViscousForce(Fv_loc,                     &
                           U_Master(:,:,:,SideID),      &
-                          gradUx_Master(:,:,:,SideID), &
-                          gradUy_Master(:,:,:,SideID), &
-                          gradUz_Master(:,:,:,SideID), &
+                          gradPx_Master(:,:,:,SideID), &
+                          gradPy_Master(:,:,:,SideID), &
+                          gradPz_Master(:,:,:,SideID), &
                           SurfElem(:,:,SideID),       &
                           NormVec(:,:,:,SideID))
     Fv=Fv+Fv_loc
@@ -460,7 +460,7 @@ END SUBROUTINE CalcPressureForce
 !==================================================================================================================================
 !> Integrate the viscous forces on the wall boundary condition
 !==================================================================================================================================
-SUBROUTINE CalcViscousForce(Fv,U_Face,gradUx_Face,gradUy_Face,gradUz_Face,SurfElem,NormVec)
+SUBROUTINE CalcViscousForce(Fv,U_Face,gradPx_Face,gradPy_Face,gradPz_Face,SurfElem,NormVec)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:s23
@@ -478,9 +478,9 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL, INTENT(IN)               :: U_Face(PP_nVar,0:PP_N,0:PP_N)
-REAL, INTENT(IN)               :: gradUx_Face(PP_nVar,0:PP_N,0:PP_N)
-REAL, INTENT(IN)               :: gradUy_Face(PP_nVar,0:PP_N,0:PP_N)
-REAL, INTENT(IN)               :: gradUz_Face(PP_nVar,0:PP_N,0:PP_N)
+REAL, INTENT(IN)               :: gradPx_Face(PP_nVar,0:PP_N,0:PP_N)
+REAL, INTENT(IN)               :: gradPy_Face(PP_nVar,0:PP_N,0:PP_N)
+REAL, INTENT(IN)               :: gradPz_Face(PP_nVar,0:PP_N,0:PP_N)
 REAL, INTENT(IN)               :: SurfElem(0:PP_N,0:PP_N)
 REAL, INTENT(IN)               :: NormVec(3,0:PP_N,0:PP_N)
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -522,11 +522,11 @@ DO j=0,PP_N; DO i=0,PP_N
   ! Compute velocity derivatives via product rule (a*b)'=a'*b+a*b'
   ! GradV(:,1)=x-gradient of V
   vel = U_Face(2:4,i,j)*srho
-  GradV(1:3,1)=srho*(gradUx_Face(2:4,i,j)-gradUx_Face(1,i,j)*vel)
+  GradV(1:3,1)=gradPx_Face(2:4,i,j)
   ! GradV(:,2)=y-gradient of V
-  GradV(1:3,2)=srho*(gradUy_Face(2:4,i,j)-gradUy_Face(1,i,j)*vel)
+  GradV(1:3,2)=gradPy_Face(2:4,i,j)
   ! GradV(:,3)=z-gradient of V
-  GradV(1:3,3)=srho*(gradUz_Face(2:4,i,j)-gradUz_Face(1,i,j)*vel)
+  GradV(1:3,3)=gradPz_Face(2:4,i,j)
   ! Velocity divergence
   DivV=GradV(1,1)+GradV(2,2)+GradV(3,3)
   ! Calculate shear stress tensor

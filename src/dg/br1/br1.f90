@@ -158,6 +158,13 @@ USE MOD_Preproc
 USE MOD_Lifting_Vars
 USE MOD_Vector,            ONLY: VNullify,V2D_M_V1D
 USE MOD_DG_Vars,           ONLY: U,nTotalU,nTotal_IP
+#if (PP_NodeType==1)
+USE MOD_DG_Vars,           ONLY: U_master,U_slave,ntotal_Face
+USE MOD_Mesh_Vars,         ONLY: FirstSlaveSide,LastSlaveSide
+USE MOD_Mesh_Vars,         ONLY: LastMPISide_MINE,FirstMortarMPISide,nMortarMPISides
+USE MOD_Mesh_Vars,         ONLY: nInnerSides,FirstInnerSide,LastInnerSide 
+USE MOD_Mesh_Vars,         ONLY: nMPISides_MINE,FirstMPISide_MINE,LastMPISide_MINE 
+#endif 
 USE MOD_FillMortar,        ONLY: U_Mortar,Flux_Mortar
 USE MOD_Lifting_SurfInt,   ONLY: Lifting_SurfInt
 USE MOD_Lifting_VolInt,    ONLY: Lifting_VolInt
@@ -168,8 +175,9 @@ USE MOD_Equation_Vars,     ONLY: ConvertToGradPrimVec
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI,               ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
-USE MOD_Mesh_Vars,         ONLY: nSides,FirstSlaveSide,LastSlaveSide 
+USE MOD_Mesh_Vars,         ONLY: FirstSlaveSide,LastSlaveSide
 #endif
+USE MOD_Mesh_Vars,         ONLY: nSides
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -199,14 +207,14 @@ CALL StartSendMPIData(   FluxZ,DataSizeSide,1,nSides,MPIRequest_Lifting(:,3,SEND
 #endif /*MPI*/
 ! compute volume integral contribution and add to gradP, Jacobian not yet included
 ! this is onyl the local gradient!
-CALL Lifting_VolInt(U,gradPx,gradPy,gradPz)
+CALL Lifting_VolInt(gradPx,gradPy,gradPz)
 
 ! fill the all surface fluxes on this proc
 CALL Lifting_FillFlux_BC(tIn,FluxX, FluxY, FluxZ)
 CALL Lifting_FillFlux(FluxX,FluxY,FluxZ,doMPISides=.FALSE.)
 
 !Start now with gradPx
-!TODO CALL Flux_Mortar(FluxX,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxX,FluxX,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
 
 CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.FALSE.)
 
@@ -214,7 +222,7 @@ CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.FALSE.)
 ! Complete send / receive FluxX
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,1,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-!TODO CALL Flux_Mortar(FluxX,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxX,FluxX,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
 CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.TRUE.)
 #endif /*MPI*/
 
@@ -224,8 +232,11 @@ CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPx,sJ) !gradPx(:,i)=gradPx(:,i)*sJ(i)
 
 !TODO entropy: "gradWx" -> gradPx back, berofre P2F (since GL only copies point data to surfaces)
 
-! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
+#if (PP_NodeType==2) 
+! ONLY Gauss-Lobatto: 
+!now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
 CALL ConvertToGradPrimVec(nTotal_IP,U,gradPx) !overwrites gradPx!
+#endif /*PP_NodeType==2*/
 
 #if MPI
 !prolongtoface and start send/receive gradPx_slave
@@ -241,7 +252,7 @@ CALL U_Mortar(gradPx_master,gradPx_slave,doMPISides=.FALSE.)
 
 !gradPx sides finished (will be received in DG)
 ! now gradPy sides
-!TODO CALL Flux_Mortar(FluxY,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxY,FluxY,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
 
 CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.FALSE.)
 
@@ -249,7 +260,7 @@ CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.FALSE.)
 ! Complete send / receive FluxY
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,2,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-! TODO CALL Flux_Mortar(FluxY,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxY,FluxY,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
 
 CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.TRUE.)
 #endif /*MPI*/
@@ -257,8 +268,11 @@ CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.TRUE.)
 !apply the Jacobian for gradPy
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPy,sJ) !gradPy(:,i)=gradPy(:,i)*sJ(i)
 
+#if (PP_NodeType==2) 
+! ONLY Gauss-Lobatto: 
 ! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
 CALL ConvertToGradPrimVec(nTotal_IP,U,gradPy) !overwrites gradPy!
+#endif /*PP_NodeType==2*/
 
 #if MPI
 !ProlongToFace and start send/receive gradPy_slave
@@ -275,22 +289,25 @@ CALL U_Mortar(gradPy_master,gradPy_slave,doMPISides=.FALSE.)
 !gradPy sides finished (will be received in DG)
 ! now gradPz sides
 
-!TODO CALL Flux_Mortar(FluxZ,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
 
 CALL Lifting_SurfInt(FluxZ,gradPz,doMPISides=.FALSE.)
 #if MPI
 ! Complete send / receive FluxZ
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,3,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-!TODO CALL Flux_Mortar(FluxZ,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
 CALL Lifting_SurfInt(FluxZ,gradPz,doMPISides=.TRUE.)
 #endif /*MPI*/
 
 !apply the Jacobian for gradPz
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,gradPz,sJ) !gradPz(:,i)=gradPz(:,i)*sJ(i)
 
+#if (PP_NodeType==2) 
+! ONLY Gauss-Lobatto: 
 ! now, grad P is the gradient of primivite variables (before, container for cons/prim/entropy vars) 
 CALL ConvertToGradPrimVec(nTotal_IP,U,gradPz) !overwrites gradPz!
+#endif /*PP_NodeType==2*/
 
 #if MPI
 !ProlongToFace and start send/receive gradPz_slave
@@ -305,6 +322,44 @@ CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 CALL U_Mortar(gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 
 !gradPz sides finished (will be received in DG)
+
+#if (PP_NodeType==1) 
+! For gauss, convert to prim after surface data is prolonged
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPx) !overwrites gradPx!
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPy) !overwrites gradPx!
+CALL ConvertToGradPrimVec(nTotal_IP,U,gradPz) !overwrites gradPx!
+CALL ConvertToGradPrimVec(nTotal_Face*lastMPISide_MINE,U_master(:,:,:,1:lastMPISide_MINE),&
+                                                  gradPx_master(:,:,:,1:lastMPISide_MINE)) 
+CALL ConvertToGradPrimVec(nTotal_Face*lastMPISide_MINE,U_master(:,:,:,1:lastMPISide_MINE),&
+                                                  gradPy_master(:,:,:,1:lastMPISide_MINE)) 
+CALL ConvertToGradPrimVec(nTotal_Face*lastMPISide_MINE,U_master(:,:,:,1:lastMPISide_MINE),&
+                                                  gradPz_master(:,:,:,1:lastMPISide_MINE)) 
+IF(nMortarMPISides.GT.0)THEN
+  CALL ConvertToGradPrimVec(nTotal_Face*nMortarMPISides,U_master(:,:,:,firstMortarMPISide:nSides),&
+                                                gradPx_master(:,:,:,firstMortarMPISide:nSides)) 
+  CALL ConvertToGradPrimVec(nTotal_Face*nMortarMPISides,U_master(:,:,:,firstMortarMPISide:nSides),&
+                                                gradPy_master(:,:,:,firstMortarMPISide:nSides)) 
+  CALL ConvertToGradPrimVec(nTotal_Face*nMortarMPISides,U_master(:,:,:,firstMortarMPISide:nSides),&
+                                                gradPz_master(:,:,:,firstMortarMPISide:nSides)) 
+END IF
+CALL ConvertToGradPrimVec(nTotal_Face*nInnerSides,U_slave(:,:,:,FirstInnerSide:LastInnerSide),& 
+                                             gradPx_slave(:,:,:,FirstInnerSide:LastInnerSide)) 
+CALL ConvertToGradPrimVec(nTotal_Face*nInnerSides,U_slave(:,:,:,FirstInnerSide:LastInnerSide),&  
+                                             gradPy_slave(:,:,:,FirstInnerSide:LastInnerSide))
+CALL ConvertToGradPrimVec(nTotal_Face*nInnerSides,U_slave(:,:,:,FirstInnerSide:LastInnerSide),& 
+                                             gradPz_slave(:,:,:,FirstInnerSide:LastInnerSide)) 
+#if MPI
+! Complete send / receive for gradUx, gradUy, gradUz, started in the lifting routines
+CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
+CALL ConvertToGradPrimVec(nTotal_Face*nMPISides_MINE,U_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE),& 
+                                                gradPx_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE)) 
+CALL ConvertToGradPrimVec(nTotal_Face*nMPISides_MINE,U_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE),&  
+                                                gradPy_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE))
+CALL ConvertToGradPrimVec(nTotal_Face*nMPISides_MINE,U_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE),& 
+                                                gradPz_slave(:,:,:,FirstMPISide_MINE:LastMPISide_MINE)) 
+#endif /*MPI*/
+#endif /*PP_NodeType==1*/
+
 
 END SUBROUTINE Lifting
 

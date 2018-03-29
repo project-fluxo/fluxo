@@ -120,7 +120,7 @@ USE MOD_Mesh_Vars    ,ONLY: nBCSides,nSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master
 #if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
+USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
@@ -135,9 +135,9 @@ INTEGER                 :: iBC,BCType,BCstate
 INTEGER                 :: p,q,iSide,SideID,nBCloc
 REAL                    :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N)
 #if PARABOLIC
-REAL                    :: gradUx_Face_loc(PP_nVar,0:PP_N,0:PP_N)
-REAL                    :: gradUy_Face_loc(PP_nVar,0:PP_N,0:PP_N)
-REAL                    :: gradUz_Face_loc(PP_nVar,0:PP_N,0:PP_N)
+REAL                    :: gradPx_Face_loc(PP_nVar,0:PP_N,0:PP_N)
+REAL                    :: gradPy_Face_loc(PP_nVar,0:PP_N,0:PP_N)
+REAL                    :: gradPz_Face_loc(PP_nVar,0:PP_N,0:PP_N)
 #endif /*PARABOLIC*/
 !==================================================================================================================================
 DO iBC=1,nBCs
@@ -157,9 +157,9 @@ DO iBC=1,nBCs
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
-                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
-                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
+                   gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                   gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                   gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -173,25 +173,25 @@ DO iBC=1,nBCs
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                   gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
-                   gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
-                   gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
+                   gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                   gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                   gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
   CASE(3) !Neumann Flux(U_inside)
 #if PARABOLIC
-    gradUx_Face_loc(:,:,:) = 0. 
-    gradUy_Face_loc(:,:,:) = 0. 
-    gradUz_Face_loc(:,:,:) = 0. 
+    gradPx_Face_loc(:,:,:) = 0. 
+    gradPy_Face_loc(:,:,:) = 0. 
+    gradPz_Face_loc(:,:,:) = 0. 
 #endif /*PARABOLIC*/
     DO iSide=1,nBCLoc
       SideID=BCSideID(iBC,iSide)
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID),         &
 #if PARABOLIC
-                   gradUx_Face_loc(:,:,:),gradUx_Face_loc(:,:,:), &
-                   gradUy_Face_loc(:,:,:),gradUy_Face_loc(:,:,:), &
-                   gradUz_Face_loc(:,:,:),gradUz_Face_loc(:,:,:), &
+                   gradPx_Face_loc(:,:,:),gradPx_Face_loc(:,:,:), &
+                   gradPy_Face_loc(:,:,:),gradPy_Face_loc(:,:,:), &
+                   gradPz_Face_loc(:,:,:),gradPz_Face_loc(:,:,:), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide

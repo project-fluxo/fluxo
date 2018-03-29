@@ -42,7 +42,7 @@ CONTAINS
 !> Note that the Jacobian is not included here!
 !> the transpose of the D matrix  (D_T) is only used because of memory access
 !===================================================================================================================================
-SUBROUTINE Lifting_VolInt(U,gradPx,gradPy,gradPz)
+SUBROUTINE Lifting_VolInt(gradPx,gradPy,gradPz)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_DG_Vars            ,ONLY:D_T
@@ -58,7 +58,6 @@ USE MOD_Flux               ,ONLY: EvalLiftingVolumeFlux
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)                              :: U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< conservative  state
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT)                           :: gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< gradient of U in x

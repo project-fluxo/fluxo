@@ -53,10 +53,6 @@ USE MOD_PreProc
 USE MOD_DG_Vars,            ONLY: L_HatMinus
 #elif (PP_NodeType==2)
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
-#if (PP_DiscType==2) && NONCONS
-USE MOD_DG_Vars,            ONLY: U_master,U_slave
-USE MOD_Mesh_Vars,          ONLY: NormVec,SurfElem,firstSlaveSide 
-#endif /*NONCONS*/
 #endif /*PP_NodeType*/ 
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 

@@ -48,7 +48,7 @@ USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,la
 USE MOD_Mesh_Vars,       ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Riemann,         ONLY: Riemann
 #if NONCONS
-USE MOD_Riemann,         ONLY: AddNonConsFluxes
+USE MOD_Riemann,         ONLY: AddNonConsFlux
 #endif /*NONCONS*/
 #if PARABOLIC
 USE MOD_Lifting_Vars,    ONLY: gradPx_Master,gradPy_Master,gradPz_Master
@@ -91,9 +91,12 @@ DO SideID=firstSideID,lastSideID
   Flux_slave(:,:,:,SideID)=Flux_master(:,:,:,SideID)
 #if NONCONS
   !add nonconservative fluxes
-  CALL AddNonConsFluxes(Flux_master(:,:,:,SideID),Flux_slave(:,:,:,SideID), &
-                        U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID),&
-                        NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+  CALL AddNonConsFlux(Flux_master(:,:,:,SideID), &
+                      U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID),&
+                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+  CALL AddNonConsFlux(Flux_slave(:,:,:,SideID), &
+                      U_Slave(:,:,:,SideID) ,U_Master(:,:,:,SideID),&
+                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #endif /*NONCONS*/
   DO q=0,PP_N
     DO p=0,PP_N

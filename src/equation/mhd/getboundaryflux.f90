@@ -207,6 +207,9 @@ USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY: GLM_ch 
 #endif /*PP_GLM*/
+#if NONCONS
+USE MOD_Riemann,         ONLY: AddNonConsFlux
+#endif /*NONCONS*/
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
@@ -243,6 +246,10 @@ DO iBC=1,nBCs
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+      CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),  BCdata(:,:,:,SideID), &
+                       NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
     END DO !iSide=1,nBCloc
   CASE(2)
     ! BCState specifies refstate to be used, if 0 then use iniexactfunc
@@ -261,6 +268,10 @@ DO iBC=1,nBCs
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
       END DO !iSide=1,nBCloc
     ELSE !BCstate /= 0
       DO q=0,PP_N
@@ -277,6 +288,10 @@ DO iBC=1,nBCs
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
       END DO !iSide=1,nBCloc
     END IF !BCState=0
   
@@ -296,6 +311,10 @@ DO iBC=1,nBCs
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
     END DO !iSide=1,nBCloc
   CASE(9) ! Euler Wall, slip wall, perfectly conducting, symmetry BC, vn=0 Bn=0
           ! pressure and density from inside,no viscous contributions
@@ -316,7 +335,10 @@ DO iBC=1,nBCs
           Flux(9,p,q,SideID) = 0.5*GLM_ch*PrimL(9) !outflow for psi
 #endif /*PP_GLM*/
           END ASSOCIATE !nvec
-        
+          
+#if NONCONS
+          !NONCONS: Powell term, B*normVec =0, no contribution here
+#endif 
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCLoc

@@ -50,6 +50,8 @@ def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, nta
    stderr=open("std.err",'r').readlines()
    if log :
       logf = open(log_path, 'a')
+      logf.write('EXECUTE COMMAND:\n')
+      logf.write(cmd.strip() + '\n')
       logf.write('EXECUTE: STDOUT FILE:\n')
       for line in stdout :
          logf.write(line)

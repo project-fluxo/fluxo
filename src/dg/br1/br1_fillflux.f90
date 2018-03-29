@@ -80,11 +80,8 @@ END IF
 
 DO SideID = firstSideID,lastSideID
   ! BR1/BR2 uses arithmetic mean value of states for the flux
-  CALL EvalLiftingSurfFlux(SideID,F_loc)
+  CALL EvalLiftingSurfFlux(SideID,F_loc) !strong flux (1/2(U_s+U_m) -U_m)*surfElem
   DO q=0,PP_N; DO p=0,PP_N
-    !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_slave( :,p,q,SideID))*NormVec(dir,p,q,SideID)*SurfElem(p,q,SideID)
-    ! 1/2(UR+UL)-UL=1/2(UR-UL)
-
     FluxX(:,p,q,SideID)=F_loc(:,p,q)*NormVec(1,p,q,SideID)
     FluxY(:,p,q,SideID)=F_loc(:,p,q)*NormVec(2,p,q,SideID)
     FluxZ(:,p,q,SideID)=F_loc(:,p,q)*NormVec(3,p,q,SideID)
@@ -121,7 +118,7 @@ REAL,INTENT(OUT)   :: FluxZ(PP_nVar,0:PP_N,0:PP_N,1:nBCSides)
 INTEGER            :: SideID,p,q
 !===================================================================================================================================
 ! fill flux for boundary sides (surface element is already added in getboundaryflux
-CALL Lifting_GetBoundaryFlux(t,FluxZ) ! uses the current U_master at the boundary
+CALL Lifting_GetBoundaryFlux(t,FluxZ) ! uses the current U_master at the boundary , includes surfelem
 
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N

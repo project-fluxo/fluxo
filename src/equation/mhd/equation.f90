@@ -87,8 +87,6 @@ CALL prms%CreateRealOption(   "kperp" , " If anisotropic heat terms enabled: dif
 CALL prms%CreateRealOption(   "GLM_scale", "MHD with GLM option: save ch from timestep <1","0.5")
 CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of GLM variable 1/cr=5.555 (cr=0.18),"//&
                                          "set zero for no damping.","0.0")
-CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms.",&
-                                                 ".FALSE.")
 #endif /*PP_GLM*/
 CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization" &
                                 ,multiple=.TRUE.)
@@ -187,7 +185,6 @@ KappasPr =Kappa/Pr
 #ifdef PP_GLM
 GLM_scale = GETREAL('GLM_scale','0.5')
 GLM_scr    = GETREAL('GLM_scr','0.0') !damping 1/cr, cr=0.18, 1/cr = 5.555
-DivBSource = GETLOGICAL('DivBSource','.FALSE.')
 !compute timestep for ch=1, then compute ch from timestep:
 !dt ~ 1/ch -> dt/dtch1=1/ch -> ch=dtch1/dt
 GLM_dtch1=0. !must be initialized to correct value in first call of calctimestep
@@ -1042,11 +1039,6 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
-#ifdef PP_GLM
-USE MOD_Equation_Vars, ONLY:GLM_scr,GLM_ch,smu_0
-USE MOD_Equation_Vars, ONLY:DivBSource
-USE MOD_DG_Vars,       ONLY:U
-#endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1062,9 +1054,6 @@ INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
 REAL                            :: rho,rho_x,rho_xx
-#ifdef PP_GLM
-REAL                            :: v(3),divB,sGLM_ch
-#endif /*PP_GLM*/
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
@@ -1161,28 +1150,6 @@ END SELECT ! ExactFunction
 !#endif /*PP_GLM*/
 !END SELECT ! ExactFunction
 !
-!#ifdef PP_GLM
-!IF(DivBSource)THEN
-!  sGLM_ch=1./GLM_ch
-!  DO iElem=1,nElems
-!    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
-!      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
-!      ! Ut(9)/ch = -divB
-!      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
-!      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
-!      ! to B_t      : -v*divB
-!      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
-!      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
-!      ! so that  energy source is  -1/mu_0* divB (v*B)  
-!      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
-!      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
-!      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
-!      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
-!    END DO; END DO; END DO ! i,j,k
-!  END DO ! iElem
-!END IF !divBsource
-!Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
-!#endif /*PP_GLM*/
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================
@@ -1312,13 +1279,8 @@ DO icase=0,6
   END IF
 END DO !icase
 #if PP_DiscType==2
-#ifdef CARTESIANFLUX
-metricL=(/1.5320,0.,0./)
-metricR=(/1.5320,0.,0./)
-#else
 metricL=(/1.5320,-0.05,4.895/)
 metricR=(/0.8715,0.594,2.531/)
-#endif
 
 !use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
 IF(DGinitIsDone)THEN
@@ -1366,11 +1328,7 @@ DO icase=0,2
     fluxName = "EntropyandKinEnergyConservingFluxVec"
   END SELECT
   !CONSISTENCY
-  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL  & 
-#ifndef CARTESIANFLUX
-                                    ,metricL  &
-#endif          
-                                    ,Fcheck)
+  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL ,metricL ,Fcheck)
   check=1.0e-12
   DO i=1,PP_nVar
     absdiff=ABS(FrefL(i)-Fcheck(i))
@@ -1379,11 +1337,7 @@ DO icase=0,2
       check=max(check,absdiff)
     END IF
   END DO
-  CALL fluxProc(   UR,UR,URaux,URaux,metricR  & 
-#ifndef CARTESIANFLUX
-                                    ,metricR  &
-#endif          
-                                    ,Fcheck)
+  CALL fluxProc(   UR,UR,URaux,URaux,metricR ,metricR ,Fcheck)
   DO i=1,PP_nVar
     absdiff=ABS(FrefR(i)-Fcheck(i))
     IF(absdiff.GT.1.0e-12)THEN
@@ -1396,16 +1350,8 @@ DO icase=0,2
     failed_vol=.TRUE.
   END IF
   !SYMMETRY
-  CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
-#ifndef CARTESIANFLUX
-                                    ,metricR  &
-#endif
-                                    ,Frefsym)
-  CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
-#ifndef CARTESIANFLUX
-                                    ,metricL  &
-#endif
-                                    ,Fcheck)
+  CALL fluxProc(   UL,UR,ULaux,URaux,metricL ,metricR ,Frefsym)
+  CALL fluxProc(   UR,UL,URaux,ULaux,metricR ,metricL ,Fcheck)
   check=1.0e-12
   DO i=1,PP_nVar
     absdiff=ABS(Frefsym(i)-Fcheck(i))

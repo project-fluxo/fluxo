@@ -33,8 +33,20 @@ INTERFACE EvalDiffFluxTilde3D
   MODULE PROCEDURE EvalDiffFluxTilde3D
 END INTERFACE
 
+INTERFACE EvalLiftingVolumeFlux
+  MODULE PROCEDURE EvalLiftingVolumeFlux
+END INTERFACE
+
+INTERFACE EvalLiftingSurfFlux
+  MODULE PROCEDURE EvalLiftingSurfFlux
+END INTERFACE
+#endif /*PARABOLIC*/
+
 PUBLIC::EvalFluxTilde3D
+#if PARABOLIC
 PUBLIC::EvalDiffFluxTilde3D
+PUBLIC::EvalLiftingVolumeFlux
+PUBLIC::EvalLiftingSurfFlux
 #endif /*PARABOLIC*/
 !==================================================================================================================================
 
@@ -51,7 +63,7 @@ USE MOD_Equation_Vars ,ONLY:AdvVel
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #if PARABOLIC
 USE MOD_Equation_Vars ,ONLY:DiffC
-USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
+USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
 #endif
 #ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
@@ -72,15 +84,7 @@ INTEGER             :: i
 INTEGER             :: j,k
 #endif
 REAL                :: f,g,h
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 
 #ifdef OPTIMIZED
 DO i=0,nTotal_vol-1
@@ -92,16 +96,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   g=AdvVel(2)*U(1,PP_IJK,iElem)
   h=AdvVel(3)*U(1,PP_IJK,iElem)
 #if PARABOLIC
-  f=f-DiffC*gradUx(1,PP_IJK,iElem)
-  g=g-DiffC*gradUy(1,PP_IJK,iElem)
-  h=h-DiffC*gradUz(1,PP_IJK,iElem)
+  f=f-DiffC*gradPx(1,PP_IJK,iElem)
+  g=g-DiffC*gradPy(1,PP_IJK,iElem)
+  h=h-DiffC*gradPz(1,PP_IJK,iElem)
 #endif /*PARABOLIC*/
 
-#ifdef CARTESIANFLUX 
-  ftilde(1,PP_IJK) = f*X_xi
-  gtilde(1,PP_IJK) = g*Y_eta
-  htilde(1,PP_IJK) = h*Z_zeta
-#else /* CURVED FLUX*/
   ftilde(1,PP_IJK) =   f*Metrics_fTilde(1,PP_IJK,iElem) &
                      + g*Metrics_fTilde(2,PP_IJK,iElem) &
                      + h*Metrics_fTilde(3,PP_IJK,iElem)
@@ -111,7 +110,6 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   htilde(1,PP_IJK) =   f*Metrics_hTilde(1,PP_IJK,iElem) &
                      + g*Metrics_hTilde(2,PP_IJK,iElem) &
                      + h*Metrics_hTilde(3,PP_IJK,iElem)
-#endif /*CARTESIANFLUX*/
 
 #ifdef OPTIMIZED
 END DO ! i
@@ -130,7 +128,7 @@ SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Lifting_Vars  ,ONLY:gradUx,gradUy,gradUz
+USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars ,ONLY:DiffC
 #ifdef OPTIMIZED
 USE MOD_DG_Vars,ONLY:nTotal_vol
@@ -147,23 +145,68 @@ REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-ftilde(1,:,:,:) = -DiffC*Metrics_fTilde(1,0,0,0,iElem)*gradUx(1,:,:,:,iElem)
-gtilde(1,:,:,:) = -DiffC*Metrics_gTilde(2,0,0,0,iElem)*gradUy(1,:,:,:,iElem)
-htilde(1,:,:,:) = -DiffC*Metrics_hTilde(3,0,0,0,iElem)*gradUz(1,:,:,:,iElem)
-#else /* CURVED FLUX*/
 ! general curved metrics
-ftilde(1,:,:,:) = -DiffC*(  Metrics_fTilde(1,:,:,:,iElem)*gradUx(1,:,:,:,iElem) &
-                          + Metrics_fTilde(2,:,:,:,iElem)*gradUy(1,:,:,:,iElem) &
-                          + Metrics_fTilde(3,:,:,:,iElem)*gradUz(1,:,:,:,iElem) )
-gtilde(1,:,:,:) = -DiffC*(  Metrics_gTilde(1,:,:,:,iElem)*gradUx(1,:,:,:,iElem) &
-                          + Metrics_gTilde(2,:,:,:,iElem)*gradUy(1,:,:,:,iElem) &
-                          + Metrics_gTilde(3,:,:,:,iElem)*gradUz(1,:,:,:,iElem) )
-htilde(1,:,:,:) = -DiffC*(  Metrics_hTilde(1,:,:,:,iElem)*gradUx(1,:,:,:,iElem) &
-                          + Metrics_hTilde(2,:,:,:,iElem)*gradUy(1,:,:,:,iElem) &
-                          + Metrics_hTilde(3,:,:,:,iElem)*gradUz(1,:,:,:,iElem) )
-#endif /*CARTESIANFLUX*/
+ftilde(1,:,:,:) = -DiffC*(  Metrics_fTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
+                          + Metrics_fTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
+                          + Metrics_fTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
+gtilde(1,:,:,:) = -DiffC*(  Metrics_gTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
+                          + Metrics_gTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
+                          + Metrics_gTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
+htilde(1,:,:,:) = -DiffC*(  Metrics_hTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
+                          + Metrics_hTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
+                          + Metrics_hTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
 END SUBROUTINE EvalDiffFluxTilde3D
+
+
+!==================================================================================================================================
+!> Compute the lifting flux depending on the variable to be used for the gradient
+!> for linadv, only U as variable
+!==================================================================================================================================
+SUBROUTINE EvalLiftingVolumeFlux(iElem,Flux)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars,ONLY:nTotal_vol,U
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)     :: iElem       !< current element
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< lifting flux, depending on lifting_var
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+  Flux=U(:,:,:,:,iElem)
+END SUBROUTINE EvalLiftingVolumeFlux
+
+
+!==================================================================================================================================
+!> Compute the average lifting surface flux in strong form U*=1/2(U_s+U_m)  (BR1/BR2),
+!> careful, we use the strong form, so that the surface flux becomes: F=U^*-U_m = 1/2(U_s-U_m)
+!> for linadv, only U is variable
+!==================================================================================================================================
+SUBROUTINE EvalLiftingSurfFlux(SideID,Flux)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars   ,ONLY: U_master,U_slave
+USE MOD_Mesh_Vars ,ONLY: SurfElem
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)     :: SideID       !< current side index
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N) !< lifting surface flux, depending on lifting_var
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER  :: p,q 
+!==================================================================================================================================
+  !strong lifting flux: 
+  DO q=0,PP_N; DO p=0,PP_N
+      Flux(:,p,q)=0.5*(U_slave(:,p,q,SideID)-U_master(:,p,q,SideID))*SurfElem(p,q,SideID)
+  END DO; END DO
+END SUBROUTINE EvalLiftingSurfFlux
+
 #endif /*PARABOLIC*/
 
 END MODULE MOD_Flux

@@ -97,6 +97,14 @@ INTERFACE PrimToCons
   MODULE PROCEDURE PrimToCons
 END INTERFACE
 
+!INTERFACE ConsToPrimVec
+!  MODULE PROCEDURE ConsToPrimVec
+!END INTERFACE
+
+!INTERFACE PrimToConsVec
+!  MODULE PROCEDURE PrimToConsVec
+!END INTERFACE
+
 INTERFACE SoundSpeed2
   MODULE PROCEDURE SoundSpeed2
 END INTERFACE
@@ -110,11 +118,20 @@ END INTERFACE
 !END INTERFACE
 
 #if PARABOLIC
+INTERFACE ConvertToGradPrim
+  MODULE PROCEDURE ConvertToGradPrim
+END INTERFACE
+
+!INTERFACE ConvertToGradPrimVec
+!  MODULE PROCEDURE ConvertToGradPrimVec
+!END INTERFACE
+
 #if PP_VISC==1
 INTERFACE muSuth
   MODULE PROCEDURE muSuth
 END INTERFACE
 #endif /*PP_VISC==1*/
+
 #endif /*PARABOLIC*/
 
 CONTAINS
@@ -129,7 +146,7 @@ PURE SUBROUTINE ConsToPrim_aux(prim,cons)
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(INOUT)  :: cons(5) !< vector of conservative variables
+REAL,INTENT(IN)     :: cons(5) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: prim(8) !< vector of primitive variables + soundspeed,energy and total energy
@@ -137,17 +154,13 @@ REAL,INTENT(OUT)    :: prim(8) !< vector of primitive variables + soundspeed,ene
 ! LOCAL VARIABLES 
 REAL                :: sRho    ! 1/Rho
 !==================================================================================================================================
-cons(1)=MAX(0.0000001,abs(cons(1)))
 sRho=1./cons(1)
-! conversion
-prim(1)=cons(1)
 ! rho
-prim(2:4)=cons(2:4)*sRho
+prim(1)=cons(1)
 ! vel/rho
-prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4)))
+prim(2:4)=cons(2:4)*sRho
 ! pressure
-! pressure must not be negative
-prim(5)=MAX(0.0000001,abs(prim(5)))
+prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4)))
 ! Additional information
 prim(6)=SQRT(Kappa*prim(5)*sRho) ! soundspeed
 prim(7)=cons(5)*sRho ! e
@@ -165,7 +178,7 @@ PURE SUBROUTINE ConsToPrim(prim,cons)
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(INOUT)  :: cons(5) !< vector of conservative variables
+REAL,INTENT(IN)     :: cons(5) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: prim(5) !< vector of primitive variables + soundspeed,energy and total energy
@@ -173,17 +186,13 @@ REAL,INTENT(OUT)    :: prim(5) !< vector of primitive variables + soundspeed,ene
 ! LOCAL VARIABLES 
 REAL                :: sRho    !< 1/Rho
 !==================================================================================================================================
-cons(1)=MAX(0.0000001,abs(cons(1)))
 sRho=1./cons(1)
-! conversion
-prim(1)=cons(1)
 ! rho
-prim(2:4)=cons(2:4)*sRho
+prim(1)=cons(1)
 ! vel/rho
+prim(2:4)=cons(2:4)*sRho
+!pressure
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4)))
-! pressure
-! pressure must not be negative
-prim(5)=MAX(0.0000001,abs(prim(5)))
 END SUBROUTINE ConsToPrim
 
 
@@ -197,22 +206,67 @@ PURE SUBROUTINE PrimToCons(prim,cons)
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(INOUT)  :: prim(5) !< vector of primitive variables + soundspeed,energy and total energy
+REAL,INTENT(IN)     :: prim(5) !< vector of primitive variables + soundspeed,energy and total energy
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: cons(5) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 !==================================================================================================================================
-prim(1)=MAX(0.0000001,abs(prim(1)))
-! conversion
-cons(1)=prim(1)
 ! rho
-cons(2:4)=prim(2:4)*prim(1)
+cons(1)=prim(1)
 ! vel/rho
-cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))
+cons(2:4)=prim(2:4)*prim(1)
 ! inner energy
+cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))
 END SUBROUTINE PrimToCons
+
+
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables
+!==================================================================================================================================
+PURE SUBROUTINE ConsToPrimVec(dim2,prim,cons)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)    :: prim(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  CALL ConsToPrim(Prim(:,i),Cons(:,i))
+END DO!i
+END SUBROUTINE ConsToPrimVec
+
+
+!==================================================================================================================================
+!> Transformation from conservative variables to primitive variables
+!==================================================================================================================================
+PURE SUBROUTINE PrimToConsVec(dim2,prim,cons)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: prim(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)    :: cons(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  CALL PrimToCons(Prim(:,i),Cons(:,i))
+END DO!i
+END SUBROUTINE PrimToConsVec
+
 
 !==================================================================================================================================
 !> calculate soundspeed^2 ,c^2 = kappa*p/rho 
@@ -267,7 +321,7 @@ END FUNCTION ConsToEntropy
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
-FUNCTION ConsToEntropyVec(dim2,cons) RESULT(Entropy)
+SUBROUTINE ConsToEntropyVec(dim2,Entropy,cons)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -276,7 +330,7 @@ INTEGER,INTENT(IN)  :: dim2
 REAL,INTENT(IN)     :: cons(PP_nVar,dim2) !< vector of primitive variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL                :: Entropy(PP_nVar,dim2) !< vector of conservative variables
+REAL,INTENT(OUT)    :: Entropy(PP_nVar,dim2) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
@@ -284,7 +338,95 @@ INTEGER             :: i
 DO i=1,dim2
   Entropy(:,i)=ConsToEntropy(Cons(:,i))
 END DO!i
-END FUNCTION ConsToEntropyVec
+END SUBROUTINE ConsToEntropyVec
+
+
+#if PARABOLIC
+!==================================================================================================================================
+!> transform gradient from conservative / primitive or entropy variables to primitive variables 
+!==================================================================================================================================
+FUNCTION ConvertToGradPrim(cons,grad_in) RESULT(gradP)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: cons(PP_nVar)    !< conservative state 
+REAL,INTENT(IN)     :: grad_in(PP_nVar) !< can be gradient of conservative / primivite /entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: gradP(PP_nVar) !<  gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+#if (PP_Lifting_Var==1) 
+REAL  :: sRho,v(3),gradv(3)
+#elif (PP_Lifting_Var==3) 
+REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
+#endif /*PP_Lifting_Var*/
+!==================================================================================================================================
+
+#if (PP_Lifting_Var==1) 
+  !grad_in is gradient of conservative variable
+  sRho      = 1./cons(1)
+      v(:)  = cons(2:4)*sRho
+  gradv(:)  = sRho*(grad_in(2:4)-grad_in(1)*v(:))
+  
+  !density gradient
+  gradP(1)  = grad_in(1)
+  !velocity gradient
+  gradP(2:4)= gradv(:)
+  !pressure gradient
+  gradP(5)  = KappaM1*(grad_in(5)                                        & !gradE
+                       -(0.5*grad_in(1)*SUM(v*v) + SUM(cons(2:4)*gradv)) ) !-grad_Ekin
+#elif (PP_Lifting_Var==2) 
+  !grad_in is gradient of primitive variable, do nothing
+  gradP(:)=grad_in(:)
+#elif (PP_Lifting_Var==3) 
+  !grad_in is gradient of entropy variable,  entropy variables are:
+  ! w(1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(2:4)=(rho/p)*v, w(5)=-(rho/p)
+
+  !gradient of (p/rho),  (p/rho)_x = -grad_in(5)
+
+  sRho   = 1./cons(1)
+  v(:)   = cons(2:4)*sRho
+  Ekin   = 0.5*SUM(cons(2:4)*v)
+  p      = KappaM1*(cons(5)-Ekin) ! includes psi^2 if PP_nVar=9
+  rho_sp = cons(1)/p
+  p_srho = p * sRho
+  
+  gradv  = p_sRho * (grad_in(2:4) +v(:)*grad_in(5))
+  
+  !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
+  gradP(1)  = cons(1)*grad_in(1) - grad_in(5)*(Ekin -p*sKappaM1) + rho_sp*SUM(cons(2:4)*gradv(:))
+  !velocity gradient
+  gradP(2:4)= gradv(:)
+  !pressure gradient, =1/(rho/p)*(rho_x-p*(rho/p)_x)
+  gradP(5)  = p_srho * (gradP(1) + p *grad_in(5))
+#endif /*PP_Lifting_Var*/
+END FUNCTION ConvertToGradPrim
+
+!==================================================================================================================================
+!> transform gradient from conservative / primitive or entropy variables to primitive variables 
+!==================================================================================================================================
+SUBROUTINE ConvertToGradPrimVec(dim2,cons,gradP)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2)    !< conservative state 
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  on intput: can be gradient of conservative / primivite /entropy variables
+                                             !<  on output: gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  gradP(:,i)=ConvertToGradPrim(cons(:,i),gradP(:,i))
+END DO!i
+END SUBROUTINE ConvertToGradPrimVec
+#endif /*PARABOLIC*/
 
 
 #if PARABOLIC

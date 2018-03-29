@@ -33,7 +33,7 @@ INTERFACE VolInt
   MODULE PROCEDURE VolInt_weakForm
 #elif (PP_DiscType==2)
   MODULE PROCEDURE VolInt_SplitForm
-  !new optimized version, using CARTESIANFLUX preproc flag for cartesian meshes, other versions are still here, see below
+  !new optimized version, other versions are still here, see below
   !MODULE PROCEDURE VolInt_SplitForm3 
 #endif /*PP_DiscType*/
 END INTERFACE
@@ -181,15 +181,7 @@ REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtil
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !central euler flux at ijk 
 REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
 INTEGER             :: i,j,k,l
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 ! due to consisteny, if left and right are the same, its just the transformed eulerflux
 CALL EvalEulerFluxTilde3D(iElem,ftilde_c,gtilde_c,htilde_c,Uaux)
 
@@ -198,37 +190,24 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
   gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
   htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
-  !for cartesian meshes, metric tensor is constant and diagonal:
   DO l=i+1,PP_N
-    CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+    CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
-#ifdef CARTESIANFLUX
-                                                (/X_xi,0.,0./),                                & !only one metric
-#else /* CURVED FLUX*/
-                                Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
-#endif /*CARTESIANFLUX*/
+                                 Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
                                        ftilde(:,l,i,j,k)                                       )
     ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
   END DO!l=i+1,N
   DO l=j+1,PP_N
-    CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+    CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
-#ifdef CARTESIANFLUX
-                                               (/0.,Y_eta,0./),                                & !only one metric
-#else /* CURVED FLUX*/
-                                Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
-#endif /*CARTESIANFLUX*/
+                                 Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
                                        gtilde(:,l,i,j,k)                                       )
     gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
   END DO!l=j+1,N
   DO l=k+1,PP_N
-    CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+    CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
-#ifdef CARTESIANFLUX
-                                              (/0.,0.,Z_zeta/),                                & !only one metric
-#else /* CURVED FLUX*/
-                                Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
-#endif /*CARTESIANFLUX*/
+                                 Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
                                        htilde(:,l,i,j,k)                                       )
     htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
   END DO!l=k+1,N
@@ -283,18 +262,9 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)      :: Uaux
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
 #endif /*PARABOLIC*/
 INTEGER                                           :: i,j,k,l,iElem
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
 
 DO iElem=1,nElems
-
-#ifdef CARTESIANFLUX 
-  X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-  Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-  Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 
   !compute Euler contribution of the fluxes, 
   !compute Diffusion flux contribution of 
@@ -308,31 +278,19 @@ DO iElem=1,nElems
 
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     DO l=0,PP_N
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
-#ifdef CARTESIANFLUX
-                                                  (/X_xi,0.,0./),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
-#endif /*CARTESIANFLUX*/
                                            ftilde(:)                                             )
 
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
-#ifdef CARTESIANFLUX
-                                                 (/0.,Y_eta,0./),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
-#endif /*CARTESIANFLUX*/
                                            gtilde(:)                                             )
 
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
-#ifdef CARTESIANFLUX
-                                                (/0.,0.,Z_zeta/),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
-#endif /*CARTESIANFLUX*/
                                            htilde(:)                                             )
 
 #if PARABOLIC
@@ -396,17 +354,9 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftilde_c,gtilde_c,htilde_c 
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
 #endif /*PARABOLIC*/
 INTEGER                                           :: i,j,k,l,iElem
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
 
 DO iElem=1,nElems
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 
   !compute Euler contribution of the fluxes, 
   !compute Diffusion flux contribution of 
@@ -420,13 +370,9 @@ Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
 
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     DO l=i+1,PP_N
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
-#ifdef CARTESIANFLUX
-                                                  (/X_xi,0.,0./),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
-#endif /*CARTESIANFLUX*/
                                          ftilde(:)                                               )
 #if PARABOLIC
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*  ftilde(:) +  D_Hat(i,l)*ftildeDiff(:,l,j,k)
@@ -437,13 +383,9 @@ Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
 #endif /*PARABOLIC*/
     END DO !l=i+1,N
     DO l=j+1,PP_N
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
-#ifdef CARTESIANFLUX
-                                                 (/0.,Y_eta,0./),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
-#endif /*CARTESIANFLUX*/
                                          gtilde(:)                                               )
 #if PARABOLIC
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(j,l)*  gtilde(:) +  D_Hat(j,l)*gtildeDiff(:,i,l,k) 
@@ -454,13 +396,9 @@ Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
 #endif /*PARABOLIC*/
     END DO !l=j+1,N
     DO l=k+1,PP_N
-      CALL VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+      CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                              Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
-#ifdef CARTESIANFLUX
-                                                (/0.,0.,Z_zeta/),                                & !only one metric
-#else /* CURVED FLUX*/
                                    Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
-#endif /*CARTESIANFLUX*/
                                          htilde(:)                                               )
 #if PARABOLIC
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(k,l)*  htilde(:) +  D_Hat(k,l)*htildeDiff(:,i,j,l) 

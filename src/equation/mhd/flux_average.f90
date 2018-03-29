@@ -115,15 +115,7 @@ INTEGER             :: i
 #ifndef OPTIMIZED
 INTEGER             :: j,k
 #endif
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 #ifdef OPTIMIZED
 DO i=0,nTotal_vol-1
 #else /*OPTIMIZED*/
@@ -200,13 +192,6 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
 END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,PP_IJK) =  f(:)*X_xi
-  gtilde(:,PP_IJK) =  g(:)*Y_eta
-  htilde(:,PP_IJK) =  h(:)*Z_zeta
-#else /* CURVED FLUX*/
-  ! general curved metrics
   ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
@@ -216,7 +201,6 @@ END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
   htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
                      + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
                      + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#endif /*CARTESIANFLUX*/
 #ifdef OPTIMIZED
 END DO ! i
 #else /*OPTIMIZED*/
@@ -408,13 +392,7 @@ END SUBROUTINE StandardDGFlux
 !> part of the MHD equations
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
@@ -428,25 +406,15 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(8),INTENT(IN)        :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(8),INTENT(IN)        :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: qv_L,qv_R,qb_L,qb_R
-#ifdef CARTESIANFLUX
-REAL                                :: metric_L(3)
-REAL                                :: metric_R(3)
 !==================================================================================================================================
-metric_L=metric
-metric_R=metric ! no optimization for cartesian flux here!
-#endif /*CARTESIANFLUX*/
 
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -507,13 +475,7 @@ END SUBROUTINE StandardDGFluxVec
 !> part of the MHD equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
+SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
@@ -527,12 +489,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(8),INTENT(IN)        :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(8),INTENT(IN)        :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed central flux
@@ -542,11 +500,9 @@ REAL                                :: qv_L,qv_R,qb_L,qb_R
 #ifdef PP_GLM
 REAL                                :: phiHat
 #endif /*PP_GLM*/
-#ifndef CARTESIANFLUX
 REAL                                :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*ndef CARTESIANFLUX*/
 
 ! Get the inverse density, velocity, and pressure on left and right
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -600,13 +556,12 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 
 
 
+!==================================================================================================================================
+!> entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+!> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+!> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!==================================================================================================================================
 SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
-!==================================================================================================================================
-! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
-! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
-! 
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0
@@ -700,20 +655,14 @@ END ASSOCIATE
 END SUBROUTINE EntropyAndKinEnergyConservingFlux
 
 
-SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR, &
-#ifdef CARTESIANFLUX
-                             metric, &
-#else
-                             metric_L,metric_R, &
-#endif
-                             Fstar)
 !==================================================================================================================================
-! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
-! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
-! firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
-! for curved metrics, 1/2(metric_L+metric_R) is taken!
+!> entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+!> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+!> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!> firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
+SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -728,12 +677,8 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
 REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-#ifdef CARTESIANFLUX
-REAL,INTENT(IN)                     :: metric(3)      !< single metric (for CARTESIANFLUX=T)
-#else
 REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
 REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-#endif
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
@@ -746,11 +691,9 @@ REAL                   :: vm,Bm,pTilde
 #ifdef PP_GLM
 REAL                   :: PsiAvg
 #endif /*PP_GLM*/
-#ifndef CARTESIANFLUX
 REAL                   :: metric(3)
 !==================================================================================================================================
 metric = 0.5*(metric_L+metric_R)
-#endif /*not Cartesianflux*/
 
 ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
               B_L => UL(6:8),    B_R => UR(6:8)  , &

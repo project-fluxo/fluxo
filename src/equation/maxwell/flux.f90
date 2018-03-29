@@ -54,15 +54,7 @@ REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux
 ! LOCAL VARIABLES
 REAL                :: f(8),g(8),h(8)    ! Cartesian fluxes 
 INTEGER             :: i,j,k 
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   ASSOCIATE(Uin=>U(:,i,j,k,iElem))
   !A
@@ -93,12 +85,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   h(7) = Uin(6)*c_corr_c2    ! B3*c_corr*c^2
   h(8) = Uin(3)*c_corr       ! E3*c_corr
   END ASSOCIATE !Uin
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,i,j,k) =  f(:)*X_xi
-  gtilde(:,i,j,k) =  g(:)*Y_eta
-  htilde(:,i,j,k) =  h(:)*Z_zeta
-#else /* CURVED FLUX*/
   ! general curved metrics
   ftilde(:,i,j,k) =   f(:)*Metrics_fTilde(1,i,j,k,iElem)  &
                     + g(:)*Metrics_fTilde(2,i,j,k,iElem)  &
@@ -109,7 +95,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   htilde(:,i,j,k) =   f(:)*Metrics_hTilde(1,i,j,k,iElem)  &
                     + g(:)*Metrics_hTilde(2,i,j,k,iElem)  &
                     + h(:)*Metrics_hTilde(3,i,j,k,iElem)
-#endif /*CARTESIANFLUX*/
       
 END DO; END DO; END DO ! i,j,k
 END SUBROUTINE EvalFluxTilde3D

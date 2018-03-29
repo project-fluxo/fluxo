@@ -55,7 +55,7 @@ USE MOD_Equation_Vars,ONLY: BCdata,BCSideID
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2
 USE MOD_DG_Vars      ,ONLY: U_Master
 #if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
+USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
 #endif /*PARABOLIC*/
 USE MOD_Riemann      ,ONLY: Riemann
 USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
@@ -87,9 +87,9 @@ CASE(21) !steadyStateBCs
     SideID=BCSideID(iBC,iSide)
     CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),BCdata(:,:,:,SideID), &
 #if PARABOLIC
-                 gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
-                 gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
-                 gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
+                 gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                 gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                 gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
   END DO !iSide=1,nBCloc
