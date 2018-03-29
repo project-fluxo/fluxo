@@ -164,6 +164,8 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
     IF(FLUXO_EQN_NONCONS)
       ADD_DEFINITIONS(-DNONCONS=1)
     ENDIF()
+  ELSE()
+    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
   ENDIF()
   SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
   IF(FLUXO_EQN_ANISO_HEAT)

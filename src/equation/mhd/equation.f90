@@ -379,8 +379,8 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(5)=6.0
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
-CASE(3) ! alfven wave 
-  Omega=PP_Pi*IniFrequency
+CASE(3) ! alfven wave , domain [-1,1]^3
+  Omega=2.*PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
   ! e: epsilon = 0.2

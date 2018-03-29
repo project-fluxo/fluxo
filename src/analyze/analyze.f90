@@ -141,6 +141,10 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
     END DO
     DO iVar=1,PP_nVar
       A2F_iVar=A2F_iVar+1
+      A2F_VarNames(A2F_iVar)='"L2_colloc_'//TRIM(StrVarNames(iVar))//'"'
+    END DO
+    DO iVar=1,PP_nVar
+      A2F_iVar=A2F_iVar+1
       A2F_VarNames(A2F_iVar)='"Linf_'//TRIM(StrVarNames(iVar))//'"'
     END DO
   END IF !doCalcErrorNorms
@@ -286,7 +290,7 @@ INTEGER(KIND=8),INTENT(IN)      :: iter
 CHARACTER(LEN=40)               :: formatStr
 INTEGER                         :: iBC
 REAL                            :: CalcTime
-REAL                            :: L_Inf_Error(PP_nVar),L_2_Error(PP_nVar)
+REAL                            :: L_Inf_Error(PP_nVar),L_2_Error(PP_nVar),L_2_colloc(PP_nVar)
 REAL                            :: MeanFlux(PP_nVar,nBCs)
 !==================================================================================================================================
 ! Graphical output
@@ -303,13 +307,16 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
 END IF !MPIroot & AnalyzeToFile
 ! Calculate error norms
 IF(doCalcErrorNorms)THEN
-  CALL CalcErrorNorms(Time,L_2_Error,L_Inf_Error)
+  CALL CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
   IF(MPIroot) THEN
     WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
     WRITE(UNIT_StdOut,formatStr)' L_2        : ',L_2_Error
+    WRITE(UNIT_StdOut,formatStr)' L_2_colloc : ',L_2_colloc
     WRITE(UNIT_StdOut,formatStr)' L_inf      : ',L_Inf_Error
     IF(doAnalyzeToFile)THEN
       A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=L_2_Error(:)
+      A2F_iVar=A2F_iVar+PP_nVar
+      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=L_2_colloc(:)
       A2F_iVar=A2F_iVar+PP_nVar
       A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=L_Inf_Error(:)
       A2F_iVar=A2F_iVar+PP_nVar
@@ -355,7 +362,7 @@ END SUBROUTINE Analyze
 !==================================================================================================================================
 !> Calculates L_infinfity and L_2 norms of state variables using the Analyze Framework (GL points+weights)
 !==================================================================================================================================
-SUBROUTINE CalcErrorNorms(Time,L_2_Error,L_Inf_Error)
+SUBROUTINE CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -365,16 +372,17 @@ USE MOD_Equation,           ONLY: ExactFunc
 USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
 USE MOD_Analyze_Vars,       ONLY: AnalyzeExactFunc
 USE MOD_Analyze_Vars,       ONLY: NAnalyze,Vdm_GaussN_NAnalyze
-USE MOD_Analyze_Vars,       ONLY: wGPVolAnalyze,Vol
+USE MOD_Analyze_Vars,       ONLY: wGPVolAnalyze,Vol,wGPVol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                 :: Time                   !< current simulation time
 REAL,INTENT(OUT)                :: L_2_Error(  PP_nVar)   !< L2 error of the solution
+REAL,INTENT(OUT)                :: L_2_colloc(  PP_nVar)  !< L2 error of the solution, computed at collocation points with wGP
 REAL,INTENT(OUT)                :: L_Inf_Error(PP_nVar)   !< LInf error of the solution
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                         :: iElem,k,l,m
+INTEGER                         :: iElem,i,j,k,l,m
 REAL                            :: U_exact(PP_nVar)
 REAL                            :: U_NAnalyze(1:PP_nVar,0:NAnalyze,0:NAnalyze,0:NAnalyze)
 REAL                            :: Coords_NAnalyze(3,0:NAnalyze,0:NAnalyze,0:NAnalyze)
@@ -385,6 +393,7 @@ REAL                            :: IntegrationWeight
 ! Calculate error norms
 L_Inf_Error(:)=-1.E10
 L_2_Error(:)=0.
+L_2_colloc(:)=0.
 ! Interpolate values of Error-Grid from GP's
 DO iElem=1,nElems
   ! Interpolate the physical position Elem_xGP to the analyze position, needed for exact function
@@ -394,31 +403,35 @@ DO iElem=1,nElems
   CALL ChangeBasis3D(1,PP_N,NAnalyze,Vdm_GaussN_NAnalyze,J_N(1:1,0:PP_N,0:PP_N,0:PP_N),J_NAnalyze(1:1,:,:,:))
   ! Interpolate the solution to the analyze grid
   CALL ChangeBasis3D(PP_nVar,PP_N,NAnalyze,Vdm_GaussN_NAnalyze,U(1:PP_nVar,:,:,:,iElem),U_NAnalyze(1:PP_nVar,:,:,:))
-  DO m=0,NAnalyze
-    DO l=0,NAnalyze
-      DO k=0,NAnalyze
-        CALL ExactFunc(AnalyzeExactFunc,time,Coords_NAnalyze(1:3,k,l,m),U_exact)
-        L_Inf_Error = MAX(L_Inf_Error,abs(U_NAnalyze(:,k,l,m) - U_exact))
-        IntegrationWeight = wGPVolAnalyze(k,l,m)*J_NAnalyze(1,k,l,m)
-        ! To sum over the elements, We compute here the square of the L_2 error
-         L_2_Error = L_2_Error+(U_NAnalyze(:,k,l,m) - U_exact)*(U_NAnalyze(:,k,l,m) - U_exact)*IntegrationWeight
-      END DO ! k
-    END DO ! l
-  END DO ! m
+  DO m=0,NAnalyze; DO l=0,NAnalyze; DO k=0,NAnalyze
+    CALL ExactFunc(AnalyzeExactFunc,time,Coords_NAnalyze(1:3,k,l,m),U_exact)
+    L_Inf_Error = MAX(L_Inf_Error,abs(U_NAnalyze(:,k,l,m) - U_exact))
+    IntegrationWeight = wGPVolAnalyze(k,l,m)*J_NAnalyze(1,k,l,m)
+    ! To sum over the elements, We compute here the square of the L_2 error
+    L_2_Error = L_2_Error+((U_NAnalyze(:,k,l,m) - U_exact)**2)*IntegrationWeight
+  END DO; END DO; END DO ! k,l,m
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    CALL  ExactFunc(AnalyzeExactFunc,time,Elem_xGP(:,i,j,k,iElem),U_exact)
+    L_2_colloc = L_2_colloc+((U(:,i,j,k,iElem) - U_exact)**2)*IntegrationWeight
+  END DO; END DO; END DO ! i,j,k
 END DO ! iElem=1,nElems
 
 #if MPI
 IF(MPIRoot)THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,L_2_Error  ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,L_2_colloc ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(MPI_IN_PLACE,L_Inf_Error,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
 ELSE
   CALL MPI_REDUCE(L_2_Error  ,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(L_2_colloc ,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(L_Inf_Error,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
 END IF
 #endif /*MPI*/
 
 ! We normalize the L_2 Error with the Volume of the domain and take into account that we have to use the square root
-L_2_Error = SQRT(L_2_Error/Vol)
+L_2_Error = SQRT(L_2_Error /Vol)
+L_2_colloc= SQRT(L_2_colloc/Vol)
 
 END SUBROUTINE CalcErrorNorms
 
