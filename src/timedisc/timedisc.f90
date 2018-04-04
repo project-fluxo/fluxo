@@ -331,37 +331,56 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#ifdef PP_CT
+USE MOD_CT           ,ONLY: CT_TimeDerivative,swapB
+USE MOD_CT_Vars      ,ONLY: curlA,curlAt,nTotalcurlA
+#endif /*PP_CT*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)  :: t                                     !< current simulation time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER  :: iStage
 REAL     :: Ut_temp(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! temporal variable for Ut
 REAL     :: tStage,b_dt(1:nRKStages)
-INTEGER  :: iStage
+#ifdef PP_CT
+REAL     :: cAt_temp(3,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! temporal variable for Ut
+#endif /*PP_CT*/
 !===================================================================================================================================
-! Premultiply with dt
-b_dt=RKb*dt
-
-! First evaluation of DG operator already done in timedisc
-CurrentStage=1
-tStage=t
-CALL DGTimeDerivative(tStage)
-CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
-CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-
-
-! Following steps
-DO iStage=2,nRKStages
-  CurrentStage=iStage
-  tStage=t+dt*RKc(iStage)
+  ! Premultiply with dt
+  b_dt=RKb*dt
+  
+  ! First evaluation of DG operator already done in timedisc
+  CurrentStage=1
+  tStage=t
+#ifdef PP_CT
+  CALL CT_TimeDerivative()                            !compute curlAt from U
+  CALL swapB(U,curlA)                                 !change B in U to curlA  
+  CALL VCopy(nTotalcurlA,cAt_temp,curlAt)           !curlAt_tmp = curlAt
+  CALL VAXPBY(nTotalcurlA,curlA,curlAt,ConstIn=b_dt(1)) !curlA  = curlA + curlAt*b_dt(1)
+#endif /*PP_CT*/
   CALL DGTimeDerivative(tStage)
-  CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
-  CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
-
-END DO
-CurrentStage=1
+  CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
+  CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
+  
+  
+  ! Following steps
+  DO iStage=2,nRKStages
+    CurrentStage=iStage
+    tStage=t+dt*RKc(iStage)
+#ifdef PP_CT
+    CALL CT_TimeDerivative()                            !compute curlAt from U
+    CALL swapB(U,curlA)                                 !change B in U to curlA 
+    CALL VAXPBY(nTotalcurlA,cAt_temp,curlAt,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
+    CALL VAXPBY(nTotalcurlA,curlA,cAt_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+#endif /*PP_CT*/
+    CALL DGTimeDerivative(tStage)
+    CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
+    CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+  
+  END DO
+  CurrentStage=1
 
 END SUBROUTINE TimeStepByLSERKW2
 
@@ -378,10 +397,12 @@ USE MOD_PreProc
 USE MOD_Vector
 USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
-!USE MOD_CT           ,ONLY: curlATimeDerivative
-!USE MOD_CT_Vars      ,ONLY: curlA,curlAt,nTotalcurlA
 USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#ifdef PP_CT
+USE MOD_CT           ,ONLY: CT_TimeDerivative,swapB
+USE MOD_CT_Vars      ,ONLY: curlA,curlAt,nTotalcurlA
+#endif /*PP_CT*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -390,48 +411,54 @@ REAL,INTENT(IN)  :: t                                     !< current simulation 
 ! LOCAL VARIABLES
 REAL     :: S2(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL     :: UPrev(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
-!REAL     :: S2cA(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
-!REAL     :: cAPrev(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 REAL     :: tStage,b_dt(1:nRKStages)
 INTEGER  :: iStage
+#ifdef PP_CT
+REAL     :: S2cA(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL     :: cAPrev(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+#endif /*PP_CT*/
 !===================================================================================================================================
 
-! Premultiply with dt
-b_dt=RKb*dt
-
-! Nomenclature:
-! S1 == U, S2 == S2, S3 == UPrev
-
-CurrentStage=1
-tStage=t
-!CALL VCopy(nTotalU,cAprev,curlA)                    !Aprev=A
-!CALL VCopy(nTotalU,S2cA,curlA)                      !S2A=A
-!CALL curlATimeDerivative(U)                         !compute curlAt
-!CALL swapB(U,curlA)                                 !change B in U to curlA  
-
-
-CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
-CALL VCopy(nTotalU,S2,U)                       !S2=U
-CALL DGTimeDerivative(t)                       !compute Ut
-CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
-!CALL VAXPBY(nTotalcurlA,curlA,curlAt,ConstIn=b_dt(1))      !curlA  = curlA + curlAt*b_dt(1)
-
-DO iStage=2,nRKStages
-  CurrentStage=iStage
-  tStage=t+dt*RKc(iStage)
-!  CALL curlATimeDerivative(U)                         !compute curlAt
-!  CALL swapB(U,curlA)                                 !change B in U to curlA  
-  CALL DGTimeDerivative(tStage)
-  CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                !S2 = S2 + U*RKdelta(iStage)
-  CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
-  CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
-  CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
-!  CALL VAXPBY(nTotalcurlA,S2cA,curlA,ConstIn=RKdelta(iStage))                !S2curlA = S2curlA + U*RKdelta(iStage)
-!  CALL VAXPBY(nTotalcurlA,curlA,S2cA,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !curlA = RKg1(iStage)*curlA + RKg2(iStage)*S2curlA
-!  CALL VAXPBY(nTotalcurlA,curlA,cAprev,ConstIn=RKg3(iStage))                !curlA = curlA + RKg3(ek)*curlAprev
-!  CALL VAXPBY(nTotalcurlA,curlA,curlAt,ConstIn=b_dt(iStage))                   !curlA = curlA + curlAt*b_dt(iStage)
-END DO
-CurrentStage=1
+  ! Premultiply with dt
+  b_dt=RKb*dt
+  
+  ! Nomenclature:
+  ! S1 == U, S2 == S2, S3 == UPrev
+  
+  CurrentStage=1
+  tStage=t
+#ifdef PP_CT
+  CALL VCopy(nTotalcurlA,cAprev,curlA)                    !Aprev=A
+  CALL VCopy(nTotalcurlA,S2cA,curlA)                      !S2A=A
+  CALL CT_TimeDerivative()                            !compute curlAt from U
+  CALL swapB(U,curlA)                                 !change B in U to curlA  
+  CALL VAXPBY(nTotalcurlA,curlA,curlAt,ConstIn=b_dt(1))      !curlA  = curlA + curlAt*b_dt(1)
+#endif /*PP_CT*/
+  
+  
+  CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
+  CALL VCopy(nTotalU,S2,U)                       !S2=U
+  CALL DGTimeDerivative(t)                       !compute Ut from U
+  CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+  
+  DO iStage=2,nRKStages
+    CurrentStage=iStage
+    tStage=t+dt*RKc(iStage)
+#ifdef PP_CT
+    CALL CT_TimeDerivative()                            !compute curlAt from U
+    CALL swapB(U,curlA)                                 !change B in U to curlA  
+    CALL VAXPBY(nTotalcurlA,S2cA,curlA,ConstIn=RKdelta(iStage))                    !S2curlA = S2curlA + U*RKdelta(s)
+    CALL VAXPBY(nTotalcurlA,curlA,S2cA,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !curlA   = RKg1(s)*curlA +RKg2(s)*S2curlA
+    CALL VAXPBY(nTotalcurlA,curlA,cAprev,ConstIn=RKg3(iStage))                     !curlA   = curlA + RKg3(s)*curlAprev
+    CALL VAXPBY(nTotalcurlA,curlA,curlAt,ConstIn=b_dt(iStage))                     !curlA   = curlA + curlAt*b_dt(s)
+#endif /*PP_CT*/
+    CALL DGTimeDerivative(tStage)                       !compute Ut from U
+    CALL VAXPBY(nTotalU,S2,U,ConstIn=RKdelta(iStage))                    !S2 = S2 + U*RKdelta(s)
+    CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U  = RKg1(s)*U + RKg2(s)*S2
+    CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                    !U  = U + RKg3(s)*Uprev
+    CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                       !U  = U + Ut*b_dt(s)
+  END DO
+  CurrentStage=1
 
 END SUBROUTINE TimeStepByLSERKK3
 

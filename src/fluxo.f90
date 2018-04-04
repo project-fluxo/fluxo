@@ -43,6 +43,9 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
+#ifdef PP_CT
+USE MOD_CT,                ONLY:InitCT,FinalizeCT
+#endif
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -125,6 +128,9 @@ CALL InitMPIvars()
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
+#ifdef PP_CT
+CALL InitCT()
+#endif
 #if PARABOLIC
 CALL InitLifting()
 #endif /*PARABOLIC*/
@@ -150,6 +156,9 @@ CALL FinalizeAnalyze()
 #if PARABOLIC
 CALL FinalizeLifting()
 #endif /*PARABOLIC*/
+#ifdef PP_CT
+CALL FinalizeCT()
+#endif
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeBC()

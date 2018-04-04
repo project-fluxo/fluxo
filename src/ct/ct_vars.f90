@@ -41,6 +41,7 @@ REAL,ALLOCATABLE                      :: curlAt(:,:,:,:,:)      !< Residual/time
 INTEGER                               :: nTotalcurlA            !< Total number of entries in curlA / size of curlA. 
                                                                 !< ntotalcurlA\(=3(N+1)^3nElems\).  
 
+REAL,ALLOCATABLE                      :: JacMat(:,:,:,:,:,:)    !< inverse of inverse jacobian matrix from (f,g,h)_metrics 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 LOGICAL                               :: CTInitIsDone=.FALSE.   !< Switch to check CTInit status

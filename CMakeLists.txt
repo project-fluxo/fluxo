@@ -159,6 +159,10 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   ELSE()
     ADD_DEFINITIONS( -DPP_nVar=8)
   ENDIF()
+  SET(FLUXO_EQN_CT  OFF  CACHE BOOL "switch on/off constraint transport for mhd divB=0 condition.")
+  IF(FLUXO_EQN_CT)
+    ADD_DEFINITIONS(-DPP_CT=1)
+  ENDIF()
   IF(FLUXO_DISCTYPE EQUAL 2)
     SET(FLUXO_EQN_NONCONS  ON  CACHE BOOL "switch on/off non-conservative source term for mhd.")
     IF(FLUXO_EQN_NONCONS)
@@ -173,6 +177,7 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   ENDIF()
 ELSE()
   UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd
+  UNSET(FLUXO_EQN_CT CACHE ) # if not mhd
   UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
   UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
 ENDIF()
@@ -507,6 +512,10 @@ FILE(GLOB dgF90            ./src/dg/*.f90)
 IF (FLUXO_PARABOLIC)
   FILE(GLOB liftingF90     ./src/dg/${FLUXO_PARABOLIC_LIFTING}/*.f90)
   LIST(APPEND dgF90 ${liftingF90})
+ENDIF()
+IF (FLUXO_EQN_CT)
+  FILE(GLOB ctF90     ./src/ct/*.f90)
+  LIST(APPEND fluxoF90 ${ctF90})
 ENDIF()
 
 
