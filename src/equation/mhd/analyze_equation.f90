@@ -257,36 +257,30 @@ REAL,INTENT(OUT)                :: Linf_divB
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER                         :: iElem,i,j,k,l
-REAL,DIMENSION(1:3)             :: gradB_xi,gradB_eta,gradB_zeta  
+REAL                            :: Btilde(3,0:PP_N,0:PP_N,0:PP_N) 
 REAL                            :: divB_loc
 !==================================================================================================================================
 ! Needed for the computation of the forcing term for the channel flow
 L2_divB=0.
 Linf_divB=0.
 DO iElem=1,nElems
-  ! Compute the gradient in the reference system
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    gradB_xi  = 0.
-    gradB_eta = 0.
-    gradB_zeta= 0.
-    DO l=0,N
-      gradB_xi  (1:3)= gradB_xi  (1:3) + D(i,l) * U(6:8,l,j,k,iElem)
-      gradB_eta (1:3)= gradB_eta (1:3) + D(j,l) * U(6:8,i,l,k,iElem)
-      gradB_zeta(1:3)= gradB_zeta(1:3) + D(k,l) * U(6:8,i,j,l,iElem)
-    END DO ! l 
-    divB_loc = sJ(i,j,k,iElem) * (                                   &   
-               Metrics_fTilde(1,i,j,k,iElem) * gradB_xi  (1) + & !gradUx(1 
-               Metrics_gTilde(1,i,j,k,iElem) * gradB_eta (1) + & 
-               Metrics_hTilde(1,i,j,k,iElem) * gradB_zeta(1) + &
-               Metrics_fTilde(2,i,j,k,iElem) * gradB_xi  (2) + & !gradUy(2 
-               Metrics_gTilde(2,i,j,k,iElem) * gradB_eta (2) + & 
-               Metrics_hTilde(2,i,j,k,iElem) * gradB_zeta(2) + &   
-               Metrics_fTilde(3,i,j,k,iElem) * gradB_xi  (3) + & !gradUz(3 
-               Metrics_gTilde(3,i,j,k,iElem) * gradB_eta (3) + & 
-               Metrics_hTilde(3,i,j,k,iElem) * gradB_zeta(3)   ) 
+    Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+    Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+    Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+  END DO; END DO; END DO ! i,j,k
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    divB_loc=0.
+    DO l=0,PP_N
+      divB_loc=divB_loc + D(i,l)*Btilde(1,l,j,k) + &
+                          D(j,l)*Btilde(2,i,l,k) + &
+                          D(k,l)*Btilde(3,i,j,l)
+    END DO ! l
+    divB_loc = sJ(i,j,k,iElem) * divB_loc 
+
     L2_divB   = L2_divB+(divB_loc)**2*wGPVol(i,j,k)/sJ(i,j,k,iElem)
     Linf_divB = MAX(Linf_divB,ABS(divB_loc))
-  END DO; END DO; END DO !i,j,k
+  END DO; END DO; END DO ! i,j,k
 END DO ! iElem
 
 #if MPI
