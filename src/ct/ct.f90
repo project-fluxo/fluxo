@@ -121,6 +121,8 @@ IF(.NOT.DoRestart)THEN
   END DO !iElem=1,nElems
   !since computed at GL points, already continuous
   CALL ComputeCartCurl(Acart,curlA,vec_in_Base=0)
+  WRITE(*,*)'CHECK B=curlA_init...'
+  CALL CheckB(curlA)
 ELSE
 !  CALL ReadCurlAFromRestart()
 END IF
@@ -162,6 +164,8 @@ CALL ProjectToNedelec(AtCov)
  
 CALL ComputeCartCurl(AtCov,curlAt,vec_in_Base=1)
 
+WRITE(*,*)'check B=curlA_t'
+CALL checkB(curlAt)
 END SUBROUTINE CT_TimeDerivative
 
 !==================================================================================================================================
@@ -234,7 +238,7 @@ USE MOD_Mesh_Vars,ONLY: nElems,SideToElem,ElemToSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: vec(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL,INTENT(INOUT) :: vec(3,0:PP_N,0:PP_N,0:PP_N,nElems) !< covariant components of a generally discontinuous vector
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL       :: vec_in(3,0:PP_N,0:PP_N,0:PP_N,nElems)
@@ -408,16 +412,97 @@ REAL,INTENT(INOUT) :: U_inout(PP_nVar,ntotal_IP)
 ! LOCAL VARIABLES
 INTEGER :: i
 REAL    :: EmagU,EmagCurlA
+REAL    :: diffB(3),mindiffB(3),maxdiffB(3) 
 !==================================================================================================================================
+maxdiffB=-1.0e20
+mindiffB=1.0e20
 DO i=1,nTotal_IP
-     EmagU=SUM(U_inout(6:8,i)**2)
-     EmagcurlA=SUM(curlA_in(:,i)**2)
-     U_inout(5,i)=U_inout(5,i)+s2mu_0*(EmagcurlA-EmagU) !add new magn. energy, substract old energy
-     U_inout(6:8,i)=curlA_in(:,i)
-END DO !i=1,nTotal_IP
+  diffB=U_inout(6:8,i)-curlA_in(:,i)
+  mindiffB=MIN(mindiffB,diffB)
+  maxdiffB=MAX(maxdiffB,diffB)
+END DO ! i
+
+WRITE(*,*)'SWAPB: min(B-curlA)',mindiffB
+WRITE(*,*)'       max(B-curlA)',maxdiffB
+
+
+WRITE(*,*)'CHECK B(U)...'
+CALL CheckB(U_inout(6:8,:))
+WRITE(*,*)'CHECK B=curlA...'
+CALL CheckB(curlA_in)
+
+DO i=1,nTotal_IP
+  EmagU=SUM(U_inout(6:8,i)**2)
+  EmagcurlA=SUM(curlA_in(:,i)**2)
+  U_inout(5,i)=U_inout(5,i)+s2mu_0*(EmagcurlA-EmagU) !add new magn. energy, substract old energy
+  U_inout(6:8,i)=curlA_in(:,i)
+END DO ! i
+
 
 END SUBROUTINE swapB
 
+!==================================================================================================================================
+!> checks divergence and surface jumps of cartesian vector field 
+!> ONLY 1 PROC & STRUCTURED MESH 
+!==================================================================================================================================
+SUBROUTINE checkB(B_in)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Mesh_Vars      ,ONLY: nElems
+USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde
+USE MOD_Mesh_Vars      ,ONLY: ElemToSide,nSides
+USE MOD_DG_Vars        ,ONLY: D 
+!USE MOD_DG_Vars        ,ONLY: nTotal_IP
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)    :: B_in(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!INTEGER :: i
+REAL    :: Bn_plus(0:PP_N,0:PP_N,nSides),Bn_minus(0:PP_N,0:PP_N,nSides)
+INTEGER :: i,j,k,l,iElem
+REAL    :: mindivB,maxDivB,divB_loc,Btilde(3,0:PP_N,0:PP_N,0:PP_N)
+!==================================================================================================================================
+
+mindivB=1.0e20
+maxdivB=-1.0e20
+Bn_plus=0.
+Bn_minus=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*B_in(:,i,j,k,iElem))
+    Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*B_in(:,i,j,k,iElem))
+    Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*B_in(:,i,j,k,iElem))
+  END DO; END DO; END DO ! i,j,k
+  Bn_plus( :,:,ElemToSide(E2S_SIDE_ID,   XI_PLUS,iElem))=Btilde(1,PP_N,:,:)
+  Bn_plus( :,:,ElemToSide(E2S_SIDE_ID,  ETA_PLUS,iElem))=Btilde(2,:,PP_N,:)
+  Bn_plus( :,:,ElemToSide(E2S_SIDE_ID, ZETA_PLUS,iElem))=Btilde(3,:,:,PP_N)
+  Bn_minus(:,:,ElemToSide(E2S_SIDE_ID,  XI_MINUS,iElem))=Btilde(1,0,:,:)
+  Bn_minus(:,:,ElemToSide(E2S_SIDE_ID, ETA_MINUS,iElem))=Btilde(2,:,0,:)
+  Bn_minus(:,:,ElemToSide(E2S_SIDE_ID,ZETA_MINUS,iElem))=Btilde(3,:,:,0)
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    divB_loc=0.
+    DO l=0,PP_N
+      divB_loc=divB_loc + D(i,l)*Btilde(1,l,j,k) + &
+                          D(j,l)*Btilde(2,i,l,k) + &
+                          D(k,l)*Btilde(3,i,j,l)
+    END DO ! l
+    divB_loc = sJ(i,j,k,iElem) * divB_loc 
+    mindivB=MIN(mindivB,divB_loc)
+    maxdivB=MAX(maxdivB,divB_loc)
+
+  END DO; END DO; END DO ! i,j,k
+END DO ! iElem
+
+WRITE(*,*)'..check ..min/max divB    : ',mindivB,maxdivB
+WRITE(*,*)'        ..min/max [[B*n]] : ',MINVAL((Bn_plus-Bn_minus)),MAXVAL((Bn_plus-Bn_minus))
+
+END SUBROUTINE checkB
 
 
 !==================================================================================================================================
