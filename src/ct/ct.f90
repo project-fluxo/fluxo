@@ -84,6 +84,7 @@ IMPLICIT NONE
 INTEGER :: i,j,k,iElem
 REAL    :: InvJacMat(3,3)
 REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+LOGICAL :: discreteDivB
 !===================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.(.NOT.MeshInitIsDone))THEN
    CALL abort(__STAMP__, &
@@ -116,12 +117,20 @@ STOP 'constraint transport not implemented for Gauss points!'
 IF(.NOT.DoRestart)THEN
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      CALL EvalMagneticVectorPotential(IniExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem))
+      CALL EvalMagneticVectorPotential(IniExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem), &
+                                                       curlA(:,i,j,k,iElem),discreteDivB)
     END DO; END DO; END DO !i,j,k=0,PP_N
   END DO !iElem=1,nElems
-  !since computed at GL points, already continuous
-  CALL ComputeCartCurl(Acart,curlA,vec_in_Base=0)
-  WRITE(*,*)'CHECK B=curlA_init...'
+  IF(.NOT.discreteDivB)THEN
+    !TEST
+      curlA=Acart
+      CALL ProjectToNedelec(Acart)
+      WRITE(*,*)'TESTTEST: (Acart - Acart_nedelec)',MINVAL(curlA-Acart),MAXVAL(curlA-Acart)
+    !TEST
+    !since computed at GL points, already continuous
+    CALL ComputeCartCurl(Acart,curlA,vec_in_Base=0)
+    WRITE(*,*)'CHECK B=curlA_init...'
+  END IF
   CALL CheckB(curlA)
 ELSE
 !  CALL ReadCurlAFromRestart()
@@ -155,7 +164,7 @@ REAL    :: At(3)
 !==================================================================================================================================
 DO iElem=1,nElems
   DO k=0,PP_N;DO j=0,PP_N; DO i=0,PP_N
-     At =  CROSS(U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem),U(6:8,i,j,k,iElem))  !=v x B = - B x v
+     At = CROSS(U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem),U(6:8,i,j,k,iElem))  !=v x B = - B x v
      AtCov(:,i,j,k,iElem)= MATMUL(dXGL_N(:,:,i,j,k,iElem),At(:)) !covariant components
   END DO; END DO; END DO !i,j,k=0,PP_N
 END DO !iElem=1,nElems
@@ -164,8 +173,8 @@ CALL ProjectToNedelec(AtCov)
  
 CALL ComputeCartCurl(AtCov,curlAt,vec_in_Base=1)
 
-WRITE(*,*)'check B=curlA_t'
-CALL checkB(curlAt)
+!WRITE(*,*)'check B=curlA_t  !!!!!!!!!'
+!CALL checkB(curlAt)
 END SUBROUTINE CT_TimeDerivative
 
 !==================================================================================================================================
@@ -234,7 +243,7 @@ SUBROUTINE projectToNedelec(vec)
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
-USE MOD_Mesh_Vars,ONLY: nElems,SideToElem,ElemToSide
+USE MOD_Mesh_Vars,ONLY: nElems,SideToElem,ElemToSide,Elem_xGP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -248,14 +257,14 @@ vec_in=vec
 DO iElem=1,nElems
   !A1: C0 in y,z
   nb( 0, 0) =iElem  ! 
-  nb( 0,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,ZETA_MINUS,iElem))       !    z- 
-  nb( 0, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,ZETA_PLUS ,iElem))       !    z+ 
-  nb(-1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_MINUS,iElem))       ! y-
-  nb( 1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_PLUS ,iElem))       ! y+
-  nb(-1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_MINUS,nb(0,-1)))    ! y-,z-
-  nb( 1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_PLUS ,nb(0,-1)))    ! y+,z-
-  nb(-1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_MINUS,nb(0, 1)))    ! y-,z+
-  nb( 1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_PLUS ,nb(0, 1)))    ! y+,z+
+  nb( 0,-1) =GetnbElemID(ZETA_MINUS,iElem)      !    z- 
+  nb( 0, 1) =GetnbElemID(ZETA_PLUS ,iElem)      !    z+ 
+  nb(-1, 0) =GetnbElemID( ETA_MINUS,iElem)      ! y-
+  nb( 1, 0) =GetnbElemID( ETA_PLUS ,iElem)      ! y+
+  nb(-1,-1) =GetnbElemID( ETA_MINUS,nb(0,-1))   ! y-,z-
+  nb( 1,-1) =GetnbElemID( ETA_PLUS ,nb(0,-1))   ! y+,z-
+  nb(-1, 1) =GetnbElemID( ETA_MINUS,nb(0, 1))   ! y-,z+
+  nb( 1, 1) =GetnbElemID( ETA_PLUS ,nb(0, 1))   ! y+,z+
   !corners
   DO yy=0,1; DO zz=0,1
     vec(1,:,yy*PP_N,zz*PP_N,iElem)= 0.25*( vec_in(1,:,   0,   0,nb(yy  ,zz  )) &
@@ -278,14 +287,14 @@ DO iElem=1,nElems
   END DO
   !A2: C0 in x,z
   nb( 0, 0) =iElem  ! 
-  nb( 0,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,ZETA_MINUS,iElem))       !    z- 
-  nb( 0, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,ZETA_PLUS ,iElem))       !    z+ 
-  nb(-1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,iElem))       ! x-
-  nb( 1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,iElem))       ! x+
-  nb(-1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,nb(0,-1)))    ! x-,z-
-  nb( 1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,nb(0,-1)))    ! x+,z-
-  nb(-1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,nb(0, 1)))    ! x-,z+
-  nb( 1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,nb(0, 1)))    ! x+,z+
+  nb( 0,-1) =GetnbElemID(ZETA_MINUS,iElem)    !    z- 
+  nb( 0, 1) =GetnbElemID(ZETA_PLUS ,iElem)    !    z+ 
+  nb(-1, 0) =GetnbElemID(  XI_MINUS,iElem)    ! x-
+  nb( 1, 0) =GetnbElemID(  XI_PLUS ,iElem)    ! x+
+  nb(-1,-1) =GetnbElemID(  XI_MINUS,nb(0,-1)) ! x-,z-
+  nb( 1,-1) =GetnbElemID(  XI_PLUS ,nb(0,-1)) ! x+,z-
+  nb(-1, 1) =GetnbElemID(  XI_MINUS,nb(0, 1)) ! x-,z+
+  nb( 1, 1) =GetnbElemID(  XI_PLUS ,nb(0, 1)) ! x+,z+
   !corners
   DO xx=0,1; DO zz=0,1
     vec(2,xx*PP_N,:,zz*PP_N,iElem)= 0.25*( vec_in(2,   0,:,   0,nb(xx  ,zz  )) &
@@ -308,14 +317,14 @@ DO iElem=1,nElems
   END DO
   !A3: C0 in x,y
   nb( 0, 0) =iElem  ! 
-  nb( 0,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_MINUS,iElem))       !    y- 
-  nb( 0, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID, ETA_PLUS ,iElem))       !    y+ 
-  nb(-1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,iElem))       ! x-
-  nb( 1, 0) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,iElem))       ! x+
-  nb(-1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,nb(0,-1)))    ! x-,y-
-  nb( 1,-1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,nb(0,-1)))    ! x+,y-
-  nb(-1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_MINUS,nb(0, 1)))    ! x-,y+
-  nb( 1, 1) =SideToElem(S2E_NB_ELEM_ID,ElemToSide(E2S_SIDE_ID,  XI_PLUS ,nb(0, 1)))    ! x+,y+
+  nb( 0,-1) =GetnbElemID( ETA_MINUS,iElem)       !    y- 
+  nb( 0, 1) =GetnbElemID( ETA_PLUS ,iElem)       !    y+ 
+  nb(-1, 0) =GetnbElemID(  XI_MINUS,iElem)       ! x-
+  nb( 1, 0) =GetnbElemID(  XI_PLUS ,iElem)       ! x+
+  nb(-1,-1) =GetnbElemID(  XI_MINUS,nb(0,-1))    ! x-,y-
+  nb( 1,-1) =GetnbElemID(  XI_PLUS ,nb(0,-1))    ! x+,y-
+  nb(-1, 1) =GetnbElemID(  XI_MINUS,nb(0, 1))    ! x-,y+
+  nb( 1, 1) =GetnbElemID(  XI_PLUS ,nb(0, 1))    ! x+,y+
   !corners
   DO xx=0,1; DO yy=0,1
     vec(3,xx*PP_N,yy*PP_N,:,iElem)= 0.25*( vec_in(3,   0,   0,:,nb(xx  ,yy  )) &
@@ -339,6 +348,27 @@ DO iElem=1,nElems
   
 END DO !iElem=1,nElems
 
+
+CONTAINS
+
+  FUNCTION GETnbElemID(locSide,elemID)
+    !----------------------------------
+    INTEGER,INTENT(IN) :: locSide
+    INTEGER,INTENT(IN) :: elemID
+    INTEGER            :: GETnbElemID
+    !----------------------------------
+    INTEGER            :: SideID,Flip
+    !----------------------------------
+    SideID=ElemToSide(E2S_SIDE_ID,locSide,ElemID)
+    Flip  =ElemToSide(E2S_FLIP   ,locSide,ElemID)
+    IF(flip.EQ.0)THEN
+      GETnbElemID=SideToElem(S2E_NB_ELEM_ID,SideID)
+    ELSE
+      GETnbElemID=SideToElem(S2E_ELEM_ID,SideID)
+    END IF
+
+  END FUNCTION GETnbElemID
+
 END SUBROUTINE projectToNedelec
 
 
@@ -349,12 +379,12 @@ END SUBROUTINE projectToNedelec
 !> B_2= d(A_1)/dz - d(A_3)/dx
 !> B_3= d(A_2)/dx - d(A_1)/dy
 !==================================================================================================================================
-SUBROUTINE EvalMagneticVectorPotential(ExactFunc,x,Acart)
+SUBROUTINE EvalMagneticVectorPotential(ExactFunc,x,Acart,Bcart,discreteDivB)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
-USE MOD_Equation_Vars  ,ONLY: s2mu_0,IniHalfwidth
+USE MOD_Equation_Vars  ,ONLY: s2mu_0,IniHalfwidth,IniFrequency,IniAmplitude
 USE MOD_DG_Vars        ,ONLY: nTotal_IP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -364,24 +394,42 @@ REAL   ,INTENT(IN)  :: x(3)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: Acart(3)
+REAL,INTENT(OUT)    :: Bcart(3)
+LOGICAL,INTENT(OUT) :: discreteDivB   !< set to true if divergence of Bcart is already DISCRETELY zero!
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL  :: B(3)
+REAL  :: Omega
 !==================================================================================================================================
 SELECT CASE(ExactFunc)
+CASE(7)
+  Omega=PP_Pi*IniFrequency
+  Acart(1)= 2.*IniAmplitude*SIN(Omega*SUM(x(:)))
+  Acart(2)=    IniAmplitude*SIN(Omega*SUM(x(:)))
+  Acart(3)=  - IniAmplitude*SIN(Omega*SUM(x(:)))
+  discreteDivB=.FALSE.
+
+  !B1=dA3/dy-dA2/dz = -2*IniAmplitude*Omega*COS(Omega*SUM(x))
+  !B2=dA1/dz-dA3/dx =  3*IniAmplitude*Omega*COS(Omega*SUM(x))
+  !B3=dA2/dx-dA1/dy = -1*IniAmplitude*Omega*COS(Omega*SUM(x))
+
+  Bcart(1) = -2*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Bcart(2) =  3*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Bcart(3) = -  IniAmplitude*Omega*COS(Omega*SUM(x))
 CASE(73)
-  B(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
-  !B2=0.
-  B(3)=1.0
+  Bcart(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Bcart(2)=0.
+  Bcart(3)=1.0
+  discreteDivB=.TRUE.
   Acart(1) = 0.
-  Acart(2) = x(1)*B(3) - x(3)*B(1)
+  Acart(2) = x(1)*Bcart(3) - x(3)*Bcart(1) !NOT PERIODIC!!
   Acart(3) = 0. 
 CASE(74)
-  B(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
-  !B2=0.
-  B(3)=SQRT(1.0-B(1)*B(1))
+  Bcart(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Bcart(2)=0.
+  Bcart(3)=SQRT(1.0-Bcart(1)**2)
+  discreteDivB=.TRUE.
   Acart(1) = 0.
-  Acart(2) = x(1)*B(3)-x(3)*B(1)
+  Acart(2) = x(1)*Bcart(3)-x(3)*Bcart(1) !NOT PERIODIC
   Acart(3) = 0. 
 
 CASE DEFAULT
@@ -400,44 +448,43 @@ SUBROUTINE swapB(U_inout,curlA_in)
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Equation_Vars  ,ONLY: s2mu_0
-USE MOD_DG_Vars        ,ONLY: nTotal_IP
+USE MOD_Mesh_Vars      ,ONLY: nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)    :: curlA_in(3,ntotal_IP)
+REAL,INTENT(IN)    :: curlA_in(3,0:PP_N,0:PP_N,0:PP_N,nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: U_inout(PP_nVar,ntotal_IP)
+REAL,INTENT(INOUT) :: U_inout(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: i
+INTEGER :: i,j,k,iElem
 REAL    :: EmagU,EmagCurlA
 REAL    :: diffB(3),mindiffB(3),maxdiffB(3) 
 !==================================================================================================================================
 maxdiffB=-1.0e20
 mindiffB=1.0e20
-DO i=1,nTotal_IP
-  diffB=U_inout(6:8,i)-curlA_in(:,i)
+DO iElem=1,nElems; DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
+  diffB=U_inout(6:8,i,j,k,iElem)-curlA_in(:,i,j,k,iElem)
   mindiffB=MIN(mindiffB,diffB)
   maxdiffB=MAX(maxdiffB,diffB)
-END DO ! i
+END DO; END DO; END DO; END DO ! i,j,k,iElem
 
-WRITE(*,*)'SWAPB: min(B-curlA)',mindiffB
-WRITE(*,*)'       max(B-curlA)',maxdiffB
+!WRITE(*,*)'SWAPB: min(B-curlA)',mindiffB
+!WRITE(*,*)'       max(B-curlA)',maxdiffB
 
 
-WRITE(*,*)'CHECK B(U)...'
-CALL CheckB(U_inout(6:8,:))
-WRITE(*,*)'CHECK B=curlA...'
-CALL CheckB(curlA_in)
+!WRITE(*,*)'CHECK B(U)...'
+!CALL CheckB(U_inout(6:8,:,:,:,:))
+!WRITE(*,*)'CHECK B=curlA...'
+!CALL CheckB(curlA_in)
 
-DO i=1,nTotal_IP
-  EmagU=SUM(U_inout(6:8,i)**2)
-  EmagcurlA=SUM(curlA_in(:,i)**2)
-  U_inout(5,i)=U_inout(5,i)+s2mu_0*(EmagcurlA-EmagU) !add new magn. energy, substract old energy
-  U_inout(6:8,i)=curlA_in(:,i)
-END DO ! i
-
+DO iElem=1,nElems; DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
+  EmagU=SUM(U_inout(6:8,i,j,k,iElem)**2)
+  EmagcurlA=SUM(curlA_in(:,i,j,k,iElem)**2)
+  U_inout(5,i,j,k,iElem)=U_inout(5,i,j,k,iElem)+s2mu_0*(EmagcurlA-EmagU) !add new magn. energy, substract old energy
+  U_inout(6:8,i,j,k,iElem)=curlA_in(:,i,j,k,iElem)
+END DO; END DO; END DO; END DO ! i,j,k,iElem
 
 END SUBROUTINE swapB
 
@@ -452,7 +499,7 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Mesh_Vars      ,ONLY: nElems
 USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde
-USE MOD_Mesh_Vars      ,ONLY: ElemToSide,nSides
+USE MOD_Mesh_Vars      ,ONLY: ElemToSide,nSides,SideToElem
 USE MOD_DG_Vars        ,ONLY: D 
 !USE MOD_DG_Vars        ,ONLY: nTotal_IP
 IMPLICIT NONE
@@ -471,8 +518,8 @@ REAL    :: mindivB,maxDivB,divB_loc,Btilde(3,0:PP_N,0:PP_N,0:PP_N)
 
 mindivB=1.0e20
 maxdivB=-1.0e20
-Bn_plus=0.
-Bn_minus=0.
+Bn_plus=9999.
+Bn_minus=9999.
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*B_in(:,i,j,k,iElem))
@@ -501,6 +548,15 @@ END DO ! iElem
 
 WRITE(*,*)'..check ..min/max divB    : ',mindivB,maxdivB
 WRITE(*,*)'        ..min/max [[B*n]] : ',MINVAL((Bn_plus-Bn_minus)),MAXVAL((Bn_plus-Bn_minus))
+!IF(MAXVAL(ABS(Bn_plus-Bn_minus)).GT.1.0e-10)THEN
+!  DO i=1,nSides
+!    WRITE(*,*)'SideID',i,'locSide master',SideToElem(S2E_LOC_SIDE_ID,i) &
+!                        ,'locSide slave ',SideToElem(S2E_NB_LOC_SIDE_ID,i)               
+!                                                 
+!    WRITE(*,*)i,'     ..min/max [[B*n]] : ',MINVAL((Bn_plus(:,:,i)-Bn_minus(:,:,i))),MAXVAL((Bn_plus(:,:,i)-Bn_minus(:,:,i))),MAXVAL(Bn_plus(:,:,i))
+!  END DO
+!  READ(*,*)
+!END IF
 
 END SUBROUTINE checkB
 

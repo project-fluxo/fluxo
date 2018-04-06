@@ -537,6 +537,20 @@ CASE(6) ! case 5 rotated
   Resu_tt(6)        = Resu_tt(1)
   !Resu_tt(7)        = 0.
   Resu_tt(8)        =-Resu_tt(1)
+CASE(7) ! constant density / pressure / velocity, periodic magnetic field
+  Omega=PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2)=-1.
+  Prim(3)=2.
+  Prim(4)=3.1
+  Prim(5)=1.
+  Prim(6) = -2.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(7) =  3.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(8) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
+
+  CALL PrimToCons(Prim,Resu)
+
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)

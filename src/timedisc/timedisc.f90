@@ -146,9 +146,13 @@ USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
 USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState
-USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
+USE MOD_Mesh_Vars           ,ONLY: nGlobalElems,nElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
+#ifdef PP_CT
+USE MOD_CT                  ,ONLY: CT_TimeDerivative,swapB
+USE MOD_CT_Vars             ,ONLY: curlA
+#endif /*PP_CT*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -157,6 +161,7 @@ IMPLICIT NONE
 REAL                         :: dt_Min,dt_MinOld,dtAnalyze,dtEnd,tStart
 INTEGER(KIND=8)              :: iter,iter_loc
 REAL                         :: CalcTimeStart,CalcTimeEnd
+REAL                         :: Utmp(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) 
 INTEGER                      :: TimeArray(8)              !< Array for system time
 INTEGER                      :: errType,nCalcTimestep,writeCounter
 LOGICAL                      :: doAnalyze,doFinalize
@@ -185,6 +190,11 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
+#ifdef PP_CT
+CALL CT_TimeDerivative()                            !compute curlAt from U
+Utmp=U
+CALL swapB(U,curlA)                                 !change B in U to curlA  
+#endif /*PP_CT*/
 CALL DGTimeDerivative(t)
 
 
@@ -212,6 +222,9 @@ IF(errType.NE.0) CALL abort(__STAMP__,&
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_StdOut,*) 'Analyze of initial solution:' 
 CALL Analyze(t,iter)
+#ifdef PP_CT
+  U=Utmp
+#endif /*PP_CT*/
 
 IF(MPIroot)THEN
   WRITE(UNIT_StdOut,'(132("-"))')
@@ -275,6 +288,11 @@ DO
   ! Analyze and output now
   IF(doAnalyze) THEN
     ! Call DG operator to fill face data, fluxes, gradients for analyze
+#ifdef PP_CT
+    CALL CT_TimeDerivative()                            !compute curlAt from U
+    Utmp=U
+    CALL swapB(U,curlA)                                 !change B in U to curlA  
+#endif /*PP_CT*/
     CALL DGTimeDerivative(t)
 
     CalcTimeEnd=FLUXOTIME()
@@ -305,6 +323,9 @@ DO
 
     ! do analysis
     CALL Analyze(t,iter)
+#ifdef PP_CT
+    U=Utmp
+#endif /*PP_CT*/
     iter_loc=0
     CalcTimeStart=FLUXOTIME()
     tAnalyze=  MIN(tAnalyze+Analyze_dt,  tEnd)
