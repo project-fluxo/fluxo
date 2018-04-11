@@ -68,6 +68,7 @@ build_mhd:
   <<: *job_def_build_intel
   script: 
     - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - rm -rf dirx_3* log_3*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 300-399 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 301,304 ;  fi
     - ls -l; mv dirx_3* ${GLOBAL_CACHE_PATH}/.
@@ -85,9 +86,10 @@ build_linadv:
   <<: *job_def_build_intel # Merge the contents of the 'job_def_build_intel' alias
   script: 
     - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - rm -rf dirx_1* log_1*.txt
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199
-    - else ; python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 101,103 ;  fi
-    - ls -l; mv dirx_1* ${GLOBAL_CACHE_PATH}/.
+    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 101,103 ;  fi
+    - ls ; mv dirx_1* ${GLOBAL_CACHE_PATH}/.
   after_script:
     - pwd 
   artifacts:
@@ -102,9 +104,10 @@ build_maxwell:
   <<: *job_def_build_intel
   script: 
     - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - rm -rf dirx_2* log_2*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 200-299 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 201 ;  fi
-    - ls -l; mv dirx_2* ${GLOBAL_CACHE_PATH}/.
+    - ls ; mv dirx_2* ${GLOBAL_CACHE_PATH}/.
   after_script:
     - pwd 
   artifacts:
@@ -120,9 +123,10 @@ build_nav-st:
   <<: *job_def_build_intel
   script: 
     - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - rm -rf dirx_4* log_4*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 400-499 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401,403 ;  fi
-    - ls -l; mv dirx_4* ${GLOBAL_CACHE_PATH}/.
+    - ls ; mv dirx_4* ${GLOBAL_CACHE_PATH}/.
   after_script:
     - pwd 
   artifacts:
