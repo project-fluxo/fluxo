@@ -161,7 +161,15 @@ END SUBROUTINE Riemann
 
 #if NONCONS
 !==================================================================================================================================
-!> nonconservative fluxes 
+!> strong nonconservative flux on a side: 
+!> phi^L 1/2(B^L+B^R)*nvec  - phi^L B^L nvec = phi^L 1/2(B^R-B^L)*nvec
+!> CAREFUL, the "weak" implementation of the nonconservative term in the volume (Phi div B ) already includes the boundary part:
+!> -1/2(phi^L B^L nvec)
+!> so that here, we only add  
+!> 1/2(phi^L B^R nvec)
+!> analogously, the GLM nonconservative term is (0,0,0,v*phi, 0,0,0,v) grad phi  in the volume, therefore
+!> we only need to add
+!> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
 !==================================================================================================================================
 SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
@@ -176,13 +184,12 @@ REAL,INTENT(IN) :: t1(            3,nTotal_Face) !< 1st tangential vector of fac
 REAL,INTENT(IN) :: t2(            3,nTotal_Face) !< 2nd tangential vector of face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< nonconservative flux on UL side
+REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i
-REAL    :: phi_L(PP_nVar),v_L(3)
+REAL    :: phi_L(2:8),v_L(3)
 !==================================================================================================================================
-phi_L  =0.
 DO i=1,nTotal_Face
   v_L=UL(2:4,i)/UL(1,i)
   !Powell
@@ -190,7 +197,7 @@ DO i=1,nTotal_Face
   phi_L(2:4)=UL(6:8,i)
   phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
   
-  FL(  :,i)=FL(:,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*phi_L(:)    !B_R*n*phi_L
+  FL(2:8,i)=FL(2:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*phi_L(2:8)    !B_R*n*phi_L
 #ifdef PP_GLM
   !nonconservative term to restore galilein invariance for GLM term
   FL((/5,PP_nVar/),i)=FL((/5,PP_nVar/),i)  &
