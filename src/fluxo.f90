@@ -127,10 +127,10 @@ CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitBC()
-CALL InitDG()
 #ifdef PP_CT
 CALL InitCT()
 #endif
+CALL InitDG()
 #if PARABOLIC
 CALL InitLifting()
 #endif /*PARABOLIC*/
@@ -156,10 +156,10 @@ CALL FinalizeAnalyze()
 #if PARABOLIC
 CALL FinalizeLifting()
 #endif /*PARABOLIC*/
+CALL FinalizeDG()
 #ifdef PP_CT
 CALL FinalizeCT()
 #endif
-CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeBC()
 CALL FinalizeInterpolation()

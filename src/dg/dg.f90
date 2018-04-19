@@ -70,6 +70,10 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
+#ifdef PP_CT
+USE MOD_CT                  ,ONLY: InitB_CT
+USE MOD_CT_Vars             ,ONLY: CTInitIsDone
+#endif /*PP_CT*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -126,6 +130,10 @@ Flux_slave=0.
 IF(.NOT.DoRestart)THEN
   ! U is filled with the ini solution
   CALL FillIni(IniExactFunc,U)
+#if PP_CT
+  IF(.NOT. CTInitIsDone) STOP' call initCT before initDG!'
+  CALL InitB_CT(IniExactFunc,U) !overwrite B, keep pressure constant 
+#endif 
 END IF
 
 !#if MPI
@@ -271,6 +279,9 @@ USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
 USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide 
 #endif /*MPI*/
+#ifdef PP_CT
+USE MOD_CT                  ,ONLY: CT_TimeDerivative,swapBt
+#endif /*PP_CT*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -366,6 +377,11 @@ CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)
 !  Compute source terms and sponge (in physical space, conversion to reference space inside routines)
 IF(doCalcSource) CALL CalcSource(Ut,tIn)
 IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
+
+#ifdef PP_CT
+    CALL CT_TimeDerivative()                     !compute curlAt from U
+    CALL swapBt(U,Ut)                            !change Bt in Ut to curlAt and energy 
+#endif /*PP_CT*/
 
 END SUBROUTINE DGTimeDerivative_weakForm
 

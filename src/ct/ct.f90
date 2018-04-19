@@ -37,12 +37,16 @@ INTERFACE InitCT
   MODULE PROCEDURE InitCT
 END INTERFACE
 
+INTERFACE InitB_CT
+  MODULE PROCEDURE InitB_CT
+END INTERFACE
+
 INTERFACE CT_TimeDerivative
   MODULE PROCEDURE CT_TimeDerivative
 END INTERFACE
 
-!INTERFACE swapB
-!  MODULE PROCEDURE swapB
+!INTERFACE swapBt
+!  MODULE PROCEDURE swapBt
 !END INTERFACE
 
 INTERFACE FinalizeCT
@@ -50,8 +54,9 @@ INTERFACE FinalizeCT
 END INTERFACE
 
 PUBLIC:: InitCT
+PUBLIC:: InitB_CT
 PUBLIC:: CT_TimeDerivative
-PUBLIC:: swapB
+PUBLIC:: swapBt
 PUBLIC:: FinalizeCT
 !==================================================================================================================================
 
@@ -69,7 +74,7 @@ USE MOD_PreProc
 USE MOD_CT_Vars
 USE MOD_Interpolation_Vars, ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars,          ONLY: MeshInitIsDone,nElems
-USE MOD_Mesh_Vars,          ONLY: Metrics_ftilde,Metrics_gtilde,Metrics_htilde,Elem_xGP
+USE MOD_Mesh_Vars,          ONLY: Metrics_ftilde,Metrics_gtilde,Metrics_htilde
 USE MOD_Restart_Vars,       ONLY: RestartInitIsDone,doRestart
 USE MOD_Basis,              ONLY: Inv33
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
@@ -83,8 +88,6 @@ IMPLICIT NONE
 ! LOCAL VARIABLES 
 INTEGER :: i,j,k,iElem
 REAL    :: InvJacMat(3,3)
-REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems)
-LOGICAL :: discreteDivB
 !===================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.(.NOT.MeshInitIsDone))THEN
    CALL abort(__STAMP__, &
@@ -114,11 +117,43 @@ END DO !iElem=1,nElems
 STOP 'constraint transport not implemented for Gauss points!'
 #endif
 
-IF(.NOT.DoRestart)THEN
+doEvalSource_A=.TRUE. !default
+
+CTInitIsDone=.TRUE.
+SWRITE(UNIT_stdOut,'(A)')' INIT CT DONE!'
+SWRITE(UNIT_StdOut,'(132("-"))')
+END SUBROUTINE InitCT
+
+
+!==================================================================================================================================
+!> Initialize divergence free magnetic field
+!> 
+!==================================================================================================================================
+SUBROUTINE InitB_CT(ExactFunc,U_inout)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_CT_Vars
+USE MOD_Mesh_Vars,          ONLY: nElems,Elem_xGP
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: exactFunc
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT)    :: U_inout(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER :: i,j,k,iElem
+REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+LOGICAL :: discreteDivB
+!===================================================================================================================================
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      CALL EvalMagneticVectorPotential(IniExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem), &
-                                                       curlA(:,i,j,k,iElem),discreteDivB)
+      CALL EvalExactFunc_A(ExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem), &
+                                                  curlA(:,i,j,k,iElem),discreteDivB)
     END DO; END DO; END DO !i,j,k=0,PP_N
   END DO !iElem=1,nElems
   IF(.NOT.discreteDivB)THEN
@@ -132,14 +167,10 @@ IF(.NOT.DoRestart)THEN
     WRITE(*,*)'CHECK B=curlA_init...'
   END IF
   CALL CheckB(curlA)
-ELSE
-!  CALL ReadCurlAFromRestart()
-END IF
-
-CTInitIsDone=.TRUE.
-SWRITE(UNIT_stdOut,'(A)')' INIT CT DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
-END SUBROUTINE InitCT
+  !replace B in U_in
+  CALL swapB(U_inout,curlA)
+   
+END SUBROUTINE InitB_CT
 
 !==================================================================================================================================
 !> compute ODE time derivative of A, A_t=-(B x v [+eta J] )
@@ -152,7 +183,9 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_DG_Vars    ,ONLY: U       !! input  !!
 USE MOD_CT_Vars    ,ONLY: curlAt  !! output !!
-USE MOD_Mesh_Vars  ,ONLY: nElems,dXGL_N
+USE MOD_CT_Vars    ,ONLY: doEvalSource_A 
+USE MOD_Equation_Vars    ,ONLY: IniExactFunc
+USE MOD_Mesh_Vars  ,ONLY: nElems,dXGL_N,Elem_xGP
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -160,11 +193,13 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER :: i,j,k,l,iElem
 REAL    :: AtCov(3,0:PP_N,0:PP_N,0:PP_N,nElems)
-REAL    :: At(3)
+REAL    :: At(3),At_source(3)
 !==================================================================================================================================
+At_source=0.
 DO iElem=1,nElems
   DO k=0,PP_N;DO j=0,PP_N; DO i=0,PP_N
-     At = CROSS(U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem),U(6:8,i,j,k,iElem))  !=v x B = - B x v
+     IF(doEvalSource_A) CALL EvalSource_A(IniExactFunc,Elem_xGP(:,i,j,k,iElem),At_source)
+     At = CROSS(U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem),U(6:8,i,j,k,iElem))+At_source  !=v x B = - B x v
      AtCov(:,i,j,k,iElem)= MATMUL(dXGL_N(:,:,i,j,k,iElem),At(:)) !covariant components
   END DO; END DO; END DO !i,j,k=0,PP_N
 END DO !iElem=1,nElems
@@ -379,7 +414,7 @@ END SUBROUTINE projectToNedelec
 !> B_2= d(A_1)/dz - d(A_3)/dx
 !> B_3= d(A_2)/dx - d(A_1)/dy
 !==================================================================================================================================
-SUBROUTINE EvalMagneticVectorPotential(ExactFunc,x,Acart,Bcart,discreteDivB)
+SUBROUTINE EvalExactFunc_A(ExactFunc,x,Acart,Bcart,discreteDivB)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
@@ -433,11 +468,47 @@ CASE(74)
   Acart(3) = 0. 
 
 CASE DEFAULT
-  STOP 'this exactfunc is not implemented in EvalMagneticVectorPotential'
+  STOP 'this exactfunc is not implemented in EvalExactFunc_A'
 END SELECT !ExactFunc
 
-END SUBROUTINE EvalMagneticVectorPotential
+END SUBROUTINE EvalExactFunc_A
 
+!==================================================================================================================================
+!> evaluate the magnetic vector potential A, belonging to the magnetic field
+!> of a given IniExactfunction 
+!> B_1= d(A_3)/dy - d(A_2)/dz
+!> B_2= d(A_1)/dz - d(A_3)/dx
+!> B_3= d(A_2)/dx - d(A_1)/dy
+!==================================================================================================================================
+SUBROUTINE EvalSource_A(ExactFunc,x,Atcart)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_CT_Vars,        ONLY: doEvalSource_A
+USE MOD_Equation_Vars  ,ONLY: s2mu_0,IniHalfwidth,IniFrequency,IniAmplitude
+USE MOD_DG_Vars        ,ONLY: nTotal_IP
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: ExactFunc
+REAL   ,INTENT(IN)  :: x(3) 
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)    :: Atcart(3)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL  :: Omega
+!==================================================================================================================================
+SELECT CASE (ExactFunc)
+CASE(4,5,6) ! navierstokes exact function
+  STOP 'you need to provide a source either for the magnetic vector potential At'
+CASE DEFAULT
+  ! No source -> do nothing
+  doEvalSource_A=.FALSE. 
+END SELECT ! ExactFunction
+
+END SUBROUTINE EvalSource_A
 
 !==================================================================================================================================
 !> Replaces B of current U by curlA, and changing total energy and keeping the same pressure
@@ -487,6 +558,51 @@ DO iElem=1,nElems; DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO; END DO ! i,j,k,iElem
 
 END SUBROUTINE swapB
+
+
+!==================================================================================================================================
+!> Replaces Bt of current Ut by curlAt, and change total energy Et to remain consistent with the entropy
+!> inequality:
+!> S_t=w^T Ut = ((gamma-s)/(gamma-1)-(rho/p)1/2|v|^2,(rho/p)vvec,-(rho/p),(rho/p)Bvec) ^T 
+!>               (rho_t, (rho*vvec)_t,E_t,Bvec_t)
+!>            =  ... (rho/p) (-E_t + Bvec*Bvec_t  + [ Bvec*(curlA_t-curlA_t) ] ) 
+!>
+!> in new Ut, the B_t is replaced with curlA_t, yielding
+!>        =>  ... (rho/p) (-E*_t + Bvec*curlA_t)
+!> if we choose:
+!> E*_t =E_t + Bvec*(curlA_t-B_t)
+!> we recover the original form, such that (w^T *U_t) remains the same!
+
+!==================================================================================================================================
+SUBROUTINE swapBt(U_in,Ut_inout)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Equation_Vars  ,ONLY: smu_0
+USE MOD_Mesh_Vars      ,ONLY: nElems
+USE MOD_CT_Vars      ,ONLY: curlAt
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)    :: U_in(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT) :: Ut_inout(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER :: i,j,k,iElem
+REAL    :: EmagUt,EmagCurlAt
+!==================================================================================================================================
+
+DO iElem=1,nElems; DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
+  EmagUt=SUM(U_in(6:8,i,j,k,iElem)*Ut_inout(6:8,i,j,k,iElem))
+  EmagcurlAt=SUM(U_in(6:8,i,j,k,iElem)*curlAt(:,i,j,k,iElem))
+  Ut_inout(5,i,j,k,iElem)=Ut_inout(5,i,j,k,iElem)+smu_0*(EmagcurlAt-EmagUt) !to keep entropy inequality
+  Ut_inout(6:8,i,j,k,iElem)=curlAt(:,i,j,k,iElem)
+END DO; END DO; END DO; END DO ! i,j,k,iElem
+
+END SUBROUTINE swapBt
 
 !==================================================================================================================================
 !> checks divergence and surface jumps of cartesian vector field 
