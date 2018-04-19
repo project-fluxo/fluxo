@@ -147,13 +147,13 @@ REAL,INTENT(INOUT)    :: U_inout(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER :: i,j,k,iElem
-REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems),constB(3)
 LOGICAL :: discreteDivB
 !===================================================================================================================================
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       CALL EvalExactFunc_A(ExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem), &
-                                                  curlA(:,i,j,k,iElem),discreteDivB)
+                                                  curlA(:,i,j,k,iElem),constB,discreteDivB)
     END DO; END DO; END DO !i,j,k=0,PP_N
   END DO !iElem=1,nElems
   IF(.NOT.discreteDivB)THEN
@@ -164,8 +164,11 @@ LOGICAL :: discreteDivB
     !TEST
     !since computed at GL points, already continuous
     CALL ComputeCartCurl(Acart,curlA,vec_in_Base=0)
-    WRITE(*,*)'CHECK B=curlA_init...'
+    curlA(1,:,:,:,:)=curlA(1,:,:,:,:)+constB(1)
+    curlA(2,:,:,:,:)=curlA(2,:,:,:,:)+constB(2)
+    curlA(3,:,:,:,:)=curlA(3,:,:,:,:)+constB(3)
   END IF
+  WRITE(*,*)'CHECK B=curlA_init...'
   CALL CheckB(curlA)
   !replace B in U_in
   CALL swapB(U_inout,curlA)
@@ -414,7 +417,7 @@ END SUBROUTINE projectToNedelec
 !> B_2= d(A_1)/dz - d(A_3)/dx
 !> B_3= d(A_2)/dx - d(A_1)/dy
 !==================================================================================================================================
-SUBROUTINE EvalExactFunc_A(ExactFunc,x,Acart,Bcart,discreteDivB)
+SUBROUTINE EvalExactFunc_A(ExactFunc,x,Acart,Bcart,constB,discreteDivB)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
@@ -430,12 +433,60 @@ REAL   ,INTENT(IN)  :: x(3)
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: Acart(3)
 REAL,INTENT(OUT)    :: Bcart(3)
+REAL,INTENT(OUT)    :: constB(3)
 LOGICAL,INTENT(OUT) :: discreteDivB   !< set to true if divergence of Bcart is already DISCRETELY zero!
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL  :: Omega
+REAL  :: Omega,e,nx,ny,phi_alv
 !==================================================================================================================================
+constB=0.
 SELECT CASE(ExactFunc)
+CASE(3) !alfven wave domain [-1,1]^3, A is periodic
+  Omega=2.*PP_Pi*IniFrequency
+  !r=2,sqr=1,teval=0.
+  e   = 0.2
+  nx  = 1./SQRT(2**2+1.)
+  ny  = 2./SQRT(2**2+1.)
+  phi_alv = omega*(nx/ny*(x(1)-1.) + (x(2)-1.))
+
+
+  Acart(1) = 0.
+  Acart(2) = e*ny/(nx*Omega)*COS(phi_alv)
+  Acart(3) = e*ny/Omega*SIN(phi_alv) 
+
+  constB(1)=nx
+  constB(2)=ny
+  constB(3)=0.
+
+  discreteDivB=.FALSE.
+
+  Bcart(1) =nx+ e*ny*COS(phi_alv)
+  Bcart(2) =ny -e*nx*COS(phi_alv)
+  Bcart(3) =   -e*SIN(phi_alv) 
+
+CASE(3001) !alfven wave domain [-1,1]^3, A is periodic, rotated
+  Omega=2.*PP_Pi*IniFrequency
+  !r=2,sqr=1,teval=0.
+  e   = 0.2
+  nx  = 1./SQRT(2**2+1.)
+  ny  = 2./SQRT(2**2+1.)
+  phi_alv = omega*(nx/ny*(x(1)-1.) + (x(3)-1.))
+
+
+  Acart(1) = 0.
+  Acart(2) =-e*ny/Omega*SIN(phi_alv) 
+  Acart(3) =-e*ny/(nx*Omega)*COS(phi_alv)
+
+  constB(1)=nx
+  constB(2)=0
+  constB(3)=ny
+
+  discreteDivB=.FALSE.
+
+  Bcart(1) =nx+ e*ny*COS(phi_alv)
+  Bcart(2) =   -e*SIN(phi_alv) 
+  Bcart(3) =ny -e*nx*COS(phi_alv)
+
 CASE(7)
   Omega=PP_Pi*IniFrequency
   Acart(1)= 2.*IniAmplitude*SIN(Omega*SUM(x(:)))
@@ -450,19 +501,21 @@ CASE(7)
   Bcart(1) = -2*IniAmplitude*Omega*COS(Omega*SUM(x))
   Bcart(2) =  3*IniAmplitude*Omega*COS(Omega*SUM(x))
   Bcart(3) = -  IniAmplitude*Omega*COS(Omega*SUM(x))
-CASE(73)
+CASE(73) !IS NOT PERIODIC!!!
   Bcart(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
   Bcart(2)=0.
-  Bcart(3)=1.0
-  discreteDivB=.TRUE.
+  Bcart(3)=1.
+  discreteDivB=.TRUE. !A,constB are not used...
   Acart(1) = 0.
-  Acart(2) = x(1)*Bcart(3) - x(3)*Bcart(1) !NOT PERIODIC!!
+  Acart(2) = - x(3)*Bcart(1) !NOT PERIODIC!!!!
   Acart(3) = 0. 
-CASE(74)
+  !constant Bfield,to be added
+  constB(3)=1.0
+CASE(74) !IS NOT PERIODIC !!!
   Bcart(1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
   Bcart(2)=0.
   Bcart(3)=SQRT(1.0-Bcart(1)**2)
-  discreteDivB=.TRUE.
+  discreteDivB=.TRUE.  ! A,constB are not used...
   Acart(1) = 0.
   Acart(2) = x(1)*Bcart(3)-x(3)*Bcart(1) !NOT PERIODIC
   Acart(3) = 0. 

@@ -418,6 +418,26 @@ CASE(3) ! alfven wave , domain [-1,1]^3
   Resu_tt(6) = -Resu_tt(2)*sqr
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
+CASE(3001) ! alfven wave , domain [-1,1]^3, rotated
+  Omega=2.*PP_Pi*IniFrequency
+  ! r: lenght-variable = lenght of computational domain
+  r=2.
+  ! e: epsilon = 0.2
+  e=0.2
+  nx  = 1./SQRT(r**2+1.)
+  ny  = r/SQRT(r**2+1.)
+  sqr = 1. !2*SQRT(PP_Pi)
+  Va  = omega/(ny*sqr)
+  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(3)-0.5*r)) - Va*tEval
+  Resu=0.
+  Resu(1) = 1.
+  Resu(2) = -e*ny*COS(phi_alv)
+  Resu(3) =  e*SIN(phi_alv)
+  Resu(4) =  e*nx*COS(phi_alv)
+  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(6) = nx -Resu(2)*sqr
+  Resu(7) =    -Resu(3)*sqr
+  Resu(8) = ny -Resu(4)*sqr
 
 CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
