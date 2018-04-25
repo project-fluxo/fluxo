@@ -42,7 +42,11 @@ INTEGER                               :: nTotalcurlA            !< Total number 
 
 REAL,ALLOCATABLE                      :: JacMat(:,:,:,:,:,:)    !< inverse of inverse jacobian matrix from (f,g,h)_metrics 
 !----------------------------------------------------------------------------------------------------------------------------------
+INTEGER                               :: Nover
+REAL,ALLOCATABLE                      :: Vdm_G_GNover(:,:)
+!----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
+LOGICAL                               :: use_CT=.TRUE.
 LOGICAL                               :: doEvalSource_A=.TRUE.  !< switch is set to false if no source is used 
 LOGICAL                               :: CTInitIsDone=.FALSE.   !< Switch to check CTInit status
 !==================================================================================================================================

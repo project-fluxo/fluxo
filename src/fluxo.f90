@@ -44,7 +44,7 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
 #ifdef PP_CT
-USE MOD_CT,                ONLY:InitCT,FinalizeCT
+USE MOD_CT,                ONLY:DefineParametersCT,InitCT,FinalizeCT
 #endif
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
@@ -65,6 +65,9 @@ CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 CALL DefineParametersMesh()
+#ifdef PP_CT
+CALL DefineParametersCT()
+#endif
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
 #if PARABOLIC

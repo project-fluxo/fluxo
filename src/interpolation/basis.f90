@@ -82,6 +82,14 @@ INTERFACE EQUALTOTOLERANCE
    MODULE PROCEDURE EQUALTOTOLERANCE
 END INTERFACE
 
+!INTERFACE JacobiP
+!  MODULE PROCEDURE JacobiP
+!END INTERFACE
+
+!INTERFACE GradJacobiP
+!  MODULE PROCEDURE GradJacobiP
+!END INTERFACE
+
 !PUBLIC::INV
 PUBLIC::INV33
 PUBLIC::BuildLegendreVdm
@@ -96,6 +104,8 @@ PUBLIC::PolynomialDerivativeMatrix
 PUBLIC::BarycentricWeights
 PUBLIC::LagrangeInterpolationPolys
 PUBLIC::EQUALTOTOLERANCE
+PUBLIC:: JacobiP
+PUBLIC:: GradJacobiP
 
 !==================================================================================================================================
 
@@ -765,6 +775,114 @@ DO iGP=0,N_in
   L(iGP)=L(iGP)/DummySum
 END DO
 END SUBROUTINE LagrangeInterpolationPolys
+
+
+SUBROUTINE  JacobiP(nNodes,x,alpha,beta,firstDeg,Deg,JP)
+!===================================================================================================================================
+! evaluates all Jacobi-polynomials up to degree Deg at position x, Algorithm in book of hesthaven and found in his matlab code
+! The Jacobi Polynomials P_i^{(alpha,beta)}(x) are orthonormal with respect to the weighting function in the interval [-1,1]
+! w(x)=(1-x)^alpha(1+x)^beta
+! \int_{-1}^{1} P_i^{(alpha,beta)}(x) P_j^{(alpha,beta)}(x) w(x) dx = \delta_{ij}
+!===================================================================================================================================
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER, INTENT(IN):: nNodes     ! number of node positions
+REAL,INTENT(IN)    :: x(nNodes)  ! evaluation positions [-1,1]
+INTEGER,INTENT(IN) :: alpha,beta ! coefficients of the weighting function w(x)=(1-x)^alpha(1+x)^beta
+INTEGER,INTENT(IN) :: firstDeg   ! min. output polynomial DEGREE of Jacobi Polynomial
+INTEGER,INTENT(IN) :: Deg        ! max. output polynomial DEGREE of Jacobi Polynomial
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)   :: JP(1:nNodes,firstDeg:Deg)    ! Jacobi polynomials eval at at all positions x
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+REAL               :: JPloc(nNodes,0:Deg)
+REAL               :: gamma0,gamma1,gammaf(1:alpha+beta+2)  ! ?
+REAL               :: aold,anew,bnew  ! ?
+REAL               :: ri,ralpha,rbeta       !temp
+INTEGER            :: i,h1,h2  ! ?
+!===================================================================================================================================
+IF(firstDeg.GT.Deg) STOP 'ERROR IN JacobiP'
+!fill gamma function, only for integer values, replace by real gamma function, if needed. Intrinsic gamma function only with GNU 
+ralpha=REAL(alpha)
+rbeta=REAL(beta)
+gammaf(1:2)=1
+DO i=3,alpha+beta+2
+  gammaf(i)=(i-1)*gammaf(i-1)
+END DO
+gamma0=2.**(alpha+beta+1)/(ralpha+rbeta+1.)*gammaf(alpha+1)*gammaf(beta+1)/gammaf(alpha+beta+1)
+JPloc(:,0)=1./SQRT(gamma0)
+IF(Deg.EQ.0) THEN
+  JP(:,0)=JPloc(:,0)
+  RETURN
+END IF
+
+gamma1=(ralpha+1.)*(rbeta+1.)/(ralpha+rbeta+3.)*gamma0
+JPloc(:,1)=0.5*((ralpha+rbeta+2.)*x(:) + (ralpha-rbeta))/SQRT(gamma1)
+IF(Deg.EQ.1) THEN
+  JP(:,firstDeg:1)=JPloc(:,firstDeg:1)
+  RETURN 
+END IF
+
+! a_i= 2/(2+aplha+beta)*sqrt( ( i*(i+alpha+beta)*(i+alpha)*(i+beta) ) / ( (2i+alpha+beta-1)(2i+alpha+beta+1) ) )
+! b_i= (alpha**2-beta**2)/( (2i+alpha+beta)(2i+alpha+beta+2) )
+! a_i for i=1
+h1=alpha+beta
+h2=beta*beta-alpha*alpha
+aold= 2./REAL(2.+h1)*SQRT(REAL((1.+alpha)*(1+beta))/REAL(h1+3))
+!start recurrence
+DO i=2,Deg
+  ri=REAL(i)
+  h1= h1+2
+  !a_i
+  anew=2./REAL(h1+2)*SQRT(REAL(i*(i+alpha+beta)*(i+alpha)*(i+beta)) / REAL((h1+1)*(h1+3)) )
+  !b_i
+  bnew=REAL(h2)/REAL(h1*(h1+2))
+  ! recurrence P(i)= ((x-b_i) P(i-1) - a_(i-1) P(i-2) )/a_i
+  JPloc(:,i)=((x(:)-bnew)*JPloc(:,i-1)-aold*JPloc(:,i-2))/anew
+  aold=anew
+END DO
+JP(:,firstDeg:Deg)=JPloc(:,firstDeg:Deg)
+END SUBROUTINE JacobiP
+
+
+SUBROUTINE  GradJacobiP(nNodes,x,alpha,beta,firstDeg,Deg,GradJP)
+!===================================================================================================================================
+! evaluates the first derivative of the Nth Jacobi-polynomial at position xi, 
+! Algorithm in book of hesthaven and found in his matlab code
+! The Jacobi Polynomials P_i^{(alpha,beta)}(x) are orthonormal with respect to the weighting function in the interval [-1,1]
+! w(x)=(1-x)^alpha(1+x)^beta
+! \int_{-1}^{1} P_i^{(alpha,beta)}(x) P_j^{(alpha,beta)}(x) w(x) dx = \delta_{ij}
+!===================================================================================================================================
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER, INTENT(IN):: nNodes  ! ?
+REAL,INTENT(IN)    :: x(nNodes)  ! evaluation positions
+INTEGER,INTENT(IN) :: alpha,beta ! coefficients of the weighting function w(x)=(1-x)^alpha(1+x)^beta
+INTEGER,INTENT(IN) :: firstDeg   ! min. output polynomial DEGREE of Jacobi Polynomial
+INTEGER,INTENT(IN) :: Deg        ! max. output polynomial DEGREE of Jacobi Polynomial
+!-----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)   :: gradJP(1:nNodes,firstDeg:Deg)    ! gradient of Jacobi polynomials eval at at all positions x
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER            :: i,i0
+REAL               :: JPloc(nNodes,0:Deg-1)
+!===================================================================================================================================
+!CALL JacobiP(nNodes,x,alpha+1,beta+1, Deg-1,Deg-1,P)
+!gradP(:,Deg)=SQRT(REAL(Deg*(Deg+alpha+beta+1)))*P
+IF(firstDeg.GT.Deg) STOP 'ERROR IN JacobiP'
+i0=MAX(1,firstDeg)
+
+gradJP=0.
+IF(Deg.EQ.0) RETURN
+CALL JacobiP(nNodes,x,alpha+1,beta+1,i0-1,Deg-1,JPloc(:,i0-1:Deg-1))
+DO i=i0,Deg
+  gradJP(:,i)=SQRT(REAL(i*(i+alpha+beta+1)))*JPloc(:,i-1)
+END DO !i
+END SUBROUTINE GradJacobiP
 
 
 END MODULE MOD_Basis

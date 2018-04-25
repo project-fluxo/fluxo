@@ -72,7 +72,7 @@ USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
 #ifdef PP_CT
 USE MOD_CT                  ,ONLY: InitB_CT
-USE MOD_CT_Vars             ,ONLY: CTInitIsDone
+USE MOD_CT_Vars             ,ONLY: use_CT,CTInitIsDone
 #endif /*PP_CT*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -131,8 +131,10 @@ IF(.NOT.DoRestart)THEN
   ! U is filled with the ini solution
   CALL FillIni(IniExactFunc,U)
 #if PP_CT
-  IF(.NOT. CTInitIsDone) STOP' call initCT before initDG!'
-  CALL InitB_CT(IniExactFunc,U) !overwrite B, keep pressure constant 
+  IF(use_CT)THEN
+    IF(.NOT. CTInitIsDone) STOP' call initCT before initDG!'
+    CALL InitB_CT(IniExactFunc,U) !overwrite B, keep pressure constant 
+  END IF !use_CT
 #endif 
 END IF
 
@@ -281,6 +283,7 @@ USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide
 #endif /*MPI*/
 #ifdef PP_CT
 USE MOD_CT                  ,ONLY: CT_TimeDerivative,swapBt
+USE MOD_CT_Vars             ,ONLY: use_CT
 #endif /*PP_CT*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -379,8 +382,10 @@ IF(doCalcSource) CALL CalcSource(Ut,tIn)
 IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
 
 #ifdef PP_CT
-    CALL CT_TimeDerivative()                     !compute curlAt from U
-    CALL swapBt(U,Ut)                            !change Bt in Ut to curlAt and energy 
+IF(use_CT)THEN
+  CALL CT_TimeDerivative()                     !compute curlAt from U
+  CALL swapBt(U,Ut)                            !change Bt in Ut to curlAt and energy 
+END IF !use_CT
 #endif /*PP_CT*/
 
 END SUBROUTINE DGTimeDerivative_weakForm

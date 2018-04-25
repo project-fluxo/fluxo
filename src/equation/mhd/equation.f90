@@ -571,6 +571,22 @@ CASE(7) ! constant density / pressure / velocity, periodic magnetic field
 
   CALL PrimToCons(Prim,Resu)
 
+CASE(8) ! for testing constriant transport: v x B = grad phi, phi=sin(omega*sum(x))
+  Omega=2.*PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2)=-1.
+  Prim(3)=1.
+  Prim(4)=0.
+  Prim(5)=1.
+  Prim(6) = 0.
+  Prim(7) = -IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(8) = -Prim(7)
+
+  CALL PrimToCons(Prim,Resu)
+
+  
+
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
