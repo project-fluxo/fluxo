@@ -84,6 +84,10 @@ REAL,ALLOCATABLE                      :: Flux_master(:,:,:,:)   !< Fluxes  on ma
                                                                 !< size \([1..nVar,0..N,0..N,allsides]\). 
 REAL,ALLOCATABLE                      :: Flux_slave(:,:,:,:)    !< Fluxes on slave = Flux_master for conservative pde. no BC sides
 !----------------------------------------------------------------------------------------------------------------------------------
+! shock capturing parameters
+REAL                                  :: nu_max           	!< Globally maximum artificial Viscosity 
+REAL,ALLOCATABLE                      :: nu(:)         		!< Cellwise artificial Viscosity
+!----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 LOGICAL                               :: DGInitIsDone=.FALSE.   !< Switch to check DGInit status
 !==================================================================================================================================

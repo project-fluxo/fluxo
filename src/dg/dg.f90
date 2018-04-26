@@ -117,6 +117,11 @@ ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 Flux_master=0.
 Flux_slave=0.
 
+! shock caturing parameters
+ALLOCATE(nu(nElems))
+nu = 0.
+nu_max = 0.
+
 #if (PP_DiscType==1)
   SWRITE(UNIT_StdOut,'(A)') ' => VolInt in weak form!'
 #elif (PP_DiscType==2)
@@ -263,6 +268,7 @@ USE MOD_Testcase_Vars       ,ONLY: doTCSource
 USE MOD_Testcase_Source     ,ONLY: TestcaseSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
 USE MOD_Equation            ,ONLY: CalcSource
+USE MOD_ShockCapturing	    ,ONLY: CalcArtificialViscosity
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 #endif /*PARABOLIC*/
@@ -315,6 +321,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_
 ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
 ! The communication of the gradients is started within the lifting routines
 CALL Lifting(tIn)
+CALL CalcArtificialViscosity(U)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)

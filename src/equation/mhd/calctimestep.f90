@@ -42,7 +42,7 @@ USE MOD_PreProc
 #ifndef GNU
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
-USE MOD_DG_Vars,ONLY:U
+USE MOD_DG_Vars,ONLY:U,nu_max
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars,ONLY: ConsToPrim
 USE MOD_Equation_Vars,ONLY: FastestWave3D
@@ -71,7 +71,7 @@ REAL                         :: Max_Lambda(3)
 #if PARABOLIC
 REAL                         :: Max_Lambda_v
 REAL                         :: Lambda_v(3)
-REAL                         :: muKappasPr_max,diffC_max
+REAL                         :: muKappasPr_max,diffC_max,mu_eff
 #endif /*PARABOLIC*/
 #if MPI
 REAL                         :: buf(3)
@@ -79,7 +79,9 @@ REAL                         :: buf(3)
 !==================================================================================================================================
 errType=0
 #if PARABOLIC
-muKappasPr_max=mu*MAX(4./3.,KappasPr)
+mu_eff=mu+nu_max
+muKappasPr_max=mu_eff*MAX(4./3.,KappasPr)
+!diffC_max=MAX(etasmu_0,nu_max)
 diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
@@ -117,7 +119,7 @@ DO iElem=1,nElems
         Lambda_v(1)=(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
         Lambda_v(2)=(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
         Lambda_v(3)=(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
-        Max_Lambda_v=MAX(Max_Lambda_v,MAX(diffC_max,sRho*muKappasPR_max)*SUM(lambda_v(:)))
+        Max_Lambda_v=MAX(Max_Lambda_v,MAX(diffC_max,sRho*muKappasPr_max)*SUM(lambda_v(:)))
 #ifdef PP_ANISO_HEAT
         !isotropic part of anisotropic heat flux I*kperp
         Max_Lambda_v=MAX(Max_Lambda_v,sRho*KappaM1*kperp*SUM(lambda_v(:)))

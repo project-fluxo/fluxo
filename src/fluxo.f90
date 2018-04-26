@@ -30,6 +30,7 @@ USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEq
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
 USE MOD_Analyze,           ONLY:DefineParametersAnalyze,InitAnalyze,FinalizeAnalyze
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing
 USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if MPI
 USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
@@ -64,6 +65,7 @@ CALL DefineParametersOutput()
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
+CALL DefineParametersShockCapturing()
 #if PARABOLIC
 CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
@@ -132,6 +134,8 @@ CALL InitTimeDisc()
 CALL Restart()
 CALL InitAnalyze()
 CALL InitTestcase()
+CALL InitShockCapturing()
+
 ! initialization finished
 CALL IgnoredParameters()
 !
