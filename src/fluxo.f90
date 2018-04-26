@@ -163,6 +163,7 @@ CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
+CALL FinalizeShockCapturing()
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()

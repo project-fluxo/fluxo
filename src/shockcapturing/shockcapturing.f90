@@ -64,7 +64,6 @@ USE MOD_PreProc
 USE MOD_ShockCapturing_Vars
 USE MOD_ReadInTools
 USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
-
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -94,7 +93,7 @@ END SUBROUTINE InitShockCapturing
 
 SUBROUTINE InitBasisTrans(N_in,xGP)
 !===================================================================================================================================
-! Initialize Vandermodematrix for basis transformation
+!> Initialize Vandermodematrix for basis transformation
 !===================================================================================================================================
 ! MODULES
 USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg
@@ -120,7 +119,7 @@ END SUBROUTINE InitBasisTrans
 
 SUBROUTINE CalcArtificialViscosity(U)
 !===================================================================================================================================
-! Use framework of Persson and Peraire to measure shocks with DOF energy indicator and calculate artificial viscosity, if necessary
+!> Use framework of Persson and Peraire to measure shocks with DOF energy indicator and calculate artificial viscosity, if necessary
 !===================================================================================================================================
 ! MODULES
 USE MOD_PreProc
@@ -131,7 +130,6 @@ USE MOD_TimeDisc_Vars      , ONLY: dt
 USE MOD_Mesh_Vars	   , ONLY: PP_nElems=>nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars	   , ONLY: ConsToPrim
 USE MOD_Equation_Vars	   , ONLY: FastestWave3D
-
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -167,11 +165,12 @@ DO l=1,PP_nElems
   CALL ChangeBasis3D(PP_N,PP_N,sVdm_Leg,Uind,Umod)
 
   ! Compute (truncated) error norms
-  LU = SUM(Umod(:,:,:)**2)
-  LUM1 = SUM(Umod(0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
-  LUM2 = SUM(Umod(0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
-  LU_N = LU-LUM1
+  LU     = SUM(Umod(:,:,:)**2)
+  LUM1   = SUM(Umod(0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
+  LUM2   = SUM(Umod(0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
+  LU_N   = LU-LUM1
   LU_NM1 = LUM1-LUM2
+
   ! DOF energy indicator
   eta_dof = LOG10(MAX(LU_N/LU,LU_NM1/LUM1))
 
@@ -220,37 +219,21 @@ DO l=1,PP_nElems
   lambda_max=MAXVAL(Max_Lambda(1:3))*h
   h=(8.0/MINVAL(sJ(:,:,:,l)))**(1.0/3.0)
   lambda_max2=MAXVAL(Max_Lambda(4:6))*h
-  
-!print*,lambda_max
-!print*,lambda_max2
-
-!  c2=kappa*Uind(i,j,k)/U(1,i,j,k,l)
-!  ca2=U(6,i,j,k,l)*U(6,i,j,k,l)/U(1,i,j,k,l) !Alfen wave speed
-!  va2=SUM(U(7:8,i,j,k,l)*U(7:8,i,j,k,l))/U(1,i,j,k,l)+ca2
-!  astar=SQRT((c2+va2)*(c2+va2)-4.*c2*ca2)
-!  cf=SQRT(0.5*(c2+va2+astar))
-!  lambda = max(lambda,abs(U(2,i,j,k,l)/U(1,i,j,k,l))+cf)
-!  nu(l) = 0.05*lambda/(REAL(PP_N))*nu(l)
 
   ! Scaling of artificial viscosity
   nu(l) = nu(l)*lambda_max2/(REAL(PP_N))
 
-!print*,l
-!print*,h
-!print*,lambda_max2
-!print*,nu(l)
-
-END DO !l
+END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
 
 
 SUBROUTINE ChangeBasis3D(N_In,N_Out,Vdm,X3D_In,X3D_Out)
 !===================================================================================================================================
-! interpolate a 3D tensor product Lagrange basis defined by (N_in+1) 1D interpolation point positions xi_In(0:N_In)
-! to another 3D tensor product node positions (number of nodes N_out+1) 
-! defined by (N_out+1) interpolation point  positions xi_Out(0:N_Out)
-!  xi is defined in the 1DrefElem xi=[-1,1]
+!> interpolate a 3D tensor product Lagrange basis defined by (N_in+1) 1D interpolation point positions xi_In(0:N_In)
+!> to another 3D tensor product node positions (number of nodes N_out+1)
+!> defined by (N_out+1) interpolation point  positions xi_Out(0:N_Out)
+!>  xi is defined in the 1DrefElem xi=[-1,1]
 !===================================================================================================================================
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
@@ -266,8 +249,8 @@ REAL,INTENT(OUT)    :: X3D_Out(0:N_Out,0:N_Out,0:N_Out)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: iN_In,jN_In,kN_In,iN_Out,jN_Out,kN_Out
-REAL                :: X3D_Buf1(0:N_Out,0:N_In,0:N_In)  ! first intermediate results from 1D interpolations
-REAL                :: X3D_Buf2(0:N_Out,0:N_Out,0:N_In) ! second intermediate results from 1D interpolations
+REAL                :: X3D_Buf1(0:N_Out,0:N_In,0:N_In)  !< first intermediate results from 1D interpolations
+REAL                :: X3D_Buf2(0:N_Out,0:N_Out,0:N_In) !< second intermediate results from 1D interpolations
 !===================================================================================================================================
 X3D_buf1=0.
 ! first direction iN_In
@@ -307,7 +290,7 @@ END SUBROUTINE ChangeBasis3D
 
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================
-! Deallocate all global interpolation variables.
+!> Deallocate all global shock capturing variables.
 !============================================================================================================================
 ! MODULES
 USE MOD_Globals

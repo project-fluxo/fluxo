@@ -28,7 +28,7 @@ SAVE
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL          :: CaptureShocks = .FALSE.
-REAL,ALLOCATABLE :: sVdm_Leg(:,:)      ! 1D inverse Vandermondematrix to Legendre polynomials
+REAL,ALLOCATABLE :: sVdm_Leg(:,:)      !< 1D inverse Vandermondematrix to Legendre polynomials
 !===================================================================================================================================
 
 LOGICAL          :: ShockCapturingInitIsDone = .FALSE.
