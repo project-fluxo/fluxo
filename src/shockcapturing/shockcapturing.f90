@@ -40,7 +40,10 @@ INTERFACE FinalizeShockCapturing
    MODULE PROCEDURE FinalizeShockCapturing
 END INTERFACE
 
-PUBLIC::DefineParametersShockCapturing,InitShockCapturing,CalcArtificialViscosity,FinalizeShockCapturing
+PUBLIC :: DefineParametersShockCapturing
+PUBLIC :: InitShockCapturing
+PUBLIC :: CalcArtificialViscosity
+PUBLIC :: FinalizeShockCapturing
 !===================================================================================================================================
 CONTAINS
 
@@ -63,6 +66,7 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars
 USE MOD_ReadInTools
+USE MOD_Mesh_Vars         ,ONLY: nElems
 USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -82,6 +86,11 @@ IF (PP_N.LT.2.AND.CaptureShocks) THEN
   CALL abort(__STAMP__,'Polynomial Degree too small for Shock Capturing!',999,999.)
   RETURN
 END IF
+! shock caturing parameters
+ALLOCATE(nu(nElems))
+nu = 0.
+nu_max = 0.
+
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 CALL InitBasisTrans(PP_N,xGP)
@@ -123,27 +132,27 @@ SUBROUTINE CalcArtificialViscosity(U)
 !===================================================================================================================================
 ! MODULES
 USE MOD_PreProc
-USE MOD_ShockCapturing_Vars, ONLY: CaptureShocks,sVdm_Leg
-USE MOD_DG_Vars            , ONLY: nu,nu_max!,lambda_max
+USE MOD_ShockCapturing_Vars, ONLY: CaptureShocks,sVdm_Leg,nu,nu_max
 USE MOD_Equation_Vars      , ONLY: KappaM1,s2mu_0,kappa
 USE MOD_TimeDisc_Vars      , ONLY: dt
-USE MOD_Mesh_Vars	   , ONLY: PP_nElems=>nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Equation_Vars	   , ONLY: ConsToPrim
-USE MOD_Equation_Vars	   , ONLY: FastestWave3D
+USE MOD_Mesh_Vars          , ONLY: PP_nElems=>nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_Equation_Vars      , ONLY: ConsToPrim
+USE MOD_Equation_Vars      , ONLY: FastestWave3D
+USE MOD_ChangeBasis        , ONLY: ChangeBasis3D
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems),INTENT(IN)  :: U
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems),INTENT(IN) :: U
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
-REAL,DIMENSION(0:PP_N,0:PP_N,0:PP_N) :: Uind,Umod
-REAL                                 :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta_min,eta_max,eps0!,c2,ca2,va2,astar,cf,lambda
-REAL                                 :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
-INTEGER                              :: l,ind,i,j,k
+REAL,DIMENSION(1:1,0:PP_N,0:PP_N,0:PP_N) :: Uind,Umod
+REAL                                     :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta_min,eta_max,eps0
+REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
+INTEGER                                  :: l,ind,i,j,k
 
 ! Check if shock capturing is turned on
 IF(.NOT.CaptureShocks) RETURN
@@ -156,18 +165,19 @@ DO l=1,PP_nElems
   ind = 2
   SELECT CASE(ind)
     CASE(1)
-    Uind = U(1,:,:,:,l)
+    Uind(1,:,:,:) = U(1,:,:,:,l)
     CASE(2)
-    Uind = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l))-s2mu_0*SUM(U(6:9,:,:,:,l)*U(6:9,:,:,:,l)))
+    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)) &
+                                         -s2mu_0*SUM(U(6:9,:,:,:,l)*U(6:9,:,:,:,l)))
   END SELECT
   
   ! Transform Uind into modal Legendre interpolant Umod
-  CALL ChangeBasis3D(PP_N,PP_N,sVdm_Leg,Uind,Umod)
+  CALL ChangeBasis3D(1,PP_N,PP_N,sVdm_Leg,Uind,Umod)
 
   ! Compute (truncated) error norms
-  LU     = SUM(Umod(:,:,:)**2)
-  LUM1   = SUM(Umod(0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
-  LUM2   = SUM(Umod(0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
+  LU     = SUM(Umod(1,:,:,:)**2)
+  LUM1   = SUM(Umod(1,0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
+  LUM2   = SUM(Umod(1,0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
   LU_N   = LU-LUM1
   LU_NM1 = LUM1-LUM2
 
@@ -215,8 +225,8 @@ DO l=1,PP_nElems
   v(3) = MAXVAL(Metrics_hTilde(:,:,:,:,l))
   eps0 = 1.0/SQRT(MAXVAL(v))
 
-  h=2.0*eps0/MINVAL(sJ(:,:,:,l))
-  lambda_max=MAXVAL(Max_Lambda(1:3))*h
+!  h=2.0*eps0/MINVAL(sJ(:,:,:,l))
+!  lambda_max=MAXVAL(Max_Lambda(1:3))*h
   h=(8.0/MINVAL(sJ(:,:,:,l)))**(1.0/3.0)
   lambda_max2=MAXVAL(Max_Lambda(4:6))*h
 
@@ -226,66 +236,6 @@ DO l=1,PP_nElems
 END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
-
-
-SUBROUTINE ChangeBasis3D(N_In,N_Out,Vdm,X3D_In,X3D_Out)
-!===================================================================================================================================
-!> interpolate a 3D tensor product Lagrange basis defined by (N_in+1) 1D interpolation point positions xi_In(0:N_In)
-!> to another 3D tensor product node positions (number of nodes N_out+1)
-!> defined by (N_out+1) interpolation point  positions xi_Out(0:N_Out)
-!>  xi is defined in the 1DrefElem xi=[-1,1]
-!===================================================================================================================================
-! MODULES
-! IMPLICIT VARIABLE HANDLING
-IMPLICIT NONE
-!-----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-INTEGER,INTENT(IN)  :: N_In,N_Out
-REAL,INTENT(IN)     :: X3D_In(0:N_In,0:N_In,0:N_In)
-REAL,INTENT(IN)     :: Vdm(0:N_Out,0:N_In)
-!-----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: X3D_Out(0:N_Out,0:N_Out,0:N_Out)
-!-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
-INTEGER             :: iN_In,jN_In,kN_In,iN_Out,jN_Out,kN_Out
-REAL                :: X3D_Buf1(0:N_Out,0:N_In,0:N_In)  !< first intermediate results from 1D interpolations
-REAL                :: X3D_Buf2(0:N_Out,0:N_Out,0:N_In) !< second intermediate results from 1D interpolations
-!===================================================================================================================================
-X3D_buf1=0.
-! first direction iN_In
-DO kN_In=0,N_In
-  DO jN_In=0,N_In
-    DO iN_In=0,N_In
-      DO iN_Out=0,N_Out
-        X3D_Buf1(iN_Out,jN_In,kN_In)=X3D_Buf1(iN_Out,jN_In,kN_In)+Vdm(iN_Out,iN_In)*X3D_In(iN_In,jN_In,kN_In)
-      END DO
-    END DO
-  END DO
-END DO
-X3D_buf2=0.
-! second direction jN_In
-DO kN_In=0,N_In
-  DO jN_In=0,N_In
-    DO jN_Out=0,N_Out
-      DO iN_Out=0,N_Out
-        X3D_Buf2(iN_Out,jN_Out,kN_In)=X3D_Buf2(iN_Out,jN_Out,kN_In)+Vdm(jN_Out,jN_In)*X3D_Buf1(iN_Out,jN_In,kN_In)
-      END DO
-    END DO
-  END DO
-END DO
-X3D_Out=0.
-! last direction kN_In
-DO kN_In=0,N_In
-  DO kN_Out=0,N_Out
-    DO jN_Out=0,N_Out
-      DO iN_Out=0,N_Out
-        X3D_Out(iN_Out,jN_Out,kN_Out)=X3D_Out(iN_Out,jN_Out,kN_Out)+Vdm(kN_Out,kN_In)*X3D_Buf2(iN_Out,jN_Out,kN_In)
-      END DO
-    END DO
-  END DO
-END DO
-END SUBROUTINE ChangeBasis3D
 
 
 SUBROUTINE FinalizeShockCapturing()
@@ -309,6 +259,8 @@ IF (.NOT.ShockCapturingInitIsDone) THEN
   RETURN
 END IF
 ShockCapturingInitIsDone = .FALSE.
+nu_max = 0.
+SDEALLOCATE(nu)
 END SUBROUTINE FinalizeShockCapturing
 
 END MODULE MOD_ShockCapturing

@@ -30,7 +30,7 @@ USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEq
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
 USE MOD_Analyze,           ONLY:DefineParametersAnalyze,InitAnalyze,FinalizeAnalyze
-USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
 USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if MPI
 USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI

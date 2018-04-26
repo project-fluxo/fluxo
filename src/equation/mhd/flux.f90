@@ -71,23 +71,24 @@ CONTAINS
 SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:U,nu
-USE MOD_Equation_Vars ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_DG_Vars            ,ONLY:U
+USE MOD_ShockCapturing_Vars,ONLY:nu
+USE MOD_Equation_Vars      ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
+USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY: GLM_ch
+USE MOD_Equation_Vars      ,ONLY: GLM_ch
 #endif /*PP_GLM*/
 #if PARABOLIC
-USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
-USE MOD_Equation_Vars ,ONLY:mu,s23,etasmu_0
+USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
+USE MOD_Equation_Vars      ,ONLY:mu,s23,etasmu_0
 #ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars ,ONLY:kperp,kpar
+USE MOD_Equation_vars      ,ONLY:kperp,kpar
 #else
-USE MOD_Equation_vars ,ONLY:kappasPr
+USE MOD_Equation_vars      ,ONLY:kappasPr
 #endif 
 #endif /*PARABOLIC*/
 #ifdef OPTIMIZED
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
+USE MOD_DG_Vars            ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -482,17 +483,18 @@ END SUBROUTINE EvalDiffFlux3D
 SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:U,nu
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
-USE MOD_Equation_Vars ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
+USE MOD_DG_Vars            ,ONLY:U
+USE MOD_ShockCapturing_Vars,ONLY:nu
+USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
+USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
 #ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars,ONLY:kperp,kpar
+USE MOD_Equation_vars      ,ONLY:kperp,kpar
 #else
-USE MOD_Equation_vars,ONLY:kappasPr
+USE MOD_Equation_vars      ,ONLY:kappasPr
 #endif 
 #ifdef OPTIMIZED
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
+USE MOD_DG_Vars            ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

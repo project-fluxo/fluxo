@@ -31,6 +31,10 @@ LOGICAL          :: CaptureShocks = .FALSE.
 REAL,ALLOCATABLE :: sVdm_Leg(:,:)      !< 1D inverse Vandermondematrix to Legendre polynomials
 !===================================================================================================================================
 
-LOGICAL          :: ShockCapturingInitIsDone = .FALSE.
+!----------------------------------------------------------------------------------------------------------------------------------
+! shock capturing parameters
+LOGICAL          :: ShockCapturingInitIsDone = .FALSE. !< Switch for aactivating shock capturing
+REAL             :: nu_max                             !< Globally maximum artificial Viscosity
+REAL,ALLOCATABLE :: nu(:)                              !< Cellwise artificial Viscosity
 
 END MODULE MOD_ShockCapturing_Vars

@@ -42,7 +42,8 @@ USE MOD_PreProc
 #ifndef GNU
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
-USE MOD_DG_Vars,ONLY:U,nu_max
+USE MOD_DG_Vars,ONLY:U
+USE MOD_ShockCapturing_Vars,ONLY:nu_max
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars,ONLY: ConsToPrim
 USE MOD_Equation_Vars,ONLY: FastestWave3D
