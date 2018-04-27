@@ -72,10 +72,9 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("CT")
-CALL prms%CreateLogicalOption('use_CT', &
-     "if true switch on the Constraint transport", '.TRUE.')
+CALL prms%CreateIntOption('use_CT', &
+     "switch on the Constraint transport, -1:off, 0: only init,1: init and Ut", '-1')
 CALL prms%CreateIntOption(     "CT_Nover"  , " N for gauss quadrature of projection step (default=N+2)")
-CALL prms%CreateIntOption(     "CT_N_Ned"  , " N for Nedelec basis (default =N)")
 END SUBROUTINE DefineParametersCT
 
 !==================================================================================================================================
@@ -90,11 +89,12 @@ USE MOD_PreProc
 USE MOD_CT_Vars
 USE MOD_Interpolation_Vars, ONLY: InterpolationInitIsDone
 USE MOD_Mesh_Vars,          ONLY: MeshInitIsDone,nElems
-USE MOD_Mesh_Vars,          ONLY: Metrics_ftilde,Metrics_gtilde,Metrics_htilde
+USE MOD_Mesh_Vars,          ONLY: Metrics_ftilde,Metrics_gtilde,Metrics_htilde,dXGL_N,Elem_xGP
+USE MOD_Mesh_vars,          ONLY: nBCSides
 USE MOD_Restart_Vars,       ONLY: RestartInitIsDone,doRestart
 USE MOD_Basis,              ONLY: Inv33
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
-USE MOD_ReadInTools,        ONLY: GETLOGICAL,GETINT
+USE MOD_ReadInTools,        ONLY: GETINT
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER :: i,j,k,iElem
+INTEGER :: i,j,k,l,iElem
 REAL    :: InvJacMat(3,3)
 CHARACTER(LEN=3) :: tmpStr
 !===================================================================================================================================
@@ -113,12 +113,22 @@ CHARACTER(LEN=3) :: tmpStr
   END IF
   SWRITE(UNIT_StdOut,'(132("-"))')
   SWRITE(UNIT_stdOut,'(A)') ' INIT CT...'
-  use_CT=GETLOGICAL('use_CT','.TRUE.') !switch
-  IF(.NOT.use_CT)THEN
+  use_CT=GETINT('use_CT','-1') !switch: 1: use CT also in time update, 0: use CT only for initialization, -1: off
+  IF(use_CT.EQ.-1)THEN
     SWRITE(UNIT_stdOut,'(A)')' INIT CT DONE!'
     SWRITE(UNIT_StdOut,'(132("-"))')
     RETURN
   END IF
+  IF(nBCSides.GT.0)THEN
+     CALL abort(__STAMP__, &
+      'CT not implemented with BC, only for periodic,cartmesh,1proc')
+  END IF
+#if MPI
+  IF(nProcessors.GT.1)THEN
+     CALL abort(__STAMP__, &
+         'CT not implemented for MPI, only for periodic,cartmesh,1proc')
+  END IF
+#endif
   
   ALLOCATE(curlA( 3,0:PP_N,0:PP_N,0:PP_N,nElems))
   ALLOCATE(curlAt(3,0:PP_N,0:PP_N,0:PP_N,nElems))
@@ -144,6 +154,48 @@ CHARACTER(LEN=3) :: tmpStr
   Nover = GETINT('CT_Nover',tmpStr)
   
   CALL InitProjectionBasis()
+
+  ALLOCATE(covVec_1(3,0:Mint,0:PP_N,0:PP_N,nElems))
+  ALLOCATE(covVec_2(3,0:PP_N,0:Mint,0:PP_N,nElems))
+  ALLOCATE(covVec_3(3,0:PP_N,0:PP_N,0:Mint,nElems))
+  ALLOCATE(Elem_xint_1(3,0:Mint,0:PP_N,0:PP_N,nElems))
+  ALLOCATE(Elem_xint_2(3,0:PP_N,0:Mint,0:PP_N,nElems))
+  ALLOCATE(Elem_xint_3(3,0:PP_N,0:PP_N,0:Mint,nElems))
+
+  DO iElem=1,nElems
+    DO k=0,PP_N;DO j=0,PP_N
+       DO l=0,Mint
+         covVec_1(:,l,j,k,iElem)=0.
+         Elem_xint_1(:,l,j,k,iElem)=0.
+         DO i=0,PP_N
+           covVec_1(:,l,j,k,iElem)=covVec_1(:,l,j,k,iElem)+Vdm_GLN_int(l,i)*dXGL_N(1,:,i,j,k,iElem)
+           Elem_xint_1(:,l,j,k,iElem)=Elem_xint_1(:,l,j,k,iElem)+Vdm_GLN_int(l,i)*Elem_xGP(:,i,j,k,iElem)
+         END DO !i
+       END DO !l
+    END DO; END DO ! j,k
+    DO k=0,PP_N;DO i=0,PP_N
+       DO l=0,Mint
+         covVec_2(:,i,l,k,iElem)=0.
+         Elem_xint_2(:,i,l,k,iElem)=0.
+         DO j=0,PP_N
+           covVec_2(:,i,l,k,iElem)=covVec_2(:,i,l,k,iElem)+Vdm_GLN_int(l,j)*dXGL_N(2,:,i,j,k,iElem)
+           Elem_xint_2(:,i,l,k,iElem)=Elem_xint_2(:,i,l,k,iElem)+Vdm_GLN_int(l,j)*Elem_xGP(:,i,j,k,iElem)
+         END DO !j
+       END DO !l
+    END DO; END DO ! i,k
+    DO j=0,PP_N;DO i=0,PP_N
+       DO l=0,Mint
+         covVec_3(:,i,j,l,iElem)=0.
+         Elem_xint_3(:,i,j,l,iElem)=0.
+         DO k=0,PP_N
+           covVec_3(:,i,j,l,iElem)=covVec_3(:,i,j,l,iElem)+Vdm_GLN_int(l,k)*dXGL_N(3,:,i,j,k,iElem)
+           Elem_xint_3(:,i,j,l,iElem)=Elem_xint_3(:,i,j,l,iElem)+Vdm_GLN_int(l,k)*Elem_xGP(:,i,j,k,iElem)
+         END DO !k
+       END DO !l
+    END DO; END DO ! i,j
+  END DO !iElem
+
+  
   
   doEvalSource_A=.TRUE. !default
   
@@ -160,9 +212,10 @@ SUBROUTINE InitProjectionBasis()
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
-USE MOD_Interpolation_Vars,ONLY:NodeType,NodeTypeG,NodeTypeGL,xGP,wGP
-USE MOD_Interpolation     ,ONLY:GetNodesAndWeights,GetVandermonde
-USE MOD_CT_Vars           ,ONLY:Nover,Vdm_G_GNover
+USE MOD_Interpolation_Vars,ONLY:NodeType,NodeTypeG,NodeTypeGL,xGP,wGP,wBary
+USE MOD_Interpolation     ,ONLY:GetNodesAndWeights
+USE MOD_Basis             ,ONLY:InitializeVandermonde,PolynomialDerivativeMatrix
+USE MOD_CT_Vars           ,ONLY:Nover,Mint,x_int,w_int,Vdm_GLN_int,Vdm_e_GLN
 ! IMPLICIT VARIABLE HANDLING
  IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -172,19 +225,65 @@ USE MOD_CT_Vars           ,ONLY:Nover,Vdm_G_GNover
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i,j,k
-REAL    :: x_G_Nm1(0:PP_N-1)
-REAL    :: w_G_Nm1(0:PP_N-1)
+REAL    :: x_Nm1(0:PP_N-1)
+REAL    :: w_Nm1(0:PP_N-1)
+REAL    :: wBary_Nm1(0:PP_N-1)
 REAL    :: check
 REAL    :: x_GNover(0:Nover)
 REAL    :: w_GNover(0:Nover)
+REAL    :: f(0:PP_N),fx(0:PP_N),fbar(0:PP_N-1),fbar_N(0:PP_N),D_GL(0:PP_N,0:PP_N)
 !===================================================================================================================================
+#if PP_NodeType != 2
+  STOP 'InitProjectionbasis only works for Gauss-Lobatto points!'
+#endif
   !overintegration of source
   CALL GetNodesAndWeights(Nover,NodeTypeG,x_GNover,w_GNover) !higher integration of source
-  
-  ALLOCATE(Vdm_G_GNover(0:Nover,0:PP_N))
-  CALL GetVandermonde(PP_N,NodeType,Nover,NodeTypeG,Vdm_G_GNover,modal=.FALSE.)
 
-  CALL GetNodesAndWeights(PP_N-1,NodeTypeG,x_G_Nm1,w_G_Nm1)
+  CALL GetNodesAndWeights(PP_N-1,NodeTypeGL,x_Nm1,w_Nm1,wBary_Nm1) !higher integration of source
+
+  Mint=(Nover+1)*PP_N-1
+  ALLOCATE(x_int(0:Mint),w_int(0:Mint))
+  ALLOCATE(Vdm_GLN_int(0:Mint ,0:PP_N))
+  ALLOCATE(Vdm_e_GLN(0:PP_N,0:PP_N-1))
+  DO i=0,PP_N-1
+    DO j=0,Nover
+      x_int(j+i*(Nover+1))=0.5*(x_GNover(j)+1.)*(xGP(i+1)-xGP(i))+xGP(i)
+      w_int(j+i*(Nover+1))=0.5*w_GNover(j)*(xGP(i+1)-xGP(i))
+    END DO
+  END DO
+  !interpolate GL N to integration points 
+  CALL InitializeVandermonde(PP_N  ,Mint,wBary    ,xGP  ,x_int(:),Vdm_GLN_int(:,:))
+
+  !edge basis function is defined as 
+  ! e_j(xi) = - sum_k=0^(j) d/dxi l_k(xi)  , j=0...N-1 
+  !
+  ! evalute at GL N points xi_i:
+  ! e_j(xi_i) = - sum_k=0^(j)  [d/dxi l_k(xi) ]_(xi_i) 
+  !
+  ! where we can use the definition of the D matrix: D_ik = [d/dxi l_k(xi) ]_(xi_i) 
+
+  CALL PolynomialDerivativeMatrix(PP_N,xGP,D_GL)
+  DO i=0,PP_N; DO j=0,PP_N-1
+    Vdm_e_GLN(i,j)=-SUM(D_GL(i,0:j))
+  END DO; END DO ! i,j=0,PP_N
+
+  !check:
+
+  f  = (xGP(:)+0.3)**REAL(PP_N);
+  fx = REAL(PP_N)*(xGP+0.3)**REAL(PP_N-1)
+
+  fbar(0:PP_N-1)=(f(1:PP_N)-f(0:PP_N-1))
+
+  fbar_N=MATMUL(Vdm_e_GLN,fbar)
+
+  check=MAXVAL(ABS(fbar_N-fx))
+
+  IF(check.GT.1.0e-12)THEN
+    WRITE(*,*)'check for initprojectionbasis ',check
+    STOP 'check for initprojectionbasis failed!'   
+  END IF
+  SWRITE(*,*)"     ... InitProjectionBasis Done."
+
  
 END SUBROUTINE InitProjectionBasis
 
@@ -209,24 +308,58 @@ INTEGER,INTENT(IN)  :: exactFunc
 REAL,INTENT(INOUT)    :: U_inout(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER :: i,j,k,iElem
-REAL    :: Acart(3,0:PP_N,0:PP_N,0:PP_N,nElems),constB(3)
+INTEGER :: i,j,k,l,iElem
+REAL    :: Acov(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL    :: Acov1(0:PP_N-1,0:PP_N  ,0:PP_N  ,nElems)
+REAL    :: Acov2(0:PP_N  ,0:PP_N-1,0:PP_N  ,nElems)
+REAL    :: Acov3(0:PP_N  ,0:PP_N  ,0:PP_N-1,nElems)
+REAL    :: Acart_loc(3),curlA_loc(3),constB(3)
+REAL    :: Acov_int(0:Mint)
 LOGICAL :: discreteDivB
 !===================================================================================================================================
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      CALL EvalExactFunc_A(ExactFunc,Elem_xGP(:,i,j,k,iElem),Acart(:,i,j,k,iElem), &
+      CALL EvalExactFunc_A(ExactFunc,Elem_xGP(:,i,j,k,iElem),Acart_loc(:), &
                                                   curlA(:,i,j,k,iElem),constB,discreteDivB)
     END DO; END DO; END DO !i,j,k=0,PP_N
   END DO !iElem=1,nElems
   IF(.NOT.discreteDivB)THEN
-    !TEST
-      curlA=Acart
-      CALL ProjectToNedelec(Acart)
-      WRITE(*,*)'TESTTEST: (Acart - Acart_nedelec)',MINVAL(curlA-Acart),MAXVAL(curlA-Acart)
-    !TEST
+    DO iElem=1,nElems
+      DO k=0,PP_N;DO j=0,PP_N
+         DO l=0,Mint
+           CALL EvalExactFunc_A(ExactFunc,Elem_xint_1(:,l,j,k,iElem),Acart_loc(:), &
+                                                    curlA_loc(:),constB,discreteDivB)
+           Acov_int(l)= SUM(covVec_1(:,l,j,k,iElem)*Acart_loc(:))*w_int(l) !covariant components & integration weight
+         END DO
+         DO i=0,PP_N-1
+           Acov1(i,j,k,iElem)=SUM(ACov_int(0+i*(Nover+1):Nover+i*(Nover+1)))
+         END DO !i
+      END DO; END DO !j,k=0,PP_N
+      DO k=0,PP_N;DO i=0,PP_N
+         DO l=0,Mint
+           CALL EvalExactFunc_A(ExactFunc,Elem_xint_2(:,i,l,k,iElem),Acart_loc(:), &
+                                                    curlA_loc(:),constB,discreteDivB)
+           Acov_int(l)= SUM(covVec_2(:,i,l,k,iElem)*Acart_loc(:))*w_int(l) !covariant components & integration weight
+         END DO
+         DO j=0,PP_N-1
+           Acov2(i,j,k,iElem)=SUM(Acov_int(0+j*(Nover+1):Nover+j*(Nover+1)))
+         END DO !i
+      END DO; END DO !i,k=0,PP_N
+      DO j=0,PP_N;DO i=0,PP_N
+         DO l=0,Mint
+           CALL EvalExactFunc_A(ExactFunc,Elem_xint_3(:,i,j,l,iElem),Acart_loc(:), &
+                                                    curlA_loc(:),constB,discreteDivB)
+           Acov_int(l)= SUM(covVec_3(:,i,j,l,iElem)*Acart_loc(:))*w_int(l) !covariant components & integration weight
+         END DO
+         DO k=0,PP_N-1
+           Acov3(i,j,k,iElem)=SUM(Acov_int(0+k*(Nover+1):Nover+k*(Nover+1)))
+         END DO !i
+      END DO; END DO !j,k=0,PP_N
+    END DO !iElem=1,nElems
     !since computed at GL points, already continuous
-    CALL ComputeCartCurl(Acart,curlA,vec_in_Base=0)
+    CALL ProjectToNedelec(ACov1,ACov2,ACov3,ACov)
+     
+    CALL ComputeCartCurl(ACov,curlA,vec_in_Base=1)
     curlA(1,:,:,:,:)=curlA(1,:,:,:,:)+constB(1)
     curlA(2,:,:,:,:)=curlA(2,:,:,:,:)+constB(2)
     curlA(3,:,:,:,:)=curlA(3,:,:,:,:)+constB(3)
@@ -249,9 +382,10 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_DG_Vars    ,ONLY: U       !! input  !!
 USE MOD_CT_Vars    ,ONLY: curlAt  !! output !!
-USE MOD_CT_Vars    ,ONLY: doEvalSource_A 
+USE MOD_CT_Vars    ,ONLY: doEvalSource_A,Mint,Vdm_GLN_int,Nover,w_int
+USE MOD_CT_Vars    ,ONLY: covVec_1,covVec_2,covVec_3,Elem_xint_1,Elem_xint_2,Elem_xint_3
 USE MOD_Equation_Vars    ,ONLY: IniExactFunc
-USE MOD_Mesh_Vars  ,ONLY: nElems,dXGL_N,Elem_xGP
+USE MOD_Mesh_Vars  ,ONLY: nElems
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -259,18 +393,60 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 INTEGER :: i,j,k,l,iElem
 REAL    :: AtCov(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL    :: AtCov1(0:PP_N-1,0:PP_N,0:PP_N,nElems)
+REAL    :: AtCov2(0:PP_N,0:PP_N-1,0:PP_N,nElems)
+REAL    :: AtCov3(0:PP_N,0:PP_N,0:PP_N-1,nElems)
 REAL    :: At(3),At_source(3)
+REAL    :: U_int(PP_nVar)
+REAL    :: Atcov_int(0:Mint)
 !==================================================================================================================================
   At_source=0.
   DO iElem=1,nElems
-    DO k=0,PP_N;DO j=0,PP_N; DO i=0,PP_N
-       IF(doEvalSource_A) CALL EvalSource_A(IniExactFunc,Elem_xGP(:,i,j,k,iElem),At_source)
-       At = CROSS(U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem),U(6:8,i,j,k,iElem))+At_source  !=v x B = - B x v
-       AtCov(:,i,j,k,iElem)= MATMUL(dXGL_N(:,:,i,j,k,iElem),At(:)) !covariant components
-    END DO; END DO; END DO !i,j,k=0,PP_N
+    DO k=0,PP_N;DO j=0,PP_N
+       DO l=0,Mint
+         U_int(:)=0.
+         DO i=0,PP_N
+           U_int(:)=U_int(:)+Vdm_GLN_int(l,i)*U(:,i,j,k,iElem)
+         END DO
+         IF(doEvalSource_A) CALL EvalSource_A(IniExactFunc,Elem_xint_1(:,l,j,k,iElem),At_source)
+         At = CROSS(U_int(2:4)/U_int(1),U_int(6:8))+At_source  !=v x B = - B x v
+         AtCov_int(l)= SUM(covVec_1(:,l,j,k,iElem)*At(:))*w_int(l) !covariant components & integration weight
+       END DO
+       DO i=0,PP_N-1
+         AtCov1(i,j,k,iElem)=SUM(AtCov_int(0+i*(Nover+1):Nover+i*(Nover+1)))
+       END DO !i
+    END DO; END DO !j,k=0,PP_N
+    DO k=0,PP_N;DO i=0,PP_N
+       DO l=0,Mint
+         U_int(:)=0.
+         DO j=0,PP_N
+           U_int(:)=U_int(:)+Vdm_GLN_int(l,j)*U(:,i,j,k,iElem)
+         END DO
+         IF(doEvalSource_A) CALL EvalSource_A(IniExactFunc,Elem_xint_2(:,i,l,k,iElem),At_source)
+         At = CROSS(U_int(2:4)/U_int(1),U_int(6:8))+At_source  !=v x B = - B x v
+         AtCov_int(l)= SUM(covVec_2(:,i,l,k,iElem)*At(:))*w_int(l) !covariant components & integration weight
+       END DO
+       DO j=0,PP_N-1
+         AtCov2(i,j,k,iElem)=SUM(AtCov_int(0+j*(Nover+1):Nover+j*(Nover+1)))
+       END DO !i
+    END DO; END DO !i,k=0,PP_N
+    DO j=0,PP_N;DO i=0,PP_N
+       DO l=0,Mint
+         U_int(:)=0.
+         DO k=0,PP_N
+           U_int(:)=U_int(:)+Vdm_GLN_int(l,k)*U(:,i,j,k,iElem)
+         END DO
+         IF(doEvalSource_A) CALL EvalSource_A(IniExactFunc,Elem_xint_3(:,i,j,l,iElem),At_source)
+         At = CROSS(U_int(2:4)/U_int(1),U_int(6:8))+At_source  !=v x B = - B x v
+         AtCov_int(l)= SUM(covVec_3(:,i,j,l,iElem)*At(:))*w_int(l) !covariant components & integration weight
+       END DO
+       DO k=0,PP_N-1
+         AtCov3(i,j,k,iElem)=SUM(AtCov_int(0+k*(Nover+1):Nover+k*(Nover+1)))
+       END DO !i
+    END DO; END DO !j,k=0,PP_N
   END DO !iElem=1,nElems
   
-  CALL ProjectToNedelec(AtCov)
+  CALL ProjectToNedelec(AtCov1,AtCov2,AtCov3,AtCov)
    
   CALL ComputeCartCurl(AtCov,curlAt,vec_in_Base=1)
   
@@ -329,6 +505,9 @@ REAL    :: vec_cov(3,0:PP_N,0:PP_N,0:PP_N)
       curl_cart(:,i,j,k,iElem)= MATMUL(JacMat(:,:,i,j,k,iElem),(/(dvdeta( 3)-dvdzeta(2)), &
                                                                  (dvdzeta(1)-dvdxi(  3)), &
                                                                  (dvdxi(  2)-dvdeta( 1)) /))
+!           D(l,j)*vec_cov(3,i,l,k)-D(l,k)*vec_cov(2,i,j,l)
+!           D(l,k)*vec_cov(1,i,j,l)-D(l,i)*vec_cov(3,l,j,k)
+!           D(l,i)*vec_cov(2,l,j,k)-D(l,j)*vec_cov(1,i,l,k)
     END DO; END DO; END DO !i,j,k=0,PP_N                      
   END DO !iElem=1,nElems
 
@@ -339,22 +518,27 @@ END SUBROUTINE ComputeCartCurl
 !> project discontinuous covariant vector represented by LGL polynomials to Nedelec Finite Element LGL polynomial basis
 !> !!! WORKS ONLY FOR 1 PROC &  PERIODIC STRUCTURED BLOCK MESH !!!
 !==================================================================================================================================
-SUBROUTINE projectToNedelec(vec)
+SUBROUTINE projectToNedelec(vec_in1,vec_in2,vec_in3,vec)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Mesh_Vars,ONLY: nElems,SideToElem,ElemToSide,Elem_xGP
+USE MOD_CT_Vars,ONLY: Vdm_e_GLN,w_int
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: vec(3,0:PP_N,0:PP_N,0:PP_N,nElems) !< covariant components of a generally discontinuous vector
+REAL,INTENT(IN) :: vec_in1(0:PP_N-1,0:PP_N  ,0:PP_N  ,nElems) !< 1st covariant components as edge dof in xi direction
+REAL,INTENT(IN) :: vec_in2(0:PP_N  ,0:PP_N-1,0:PP_N  ,nElems) !< 2nd covariant components as edge dof in eta direction
+REAL,INTENT(IN) :: vec_in3(0:PP_N  ,0:PP_N  ,0:PP_N-1,nElems) !< 3rd covariant components as edge dof in zeta direction
+REAL,INTENT(OUT):: vec(3,0:PP_N,0:PP_N,0:PP_N,nElems)  !< covariant components stiched together and interpolated to GL N 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL       :: vec_in(3,0:PP_N,0:PP_N,0:PP_N,nElems)
+REAL       :: vec1(0:PP_N-1,0:PP_N  ,0:PP_N  )
+REAL       :: vec2(0:PP_N  ,0:PP_N-1,0:PP_N  )
+REAL       :: vec3(0:PP_N  ,0:PP_N  ,0:PP_N-1)
 INTEGER    :: i,j,k,iElem,nb(-1:1,-1:1),xx,yy,zz
 !==================================================================================================================================
-  vec_in=vec
   DO iElem=1,nElems
     !A1: C0 in y,z
     nb( 0, 0) =iElem  ! 
@@ -368,23 +552,29 @@ INTEGER    :: i,j,k,iElem,nb(-1:1,-1:1),xx,yy,zz
     nb( 1, 1) =GetnbElemID( ETA_PLUS ,nb(0, 1))   ! y+,z+
     !corners
     DO yy=0,1; DO zz=0,1
-      vec(1,:,yy*PP_N,zz*PP_N,iElem)= 0.25*( vec_in(1,:,   0,   0,nb(yy  ,zz  )) &
-                                            +vec_in(1,:,   0,PP_N,nb(yy  ,zz-1)) &
-                                            +vec_in(1,:,PP_N,   0,nb(yy-1,zz  )) &
-                                            +vec_in(1,:,PP_N,PP_N,nb(yy-1,zz-1)) )
+      vec1(:,yy*PP_N,zz*PP_N) = 0.25*( vec_in1(:,   0,   0,nb(yy  ,zz  )) &
+                                      +vec_in1(:,   0,PP_N,nb(yy  ,zz-1)) &
+                                      +vec_in1(:,PP_N,   0,nb(yy-1,zz  )) &
+                                      +vec_in1(:,PP_N,PP_N,nb(yy-1,zz-1)) )
     END DO; END DO !yy,zz
     !inner surface points
     DO k=1,PP_N-1 
-      vec(1, :,   0,k,iElem)=0.5*( vec_in(1,   :,   0,k,nb( 0, 0)) &
-                                  +vec_in(1,   :,PP_N,k,nb(-1, 0)) ) !y-
-      vec(1, :,PP_N,k,iElem)=0.5*( vec_in(1,   :,PP_N,k,nb( 0, 0)) &
-                                  +vec_in(1,   :,   0,k,nb( 1, 0)) ) !y+
+      vec1( :,   0,k)=0.5*( vec_in1(   :,   0,k,nb( 0, 0)) &
+                           +vec_in1(   :,PP_N,k,nb(-1, 0)) ) !y-
+      vec1( :,PP_N,k)=0.5*( vec_in1(   :,PP_N,k,nb( 0, 0)) &
+                           +vec_in1(   :,   0,k,nb( 1, 0)) ) !y+
     END DO
     DO j=1,PP_N-1 
-      vec(1, :,j,   0,iElem)=0.5*( vec_in(1,   :,j,   0,nb( 0, 0)) &
-                                  +vec_in(1,   :,j,PP_N,nb( 0,-1)) ) !z-
-      vec(1, :,j,PP_N,iElem)=0.5*( vec_in(1,   :,j,PP_N,nb( 0, 0)) &
-                                  +vec_in(1,   :,j,   0,nb( 0, 1)) ) !z+
+      vec1( :,j,   0)=0.5*( vec_in1(   :,j,   0,nb( 0, 0)) &
+                           +vec_in1(   :,j,PP_N,nb( 0,-1)) ) !z-
+      vec1( :,j,PP_N)=0.5*( vec_in1(   :,j,PP_N,nb( 0, 0)) &
+                           +vec_in1(   :,j,   0,nb( 0, 1)) ) !z+
+    END DO
+    !inner volume points
+    DO k=1,PP_N-1 
+      DO j=1,PP_N-1 
+        vec1(:,j,k)=vec_in1(:,j,k,iElem)
+      END DO
     END DO
     !A2: C0 in x,z
     nb( 0, 0) =iElem  ! 
@@ -398,23 +588,29 @@ INTEGER    :: i,j,k,iElem,nb(-1:1,-1:1),xx,yy,zz
     nb( 1, 1) =GetnbElemID(  XI_PLUS ,nb(0, 1)) ! x+,z+
     !corners
     DO xx=0,1; DO zz=0,1
-      vec(2,xx*PP_N,:,zz*PP_N,iElem)= 0.25*( vec_in(2,   0,:,   0,nb(xx  ,zz  )) &
-                                            +vec_in(2,   0,:,PP_N,nb(xx  ,zz-1)) &
-                                            +vec_in(2,PP_N,:,   0,nb(xx-1,zz  )) &
-                                            +vec_in(2,PP_N,:,PP_N,nb(xx-1,zz-1)) )
+      vec2(xx*PP_N,:,zz*PP_N)= 0.25*( vec_in2(   0,:,   0,nb(xx  ,zz  )) &
+                                     +vec_in2(   0,:,PP_N,nb(xx  ,zz-1)) &
+                                     +vec_in2(PP_N,:,   0,nb(xx-1,zz  )) &
+                                     +vec_in2(PP_N,:,PP_N,nb(xx-1,zz-1)) )
     END DO; END DO !xx,zz
     !inner surface points
     DO k=1,PP_N-1 
-      vec(2,   0, :,k,iElem)=0.5*( vec_in(2,   0,   :,k,nb( 0, 0)) &
-                                  +vec_in(2,PP_N,   :,k,nb(-1, 0)) ) !x-
-      vec(2,PP_N, :,k,iElem)=0.5*( vec_in(2,PP_N,   :,k,nb( 0, 0)) &
-                                  +vec_in(2,   0,   :,k,nb( 1, 0)) ) !x+
+      vec2(   0, :,k)=0.5*( vec_in2(   0,   :,k,nb( 0, 0)) &
+                           +vec_in2(PP_N,   :,k,nb(-1, 0)) ) !x-
+      vec2(PP_N, :,k)=0.5*( vec_in2(PP_N,   :,k,nb( 0, 0)) &
+                           +vec_in2(   0,   :,k,nb( 1, 0)) ) !x+
     END DO
     DO i=1,PP_N-1 
-      vec(2, i,:,   0,iElem)=0.5*( vec_in(2,   i,:,   0,nb( 0, 0)) &
-                                  +vec_in(2,   i,:,PP_N,nb( 0,-1)) ) !z-
-      vec(2, i,:,PP_N,iElem)=0.5*( vec_in(2,   i,:,PP_N,nb( 0, 0)) &
-                                  +vec_in(2,   i,:,   0,nb( 0, 1)) ) !z+
+      vec2( i,:,   0)=0.5*( vec_in2(   i,:,   0,nb( 0, 0)) &
+                           +vec_in2(   i,:,PP_N,nb( 0,-1)) ) !z-
+      vec2( i,:,PP_N)=0.5*( vec_in2(   i,:,PP_N,nb( 0, 0)) &
+                           +vec_in2(   i,:,   0,nb( 0, 1)) ) !z+
+    END DO
+    !inner volume points
+    DO k=1,PP_N-1 
+      DO i=1,PP_N-1 
+        vec2(i,:,k)=vec_in2(i,:,k,iElem)
+      END DO
     END DO
     !A3: C0 in x,y
     nb( 0, 0) =iElem  ! 
@@ -428,25 +624,42 @@ INTEGER    :: i,j,k,iElem,nb(-1:1,-1:1),xx,yy,zz
     nb( 1, 1) =GetnbElemID(  XI_PLUS ,nb(0, 1))    ! x+,y+
     !corners
     DO xx=0,1; DO yy=0,1
-      vec(3,xx*PP_N,yy*PP_N,:,iElem)= 0.25*( vec_in(3,   0,   0,:,nb(xx  ,yy  )) &
-                                            +vec_in(3,   0,PP_N,:,nb(xx  ,yy-1)) &
-                                            +vec_in(3,PP_N,   0,:,nb(xx-1,yy  )) &
-                                            +vec_in(3,PP_N,PP_N,:,nb(xx-1,yy-1)) )
+      vec3(xx*PP_N,yy*PP_N,:)= 0.25*( vec_in3(   0,   0,:,nb(xx  ,yy  )) &
+                                     +vec_in3(   0,PP_N,:,nb(xx  ,yy-1)) &
+                                     +vec_in3(PP_N,   0,:,nb(xx-1,yy  )) &
+                                     +vec_in3(PP_N,PP_N,:,nb(xx-1,yy-1)) )
     END DO; END DO !xx,yy
     !inner surface points
     DO j=1,PP_N-1 
-      vec(3,   0, j,:,iElem)=0.5*( vec_in(3,   0,   j,:,nb( 0, 0)) &
-                                  +vec_in(3,PP_N,   j,:,nb(-1, 0)) ) !x-
-      vec(3,PP_N, j,:,iElem)=0.5*( vec_in(3,PP_N,   j,:,nb( 0, 0)) &
-                                  +vec_in(3,   0,   j,:,nb( 1, 0)) ) !x+
+      vec3(   0, j,:)=0.5*( vec_in3(   0,   j,:,nb( 0, 0)) &
+                           +vec_in3(PP_N,   j,:,nb(-1, 0)) ) !x-
+      vec3(PP_N, j,:)=0.5*( vec_in3(PP_N,   j,:,nb( 0, 0)) &
+                           +vec_in3(   0,   j,:,nb( 1, 0)) ) !x+
     END DO
     DO i=1,PP_N-1 
-      vec(3, i,   0,:,iElem)=0.5*( vec_in(3,   i,   0,:,nb( 0, 0)) &
-                                  +vec_in(3,   i,PP_N,:,nb( 0,-1)) ) !y-
-      vec(3, i,PP_N,:,iElem)=0.5*( vec_in(3,   i,PP_N,:,nb( 0, 0)) &
-                                  +vec_in(3,   i,   0,:,nb( 0, 1)) ) !y+
+      vec3( i,   0,:)=0.5*( vec_in3(   i,   0,:,nb( 0, 0)) &
+                           +vec_in3(   i,PP_N,:,nb( 0,-1)) ) !y-
+      vec3( i,PP_N,:)=0.5*( vec_in3(   i,PP_N,:,nb( 0, 0)) &
+                           +vec_in3(   i,   0,:,nb( 0, 1)) ) !y+
+    END DO
+    !inner volume points
+    DO j=1,PP_N-1 
+      DO i=1,PP_N-1 
+        vec3(i,j,:)=vec_in3(i,j,:,iElem)
+      END DO
     END DO
     
+    !change basis vec1,vec2,vec3 --> vec(3,...,iElem)
+    DO k=0,PP_N; DO j=0,PP_N
+        vec(1,:,j,k,iElem)=MATMUL(Vdm_e_GLN,vec1(:,j,k))
+    END DO; END DO
+    DO k=0,PP_N; DO i=0,PP_N
+        vec(2,i,:,k,iElem)=MATMUL(Vdm_e_GLN,vec2(i,:,k))
+    END DO; END DO
+    DO j=0,PP_N; DO i=0,PP_N
+        vec(3,i,j,:,iElem)=MATMUL(Vdm_e_GLN,vec3(i,j,:))
+    END DO; END DO
+
   END DO !iElem=1,nElems
 
 
@@ -860,6 +1073,12 @@ IMPLICIT NONE
   SDEALLOCATE(CurlAt)
   SDEALLOCATE(CurlA)
   SDEALLOCATE(JacMat)
+  SDEALLOCATE(covVec_1)
+  SDEALLOCATE(covVec_2)
+  SDEALLOCATE(covVec_3)
+  SDEALLOCATE(Elem_xint_1)
+  SDEALLOCATE(Elem_xint_2)
+  SDEALLOCATE(Elem_xint_3)
   CTInitIsDone = .FALSE.
 END SUBROUTINE FinalizeCT
 

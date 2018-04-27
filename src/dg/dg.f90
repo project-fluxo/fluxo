@@ -131,7 +131,7 @@ IF(.NOT.DoRestart)THEN
   ! U is filled with the ini solution
   CALL FillIni(IniExactFunc,U)
 #if PP_CT
-  IF(use_CT)THEN
+  IF(use_CT.GE.0)THEN
     IF(.NOT. CTInitIsDone) STOP' call initCT before initDG!'
     CALL InitB_CT(IniExactFunc,U) !overwrite B, keep pressure constant 
   END IF !use_CT
@@ -382,7 +382,7 @@ IF(doCalcSource) CALL CalcSource(Ut,tIn)
 IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
 
 #ifdef PP_CT
-IF(use_CT)THEN
+IF(use_CT.EQ.1)THEN
   CALL CT_TimeDerivative()                     !compute curlAt from U
   CALL swapBt(U,Ut)                            !change Bt in Ut to curlAt and energy 
 END IF !use_CT

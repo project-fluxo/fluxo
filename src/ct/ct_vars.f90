@@ -42,11 +42,21 @@ INTEGER                               :: nTotalcurlA            !< Total number 
 
 REAL,ALLOCATABLE                      :: JacMat(:,:,:,:,:,:)    !< inverse of inverse jacobian matrix from (f,g,h)_metrics 
 !----------------------------------------------------------------------------------------------------------------------------------
+! for projection
 INTEGER                               :: Nover
-REAL,ALLOCATABLE                      :: Vdm_G_GNover(:,:)
+INTEGER                               :: Mint
+REAL,ALLOCATABLE                      :: x_int(:),w_int(:)    !< integration points and weights
+REAL,ALLOCATABLE                      :: Vdm_GLN_int(:,:)     !< vandermonde from Gauss-Lob. degree N to integration points
+REAL,ALLOCATABLE                      :: Vdm_e_GLN(:,:)       !< vandermonde form edge basis functions (degree N-1) to Gauss-Lob. degree N
+REAL,ALLOCATABLE                      :: covVec_1(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: covVec_2(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: covVec_3(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: elem_xint_1(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: elem_xint_2(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: elem_xint_3(:,:,:,:,:)  !<
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
-LOGICAL                               :: use_CT=.TRUE.
+INTEGER                               :: use_CT
 LOGICAL                               :: doEvalSource_A=.TRUE.  !< switch is set to false if no source is used 
 LOGICAL                               :: CTInitIsDone=.FALSE.   !< Switch to check CTInit status
 !==================================================================================================================================
