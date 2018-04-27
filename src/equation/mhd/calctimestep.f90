@@ -43,7 +43,9 @@ USE MOD_PreProc
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_DG_Vars,ONLY:U
+#if SHOCKCAPTURE
 USE MOD_ShockCapturing_Vars,ONLY:nu_max
+#endif /*SHOCKCAPTURE*/
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars,ONLY: ConsToPrim
 USE MOD_Equation_Vars,ONLY: FastestWave3D
@@ -80,7 +82,11 @@ REAL                         :: buf(3)
 !==================================================================================================================================
 errType=0
 #if PARABOLIC
+#if SHOCKCAPTURE
 mu_eff=mu+nu_max
+#else
+mu_eff=mu
+#endif /*SHOCKCAPTURE*/
 muKappasPr_max=mu_eff*MAX(4./3.,KappasPr)
 !diffC_max=MAX(etasmu_0,nu_max)
 diffC_max=etasmu_0

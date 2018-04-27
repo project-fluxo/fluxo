@@ -30,7 +30,6 @@ USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEq
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
 USE MOD_Analyze,           ONLY:DefineParametersAnalyze,InitAnalyze,FinalizeAnalyze
-USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
 USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if MPI
 USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
@@ -44,6 +43,9 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
+#endif /*SHOCKCAPTURE*/
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -65,10 +67,12 @@ CALL DefineParametersOutput()
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
-CALL DefineParametersShockCapturing()
 #if PARABOLIC
 CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
+#if SHOCKCAPTURE
+CALL DefineParametersShockCapturing()
+#endif /*SHOCKCAPTURE*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
@@ -134,7 +138,9 @@ CALL InitTimeDisc()
 CALL Restart()
 CALL InitAnalyze()
 CALL InitTestcase()
+#if SHOCKCAPTURE
 CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
 
 ! initialization finished
 CALL IgnoredParameters()
@@ -163,7 +169,9 @@ CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
+#if SHOCKCAPTURE
 CALL FinalizeShockCapturing()
+#endif /*SHOCKCAPTURE*/
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()

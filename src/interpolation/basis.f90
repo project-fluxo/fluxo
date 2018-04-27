@@ -34,9 +34,11 @@ INTERFACE INV33
    MODULE PROCEDURE INV33
 END INTERFACE
 
+#if SHOCKCAPTURE
 INTERFACE BuildLegendreVdm
    MODULE PROCEDURE BuildLegendreVdm
 END INTERFACE
+#endif /*SHOCKCAPTURE*/
 
 INTERFACE InitializeVandermonde
    MODULE PROCEDURE InitializeVandermonde
@@ -84,7 +86,9 @@ END INTERFACE
 
 !PUBLIC::INV
 PUBLIC::INV33
+#if SHOCKCAPTURE
 PUBLIC::BuildLegendreVdm
+#endif /*SHOCKCAPTURE*/
 PUBLIC::InitializeVandermonde
 PUBLIC::LegGaussLobNodesAndWeights
 PUBLIC::LegendreGaussNodesAndWeights
@@ -192,7 +196,8 @@ END SUBROUTINE INV33
 !==================================================================================================================================
 !> Build a 1D Vandermonde matrix from an orthonormal Legendre basis to a nodal basis and reverse
 !==================================================================================================================================
-SUBROUTINE buildLegendreVdm(N_In,xi_In,Vdm_Leg,sVdm_Leg)
+#if SHOCKCAPTURE
+SUBROUTINE BuildLegendreVdm(N_In,xi_In,Vdm_Leg,sVdm_Leg)
 ! MODULES
 USE MOD_Globals,ONLY:abort
 USE MOD_PreProc,ONLY:PP_RealTolerance
@@ -248,8 +253,8 @@ END DO; END DO !j
 dummy=ABS(SUM(ABS(MATMUL(sVdm_Leg,Vdm_Leg)))/REAL(N_In+1)-1.)
 IF(dummy.GT.100.*PP_RealTolerance) CALL abort(__STAMP__,&
                                          'problems in MODAL<->NODAL Vandermonde ',999,dummy)
-END SUBROUTINE buildLegendreVdm
-
+END SUBROUTINE BuildLegendreVdm
+#endif /*SHOCKCAPTURE*/
 
 
 !==================================================================================================================================

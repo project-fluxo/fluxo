@@ -56,7 +56,6 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("ShockCapturing")
-CALL prms%CreateLogicalOption("CaptureShocks", "Shock Capturing on/off")
 END SUBROUTINE DefineParametersShockCapturing
 
 SUBROUTINE InitShockCapturing()
@@ -78,22 +77,26 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !============================================================================================================================
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
-  CALL abort(__STAMP__,'InitShockCapturing not ready to be called or already called.',999,999.)
+  SWRITE(*,*) "InitShockCapturing not ready to be called or already called."
   RETURN
 END IF
-CaptureShocks=GETLOGICAL('CaptureShocks','.FALSE.') 
-IF (PP_N.LT.2.AND.CaptureShocks) THEN
+IF (PP_N.LT.2) THEN
   CALL abort(__STAMP__,'Polynomial Degree too small for Shock Capturing!',999,999.)
   RETURN
 END IF
 ! shock caturing parameters
 ALLOCATE(nu(nElems))
-nu = 0.
+nu     = 0.
 nu_max = 0.
 
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 CALL InitBasisTrans(PP_N,xGP)
+#if (PP_Indicator_Var==1)
+SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY AS SHOCK INDICATOR!'
+#elif (PP_Indicator_Var==2)
+SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE AS SHOCK INDICATOR!'
+#endif
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -106,7 +109,7 @@ SUBROUTINE InitBasisTrans(N_in,xGP)
 !===================================================================================================================================
 ! MODULES
 USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg
-USE MOD_Basis, ONLY :buildLegendreVdm
+USE MOD_Basis, ONLY :BuildLegendreVdm
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -122,20 +125,20 @@ REAL,DIMENSION(0:N_in,0:N_in)              :: Vdm_Leg
 !  NODAL <--> MODAL
 ! Compute the 1D Vandermondematrix, needed to tranform the nodal basis into a modal (Legendre) basis
 ALLOCATE(sVdm_Leg(0:N_in,0:N_in))
-CALL buildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
+CALL BuildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
 END SUBROUTINE InitBasisTrans
 
-
+#if SHOCKCAPTURE
 SUBROUTINE CalcArtificialViscosity(U)
 !===================================================================================================================================
 !> Use framework of Persson and Peraire to measure shocks with DOF energy indicator and calculate artificial viscosity, if necessary
 !===================================================================================================================================
 ! MODULES
 USE MOD_PreProc
-USE MOD_ShockCapturing_Vars, ONLY: CaptureShocks,sVdm_Leg,nu,nu_max
+USE MOD_ShockCapturing_Vars, ONLY: sVdm_Leg,nu,nu_max
 USE MOD_Equation_Vars      , ONLY: KappaM1,s2mu_0,kappa
 USE MOD_TimeDisc_Vars      , ONLY: dt
-USE MOD_Mesh_Vars          , ONLY: PP_nElems=>nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_Mesh_Vars          , ONLY: nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      , ONLY: ConsToPrim
 USE MOD_Equation_Vars      , ONLY: FastestWave3D
 USE MOD_ChangeBasis        , ONLY: ChangeBasis3D
@@ -145,7 +148,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,PP_nElems),INTENT(IN) :: U
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(IN) :: U
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
@@ -154,16 +157,12 @@ REAL                                     :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta
 REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
 INTEGER                                  :: l,ind,i,j,k
 
-! Check if shock capturing is turned on
-IF(.NOT.CaptureShocks) RETURN
-
-nu=0.
+nu    =0.
 nu_max=0.
-DO l=1,PP_nElems
+DO l=1,nElems
 
-  ! Choose indicator (density: ind=1, pressure: ind=2)
-  ind = 2
-  SELECT CASE(ind)
+  ! Select a shock indicator: density = 1, pressure = 2
+  SELECT CASE(PP_Indicator_Var)
     CASE(1)
     Uind(1,:,:,:) = U(1,:,:,:,l)
     CASE(2)
@@ -236,7 +235,7 @@ DO l=1,PP_nElems
 END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
-
+#endif SHOCKCAPTURE
 
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================
@@ -260,6 +259,7 @@ IF (.NOT.ShockCapturingInitIsDone) THEN
 END IF
 ShockCapturingInitIsDone = .FALSE.
 nu_max = 0.
+SDEALLOCATE(sVdm_Leg)
 SDEALLOCATE(nu)
 END SUBROUTINE FinalizeShockCapturing
 

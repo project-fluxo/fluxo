@@ -80,6 +80,7 @@ OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
+OPTION(FLUXO_SHOCKCAPTURE "Enable shock capturing for non-linear equations" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
@@ -242,7 +243,26 @@ ELSE()
   ADD_DEFINITIONS(-DPARABOLIC=0)
 ENDIF()
 
+# =========================================================================
+# Shock capturing settings
+# =========================================================================
 
+IF (FLUXO_SHOCKCAPTURE)
+  ADD_DEFINITIONS(-DSHOCKCAPTURE=1)
+
+  #### Set the shock capturing indicator
+  SET(FLUXO_SHOCKCAPTURE_VAR "dens" CACHE STRING "indicator used for shock capturing, dens/pres: density/pressure.")
+  SET_PROPERTY(CACHE FLUXO_SHOCKCAPTURE_VAR PROPERTY STRINGS dens pres)
+  IF(FLUXO_SHOCKCAPTURE_VAR STREQUAL "dens")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=1)
+  ELSEIF(FLUXO_SHOCKCAPTURE_VAR STREQUAL "pres")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=2)
+  ENDIF()
+ELSE()
+  #if no shock capturing
+  UNSET(FLUXO_SHOCKCAPTURE_VAR CACHE )
+  ADD_DEFINITIONS(-DSHOCKCAPTURE=0)
+ENDIF()
 
 # =========================================================================
 # Build type
@@ -500,7 +520,7 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
                            ./src/timedisc/*.f90   
-			               ./src/shockcapturing/*.f90          )
+                           ./src/shockcapturing/*.f90          )
 
 
 

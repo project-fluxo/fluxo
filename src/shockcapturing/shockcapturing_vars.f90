@@ -27,14 +27,10 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: CaptureShocks = .FALSE.
-REAL,ALLOCATABLE :: sVdm_Leg(:,:)      !< 1D inverse Vandermondematrix to Legendre polynomials
+LOGICAL          :: ShockCapturingInitIsDone=.FALSE.     !< marks whether the shock capturing init routine is complete
+REAL,ALLOCATABLE :: sVdm_Leg(:,:)                        !< 1D inverse Vandermondematrix to Legendre polynomials
+REAL             :: nu_max                               !< Globally maximum artificial viscosity
+REAL,ALLOCATABLE :: nu(:)                                !< Cellwise artificial viscosity
 !===================================================================================================================================
-
-!----------------------------------------------------------------------------------------------------------------------------------
-! shock capturing parameters
-LOGICAL          :: ShockCapturingInitIsDone = .FALSE. !< Switch for aactivating shock capturing
-REAL             :: nu_max                             !< Globally maximum artificial Viscosity
-REAL,ALLOCATABLE :: nu(:)                              !< Cellwise artificial Viscosity
 
 END MODULE MOD_ShockCapturing_Vars

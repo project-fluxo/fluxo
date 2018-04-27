@@ -72,7 +72,9 @@ SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars            ,ONLY:U
+#if SHOCKCAPTURE
 USE MOD_ShockCapturing_Vars,ONLY:nu
+#endif /*SHOCKCAPTURE*/
 USE MOD_Equation_Vars      ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
 USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
@@ -205,7 +207,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
              gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem)  )
            
   ! artificial visosity for shocks
+#if SHOCKCAPTURE
   mu_eff=mu+nu(iElem)
+#else
+  mu_eff=mu
+#endif /*SHOCKCAPTURE*/
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -484,7 +490,9 @@ SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars            ,ONLY:U
+#if SHOCKCAPTURE
 USE MOD_ShockCapturing_Vars,ONLY:nu
+#endif /*SHOCKCAPTURE*/
 USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
@@ -547,7 +555,11 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
            gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem))
 
   ! artificial visosity for shocks
+#if SHOCKCAPTURE
   mu_eff=mu+nu(iElem)
+#else
+  mu_eff=mu
+#endif /*SHOCKCAPTURE*/
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
