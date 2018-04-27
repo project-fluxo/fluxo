@@ -213,10 +213,10 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   mu_eff=mu
 #endif /*SHOCKCAPTURE*/
 
-  divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem)) 
+  divv      = gradv1x+gradv2y+gradv3z
+  cv_gradTx = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem))
+  cv_gradTz = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem))
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux

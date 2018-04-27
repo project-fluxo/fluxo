@@ -76,21 +76,24 @@ CONTAINS
 SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Equation_Vars ,ONLY:kappaM1
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_DG_Vars            ,ONLY:U
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars,ONLY:nu
+#endif /*SHOCKCAPTURE*/
+USE MOD_Equation_Vars      ,ONLY:kappaM1
+USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #if PARABOLIC
-USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
-USE MOD_Equation_Vars ,ONLY:mu0,sKappaM1,KappasPr,s23
+USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
+USE MOD_Equation_Vars      ,ONLY:mu0,sKappaM1,KappasPr,s23
 #if PP_VISC==1
-USE MOD_Equation_Vars ,ONLY:muSuth,R
+USE MOD_Equation_Vars      ,ONLY:muSuth,R
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoPow,R
+USE MOD_Equation_Vars      ,ONLY:ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
 #ifdef OPTIMIZED
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
+USE MOD_DG_Vars            ,ONLY:nTotal_vol
 #endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -109,6 +112,7 @@ REAL                :: v1,v2,v3,p                              ! auxiliary varia
 #if PARABOLIC
 REAL                :: f_visc(5),g_visc(5),h_visc(5)           ! viscous cartesian fluxes (iVar)
 REAL                :: muS,lambda                              ! viscosity,heat coeff.
+REAL                :: mu_eff                                  ! effective viscosity can be a mix of physical and artificial
 REAL                :: divv 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 #if (PP_VISC == 1) || (PP_VISC == 2) 
@@ -171,7 +175,11 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
 #if PP_VISC == 2
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-  ! Viscous part
+#if SHOCKCAPTURE
+  mu_eff = muS+nu(iElem)
+#else
+  mu_eff = muS
+#endif /*SHOCKCAPTURE*/
   ! Viscous part
   ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), & 
              gradv2x => gradPx(3,PP_IJK,iElem), & 
@@ -183,30 +191,30 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
              gradv2z => gradPz(3,PP_IJK,iElem), & 
              gradv3z => gradPz(4,PP_IJK,iElem)  )
            
-  divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem)) 
+  divv      = gradv1x+gradv2y+gradv3z
+  cv_gradTx = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem))
+  cv_gradTz = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem))
   !isotropic heat flux
-  lambda=muS*KappasPr
+  lambda=mu_eff*KappasPr
   ! viscous fluxes in x-direction      
-  f_visc(2)=-muS*(2*gradv1x-s23*divv)
-  f_visc(3)=-muS*(  gradv2x+gradv1y)   
-  f_visc(4)=-muS*(  gradv3x+gradv1z)   
+  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
+  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)
+  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-muS*(2*gradv2y-s23*divv)     
-  g_visc(4)=-muS*(  gradv3y+gradv2z)      
+  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)
+  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
   ! viscous fluxes in z-direction      
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-muS*(2*gradv3z-s23*divv )             
+  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 
@@ -460,6 +468,9 @@ SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars,ONLY:nu
+#endif /*SHOCKCAPTURE*/
 USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars ,ONLY:mu0,kappaM1,sKappaM1,KappasPr,s23
@@ -487,6 +498,7 @@ REAL                :: f_visc(5),g_visc(5),h_visc(5)           !cartesian fluxes
 REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                              ! auxiliary variables
 REAL                :: muS,lambda                              ! viscosity,heat coeff.
+REAL                :: mu_eff                                  ! effective viscosity can be a mix of physical and artificial
 REAL                :: divv 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 #if (PP_VISC == 1) || (PP_VISC == 2) 
@@ -534,26 +546,31 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   T=p*srho/R ! Calculate temperature
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
+#if SHOCKCAPTURE
+  mu_eff = muS+nu(iElem)
+#else
+  mu_eff = muS
+#endif /*SHOCKCAPTURE*/
   ! Viscous part
-  divv    = gradv1x+gradv2y+gradv3z
+  divv       = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem)) 
 
-  lambda=muS*KappasPr
+  lambda=mu_eff*KappasPr
   ! viscous fluxes in x-direction      
   f_visc(1)= 0.
-  f_visc(2)=-muS*(2*gradv1x-s23*divv)
-  f_visc(3)=-muS*(  gradv2x+gradv1y)   
-  f_visc(4)=-muS*(  gradv3x+gradv1z)   
+  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
+  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)
+  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(1)= 0.
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-muS*(2*gradv2y-s23*divv)     
-  g_visc(4)=-muS*(  gradv3y+gradv2z)      
+  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)
+  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
@@ -561,7 +578,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h_visc(1)= 0.
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-muS*(2*gradv3z-s23*divv )             
+  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 

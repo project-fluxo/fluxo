@@ -32,9 +32,11 @@ INTERFACE InitShockCapturing
    MODULE PROCEDURE InitShockCapturing
 END INTERFACE
 
+#if SHOCKCAPTURE
 INTERFACE CalcArtificialViscosity
    MODULE PROCEDURE CalcArtificialViscosity
 END INTERFACE
+#endif /*SHOCKCAPTURE*/
 
 INTERFACE FinalizeShockCapturing
    MODULE PROCEDURE FinalizeShockCapturing
@@ -42,7 +44,9 @@ END INTERFACE
 
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
+#if SHOCKCAPTURE
 PUBLIC :: CalcArtificialViscosity
+#endif /*SHOCKCAPTURE*/
 PUBLIC :: FinalizeShockCapturing
 !===================================================================================================================================
 CONTAINS
@@ -136,7 +140,10 @@ SUBROUTINE CalcArtificialViscosity(U)
 ! MODULES
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars, ONLY: sVdm_Leg,nu,nu_max
-USE MOD_Equation_Vars      , ONLY: KappaM1,s2mu_0,kappa
+USE MOD_Equation_Vars      , ONLY: KappaM1,kappa
+#ifdef mhd
+USE MOD_Equation_Vars      , ONLY: s2mu_0
+#endif /*mhd*/
 USE MOD_TimeDisc_Vars      , ONLY: dt
 USE MOD_Mesh_Vars          , ONLY: nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      , ONLY: ConsToPrim
@@ -153,7 +160,7 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(IN) :: U
 ! LOCAL VARIABLES
 !===================================================================================================================================
 REAL,DIMENSION(1:1,0:PP_N,0:PP_N,0:PP_N) :: Uind,Umod
-REAL                                     :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta_min,eta_max,eps0
+REAL                                     :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta_min,eta_max,eps0,p
 REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
 INTEGER                                  :: l,ind,i,j,k
 
@@ -166,8 +173,13 @@ DO l=1,nElems
     CASE(1)
     Uind(1,:,:,:) = U(1,:,:,:,l)
     CASE(2)
-    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)) &
-                                         -s2mu_0*SUM(U(6:9,:,:,:,l)*U(6:9,:,:,:,l)))
+    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
+#ifdef mhd
+    Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#ifdef PP_GLM
+    Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
+#endif /*PP_GLM*/
+#endif /*mhd*/
   END SELECT
   
   ! Transform Uind into modal Legendre interpolant Umod
@@ -235,7 +247,7 @@ DO l=1,nElems
 END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
-#endif SHOCKCAPTURE
+#endif /*SHOCKCAPTURE*/
 
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================

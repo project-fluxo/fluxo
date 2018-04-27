@@ -40,21 +40,24 @@ FUNCTION CALCTIMESTEP(errType)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Mesh_Vars     ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
-USE MOD_Equation_Vars ,ONLY:kappa,kappaM1
-USE MOD_TimeDisc_Vars ,ONLY:CFLScale,ViscousTimeStep,dtElem
+USE MOD_DG_Vars            ,ONLY:U
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars,ONLY:nu_max
+#endif /*SHOCKCAPTURE*/
+USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
+USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
+USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem
 #if PARABOLIC
-USE MOD_Equation_Vars ,ONLY:KappasPr
-USE MOD_TimeDisc_Vars ,ONLY:DFLScale
+USE MOD_Equation_Vars      ,ONLY:KappasPr
+USE MOD_TimeDisc_Vars      ,ONLY:DFLScale
 #if PP_VISC == 0
-USE MOD_Equation_Vars ,ONLY:mu0
+USE MOD_Equation_Vars      ,ONLY:mu0
 #endif
 #if PP_VISC == 1
-USE MOD_Equation_Vars ,ONLY:muSuth,R
+USE MOD_Equation_Vars      ,ONLY:muSuth,R
 #endif
 #if PP_VISC == 2
-USE MOD_Equation_Vars ,ONLY:mu0,ExpoPow,R
+USE MOD_Equation_Vars      ,ONLY:mu0,ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
 #ifndef GNU
@@ -74,7 +77,7 @@ REAL                         :: TimeStepConv, TimeStepVisc,TimeStepViscElem
 REAL                         :: maxLambda1,maxLambda2,maxLambda3
 #if PARABOLIC
 REAL                         :: maxLambda_v1,maxLambda_v2,maxLambda_v3
-REAL                         :: muX,KappasPr_max
+REAL                         :: muX,KappasPr_max,mu_eff
 #endif /*PARABOLIC*/
 #if MPI
 REAL                         :: buf(3)
@@ -127,9 +130,12 @@ DO iElem=1,nElems
 #elif PP_VISC == 2
         muX=sRho*KappasPr_max*mu0*(srho*p/R)**ExpoPow ! compute vsicosity using the power-law
 #endif /*PP_VISC*/
-        MaxLambda_v1=MAX(MaxLambda_v1,muX*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        MaxLambda_v2=MAX(MaxLambda_v2,muX*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        MaxLambda_v3=MAX(MaxLambda_v3,muX*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+#if SHOCKCAPTURE
+        mu_eff = muX + nu_max
+#endif /*SHOCKCAPTURE*/
+        MaxLambda_v1=MAX(MaxLambda_v1,mu_eff*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        MaxLambda_v2=MAX(MaxLambda_v2,mu_eff*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        MaxLambda_v3=MAX(MaxLambda_v3,mu_eff*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
 #endif /* PARABOLIC*/
       END DO ! i
     END DO ! j
