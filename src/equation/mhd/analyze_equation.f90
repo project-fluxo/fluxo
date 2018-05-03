@@ -60,11 +60,13 @@ IMPLICIT NONE
 CALL prms%SetSection("AnalyzeEquation")
 CALL prms%CreateLogicalOption('CalcDivergence'   , "Set true to compute the current divergence of the magnetic field" &
            , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcBulk',"Set true to compute the integrated mean value of each state variable over whole domain"&
+CALL prms%CreateLogicalOption('CalcBulk',"Set true to compute the integrated mean value of U and Ut over whole domain"&
            , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcEnergy', "Set true to compute the integrated kinetic and full and disturbed magnetic energy"&
            , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcEntropy', "Set true to compute the integrated entropy"&
+           , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcCrossHel', "Set true to compute the integrated cross helicity v.B"&
            , '.FALSE.')
 END SUBROUTINE DefineParametersAnalyzeEquation
 
@@ -93,22 +95,27 @@ doCalcDivergence       = GETLOGICAL('CalcDivergence','.FALSE.')
 doCalcBulk             = GETLOGICAL('CalcBulk'      ,'.FALSE.')
 doCalcEnergy           = GETLOGICAL('CalcEnergy'    ,'.FALSE.')
 doCalcEntropy          = GETLOGICAL('CalcEntropy'   ,'.FALSE.')
+doCalcCrossHel         = GETLOGICAL('CalcCrossHel','.FALSE.')
 IF(doCalcEnergy)THEN
 END IF
 
 IF(MPIroot.AND.doAnalyzeToFile) THEN
-  IF(doCalcDivergence)THEN
-    A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"L2_divB"'
-    A2F_iVar=A2F_iVar+1
-    A2F_VarNames(A2F_iVar)='"Linf_divB"'
-  END IF  !doCalcDivergence
   IF(doCalcBulk)THEN
     DO iVar=1,PP_nVar
       A2F_iVar=A2F_iVar+1
       A2F_VarNames(A2F_iVar)='"Bulk_'//TRIM(StrVarNames(iVar))//'"'
     END DO !iVar 
+    DO iVar=1,PP_nVar
+      A2F_iVar=A2F_iVar+1
+      A2F_VarNames(A2F_iVar)='"Bulk_t_'//TRIM(StrVarNames(iVar))//'"'
+    END DO !iVar 
   END IF ! doCalcBulk
+  IF(doCalcDivergence)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"maxDivB"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"max|[Bn]|"'
+  END IF  !doCalcDivergence
   IF(doCalcEnergy)THEN
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"KineticEnergy"'
@@ -122,10 +129,18 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
 #endif /*PP_GLM*/
   END IF !doCalcEnergy
   IF(doCalcEntropy)THEN
+    Entropy=0.
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"Entropy"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"dSdU_Ut"'
+  END IF !doCalcEntropy
+  IF(doCalcCrossHel)THEN
+    CrossHel=0.
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"CrossHel"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"CrossHel_t"'
   END IF !doCalcEntropy
 END IF !MPIroot & doAnalyzeToFile
 
@@ -153,36 +168,39 @@ REAL,INTENT(IN)                 :: Time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)    :: formatStr
-REAL                 :: L2_divB,Linf_divB
-REAL                 :: bulk(1:PP_nVar)
-REAL                 :: tmp(2),dSdU_Ut 
+REAL                 :: maxJumpB,maxDivB
+REAL                 :: bulk(1:PP_nVar),bulk_t(1:PP_nVar)
+REAL                 :: tmp(2),dSdU_Ut,CrossHel_t 
 !==================================================================================================================================
 ! Calculate divergence 
-IF(doCalcDivergence)THEN
-  CALL CalcDivergence(L2_divB,Linf_divB)
-  IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A21,',2,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)' L2,Linf divB : ',L2_divB,Linf_divB
-    IF(doAnalyzeToFile)THEN
-      A2F_iVar=A2F_iVar+1
-      A2F_Data(A2F_iVar)=L2_divB
-      A2F_iVar=A2F_iVar+1
-      A2F_Data(A2F_iVar)=Linf_divB
-    END IF !doAnalyzeToFile
-  END IF !MPIroot
-END IF  !(doCalcDivergence)
-
 IF(doCalcBulk)THEN
-  CALL CalcBulk(bulk)
+  CALL CalcBulk(bulk,bulk_t)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A21,',PP_nVar,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)' Bulk : ',bulk(:)
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
+    WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk(:)
     IF(doAnalyzeToFile)THEN
       A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk(:)
+      A2F_iVar=A2F_iVar+PP_nVar
+      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk_t(:)
       A2F_iVar=A2F_iVar+PP_nVar
     END IF !doAnalyzeToFile
   END IF !MPIroot
 END IF
+
+IF(doCalcDivergence)THEN
+  CALL CalcDivergence(maxDivB,maxJumpB)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A21,',2,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'maxdivB,maxJumpB  : ',maxDivB,maxJumpB
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=maxDivB
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=maxJumpB
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF  !(doCalcDivergence)
 
 IF(doCalcEnergy)THEN
   !store last energies
@@ -191,14 +209,14 @@ IF(doCalcEnergy)THEN
   IF(MPIroot) THEN
 #ifdef PP_GLM
     WRITE(formatStr,'(A5,I1,A7)')'(A21,',4,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)' kin./magn./total/psi Energy : ',Energy(1:4)
+    WRITE(UNIT_StdOut,formatStr)  'Ekin/mag/tot/psi  : ',Energy(1:4)
 #else
     WRITE(formatStr,'(A5,I1,A7)')'(A21,',3,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)' kin./magn./total Energy : ',Energy(1:3)
+    WRITE(UNIT_StdOut,formatStr)  'Ekin/mag/total    : ',Energy(1:3)
 #endif 
     IF((time-RestartTime).GE.Analyze_dt)THEN
       tmp(1:2)=LOG(Energy(1:2) /tmp(1:2))/Analyze_dt
-      WRITE(UNIT_StdOut,formatStr)' growth rates    : ',tmp(1:2)
+      WRITE(UNIT_StdOut,formatStr)'  ...growth rates : ',tmp(1:2)
     END IF !time>Analyze_dt
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+1
@@ -220,11 +238,11 @@ IF(doCalcEntropy)THEN
   CALL CalcEntropy(Entropy,dSdU_Ut)
   IF(MPIroot) THEN
     WRITE(formatStr,'(A)')'(A21,ES21.12)'
-    WRITE(UNIT_StdOut,formatStr)  ' Entropy      : ',Entropy
+    WRITE(UNIT_StdOut,formatStr)  'Entropy           : ',Entropy
     IF((time-RestartTime).GE.Analyze_dt)THEN
-      WRITE(UNIT_StdOut,formatStr)' dEntropy/dt  : ',(Entropy-tmp(1))/Analyze_dt
+      WRITE(UNIT_StdOut,formatStr)'  ...dEntropy/dt  : ',(Entropy-tmp(1))/Analyze_dt
     END IF !time>Analyze_dt
-    WRITE(UNIT_StdOut,formatStr)  ' dSdU*Ut         : ',dSdU_Ut
+    WRITE(UNIT_StdOut,formatStr)  '  dSdU*Ut         : ',dSdU_Ut
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=Entropy
@@ -233,76 +251,89 @@ IF(doCalcEntropy)THEN
     END IF !doAnalyzeToFile
   END IF !MPIroot
 END IF !doCalcEntropy
+IF(doCalcCrossHel)THEN
+  tmp(1)=CrossHel
+  CALL CalcEntropy(CrossHel,CrossHel_t)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A)')'(A21,ES21.12)'
+    WRITE(UNIT_StdOut,formatStr)  'CrossHelicity     : ',CrossHel
+    IF((time-RestartTime).GE.Analyze_dt)THEN
+      WRITE(UNIT_StdOut,formatStr)' ...dCrossHel/dt  : ',(CrossHel-tmp(1))/Analyze_dt
+    END IF !time>Analyze_dt
+    WRITE(UNIT_StdOut,formatStr)  '  CrossHel_t      : ',CrossHel_t
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=CrossHel
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=CrossHel_t
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF !doCalcCrossHel
 END SUBROUTINE AnalyzeEquation
 
 
 !==================================================================================================================================
-!> Calculates the divergence of the magnetic field
+!> Calculates the maximum of the discrete divergence of the magnetic field and the maximum Jumps of B*n
 !==================================================================================================================================
-SUBROUTINE CalcDivergence(L2_divB,Linf_divB)
+SUBROUTINE CalcDivergence(maxDivB,maxJumpB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ,nElems
-USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde   ! metrics
-USE MOD_DG_Vars            ,ONLY:U,D
+USE MOD_Mesh_Vars      ,ONLY: nElems
+USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec
+USE MOD_Mesh_Vars      ,ONLY: ElemToSide,firstInnerSide,LastMPISide_MINE
+USE MOD_DG_Vars        ,ONLY: D,U,U_master,U_slave 
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)                :: L2_divB
-REAL,INTENT(OUT)                :: Linf_divB
+REAL,INTENT(OUT)                :: maxDivB
+REAL,INTENT(OUT)                :: maxJumpB
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER                         :: iElem,i,j,k,l
-REAL,DIMENSION(1:3)             :: gradB_xi,gradB_eta,gradB_zeta  
-REAL                            :: divB_loc
-!==================================================================================================================================
-! Needed for the computation of the forcing term for the channel flow
-L2_divB=0.
-Linf_divB=0.
-DO iElem=1,nElems
-  ! Compute the gradient in the reference system
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    gradB_xi  = 0.
-    gradB_eta = 0.
-    gradB_zeta= 0.
-    DO l=0,N
-      gradB_xi  (1:3)= gradB_xi  (1:3) + D(i,l) * U(6:8,l,j,k,iElem)
-      gradB_eta (1:3)= gradB_eta (1:3) + D(j,l) * U(6:8,i,l,k,iElem)
-      gradB_zeta(1:3)= gradB_zeta(1:3) + D(k,l) * U(6:8,i,j,l,iElem)
-    END DO ! l 
-    divB_loc = sJ(i,j,k,iElem) * (                                   &   
-               Metrics_fTilde(1,i,j,k,iElem) * gradB_xi  (1) + & !gradUx(1 
-               Metrics_gTilde(1,i,j,k,iElem) * gradB_eta (1) + & 
-               Metrics_hTilde(1,i,j,k,iElem) * gradB_zeta(1) + &
-               Metrics_fTilde(2,i,j,k,iElem) * gradB_xi  (2) + & !gradUy(2 
-               Metrics_gTilde(2,i,j,k,iElem) * gradB_eta (2) + & 
-               Metrics_hTilde(2,i,j,k,iElem) * gradB_zeta(2) + &   
-               Metrics_fTilde(3,i,j,k,iElem) * gradB_xi  (3) + & !gradUz(3 
-               Metrics_gTilde(3,i,j,k,iElem) * gradB_eta (3) + & 
-               Metrics_hTilde(3,i,j,k,iElem) * gradB_zeta(3)   ) 
-    L2_divB   = L2_divB+(divB_loc)**2*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    Linf_divB = MAX(Linf_divB,ABS(divB_loc))
-  END DO; END DO; END DO !i,j,k
-END DO ! iElem
-
+INTEGER :: i,j,k,l,iElem,SideID
+REAL    :: divB_loc,Btilde(3,0:PP_N,0:PP_N,0:PP_N)
 #if MPI
-IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,L2_divB,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-ELSE
-  CALL MPI_REDUCE(L2_divB        ,0  ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-END IF
-IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,Linf_divB,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-ELSE
-  CALL MPI_REDUCE(Linf_divB     ,0  ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-END IF
+REAL                            :: box(2)
 #endif
-
-L2_divB=SQRT(L2_divB/Vol)
+!==================================================================================================================================
+  maxDivB=-1.0e20
+  maxJumpB=-1.0e20
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+    END DO; END DO; END DO ! i,j,k
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      divB_loc=0.
+      DO l=0,PP_N
+        divB_loc=divB_loc + D(i,l)*Btilde(1,l,j,k) + &
+                            D(j,l)*Btilde(2,i,l,k) + &
+                            D(k,l)*Btilde(3,i,j,l)
+      END DO ! l
+      divB_loc = sJ(i,j,k,iElem) * divB_loc 
+      maxDivB=MAX(maxDivB,ABS(divB_loc))
+  
+    END DO; END DO; END DO ! i,j,k
+  END DO ! iElem
+  DO SideID=firstInnerSide,LastMPISide_MINE
+    maxJumpB=MAX(maxJumpB,  &
+                 MAXVAL(ABS( NormVec(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
+                            +NormVec(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
+                            +NormVec(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+  END DO !SideID
+#if MPI
+  Box=(/maxDivB,maxJumpB/)
+  IF(MPIRoot)THEN
+    CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    maxDivB =Box(1)
+    maxJumpB=Box(2)
+  ELSE
+    CALL MPI_REDUCE(Box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  END IF
+#endif
 
 END SUBROUTINE CalcDivergence 
 
@@ -310,44 +341,49 @@ END SUBROUTINE CalcDivergence
 !==================================================================================================================================
 !> Calculates bulk velocities over whole domain
 !==================================================================================================================================
-SUBROUTINE CalcBulk(Bulk)
+SUBROUTINE CalcBulk(Bulk,Bulk_t)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
-USE MOD_DG_Vars,            ONLY: U
+USE MOD_DG_Vars,            ONLY: U,Ut
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: Bulk(1:PP_nVar)
+REAL,INTENT(OUT)                :: Bulk_t(1:PP_nVar)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER                         :: iElem,i,j,k
 #if MPI
-REAL                            :: box(1:PP_nVar)
+REAL                            :: box(1:2*PP_nVar)
 #endif
 !==================================================================================================================================
 Bulk=0.
+Bulk_t=0.
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    Bulk =Bulk+U(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    Bulk   = Bulk  + U(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    Bulk_t = Bulk_t+Ut(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
 
 #if MPI
-Box=Bulk
+Box=(/Bulk,Bulk_t/)
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,box,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  Bulk=Box
+  CALL MPI_REDUCE(MPI_IN_PLACE,box,2*PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  Bulk=Box(1:PP_nVar)
+  Bulk_t=Box(PP_nVar+1:2*PP_nVar)
 ELSE
-  CALL MPI_REDUCE(Box         ,0  ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(Box         ,0  ,2*PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
 #endif
 
-Bulk    =Bulk/Vol
+Bulk    = Bulk  /Vol
+Bulk_t  = Bulk_t/Vol
 
 END SUBROUTINE CalcBulk
 
@@ -401,7 +437,9 @@ END SUBROUTINE CalcEnergy
 
 
 !==================================================================================================================================
-!> Calculates  Entropy over whole domain Entropy=rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
+!> Integrates the  Entropy over whole domain Entropy=rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
+!> and also the time derivative s_t = w^T*U_t
+!>
 !==================================================================================================================================
 SUBROUTINE CalcEntropy(Entropy,dSdU_Ut)
 ! MODULES
@@ -426,34 +464,89 @@ REAL                         :: ent_loc,prim(PP_nVar),dSdU(PP_nVar)
 REAL                         :: box(2)
 #endif 
 !==================================================================================================================================
-Entropy=0.
-dSdU_Ut=0.
-DO iElem=1,nElems
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    CALL ConsToPrim(prim,U(:,i,j,k,iElem))
-    ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
-    Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    dSdU     = ConsToEntropy(U(:,i,j,k,iElem))
-    ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
-    dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-  END DO; END DO; END DO !i,j,k
-END DO ! iElem
-
+  Entropy=0.
+  dSdU_Ut=0.
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      CALL ConsToPrim(prim,U(:,i,j,k,iElem))
+      ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
+      Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+      dSdU     = ConsToEntropy(U(:,i,j,k,iElem))
+      ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
+      dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    END DO; END DO; END DO !i,j,k
+  END DO ! iElem
+  
 #if MPI
-box(1) = Entropy
-box(2) = dSdU_Ut
-IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  Entropy = box(1)
-  dSdU_Ut = box(2)
-ELSE
-  CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-END IF
+  box(1) = Entropy
+  box(2) = dSdU_Ut
+  IF(MPIRoot)THEN
+    CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+    Entropy = box(1)
+    dSdU_Ut = box(2)
+  ELSE
+    CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  END IF
 #endif /*MPI*/
-Entropy=Entropy*sKappaM1
+  Entropy=Entropy*sKappaM1
 
 
 END SUBROUTINE CalcEntropy
+
+
+!==================================================================================================================================
+!> Integrates the cross-helicity v.B over whole domain, 
+!> and also the time derivative (v.B)_t = ((rho v).B_t + (rho v)_t.B - rho_t*v.B)/rho
+!>
+!==================================================================================================================================
+SUBROUTINE CalcCrossHelicity(CH,CH_t)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U,Ut
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)             :: CH !< CrossHelicity, (v.B)
+REAL,INTENT(OUT)             :: CH_t !< (v.B)_t
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                      :: iElem,i,j,k
+REAL                         :: srho,vB,vB_t
+#if MPI
+REAL                         :: box(2)
+#endif 
+!==================================================================================================================================
+  CH  =0.
+  CH_t=0.
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      srho=1./U(1,i,j,k,iElem)
+      vB  =SUM(U(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))*srho
+      CH  = CH+(vB)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+      vB_t =srho*(SUM(U(2:4,i,j,k,iElem)*Ut(6:8,i,j,k,iElem) + Ut(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))-Ut(1,i,j,k,iElem)*vB)
+      CH_t =CH_t+(vB_t)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    END DO; END DO; END DO !i,j,k
+  END DO ! iElem
+  
+#if MPI
+  box(1) = CH  
+  box(2) = CH_t
+  IF(MPIRoot)THEN
+    CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+    CH   = box(1)
+    CH_t = box(2)
+  ELSE
+    CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  END IF
+#endif /*MPI*/
+
+
+END SUBROUTINE CalcCrossHelicity
 
 
 !==================================================================================================================================
