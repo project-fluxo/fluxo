@@ -60,8 +60,6 @@ IMPLICIT NONE
 CALL prms%SetSection("AnalyzeEquation")
 CALL prms%CreateLogicalOption('CalcDivergence'   , "Set true to compute the current divergence of the magnetic field" &
            , '.FALSE.')
-CALL prms%CreateLogicalOption('CalcBulk',"Set true to compute the integrated mean value of U and Ut over whole domain"&
-           , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcEnergy', "Set true to compute the integrated kinetic and full and disturbed magnetic energy"&
            , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcEntropy', "Set true to compute the integrated entropy"&
@@ -92,7 +90,6 @@ INTEGER     :: iVar
 !==================================================================================================================================
 ! Get the various analysis/output variables 
 doCalcDivergence       = GETLOGICAL('CalcDivergence','.FALSE.')
-doCalcBulk             = GETLOGICAL('CalcBulk'      ,'.FALSE.')
 doCalcEnergy           = GETLOGICAL('CalcEnergy'    ,'.FALSE.')
 doCalcEntropy          = GETLOGICAL('CalcEntropy'   ,'.FALSE.')
 doCalcCrossHel         = GETLOGICAL('CalcCrossHel','.FALSE.')
@@ -100,16 +97,6 @@ IF(doCalcEnergy)THEN
 END IF
 
 IF(MPIroot.AND.doAnalyzeToFile) THEN
-  IF(doCalcBulk)THEN
-    DO iVar=1,PP_nVar
-      A2F_iVar=A2F_iVar+1
-      A2F_VarNames(A2F_iVar)='"Bulk_'//TRIM(StrVarNames(iVar))//'"'
-    END DO !iVar 
-    DO iVar=1,PP_nVar
-      A2F_iVar=A2F_iVar+1
-      A2F_VarNames(A2F_iVar)='"Bulk_t_'//TRIM(StrVarNames(iVar))//'"'
-    END DO !iVar 
-  END IF ! doCalcBulk
   IF(doCalcDivergence)THEN
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"maxDivB"'
@@ -169,25 +156,9 @@ REAL,INTENT(IN)                 :: Time
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)    :: formatStr
 REAL                 :: maxJumpB,maxDivB
-REAL                 :: bulk(1:PP_nVar),bulk_t(1:PP_nVar)
 REAL                 :: tmp(2),dSdU_Ut,CrossHel_t 
 !==================================================================================================================================
 ! Calculate divergence 
-IF(doCalcBulk)THEN
-  CALL CalcBulk(bulk,bulk_t)
-  IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
-    WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk(:)
-    IF(doAnalyzeToFile)THEN
-      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk(:)
-      A2F_iVar=A2F_iVar+PP_nVar
-      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk_t(:)
-      A2F_iVar=A2F_iVar+PP_nVar
-    END IF !doAnalyzeToFile
-  END IF !MPIroot
-END IF
-
 IF(doCalcDivergence)THEN
   CALL CalcDivergence(maxDivB,maxJumpB)
   IF(MPIroot) THEN
@@ -336,56 +307,6 @@ REAL                            :: box(2)
 #endif
 
 END SUBROUTINE CalcDivergence 
-
-
-!==================================================================================================================================
-!> Calculates bulk velocities over whole domain
-!==================================================================================================================================
-SUBROUTINE CalcBulk(Bulk,Bulk_t)
-! MODULES
-USE MOD_Globals
-USE MOD_PreProc
-USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
-USE MOD_Mesh_Vars,          ONLY: sJ,nElems
-USE MOD_DG_Vars,            ONLY: U,Ut
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(OUT)                :: Bulk(1:PP_nVar)
-REAL,INTENT(OUT)                :: Bulk_t(1:PP_nVar)
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
-INTEGER                         :: iElem,i,j,k
-#if MPI
-REAL                            :: box(1:2*PP_nVar)
-#endif
-!==================================================================================================================================
-Bulk=0.
-Bulk_t=0.
-DO iElem=1,nElems
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    Bulk   = Bulk  + U(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    Bulk_t = Bulk_t+Ut(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-  END DO; END DO; END DO !i,j,k
-END DO ! iElem
-
-#if MPI
-Box=(/Bulk,Bulk_t/)
-IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,box,2*PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  Bulk=Box(1:PP_nVar)
-  Bulk_t=Box(PP_nVar+1:2*PP_nVar)
-ELSE
-  CALL MPI_REDUCE(Box         ,0  ,2*PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-END IF
-#endif
-
-Bulk    = Bulk  /Vol
-Bulk_t  = Bulk_t/Vol
-
-END SUBROUTINE CalcBulk
 
 
 !==================================================================================================================================

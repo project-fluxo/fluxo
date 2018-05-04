@@ -26,7 +26,6 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Analyze features
 LOGICAL              :: doCalcDivergence   !<handle for analyze: compute divergence of B
-LOGICAL              :: doCalcBulk         !<handle for analyze: compute Bulk integral of all variables
 LOGICAL              :: doCalcEnergy       !<handle for analyze: compute kinetic and magnetic energy
 LOGICAL              :: doCalcEntropy      !<handle for analyze: compute entropy
 LOGICAL              :: doCalcCrossHel     !<handle for analyze: compute cross helicity
