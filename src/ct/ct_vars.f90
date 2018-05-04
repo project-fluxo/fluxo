@@ -43,17 +43,19 @@ INTEGER                               :: nTotalcurlA            !< Total number 
 REAL,ALLOCATABLE                      :: JacMat(:,:,:,:,:,:)    !< inverse of inverse jacobian matrix from (f,g,h)_metrics 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! for projection
-INTEGER                               :: Nover
-INTEGER                               :: Mint
-REAL,ALLOCATABLE                      :: x_int(:),w_int(:)    !< integration points and weights
+INTEGER                               :: N_ned                !< degree of Nedelec basis, (=N-1)
+INTEGER                               :: Mover                !< gauss integration + boundary (2+ Mover-2) 
+REAL,ALLOCATABLE                      :: x_int(:),w_int(:)    !< integration points and weights (0:Mover)
 REAL,ALLOCATABLE                      :: Vdm_GLN_int(:,:)     !< vandermonde from Gauss-Lob. degree N to integration points
-REAL,ALLOCATABLE                      :: Vdm_e_GLN(:,:)       !< vandermonde form edge basis functions (degree N-1) to Gauss-Lob. degree N
-REAL,ALLOCATABLE                      :: covVec_1(:,:,:,:,:)  !<
-REAL,ALLOCATABLE                      :: covVec_2(:,:,:,:,:)  !<
-REAL,ALLOCATABLE                      :: covVec_3(:,:,:,:,:)  !<
-REAL,ALLOCATABLE                      :: elem_xint_1(:,:,:,:,:)  !<
-REAL,ALLOCATABLE                      :: elem_xint_2(:,:,:,:,:)  !<
-REAL,ALLOCATABLE                      :: elem_xint_3(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: Vdm_e_GLN(:,:)       !< vandermonde from edge basis functions (degree N-1) to Gauss-Lob. degree N
+REAL,ALLOCATABLE                      :: Vdm_phi_GLN(:,:)     !< vandermonde from face/volume basis functions (degree N) to Gauss-Lob. degree N
+REAL,ALLOCATABLE                      :: proj_int_e(:,:)      !< projection matrix from inner integrations points (1:Mover-1) to edge base (N-1)
+REAL,ALLOCATABLE                      :: proj_int_phi(:,:) !< projection from inner integration points to face basis & copy of boundaries (0,0)=1,(Mover,Mover)=1.
+REAL,ALLOCATABLE                      :: covVec1_int(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: covVec2_int(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: covVec3_int(:,:,:,:,:)  !<
+REAL,ALLOCATABLE                      :: elem_xint(:,:,:,:,:)  !<
+
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Auxilliary variables
 INTEGER                               :: use_CT
