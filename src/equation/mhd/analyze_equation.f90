@@ -102,6 +102,10 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_VarNames(A2F_iVar)='"maxDivB"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"max|[Bn]|"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"max|[Bt1]|"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"max|[Bt2]|"'
   END IF  !doCalcDivergence
   IF(doCalcEnergy)THEN
     A2F_iVar=A2F_iVar+1
@@ -128,6 +132,8 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_VarNames(A2F_iVar)='"CrossHel"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"CrossHel_t"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"max|v.B|"'
   END IF !doCalcEntropy
 END IF !MPIroot & doAnalyzeToFile
 
@@ -155,20 +161,20 @@ REAL,INTENT(IN)                 :: Time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)    :: formatStr
-REAL                 :: maxJumpB,maxDivB
-REAL                 :: tmp(2),dSdU_Ut,CrossHel_t 
+REAL                 :: maxJumpB(3),maxDivB
+REAL                 :: tmp(2),dSdU_Ut,CrossHel_t,maxAbs_vB 
 !==================================================================================================================================
 ! Calculate divergence 
 IF(doCalcDivergence)THEN
   CALL CalcDivergence(maxDivB,maxJumpB)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A21,',2,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)'maxdivB,maxJumpB  : ',maxDivB,maxJumpB
+    WRITE(formatStr,'(A5,I1,A7)')'(A21,',4,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'maxdivB,maxJumpB  : ',maxDivB,maxJumpB(:)
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=maxDivB
-      A2F_iVar=A2F_iVar+1
-      A2F_Data(A2F_iVar)=maxJumpB
+      A2F_Data(A2F_iVar+1:A2F_iVar+3)=maxJumpB(:)
+      A2F_iVar=A2F_iVar+3
     END IF !doAnalyzeToFile
   END IF !MPIroot
 END IF  !(doCalcDivergence)
@@ -224,10 +230,11 @@ IF(doCalcEntropy)THEN
 END IF !doCalcEntropy
 IF(doCalcCrossHel)THEN
   tmp(1)=CrossHel
-  CALL CalcEntropy(CrossHel,CrossHel_t)
+  CALL CalcCrossHelicity(CrossHel,CrossHel_t,maxAbs_vB)
   IF(MPIroot) THEN
+    WRITE(formatStr,'(A)')'(A21,2ES21.12)'
+    WRITE(UNIT_StdOut,formatStr)  'CrossHel.,max|v.B|: ',CrossHel,maxAbs_vB
     WRITE(formatStr,'(A)')'(A21,ES21.12)'
-    WRITE(UNIT_StdOut,formatStr)  'CrossHelicity     : ',CrossHel
     IF((time-RestartTime).GE.Analyze_dt)THEN
       WRITE(UNIT_StdOut,formatStr)' ...dCrossHel/dt  : ',(CrossHel-tmp(1))/Analyze_dt
     END IF !time>Analyze_dt
@@ -237,6 +244,8 @@ IF(doCalcCrossHel)THEN
       A2F_Data(A2F_iVar)=CrossHel
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=CrossHel_t
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=maxAbs_vB
     END IF !doAnalyzeToFile
   END IF !MPIroot
 END IF !doCalcCrossHel
@@ -251,7 +260,7 @@ SUBROUTINE CalcDivergence(maxDivB,maxJumpB)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars      ,ONLY: nElems
-USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec
+USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec,TangVec1,TangVec2
 USE MOD_Mesh_Vars      ,ONLY: ElemToSide,firstInnerSide,LastMPISide_MINE
 USE MOD_DG_Vars        ,ONLY: D,U,U_master,U_slave 
 IMPLICIT NONE
@@ -260,13 +269,13 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: maxDivB
-REAL,INTENT(OUT)                :: maxJumpB
+REAL,INTENT(OUT)                :: maxJumpB(3)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER :: i,j,k,l,iElem,SideID
 REAL    :: divB_loc,Btilde(3,0:PP_N,0:PP_N,0:PP_N)
 #if MPI
-REAL                            :: box(2)
+REAL                            :: box(4)
 #endif
 !==================================================================================================================================
   maxDivB=-1.0e20
@@ -290,19 +299,27 @@ REAL                            :: box(2)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
   DO SideID=firstInnerSide,LastMPISide_MINE
-    maxJumpB=MAX(maxJumpB,  &
+    maxJumpB(1)=MAX(maxJumpB(1),  &
                  MAXVAL(ABS( NormVec(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
                             +NormVec(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
                             +NormVec(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+    maxJumpB(2)=MAX(maxJumpB(2),  &
+                 MAXVAL(ABS( TangVec1(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
+                            +TangVec1(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
+                            +TangVec1(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+    maxJumpB(3)=MAX(maxJumpB(3),  &
+                 MAXVAL(ABS( TangVec2(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
+                            +TangVec2(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
+                            +TangVec2(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
   END DO !SideID
 #if MPI
   Box=(/maxDivB,maxJumpB/)
   IF(MPIRoot)THEN
-    CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(MPI_IN_PLACE,box,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
     maxDivB =Box(1)
-    maxJumpB=Box(2)
+    maxJumpB=Box(2:4)
   ELSE
-    CALL MPI_REDUCE(Box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(Box         ,0  ,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   END IF
 #endif
 
@@ -420,7 +437,7 @@ END SUBROUTINE CalcEntropy
 !> and also the time derivative (v.B)_t = ((rho v).B_t + (rho v)_t.B - rho_t*v.B)/rho
 !>
 !==================================================================================================================================
-SUBROUTINE CalcCrossHelicity(CH,CH_t)
+SUBROUTINE CalcCrossHelicity(CH,CH_t,maxabs_vB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -434,6 +451,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)             :: CH !< CrossHelicity, (v.B)
 REAL,INTENT(OUT)             :: CH_t !< (v.B)_t
+REAL,INTENT(OUT)             :: maxabs_vB !< (v.B)_t
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER                      :: iElem,i,j,k
@@ -444,10 +462,12 @@ REAL                         :: box(2)
 !==================================================================================================================================
   CH  =0.
   CH_t=0.
+  maxAbs_vB=-1.0e-10
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       srho=1./U(1,i,j,k,iElem)
       vB  =SUM(U(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))*srho
+      maxAbs_vB=MAX(maxAbs_vB,ABS(vB))
       CH  = CH+(vB)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
       vB_t =srho*(SUM(U(2:4,i,j,k,iElem)*Ut(6:8,i,j,k,iElem) + Ut(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))-Ut(1,i,j,k,iElem)*vB)
       CH_t =CH_t+(vB_t)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
@@ -461,8 +481,10 @@ REAL                         :: box(2)
     CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
     CH   = box(1)
     CH_t = box(2)
+    CALL MPI_REDUCE(MPI_IN_PLACE,maxAbs_vB,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   ELSE
     CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(maxAbs_vB   ,0  ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   END IF
 #endif /*MPI*/
 
