@@ -43,6 +43,7 @@ INTERFACE FinalizeEquation
 END INTERFACE
 
 PUBLIC:: InitEquation
+PUBLIC:: SetRiemannSolver
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
@@ -120,8 +121,6 @@ USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTAR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars 
-USE MOD_Riemann
-USE MOD_Flux_Average
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -230,7 +229,40 @@ IF(nRefState .GT. 0)THEN
 END IF
 
 WhichRiemannSolver = GETINT('Riemann','1')
-SELECT CASE(WhichRiemannSolver)
+CALL SetRiemannSolver(whichRiemannSolver)
+
+#if (PP_DiscType==2)
+WhichVolumeFlux = GETINT('VolumeFlux','0')
+CALL SetVolumeFlux(whichVolumeFlux)
+#endif /*PP_DiscType==2*/
+
+IF(MPIroot) CALL CheckFluxes()
+
+EquationInitIsDone=.TRUE.
+SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
+SWRITE(UNIT_StdOut,'(132("-"))')
+END SUBROUTINE InitEquation
+
+
+!==================================================================================================================================
+!> Set the pointer of the riemann solver 
+!==================================================================================================================================
+SUBROUTINE SetRiemannSolver(which)
+! MODULES
+USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0
+USE MOD_Riemann
+USE MOD_Flux_Average
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN) :: which
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+SELECT CASE(Which)
 CASE(1)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Lax-Friedrichs'
   SolveRiemannProblem => RiemannSolverByRusanov
@@ -263,10 +295,28 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
 END SELECT
+END SUBROUTINE SetRiemannSolver
 
 #if (PP_DiscType==2)
-WhichVolumeFlux = GETINT('VolumeFlux','0')
-SELECT CASE(WhichVolumeFlux)
+!==================================================================================================================================
+!> Set the pointer of the volume flux 
+!==================================================================================================================================
+SUBROUTINE SetVolumeFlux(which)
+! MODULES
+USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec
+USE MOD_Flux_Average
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN) :: which
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+SELECT CASE(Which)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
@@ -280,15 +330,8 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+END SUBROUTINE SetVolumeFlux
 #endif /*PP_DiscType==2*/
-
-IF(MPIroot) CALL CheckFluxes()
-
-EquationInitIsDone=.TRUE.
-SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
-END SUBROUTINE InitEquation
-
 
 !==================================================================================================================================
 !> Fill initial solution with IniExactFunc

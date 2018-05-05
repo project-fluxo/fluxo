@@ -74,6 +74,9 @@ CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
      "=0: Default: disturbance case number = iniExactFunc"// &
      ">0: specific disturbance function added to initial state." &
      ,"0")
+CALL prms%CreateIntOption('EquilibriumRiemann', &
+     "=-1: Default: do not change the riemann solver for Ut_eq "// &
+     ">0: specify Riemann Solver for Ut_eq computation.","-1")
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
@@ -144,6 +147,8 @@ IF(.NOT.doRestart)THEN
                                                'set to IniExactFunc'    ,' | ',EquilibriumDisturbFunc
   END IF
 END IF
+EquilibriumRiemann=GETINT('EquilibriumRiemann','-1')
+
 CALL InitEquilibriumState()
 
 

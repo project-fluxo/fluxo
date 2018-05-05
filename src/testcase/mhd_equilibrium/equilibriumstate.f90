@@ -54,10 +54,10 @@ USE MOD_DG                 ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars            ,ONLY: U,Ut,U_master,U_slave
 USE MOD_ProlongToFace      ,ONLY: ProlongToFace
 USE MOD_FillMortar         ,ONLY: U_Mortar
-USE MOD_Equation           ,ONLY: ExactFunc
+USE MOD_Equation           ,ONLY: ExactFunc,SetRiemannSolver
 USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Equation_Vars      ,ONLY: ConsToPrimVec,PrimToConsVec
-USE MOD_Equation_Vars      ,ONLY: StrVarNames
+USE MOD_Equation_Vars      ,ONLY: StrVarNames,whichRiemannSolver
 USE MOD_Restart_Vars       ,ONLY: DoRestart
 USE MOD_Mesh_Vars          ,ONLY: MeshFile
 USE MOD_Mesh_Vars          ,ONLY: nBCSides,nBCs,BoundaryType
@@ -90,6 +90,7 @@ INTEGER             :: nTotal
 CHARACTER(LEN=255)  :: FileTypeStr
 !CHECK
 REAL                :: deltaB(3),maxjmp_B(3),AngMom_t(3)
+PROCEDURE(),POINTER :: SolveRiemann_tmp
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT EQUILIBRIUM STATE...'
@@ -218,7 +219,15 @@ U_slave=0.
 
 ! Call DG operator to fill face data, fluxes, gradients for analyze
 dt_Min=CALCTIMESTEP(errType) 
+
+IF(EquilibriumRiemann .NE. -1) THEN
+  SWRITE(UNIT_StdOut,'(A,3E21.13)')' change Riemann for Ut_eq to:'
+  CALL SetRiemannSolver(EquilibriumRiemann)
+END IF
+
 CALL DGTimeDerivative(0.)
+
+CALL SetRiemannSolver(WhichRiemannSolver)
 
 !store time derivative of Ueq
 Uteq= Ut 
@@ -534,23 +543,23 @@ REAL,INTENT(IN)                 :: Uin(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                            :: L_2(PP_nVar),L_Inf(PP_nVar)
+REAL                            :: Bulk(PP_nVar),maxAbs(PP_nVar)
 INTEGER                         :: iElem,i,j,k
 REAL                            :: IntegrationWeight,vol
 !==================================================================================================================================
 ! Calculate error norms
-L_Inf(:)=-1.E10
-L_2(:)=0.
+maxAbs(:)=-1.E10
+Bulk(:)=0.
 vol=0.
 ! Interpolate values of Error-Grid from GP's
 DO iElem=1,nElems
    DO k=0,PP_N
      DO j=0,PP_N
        DO i=0,PP_N
-         L_Inf = MAX(L_Inf,abs(Uin(:,i,j,k,iElem)))
+         maxAbs = MAX(maxAbs,ABS(Uin(:,i,j,k,iElem)))
          IntegrationWeight = wGP(i)*wGP(j)*wGP(k)/sJ(i,j,k,iElem)
-         ! To sum over the elements, We compute here the square of the L_2 error
-         L_2 = L_2+Uin(:,i,j,k,iElem)**2*IntegrationWeight
+         ! To sum over the elements, We compute here 
+         Bulk = Bulk+Uin(:,i,j,k,iElem)*IntegrationWeight
          vol = vol+IntegrationWeight
        END DO ! k
      END DO ! l
@@ -559,23 +568,23 @@ END DO ! iElem=1,nElems
 
 #if MPI
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,L_2  ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  CALL MPI_REDUCE(MPI_IN_PLACE,L_Inf,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-  CALL MPI_REDUCE(MPI_IN_PLACE,vol  ,      1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,Bulk  ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,maxAbs,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,vol   ,      1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ELSE
-  CALL MPI_REDUCE(L_2  ,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-  CALL MPI_REDUCE(L_Inf,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-  CALL MPI_REDUCE(vol  ,0           ,      1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(Bulk  ,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(maxAbs,0           ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(vol   ,0           ,      1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
 #endif /*MPI*/
 
-! We normalize the L_2 norm with the Volume of the domain and take into account that we have to use the square root
+! We normalize the Bulk with the Volume of the domain and take into account that we have to use the square root
 IF(MPIroot)THEN
-    L_2 = SQRT(L_2/Vol)
+    Bulk = Bulk/Vol
     WRITE(UNIT_StdOut,'(66("-"))')
-    WRITE(UNIT_StdOut,'(A20,2(2X,A21))')'Variablename: ','L_2  (Ut_eq): ',' L_inf(Ut_eq): '
+    WRITE(UNIT_StdOut,'(A20,2(2X,A21))')'Variablename: ','Bulk (Ut_eq): ',' max|Ut_eq|: '
     DO i=1,PP_nVar
-      WRITE(UNIT_StdOut,'(A20,2(2X,ES21.15))')TRIM(StrVarNames(i))//' : ',L_2(i),L_inf(i)
+      WRITE(UNIT_StdOut,'(A20,2(2X,ES21.13))')TRIM(StrVarNames(i))//' : ',Bulk(i),maxAbs(i)
     END DO
     WRITE(UNIT_StdOut,'(66("-"))')
 END IF

@@ -45,6 +45,7 @@ INTEGER                  :: EquilibriumDisturbFunc  !< =0: Default: use same num
                                                     !< initialization state, else specific function
 CHARACTER(LEN=255)       :: EquilibriumStateFile    !< if equilibrium is read from a state
 
+INTEGER                  :: EquilibriumRiemann       !< =
 
 
 LOGICAL                  :: EqBCexists               !< BCtype =21/29 exists: equilibrium state dirichlet BC
