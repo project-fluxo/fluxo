@@ -39,9 +39,9 @@ INTERFACE ChangeBasis3D_XYZ
   MODULE PROCEDURE ChangeBasis3D_XYZ
 END INTERFACE
 
-INTERFACE ChangeBasis2D
-  MODULE PROCEDURE ChangeBasis2D
-END INTERFACE
+!INTERFACE ChangeBasis2D
+!  MODULE PROCEDURE ChangeBasis2D
+!END INTERFACE
 
 INTERFACE ChangeBasis2D_selective
   MODULE PROCEDURE ChangeBasis2D_selective
@@ -280,55 +280,55 @@ END SUBROUTINE ChangeBasis3D_Single
 !> positions xi_out(0:NOut) using DIFFERENT 1D Vdm matrices in the xi,eta and zeta directions.
 !> xi is defined in the 1D referent element \f$ \xi \in [-1,1] \f$.
 !==================================================================================================================================
-SUBROUTINE ChangeBasis3D_XYZ(Dim1,NIn,NOut,Vdm_xi,Vdm_eta,Vdm_zeta,X3D_In,X3D_Out)
+SUBROUTINE ChangeBasis3D_XYZ(Dim1,NxIn,NxOut,Vdm_x,NyIn,NyOut,Vdm_y,NzIn,NzOut,Vdm_z,X3D_In,X3D_Out)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 INTEGER,INTENT(IN)  :: Dim1                                    !< Number of variables
-INTEGER,INTENT(IN)  :: NIn                                     !< Input polynomial degree, no. of points = NIn+1
-INTEGER,INTENT(IN)  :: NOut                                    !< Output polynomial degree, no. of points = NOut+1
-REAL,INTENT(IN)     :: X3D_In(1:Dim1,0:NIn,0:NIn,0:NIn)        !< Input field, dimensions must match Dim1,NIn
-REAL,INTENT(OUT)    :: X3D_Out(1:Dim1,0:NOut,0:NOut,0:NOut)    !< Output field, dimensions must match Dim1,NOut
-REAL,INTENT(IN)     :: Vdm_xi(0:NOut,0:NIn)                    !< 1D Vandermonde In -> Out xi direction
-REAL,INTENT(IN)     :: Vdm_eta(0:NOut,0:NIn)                   !< 1D Vandermonde In -> Out eta direction
-REAL,INTENT(IN)     :: Vdm_zeta(0:NOut,0:NIn)                  !< 1D Vandermonde In -> Out zeta direction
+INTEGER,INTENT(IN)  :: NxIn,NyIn,NzIn                          !< Input polynomial degree, no. of points = NIn+1
+INTEGER,INTENT(IN)  :: NxOut,NyOut,Nzout                       !< Output polynomial degree, no. of points = NOut+1
+REAL,INTENT(IN)     :: X3D_In(1:Dim1,0:NxIn,0:NyIn,0:NzIn)     !< Input field, dimensions must match Dim1,NIn
+REAL,INTENT(OUT)    :: X3D_Out(1:Dim1,0:NxOut,0:NyOut,0:NzOut) !< Output field, dimensions must match Dim1,NOut
+REAL,INTENT(IN)     :: Vdm_x(0:NxOut,0:NxIn)                    !< 1D Vandermonde In -> Out xi direction
+REAL,INTENT(IN)     :: Vdm_y(0:NyOut,0:NyIn)                   !< 1D Vandermonde In -> Out eta direction
+REAL,INTENT(IN)     :: Vdm_z(0:NzOut,0:NzIn)                  !< 1D Vandermonde In -> Out zeta direction
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: iNIn,jNIn,kNIn,iN_Out,jN_Out,kN_Out
-REAL                :: X3D_Buf1(1:Dim1,0:NOut,0:NIn,0:NIn)     ! first intermediate results from 1D interpolations
-REAL                :: X3D_Buf2(1:Dim1,0:NOut,0:NOut,0:NIn)    ! second intermediate results from 1D interpolations
+REAL                :: X3D_Buf1(1:Dim1,0:NxOut,0:NyIn,0:NzIn)     ! first intermediate results from 1D interpolations
+REAL                :: X3D_Buf2(1:Dim1,0:NxOut,0:NyOut,0:NzIn)    ! second intermediate results from 1D interpolations
 !==================================================================================================================================
 X3D_buf1=0.
 ! first direction iNIn
-DO kNIn=0,NIn
-  DO jNIn=0,NIn
-    DO iNIn=0,NIn
-      DO iN_Out=0,NOut
-        X3D_Buf1(:,iN_Out,jNIn,kNIn)=X3D_Buf1(:,iN_Out,jNIn,kNIn)+Vdm_xi(iN_Out,iNIn)*X3D_In(:,iNIn,jNIn,kNIn)
+DO kNIn=0,NzIn
+  DO jNIn=0,NyIn
+    DO iNIn=0,NxIn
+      DO iN_Out=0,NxOut
+        X3D_Buf1(:,iN_Out,jNIn,kNIn)=X3D_Buf1(:,iN_Out,jNIn,kNIn)+Vdm_x(iN_Out,iNIn)*X3D_In(:,iNIn,jNIn,kNIn)
       END DO
     END DO
   END DO
 END DO
 X3D_buf2=0.
 ! second direction jNIn
-DO kNIn=0,NIn
-  DO jNIn=0,NIn
-    DO jN_Out=0,NOut
-      DO iN_Out=0,NOut
-        X3D_Buf2(:,iN_Out,jN_Out,kNIn)=X3D_Buf2(:,iN_Out,jN_Out,kNIn)+Vdm_eta(jN_Out,jNIn)*X3D_Buf1(:,iN_Out,jNIn,kNIn)
+DO kNIn=0,NzIn
+  DO jNIn=0,NyIn
+    DO jN_Out=0,NyOut
+      DO iN_Out=0,NxOut
+        X3D_Buf2(:,iN_Out,jN_Out,kNIn)=X3D_Buf2(:,iN_Out,jN_Out,kNIn)+Vdm_y(jN_Out,jNIn)*X3D_Buf1(:,iN_Out,jNIn,kNIn)
       END DO
     END DO
   END DO
 END DO
 X3D_Out=0.
 ! last direction kNIn
-DO kNIn=0,NIn
-  DO kN_Out=0,NOut
-    DO jN_Out=0,NOut
-      DO iN_Out=0,NOut
-        X3D_Out(:,iN_Out,jN_Out,kN_Out)=X3D_Out(:,iN_Out,jN_Out,kN_Out)+Vdm_zeta(kN_Out,kNIn)*X3D_Buf2(:,iN_Out,jN_Out,kNIn)
+DO kNIn=0,NzIn
+  DO kN_Out=0,NzOut
+    DO jN_Out=0,NyOut
+      DO iN_Out=0,NxOut
+        X3D_Out(:,iN_Out,jN_Out,kN_Out)=X3D_Out(:,iN_Out,jN_Out,kN_Out)+Vdm_z(kN_Out,kNIn)*X3D_Buf2(:,iN_Out,jN_Out,kNIn)
       END DO
     END DO
   END DO
