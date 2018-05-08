@@ -34,6 +34,7 @@ REAL,ALLOCATABLE   :: Vdm_Leg(:,:), sVdm_Leg(:,:) !< Legendre Vandermonde matrix
 CHARACTER(LEN=255),PARAMETER :: NodeTypeG    = 'GAUSS'                    !< Gauss nodes (-1,1)
 CHARACTER(LEN=255),PARAMETER :: NodeTypeGL   = 'GAUSS-LOBATTO'            !< Gauss-Lobatto nodes [-1,1]
 CHARACTER(LEN=255),PARAMETER :: NodeTypeCL   = 'CHEBYSHEV-GAUSS-LOBATTO'
+CHARACTER(LEN=255),PARAMETER :: NodeTypeEQ   = 'EQUIDISTANT'             !< equidistant nodes [-1,1]
 CHARACTER(LEN=255),PARAMETER :: NodeTypeVISU = 'VISU'                     !< equidistant nodes [-1,1]
 CHARACTER(LEN=255),PARAMETER :: NodeTypeVISUInner = 'VISU_INNER'
 !@}
