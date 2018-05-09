@@ -39,6 +39,7 @@ INTEGER                  :: EquilibriumStateIni      !< =-1: Default: no equilib
                                                      !< > 0 : Use U_eq=exactFunc(EquilibriumStateIni) for equilibrium state
                                                      !< =-2 : Read U_eq from MeshFile
                                                      !< =-3 : Read U_eq from the solution of a stateFile
+REAL                     :: Eq_PressureOffset        !< pressure offset when readin equilibrium data
 
 LOGICAL                  :: EquilibriumDivBcorr     !< switch to compute B from a vector potential instead of using B directly
 INTEGER                  :: EquilibriumDisturbFunc  !< =0: Default: use same number as iniExactfunc for disturbance added to 

@@ -216,7 +216,7 @@ END SUBROUTINE PrintStatusLine
 !> Supersample DG dataset at (equidistant) visualization points and output to file.
 !> Currently only Paraview binary format is supported.
 !==================================================================================================================================
-SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt)
+SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt,StrVarNames_opt)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -239,6 +239,7 @@ REAL,INTENT(IN)               :: OutputTime               !< simulation time of 
 REAL,INTENT(IN)               :: Uin(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< solution vector to be visualized
 CHARACTER(LEN=255),OPTIONAL,INTENT(IN) :: FileTypeStrIn
 LOGICAL,OPTIONAL,INTENT(IN) :: PrimVisuOpt
+CHARACTER(LEN=255),OPTIONAL,INTENT(IN) :: StrVarNames_Opt(PP_nVar)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                       :: iElem
@@ -278,13 +279,21 @@ ALLOCATE(strvarnames_tmp(nOutVars))
 IF(PrimVisu)THEN
   strvarnames_tmp=StrVarnamesPrim
 ELSE
-  strvarnames_tmp=StrVarnames
+  IF(PRESENT(StrVarNames_opt))THEN
+    strvarnames_tmp=StrVarnames_opt
+  ELSE
+    strvarnames_tmp=StrVarnames
+  END IF
 END IF
 #else
 !default
 nOutVars=PP_nVar
 ALLOCATE(strvarnames_tmp(nOutVars))
-strvarnames_tmp=StrVarnames
+IF(PRESENT(StrVarNames_opt))THEN
+  strvarnames_tmp=StrVarnames_opt
+ELSE
+  strvarnames_tmp=StrVarnames
+END IF
 #endif
 
 ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))

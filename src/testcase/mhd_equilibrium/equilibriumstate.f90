@@ -91,6 +91,13 @@ CHARACTER(LEN=255)  :: FileTypeStr
 !CHECK
 REAL                :: deltaB(3),maxjmp_B(3),AngMom_t(3)
 PROCEDURE(),POINTER :: SolveRiemann_tmp
+CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames_Ut(PP_nVar)=(/ CHARACTER(LEN=255) :: &
+                   'Density_t', 'Momentum_tX', 'Momentum_tY', 'Momentum_tZ', 'TotalEnergy_t',&
+                   'MagneticField_tX', 'MagneticField_tY', 'MagneticField_tZ'   &
+#ifdef PP_GLM
+                   ,'Psi_t' &
+#endif 
+                   /)
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT EQUILIBRIUM STATE...'
@@ -227,7 +234,9 @@ END IF
 
 CALL DGTimeDerivative(0.)
 
-CALL SetRiemannSolver(WhichRiemannSolver)
+IF(EquilibriumRiemann .NE. -1) THEN
+  CALL SetRiemannSolver(WhichRiemannSolver)
+END IF
 
 !store time derivative of Ueq
 Uteq= Ut 
@@ -244,8 +253,8 @@ ELSE
   !then disturb the Initial state U
   CALL DisturbU(EquilibriumDisturbFunc)
   FileTypeStr='EquilibriumSource'
-  CALL Visualize(0.,Uteq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.FALSE.)
-  CALL WriteAnyState(PP_nVar,Uteq,MeshFile,FileTypeStr,StrVarNames,0.)
+  CALL Visualize(0.,Uteq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.FALSE.,StrVarNames_Opt=StrVarNames_Ut)
+  CALL WriteAnyState(PP_nVar,Uteq,MeshFile,FileTypeStr,StrVarNames_Ut,0.)
   FileTypeStr='EquilibriumState'
   CALL Visualize(0.,Ueq,FileTypeStrIn=FileTypeStr,PrimVisuOpt=.TRUE.)
   CALL WriteAnyState(PP_nVar,Ueq,MeshFile,FileTypeStr,StrVarNames,0.)
@@ -601,7 +610,7 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars             ,ONLY: MeshFile,Ngeo
 USE MOD_Mesh_Vars             ,ONLY: offsetElem,nElems
 USE MOD_Interpolation_Vars    ,ONLY: NodeType,NodeTypeGL
-USE MOD_Testcase_Vars         ,ONLY: InputEq
+USE MOD_Testcase_Vars         ,ONLY: InputEq,Eq_PressureOffset
 USE MOD_Interpolation         ,ONLY: GetVandermonde 
 USE MOD_Equation_Vars         ,ONLY: PrimToConsVec
 USE MOD_HDF5_input            ,ONLY: OpenDataFile,CloseDataFile,ReadArray,DataSetExists,GetDataSize
@@ -652,6 +661,10 @@ LOGICAL            :: exists
   ! 7 normalized toroidal flux
   ! 8-10 (Ax,Ay,Az) 
 
+  !add offset pressure (if equilibrium has tiny pressures...)
+  MHDEQdata_GL(2,:,:,:,:)=MHDEQdata_GL(2,:,:,:,:)++Eq_PressureOffset !pressure
+
+  
   !interpolate to computing nodes
   ALLOCATE(InputEq(1:nVarMHDEQ,0:PP_N,0:PP_N,0:PP_N,nElems))
   CALL GetVandermonde(Ngeo,NodeTypeGL,PP_N,NodeType,Vdm_GLNgeo_N)
