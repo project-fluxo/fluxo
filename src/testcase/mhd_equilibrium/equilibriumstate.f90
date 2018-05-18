@@ -662,7 +662,7 @@ LOGICAL            :: exists
   ! 8-10 (Ax,Ay,Az) 
 
   !add offset pressure (if equilibrium has tiny pressures...)
-  MHDEQdata_GL(2,:,:,:,:)=MHDEQdata_GL(2,:,:,:,:)++Eq_PressureOffset !pressure
+  MHDEQdata_GL(2,:,:,:,:)=MHDEQdata_GL(2,:,:,:,:)+Eq_PressureOffset !pressure
 
   
   !interpolate to computing nodes
