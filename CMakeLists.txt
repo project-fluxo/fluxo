@@ -256,12 +256,14 @@ IF (FLUXO_SHOCKCAPTURE)
   ADD_DEFINITIONS(-DSHOCKCAPTURE=1)
 
   #### Set the shock capturing indicator
-  SET(FLUXO_SHOCKINDICATOR "dens" CACHE STRING "indicator used for shock capturing, dens/pres: density/pressure.")
-  SET_PROPERTY(CACHE FLUXO_SHOCKINDICATOR PROPERTY STRINGS dens pres)
+  SET(FLUXO_SHOCKINDICATOR "dens" CACHE STRING "indicator used for shock capturing, dens/pres/ptde: density/pressure/pressuretimesdensity.")
+  SET_PROPERTY(CACHE FLUXO_SHOCKINDICATOR PROPERTY STRINGS dens pres ptde)
   IF(FLUXO_SHOCKINDICATOR STREQUAL "dens")
     ADD_DEFINITIONS(-DPP_Indicator_Var=1)
   ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "pres")
     ADD_DEFINITIONS(-DPP_Indicator_Var=2)
+ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "ptde")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=3)
   ENDIF()
 ELSE()
   #if no shock capturing

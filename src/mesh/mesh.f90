@@ -244,6 +244,8 @@ ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
 NGeoRef=3*NGeo ! build jacobian at higher degree
 ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
+ALLOCATE(    Elem_inCyl(nElems))
+
 ! surface data
 ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
@@ -267,6 +269,8 @@ DEALLOCATE(NodeCoords)
 CALL WriteDebugMesh(GETINT('debugmesh','0'))
 
 CALL AddToElemData('myRank',IntScalar=myRank)
+
+Elem_inCyl=.FALSE.
 
 MeshInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MESH DONE!'

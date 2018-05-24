@@ -100,6 +100,8 @@ CALL InitBasisTrans(PP_N,xGP)
 SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY AS SHOCK INDICATOR!'
 #elif (PP_Indicator_Var==2)
 SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE AS SHOCK INDICATOR!'
+#elif (PP_Indicator_Var==3)
+SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE TIMES DENSITY AS SHOCK INDICATOR!'
 #endif
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
@@ -180,6 +182,15 @@ DO l=1,nElems
     Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
 #endif /*PP_GLM*/
 #endif /*mhd*/
+    CASE(3)
+    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
+#ifdef mhd
+    Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#ifdef PP_GLM
+    Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
+#endif /*PP_GLM*/
+#endif /*mhd*/
+    Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
   END SELECT
   
   ! Transform Uind into modal Legendre interpolant Umod

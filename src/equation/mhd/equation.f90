@@ -296,7 +296,7 @@ END SUBROUTINE InitEquation
 SUBROUTINE FillIni(IniExactFunc_in,U_in)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems
+USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems,Elem_inCyl
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -306,7 +306,8 @@ INTEGER,INTENT(IN) :: IniExactFunc_in  !< handle to specify exactfunction
 REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< initialized DG solution 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                         :: i,j,k,iElem
+INTEGER                 :: i,j,k,iElem,counter
+REAL 			:: x,z,y,tol,d1,d2,tau,s,tau_max,r,h
 !==================================================================================================================================
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
@@ -315,10 +316,91 @@ DO iElem=1,nElems
     DO j=0,PP_N
       DO i=0,PP_N
         CALL ExactFunc(IniExactFunc_in,0.,Elem_xGP(1:3,i,j,k,iElem),U_in(1:PP_nVar,i,j,k,iElem))
+        IF (IniExactFunc_in.EQ.102) THEN ! Cylinder in Box
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          tol = 100.*EPSILON(y)      
+          IF (((z-11.).LE.tol).AND.((z-9.).GE.-tol).AND.((x**2+y**2).LE.1.01)) THEN
+            counter=counter+1
+          END IF
+        END IF
+
+        IF (IniExactFunc_in.EQ.109) THEN ! Sphere in Box
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          IF ((x**2+y**2+z**2).LE.1.001) THEN
+            counter=counter+1
+          END IF
+        END IF
+
       END DO ! i
     END DO ! j
   END DO !k
-END DO ! iElem=1,nElems
+  
+  IF ((IniExactFunc_in.EQ.102).AND.((PP_N+1)**3.EQ.counter)) THEN
+    Elem_inCyl(iElem) = .TRUE.
+  END IF
+  
+  IF ((IniExactFunc_in.EQ.109).AND.((PP_N+1)**3.EQ.counter)) THEN
+    Elem_inCyl(iElem) = .TRUE.
+  END IF
+
+END DO ! iElem=1,PP_nElems
+
+! test
+!  tau_max = 127.6
+!  DO iElem=1,PP_nElems
+!    IF (Elem_inCyl(iElem)) THEN
+!      tau=tau_max
+!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!        U_in(1,i,j,k,iElem)=tau
+!      END DO; END DO; END DO ! i,j,k
+!    ELSE
+!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!        r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+!	h = 150.0/1820.0
+!	tau = tau_max*(EXP(1.0-r)/h)
+!        U_in(1,i,j,k,iElem)=tau
+!      END DO; END DO; END DO ! i,j,k
+!    END IF
+!  END DO
+
+
+!  s=0.5
+!  DO iElem=1,PP_nElems
+!    IF (Elem_inCyl(iElem)) THEN
+!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!        U_in(1,i,j,k,iElem) = 4.
+!      END DO; END DO; END DO ! i,j,k
+!    ELSE        
+!        DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!          tau=0.
+!          x=Elem_xGP(1,i,j,k,iElem)
+!          y=Elem_xGP(2,i,j,k,iElem)
+!          z=Elem_xGP(3,i,j,k,iElem)
+!          d1=x*x+y*y-1.
+!          d2=ABS(z-10.)-1.               
+!          IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .GE. -tol).AND.(d2 .LE. 0.5)) THEN
+!            !tau=16./PP_Pi*ATAN(2.*(0.5-SQRT(d1*d1+d2*d2)))
+!            tau=MAX(0.,s*ATANH(2.*((0.5-d1)*(0.5-d1)+(0.5-d2)*(0.5-d2))*TANH(4./s))) 
+!          ELSE
+!            IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .LE. 0.)) THEN
+!              !tau=16./PP_Pi*ATAN(2.*(0.5-d1))
+!              tau=s*ATANH(2.*(0.5-d1)*TANH(4./s))  
+!            ELSE
+!              IF ((d2 .GE. -tol).AND.(d2 .LE. 0.5).AND.(d1 .LE. 0.)) THEN
+!                !tau=16./PP_Pi*ATAN(2.*(0.5-d2))
+!                tau=s*ATANH(2.*(0.5-d2)*TANH(4./s))
+!              END IF
+!            END IF
+!          END IF
+!          U_in(1,i,j,k,iElem) = tau
+!        END DO; END DO; END DO ! i,j,k
+!   END IF 
+!  END DO
+
 END SUBROUTINE FillIni
 
 
@@ -352,7 +434,7 @@ REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< state in conservative var
 REAL                            :: tEval
 REAL                            :: Resu_t(PP_nVar),Resu_tt(PP_nVar)      ! state in conservative variables
 INTEGER                         :: i,j
-REAL                            :: Omega,a
+REAL                            :: Omega,a,f
 REAL                            :: Prim(1:PP_nVar) 
 REAL                            :: r, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
@@ -933,6 +1015,46 @@ CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
   prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
   CALL PrimToCons(Prim,Resu)
 
+CASE(411) ! Magnetic Rotor
+  r = SQRT((x(1)-0.5)*(x(1)-0.5)+(x(2)-0.5)*(x(2)-0.5))
+  f = (0.115-r)/0.015
+  Prim = 0.  
+  Prim(1) = 1.0  
+  Prim(5) = 1.0
+  Prim(6) = 5.0/SQRT(4.0*PP_Pi)
+  IF (r .LT. 0.1) THEN
+    Prim(1) = 10.0
+    Prim(2) = 20.0*(0.5-x(2))
+    Prim(3) = 20.0*(x(1)-0.5)
+  ELSE
+    IF (r .LE. 0.115) THEN
+      Prim(1) = 1.0+9.0*f
+      Prim(2) = f*20.0*(0.5-x(2))
+      Prim(3) = f*20.0*(x(1)-0.5)
+    END IF
+  END IF
+  CALL PrimToCons(Prim,Resu)
+
+CASE(102) ! Geophysics application: Flow through cylinder
+  
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148 
+  Prim(8)=-3.41 
+  CALL PrimToCons(Prim,Resu)
+
+CASE(109) ! Geophysics application: Flow through sphere
+
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148 
+  Prim(8)=-3.41 
+    
+  CALL PrimToCons(Prim,Resu)
+
+
 !CASE(666) ! random initialization for velocity and B field, only works with GNU
 !  prim =  0.
 !  !CALL RANDOM_NUMBER(prim(2:4))
@@ -1035,9 +1157,10 @@ USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
 USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
 USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
 USE MOD_Equation_Vars, ONLY:doCalcSource
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
+USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
+USE MOD_DG_Vars,       ONLY:U
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1054,6 +1177,8 @@ INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
 REAL                            :: rho,rho_x,rho_xx
+REAL                            :: x,y,z,d1,d2,tau,tau_max,s,r,h,tol
+LOGICAL                         :: diffCyl
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
@@ -1138,6 +1263,76 @@ CASE(6) ! case 5 rotated
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
+
+
+CASE(102) ! Geophysics plasma flow through cylinder
+  
+  ! Make cylinder boundaries diffusive?
+  diffCyl=.TRUE.
+  tol=100.*EPSILON(1.)
+  tau_max=4.
+  s=0.5  
+
+  DO iElem=1,nElems
+    IF (Elem_inCyl(iElem)) THEN
+      tau=tau_max
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    ELSE
+      IF (diffCyl) THEN
+        DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+          tau=0.
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          d1=x*x+y*y-1.
+          d2=ABS(z-10.)-1.               
+          IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .GE. -tol).AND.(d2 .LE. 0.5)) THEN
+            tau=MAX(0.,s*ATANH(2.*((0.5-d1)*(0.5-d1)+(0.5-d2)*(0.5-d2))*TANH(tau_max/s))) 
+!            tau=16./PP_Pi*ATAN(2.*(0.5-SQRT(d1*d1+d2*d2)))
+          ELSE
+            IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .LE. 0.)) THEN
+              tau=s*ATANH(2.*(0.5-d1)*TANH(tau_max/s)) 
+!              tau=16./PP_Pi*ATAN(2.*(0.5-d1))
+            ELSE
+              IF ((d2 .GE. -tol).AND.(d2 .LE. 0.5).AND.(d1 .LE. 0.)) THEN
+                tau=s*ATANH(2.*(0.5-d2)*TANH(tau_max/s))
+!                tau=16./PP_Pi*ATAN(2.*(0.5-d2))
+              END IF
+            END IF
+          END IF
+          Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+          Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+        END DO; END DO; END DO ! i,j,k
+      END IF
+    END IF 
+  END DO ! iElem=1,nElems
+
+CASE(109) ! Geophysics plasma flow through sphere
+  tau_max=127.6
+  DO iElem=1,nElems
+    IF (Elem_inCyl(iElem)) THEN
+      tau=tau_max
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    ELSE
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+	h = 150.0/1820.0
+	tau = tau_max*EXP((1.0-r)/h)
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    END IF
+  END DO
+
+
+
+
 CASE DEFAULT
   ! No source -> do nothing
   doCalcSource=.FALSE. 
