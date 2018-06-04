@@ -35,16 +35,16 @@ REAL,ALLOCATABLE                      :: D(:,:)                 !< Differentiati
 REAL,ALLOCATABLE                      :: D_T(:,:)               !< Transpose of differentiation matrix, size \([0..N,0..N]\). 
 
 REAL,ALLOCATABLE                      :: D_Hat(:,:)             !< Differentiation matrix premultiplied by
-                                                                !< mass matrix, \(\hat{D} = M^{-1} D^T M\), size \([0..N,0..N]\).  
-
-REAL,ALLOCATABLE                      :: D_Hat_T(:,:)           !< Transpose of differentiation matrix premultiplied by 
-                                                                !< mass matrix, size \([0..N,0..N]\).
+                                                                !< mass matrix, \(\hat{D} =- M^{-1} D^T M\), size \([0..N,0..N]\).  
+                                                                !< for GL, SBP applies: \(\hat{D}=-M^{-1}Q^T=M^{-1}(Q-B)=D-M^{-1}B\)
+REAL,ALLOCATABLE                      :: D_Hat_T(:,:)           !< Transpose of d_hat
 #if (PP_DiscType==2)
 REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D matrix for volint with flux differencing
                                                                 !< 2 from flux difference and the inner surface fluxes
                                                                 !< Dvolsurf = 2*D  but
                                                                 !< Dvolsurf(0,0)=2*sWGP(0)*Q(0,0)+swGP(0)=swGP(0)*(2*(-0.5)+1)=0
                                                                 !< Dvolsurf(N,N)=2*sWGP(N)*Q(N,N)-sWGP(N)=swGP(N)*(2*  0.5 -1)=0
+REAL,ALLOCATABLE                      :: Dvolsurf_T(:,:)        !< transpose of DvolSurf 
 #endif /*PP_DiscType==2*/
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)
                                                                 !< premultiplied by mass matrix

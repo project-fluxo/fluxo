@@ -235,6 +235,9 @@ CALL SetRiemannSolver(whichRiemannSolver)
 WhichVolumeFlux = GETINT('VolumeFlux','0')
 CALL SetVolumeFlux(whichVolumeFlux)
 #endif /*PP_DiscType==2*/
+#if NONCONS
+  SWRITE(UNIT_stdOut,'(A)') ' NONCONSERVATIVE TERMS ARE ACTIVE (POWELL)'
+#endif /*NONCONS*/
 
 IF(MPIroot) CALL CheckFluxes()
 

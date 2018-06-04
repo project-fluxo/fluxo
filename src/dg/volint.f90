@@ -33,7 +33,9 @@ INTERFACE VolInt
   MODULE PROCEDURE VolInt_weakForm
 #elif (PP_DiscType==2)
   MODULE PROCEDURE VolInt_SplitForm
-  !new optimized version, other versions are still here, see below
+  ! low memory but full loop version, 2x slower than version above
+  !MODULE PROCEDURE VolInt_SplitForm2 
+  !new optimized version, other versions are still here, see below, not working for noncons(!)
   !MODULE PROCEDURE VolInt_SplitForm3 
 #endif /*PP_DiscType*/
 END INTERFACE
@@ -54,7 +56,7 @@ SUBROUTINE VolInt_weakForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars   ,ONLY:D_hat
+USE MOD_DG_Vars   ,ONLY:D_hat_T
 USE MOD_Flux      ,ONLY:EvalFluxTilde3D  
 USE MOD_Mesh_Vars ,ONLY:nElems
 ! IMPLICIT VARIABLE HANDLING
@@ -74,9 +76,9 @@ DO iElem=1,nElems
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO l=0,PP_N
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat(i,l)*ftilde(:,l,j,k) + &
-                                              D_hat(j,l)*gtilde(:,i,l,k) + &
-                                              D_hat(k,l)*htilde(:,i,j,l)
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,i)*ftilde(:,l,j,k) + &
+                                              D_hat_T(l,j)*gtilde(:,i,l,k) + &
+                                              D_hat_T(l,k)*htilde(:,i,j,l)
     END DO; END DO; END DO ! i,j,k
   END DO ! l
 END DO ! iElem
@@ -98,11 +100,11 @@ SUBROUTINE VolInt_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars   ,ONLY:DvolSurf
+USE MOD_DG_Vars   ,ONLY:DvolSurf_T
 USE MOD_Mesh_Vars ,ONLY:nElems
 #if PARABOLIC
 USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
-USE MOD_DG_Vars   ,ONLY:D_Hat
+USE MOD_DG_Vars   ,ONLY:D_Hat_T
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -133,12 +135,12 @@ DO iElem=1,nElems
   ! diffusion fluxes are accouted in the standard weak form
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     DO l=0,PP_N
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*  ftilde(:,l,i,j,k)  &
-                                            + Dvolsurf(j,l)*  gtilde(:,l,i,j,k)  &
-                                            + Dvolsurf(k,l)*  htilde(:,l,i,j,k)  &
-                                            +    D_Hat(i,l)*ftildeDiff(:,l,j,k)  &
-                                            +    D_Hat(j,l)*gtildeDiff(:,i,l,k)  &
-                                            +    D_Hat(k,l)*htildeDiff(:,i,j,l)
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*  ftilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,j)*  gtilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,k)*  htilde(:,l,i,j,k)  &
+                                            +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
+                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
+                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
     END DO ! l
   END DO; END DO; END DO ! i,j,k
 #else  
@@ -146,9 +148,9 @@ DO iElem=1,nElems
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     DO l=0,PP_N
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*ftilde(:,l,i,j,k)  &
-                                            + Dvolsurf(j,l)*gtilde(:,l,i,j,k)  &
-                                            + Dvolsurf(k,l)*htilde(:,l,i,j,k)
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*ftilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,j)*gtilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
     END DO ! l
   END DO; END DO; END DO ! i,j,k
 #endif /*PARABOLIC*/
@@ -186,10 +188,8 @@ INTEGER             :: i,j,k,l
 CALL EvalEulerFluxTilde3D(iElem,ftilde_c,gtilde_c,htilde_c,Uaux)
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !symmetric part
+  !diagonal (consistent) part
   ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
-  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
-  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
   DO l=i+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
@@ -197,6 +197,8 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                        ftilde(:,l,i,j,k)                                       )
     ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
   END DO!l=i+1,N
+  !diagonal (consistent) part
+  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
   DO l=j+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
@@ -204,6 +206,8 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                        gtilde(:,l,i,j,k)                                       )
     gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
   END DO!l=j+1,N
+  !diagonal (consistent) part
+  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
   DO l=k+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
@@ -233,16 +237,19 @@ SUBROUTINE VolInt_SplitForm2(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars            ,ONLY:DvolSurf
+USE MOD_DG_Vars            ,ONLY:DvolSurf_T
 USE MOD_DG_Vars            ,ONLY:U
 USE MOD_Mesh_Vars          ,ONLY:nElems
 USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      ,ONLY:VolumeFluxAverageVec !pointer to flux Averaging routine
 USE MOD_Equation_Vars      ,ONLY:nAuxVar
 USE MOD_Flux_Average       ,ONLY:EvalUaux
+#if NONCONS
+USE MOD_Flux_Average       ,ONLY:AddNonConsFluxVec
+#endif /*NONCONS*/
 #if PARABOLIC
 USE MOD_Flux               ,ONLY:EvalDiffFluxTilde3D
-USE MOD_DG_Vars            ,ONLY:D_Hat
+USE MOD_DG_Vars            ,ONLY:D_Hat_T
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -292,18 +299,32 @@ DO iElem=1,nElems
                                              Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
                                    Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
                                            htilde(:)                                             )
+#if NONCONS
+      CALL AddNonConsFluxVec(                   U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+                                             Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
+                                   Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
+                                           ftilde(:)                                             )
+      CALL AddNonConsFluxVec(                   U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+                                             Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
+                                   Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
+                                           gtilde(:)                                             )
+      CALL AddNonConsFluxVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+                                             Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
+                                   Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
+                                           htilde(:)                                             )
+#endif /*NONCONS*/
 
 #if PARABOLIC
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*  ftilde(:)          &
-                                            + Dvolsurf(j,l)*  gtilde(:)          &
-                                            + Dvolsurf(k,l)*  htilde(:)          &
-                                            +    D_Hat(i,l)*ftildeDiff(:,l,j,k)  &
-                                            +    D_Hat(j,l)*gtildeDiff(:,i,l,k)  &
-                                            +    D_Hat(k,l)*htildeDiff(:,i,j,l)
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*  ftilde(:)          &
+                                            + Dvolsurf_T(l,j)*  gtilde(:)          &
+                                            + Dvolsurf_T(l,k)*  htilde(:)          &
+                                            +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
+                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
+                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
 #else
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*  ftilde(:)          &
-                                            + Dvolsurf(j,l)*  gtilde(:)          &
-                                            + Dvolsurf(k,l)*  htilde(:) 
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*  ftilde(:)          &
+                                            + Dvolsurf_T(l,j)*  gtilde(:)          &
+                                            + Dvolsurf_T(l,k)*  htilde(:) 
 #endif /*PARABOLIC*/
     END DO ! l=0,N
   END DO; END DO; END DO ! i,j,k
@@ -355,6 +376,9 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htild
 #endif /*PARABOLIC*/
 INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
+#if NONCONS
+  STOP 'NONCONS TERMS NOT IMPLEMENTED IN SplitFormVolInt3'
+#endif /*NONCONS*/
 
 DO iElem=1,nElems
 

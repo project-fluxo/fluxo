@@ -31,6 +31,10 @@ END INTERFACE
 INTERFACE AddNonConsFluxTilde3D
   MODULE PROCEDURE AddNonConsFluxTilde3D
 END INTERFACE
+
+INTERFACE AddNonConsFluxVec
+  MODULE PROCEDURE AddNonConsFluxVec
+END INTERFACE
 #endif /*NONCONS*/
 
 INTERFACE EvalUaux
@@ -65,6 +69,7 @@ END INTERFACE
 PUBLIC::EvalEulerFluxTilde3D
 #if NONCONS
 PUBLIC::AddNonConsFluxTilde3D
+PUBLIC::AddNonConsFluxVec
 #endif /*NONCONS*/
 PUBLIC::EvalUaux
 PUBLIC::StandardDGFlux

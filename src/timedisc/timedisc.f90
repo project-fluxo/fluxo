@@ -258,7 +258,7 @@ DO
   IF(doTCpreTimeStep) CALL CalcPreTimeStep(t,dt)
 
 
-  CALL PrintStatusLine(t,dt,tStart,tEnd)
+  !CALL PrintStatusLine(t,dt,tStart,tEnd)
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !Perform Timestep using a global time stepping routine, attention: only RK3 has time dependent BC
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

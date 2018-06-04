@@ -165,7 +165,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
 USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
 #if PP_DiscType==2
-USE MOD_DG_Vars,            ONLY: DvolSurf
+USE MOD_DG_Vars,            ONLY: DvolSurf,DvolSurf_T
 #endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -202,10 +202,12 @@ D_Hat_T= TRANSPOSE(D_hat)
 
 #if PP_DiscType==2
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
+ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
 Dvolsurf=2.0*D
 Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
 Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
+Dvolsurf_T= TRANSPOSE(Dvolsurf)
 #endif /*PP_DiscType==2*/
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
@@ -390,6 +392,10 @@ SDEALLOCATE(D)
 SDEALLOCATE(D_T)
 SDEALLOCATE(D_Hat)
 SDEALLOCATE(D_Hat_T)
+#if PP_DiscType==2
+SDEALLOCATE(Dvolsurf)
+SDEALLOCATE(Dvolsurf_T)
+#endif /*PP_DiscType==2*/
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(Ut)
