@@ -207,9 +207,9 @@ DO l=1,nElems
   eta_dof = LOG10(MAX(LU_N/LU,LU_NM1/LUM1))
 
   ! Artificial Viscosity
-  eta_min = -5.0
+  eta_min = -9.0
   eta_max = -3.0
-  eps0 = 0.05
+  eps0 = 0.01
   IF (eta_dof.GE.eta_max) THEN
     nu(l) = eps0
   ELSE IF (eta_dof.LE.eta_min) THEN
@@ -223,9 +223,9 @@ DO l=1,nElems
 
   ! Get (transformed) max eigenvalue:
   Max_Lambda = 0.0
-  DO i=1,PP_N
-    DO j=1,PP_N
-      DO k=1,PP_N
+  DO i=0,PP_N
+    DO j=0,PP_N
+      DO k=0,PP_N
         CALL ConsToPrim(Prim,U(:,i,j,k,l))
         CALL FastestWave3D(Prim,cf)
         v(:)=Prim(2:4) 

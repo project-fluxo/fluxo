@@ -200,7 +200,7 @@ USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: s2mu_0
-USE MOD_Equation_Vars,ONLY: ConsToPrim
+USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: FastestWave1D
 USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
@@ -227,7 +227,7 @@ REAL,INTENT(OUT)                     :: Flux(PP_nVar,0:PP_N,0:PP_N,nSides) !< bo
 INTEGER                              :: iBC,iSide,p,q,SideID
 INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N)
-REAL,DIMENSION(1:PP_nVar)            :: PrimL
+REAL,DIMENSION(1:PP_nVar)            :: PrimL,U_loc
 !==================================================================================================================================
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
@@ -294,6 +294,47 @@ DO iBC=1,nBCs
 #endif 
       END DO !iSide=1,nBCloc
     END IF !BCState=0
+
+  CASE(3) ! outflow
+      DO iSide=1,nBCLoc
+        SideID=BCSideID(iBC,iSide)
+
+!        DO q=0,PP_N
+!          DO p=0,PP_N
+!            ! get pressure from Exactfunction
+!            U_loc = U_master(:,p,q,SideID)
+!            CALL ConsToPrim(PrimL,U_loc)
+!            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+!            PrimL(5) = U_Face_loc(5,p,q)
+!            ! U_loc contains now the state with pressure from outside (Exactfunc)
+!            CALL PrimToCons(PrimL,U_loc)
+!            ! transform state into normal system
+!            U_Face_loc(1,p,q)= U_loc(1)
+!            U_Face_loc(5,p,q)= U_loc(5)
+!            U_Face_loc(2,p,q)= SUM(U_loc(2:4)*NormVec(:,p,q,SideID))
+!            U_Face_loc(3,p,q)= SUM(U_loc(2:4)*TangVec1(:,p,q,SideID))
+!            U_Face_loc(4,p,q)= SUM(U_loc(2:4)*TangVec2(:,p,q,SideID))
+!            U_Face_loc(6,p,q)= SUM(U_loc(6:8)*NormVec(:,p,q,SideID))
+!            U_Face_loc(7,p,q)= SUM(U_loc(6:8)*TangVec1(:,p,q,SideID))  
+!            U_Face_loc(8,p,q)= SUM(U_loc(6:8)*TangVec2(:,p,q,SideID))
+!        END DO ! p
+!      END DO ! q 
+
+      CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
+#if PARABOLIC
+                     gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                     gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                     gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                     NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif
+ 
+   END DO !iSide=1,nBCLoc
+
+
   
   CASE(22) ! exact BC = Dirichlet BC !!
     ! SPECIAL BC: BCState specifies exactfunc to be used!!
@@ -438,6 +479,17 @@ DO iBC=1,nBCs
         END DO ! q
       END DO !iSide=1,nBCloc
     END IF !BCstate=0
+
+  CASE(3) ! outflow
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
+!      DO q=0,PP_N
+!        DO p=0,PP_N
+          Flux(:,:,:,SideID)=U_master(:,:,:,SideID)
+!        END DO
+!      END DO
+    END DO
+
   
   CASE(22) ! exact BC = Dirichlet BC !!
     ! SPECIAL BC: BCState specifies exactfunc to be used!!
@@ -496,6 +548,7 @@ DO SideID=1,nBCSides
     Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-P_m(:,p,q))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
+
 END SUBROUTINE Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
 

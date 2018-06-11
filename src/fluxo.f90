@@ -46,6 +46,9 @@ USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLift
 #if SHOCKCAPTURE
 USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
 #endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY:DefineParametersPositivityPreservation,InitPositivityPreservation,FinalizePositivityPreservation
+#endif /*POSITIVITYPRES*/
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -73,6 +76,9 @@ CALL DefineParametersLifting ()
 #if SHOCKCAPTURE
 CALL DefineParametersShockCapturing()
 #endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL DefineParametersPositivityPreservation()
+#endif /*POSITIVITYPRES*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
@@ -141,6 +147,9 @@ CALL InitTestcase()
 #if SHOCKCAPTURE
 CALL InitShockCapturing()
 #endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL InitPositivityPreservation()
+#endif /*POSITIVITYPRES*/
 
 ! initialization finished
 CALL IgnoredParameters()
@@ -172,6 +181,9 @@ CALL FinalizeMortar()
 #if SHOCKCAPTURE
 CALL FinalizeShockCapturing()
 #endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL FinalizePositivityPreservation()
+#endif /*POSITIVITYPRES*/
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()

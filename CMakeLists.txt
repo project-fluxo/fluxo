@@ -81,6 +81,7 @@ OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 OPTION(FLUXO_SHOCKCAPTURE "Enable shock capturing for non-linear equations" OFF)
+OPTION(FLUXO_POSITIVITYPRES "Enable positivity preservation for non-linear equations" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
@@ -152,6 +153,9 @@ IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
   IF(FLUXO_SHOCKCAPTURE)
     MESSAGE(ERROR " Do not use shock capturing with linear advection equation!")
   ENDIF()
+  IF(FLUXO_POSITIVITYPRES)
+    MESSAGE(ERROR " Do not use positivity preservation with linear advection equation!")
+  ENDIF()
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
@@ -188,6 +192,9 @@ IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
     MESSAGE(ERROR " Do not use parabolic flag with maxwell equation system!")
   ELSEIF(FLUXO_SHOCKCAPTURE)
     MESSAGE(ERROR " Do not use shock capturing with maxwell equation system!")
+  ENDIF()
+  IF(FLUXO_POSITIVITYPRES)
+    MESSAGE(ERROR " Do not use positivity preservation with maxwell equation system!")
   ENDIF()
 ENDIF()
 
@@ -269,6 +276,14 @@ ELSE()
   #if no shock capturing
   UNSET(FLUXO_SHOCKINDICATOR CACHE )
   ADD_DEFINITIONS(-DSHOCKCAPTURE=0)
+ENDIF()
+
+# =========================================================================
+# Positivity preservation
+# =========================================================================
+
+IF (FLUXO_POSITIVITYPRES)
+  ADD_DEFINITIONS(-DPOSITIVITYPRES=1)
 ENDIF()
 
 # =========================================================================
@@ -527,7 +542,8 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
                            ./src/timedisc/*.f90   
-                           ./src/shockcapturing/*.f90          )
+                           ./src/shockcapturing/*.f90   
+       			   ./src/positivitypreservation/*.f90   )
 
 
 

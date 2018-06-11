@@ -266,9 +266,6 @@ USE MOD_Equation            ,ONLY: CalcSource
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 #endif /*PARABOLIC*/
-#if SHOCKCAPTURE
-USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
@@ -318,9 +315,6 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_
 ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
 ! The communication of the gradients is started within the lifting routines
 CALL Lifting(tIn)
-#if SHOCKCAPTURE
-CALL CalcArtificialViscosity(U)
-#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)

@@ -149,6 +149,12 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -182,6 +188,14 @@ tWriteData=MIN(t+WriteData_dt,tEnd)
 tAnalyze=MIN(t+Analyze_dt,tEnd)
 
 ! --- Perform some preparational steps ---
+
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+
+#if SHOCKCAPTURE
+CALL CalcArtificialViscosity(U)
+#endif /*SHOCKCAPTURE*/
 
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
@@ -331,6 +345,12 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -350,7 +370,12 @@ tStage=t
 CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+#if SHOCKCAPTURE
+CALL CalcArtificialViscosity(U)
+#endif /*SHOCKCAPTURE*/
 
 ! Following steps
 DO iStage=2,nRKStages
@@ -359,7 +384,9 @@ DO iStage=2,nRKStages
   CALL DGTimeDerivative(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
-
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 END DO
 CurrentStage=1
 
@@ -380,6 +407,12 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -404,6 +437,12 @@ CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
 CALL VCopy(nTotalU,S2,U)                       !S2=U
 CALL DGTimeDerivative(t)
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+#if SHOCKCAPTURE
+CALL CalcArtificialViscosity(U)
+#endif /*SHOCKCAPTURE*/
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
@@ -413,6 +452,9 @@ DO iStage=2,nRKStages
   CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
   CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
   CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 END DO
 CurrentStage=1
 

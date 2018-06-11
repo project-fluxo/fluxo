@@ -312,6 +312,8 @@ REAL 			:: x,z,y,tol,d1,d2,tau,s,tau_max,r,h
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
 DO iElem=1,nElems
+
+  counter=0
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
@@ -321,7 +323,7 @@ DO iElem=1,nElems
           y=Elem_xGP(2,i,j,k,iElem)
           z=Elem_xGP(3,i,j,k,iElem)
           tol = 100.*EPSILON(y)      
-          IF (((z-11.).LE.tol).AND.((z-9.).GE.-tol).AND.((x**2+y**2).LE.1.01)) THEN
+          IF (((z-1.).LE.tol).AND.((z+1.).GE.-tol).AND.((x**2+y**2).LE.1.01)) THEN
             counter=counter+1
           END IF
         END IF
@@ -351,7 +353,7 @@ END DO ! iElem=1,PP_nElems
 
 ! test
 !  tau_max = 127.6
-!  DO iElem=1,PP_nElems
+!  DO iElem=1,nElems
 !    IF (Elem_inCyl(iElem)) THEN
 !      tau=tau_max
 !      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -1268,9 +1270,9 @@ CASE(6) ! case 5 rotated
 CASE(102) ! Geophysics plasma flow through cylinder
   
   ! Make cylinder boundaries diffusive?
-  diffCyl=.TRUE.
+  diffCyl=.FALSE.
   tol=100.*EPSILON(1.)
-  tau_max=4.
+  tau_max=127.6
   s=0.5  
 
   DO iElem=1,nElems
@@ -1288,7 +1290,7 @@ CASE(102) ! Geophysics plasma flow through cylinder
           y=Elem_xGP(2,i,j,k,iElem)
           z=Elem_xGP(3,i,j,k,iElem)
           d1=x*x+y*y-1.
-          d2=ABS(z-10.)-1.               
+          d2=ABS(z)-1.               
           IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .GE. -tol).AND.(d2 .LE. 0.5)) THEN
             tau=MAX(0.,s*ATANH(2.*((0.5-d1)*(0.5-d1)+(0.5-d2)*(0.5-d2))*TANH(tau_max/s))) 
 !            tau=16./PP_Pi*ATAN(2.*(0.5-SQRT(d1*d1+d2*d2)))

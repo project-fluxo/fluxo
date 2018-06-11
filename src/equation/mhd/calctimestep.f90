@@ -74,7 +74,7 @@ REAL                         :: Max_Lambda(3)
 #if PARABOLIC
 REAL                         :: Max_Lambda_v
 REAL                         :: Lambda_v(3)
-REAL                         :: muKappasPr_max,diffC_max,mu_eff
+REAL                         :: muKappasPr_max,diffC_max
 #endif /*PARABOLIC*/
 #if MPI
 REAL                         :: buf(3)
@@ -82,14 +82,12 @@ REAL                         :: buf(3)
 !==================================================================================================================================
 errType=0
 #if PARABOLIC
+muKappasPr_max=mu*MAX(4./3.,KappasPr)
 #if SHOCKCAPTURE
-mu_eff=mu+nu_max
+diffC_max=MAX(etasmu_0,nu_max)
 #else
-mu_eff=mu
-#endif /*SHOCKCAPTURE*/
-muKappasPr_max=mu_eff*MAX(4./3.,KappasPr)
-!diffC_max=MAX(etasmu_0,nu_max)
 diffC_max=etasmu_0
+#endif /*SHOCKCAPTURE*/
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
 #ifdef PP_GLM
