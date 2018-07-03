@@ -115,6 +115,7 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            "20: Gassner, Winters, Walch flux"//&
                                            "21: Gassner, Winters, Walch flux + LLF diss" &
                                           ,"1")
+#if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
                                               "DG volume integral "//&
                                               " 0: Standard DG"//&
@@ -129,6 +130,7 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               " 9: Gassner Winter Walch"//&
                                               "10: Two-Point EC" &
                                              ,"0")
+#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -350,7 +352,13 @@ SELECT CASE(WhichRiemannSolver)
          "Riemann solver not implemented")
 END SELECT
 
+#if (PP_DiscType==2)
+#if PP_VolFlux==-1
 WhichVolumeFlux = GETINT('VolumeFlux','0')
+#else
+WhichVolumeFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
+#endif
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
@@ -389,6 +397,8 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+#endif /*PP_DiscType==2*/
+
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')

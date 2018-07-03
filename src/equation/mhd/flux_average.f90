@@ -824,15 +824,16 @@ END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
 !>  (aR-aL)/Log(xi) = (aR+aL)*f/(2*f*(1 + 1/3 f^2 + 1/5 f^4 + 1/7 f^6)) = (aR+aL)/(2 + 2/3 f^2 + 2/5 f^4 + 2/7 f^6)
 !>  (aR-aL)/Log(xi) = 0.5*(aR+aL)*(105/ (105+35 f^2+ 21 f^4 + 15 f^6)
 !==================================================================================================================================
-REAL FUNCTION LN_MEAN(aL,aR)
+PURE FUNCTION LN_MEAN(aL,aR)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL         :: aL  !< left value
-REAL         :: aR  !< right value
+REAL,INTENT(IN) :: aL  !< left value
+REAL,INTENT(IN) :: aR  !< right value
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
+REAL            :: LN_MEAN  !< result
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCaR VaLIABLES
 REAL           :: Xi,u

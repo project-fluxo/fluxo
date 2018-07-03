@@ -41,6 +41,17 @@ INTERFACE VolInt
 END INTERFACE
 
 PUBLIC::VolInt
+
+#if (PP_DiscType==2)
+#if PARABOLIC
+INTERFACE VolInt_visc
+  MODULE PROCEDURE VolInt_visc
+END INTERFACE
+
+PUBLIC::VolInt_visc
+#endif /*PARABOLIC*/
+#endif 
+
 !==================================================================================================================================
 
 
@@ -102,6 +113,7 @@ SUBROUTINE VolInt_SplitForm(Ut)
 USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:DvolSurf_T
 USE MOD_Mesh_Vars ,ONLY:nElems
+USE MOD_Flux_Average   ,ONLY:EvalEulerFluxAverage3D_eqn
 #if PARABOLIC
 USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
 USE MOD_DG_Vars   ,ONLY:D_Hat_T
@@ -126,7 +138,7 @@ INTEGER                                           :: i,j,k,l,iElem
 
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
-  CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
+  CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
 #if PARABOLIC
   !compute Diffusion flux contribution of 
   CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
@@ -157,7 +169,51 @@ DO iElem=1,nElems
 END DO ! iElem
 END SUBROUTINE VolInt_SplitForm
 
+#if PARABOLIC
+!==================================================================================================================================
+!> Computes the volume integral using flux differencing 
+!> Attention 1: 1/J(i,j,k) is not yet accounted for
+!> Attention 2: input Ut=0. and is updated with the volume flux derivatives
+!==================================================================================================================================
+SUBROUTINE VolInt_visc(Ut)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_PreProc
+USE MOD_Mesh_Vars ,ONLY:nElems
+USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
+USE MOD_DG_Vars   ,ONLY:D_Hat_T
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT)                                :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+!< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+#if PARABOLIC
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
+#endif /*PARABOLIC*/
+INTEGER                                           :: i,j,k,l,iElem
+!==================================================================================================================================
 
+DO iElem=1,nElems
+  !compute Diffusion flux contribution of 
+  CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
+  ! Update the time derivative with the spatial derivatives of the transformed fluxes
+  ! euler fluxes in flux differencing form: strong, but surface parts included 
+  ! diffusion fluxes are accouted in the standard weak form
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    DO l=0,PP_N
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
+                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
+                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
+    END DO ! l
+  END DO; END DO; END DO ! i,j,k
+END DO ! iElem
+END SUBROUTINE VolInt_visc
+#endif /*PARABOLIC*/
+
+#ifdef DONOTCOMPILE
 !==================================================================================================================================
 !> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !==================================================================================================================================
@@ -447,6 +503,8 @@ DO iElem=1,nElems
   END DO; END DO; END DO ! i,j,k
 END DO ! iElem
 END SUBROUTINE VolInt_SplitForm3
+
+#endif /*DONOTCOMPILE*/
 
 #endif /*PP_DiscType==2*/
 

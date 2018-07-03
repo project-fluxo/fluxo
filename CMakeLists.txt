@@ -21,6 +21,7 @@ INCLUDE(CMakeDependentOption)
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
 STRING(FIND "${CMAKE_HOSTNAME}" "marconi" ON_MARCONI)
+STRING(FIND "${CMAKE_HOSTNAME}" "cobra" ON_COBRA)
 # Set options that need to be enabled BEFORE ANY PROJECT OR LANGUAGE COMMAND
 IF (ONHORNET GREATER -1)
   SET(CMAKE_C_COMPILER       cc)
@@ -92,7 +93,7 @@ SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
-MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
+#MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
 SET(_BUILD_FLUXO_POST  OFF  CACHE BOOL "switch to also build the fluxo_post executable (reads a collection of states and calls analyze).")
 
@@ -190,6 +191,14 @@ IF(NOT EQNSYSNAME_FOUND )
   MESSAGE(ERROR " This equation system does not appear in CMakeLists.txt!")
 ENDIF()
 
+IF(FLUXO_DISCTYPE EQUAL 2)
+  SET(FLUXO_EQN_VOLFLUX "-1" CACHE STRING 
+          "Default: -1 (procedure pointer set in init). Specify two-point flux for compilation (eqn/flux_average module), for optimization!")
+  ADD_DEFINITIONS(-DPP_VolFlux=${FLUXO_EQN_VOLFLUX}  )
+ELSE() #if not disctype=2
+  UNSET(FLUXO_EQN_VOLFLUX CACHE )
+ENDIF()
+
 
 # variables set in an if clause needs to be unset by default
 
@@ -278,6 +287,7 @@ GET_FILENAME_COMPONENT (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
 
 
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+  SET(COMPILER_ADD_FLAGS " " CACHE STRING "additional user defined compiler flags") 
   #environment specific variables
   IF(ONHORNET GREATER -1)
     SET(FLUXO_INSTRUCTION "-march=core-avx2")
@@ -293,19 +303,23 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input")
 
 ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+   SET(COMPILER_ADD_FLAGS "-inline-max-size=1000 -no-inline-total-max-size" CACHE STRING "additional user defined compiler flags") 
    #environment specific variables
    IF(ONHORNET GREATER -1)
       SET(FLUXO_INSTRUCTION "-xCORE-AVX2")
    ELSEIF(ON_MARCONI GREATER -1)
       SET(FLUXO_INSTRUCTION "-axMIC-AVX512 ") #for BW and KNL
+   ELSEIF(ON_COBRA GREATER -1)
+      SET(FLUXO_INSTRUCTION "-xCore-AVX512")
    ELSE()
       SET(FLUXO_INSTRUCTION "-xHost")
    ENDIF()
    # set Flags
+  SET(FLUXO_OPT_REPORT "-qopt-report=5 -qopt-report-phase=all")
   SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -r8 -i4 -traceback -warn all -shared-intel -DINTEL")
-  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
-  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
-  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${COMPILER_ADD_FLAGS}  ${FLUXO_INSTRUCTION} ${FLUXO_OPT_REPORT} -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${COMPILER_ADD_FLAGS}  ${FLUXO_INSTRUCTION} ${FLUXO_OPT_REPORT} -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g  -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
    # add flags only for compiling not linking!
    SET (FLUXO_COMPILE_FLAGS "-fpp -assume bscc")
 
@@ -417,7 +431,8 @@ IF(FLUXO_BUILD_HDF5_CMAKE)
   LIST(APPEND linkedlibs ${HDF5_FORTRAN_STATIC_LIBRARY} ${HDF5_LIBRARIES})
 ELSE()
   INCLUDE_DIRECTORIES (${HDF5_INCLUDE_DIR_FORTRAN} ${HDF5_INCLUDE_DIR})
-  LIST(INSERT HDF5_LIBRARIES 0 ${HDF5_hdf5_fortran_LIBRARY_RELEASE})
+  #LIST(INSERT HDF5_LIBRARIES 0 ${HDF5_hdf5_fortran_LIBRARY_RELEASE})
+  LIST(APPEND HDF5_LIBRARIES ${HDF5_hdf5_fortran_LIBRARY_RELEASE})
   LIST(REMOVE_DUPLICATES HDF5_LIBRARIES)
   MESSAGE(STATUS "Found HDF5 Libs: " ${HDF5_LIBRARIES})
   LIST(APPEND linkedlibs ${HDF5_LIBRARIES} )
