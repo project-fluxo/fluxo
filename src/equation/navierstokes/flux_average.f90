@@ -251,6 +251,8 @@ DO iElem=1,nElems
 
 #if PP_VolFlux==0
 #define PP_VolumeFluxAverageMat StandardDGFluxMat 
+#elif PP_VolFlux==2
+#define PP_VolumeFluxAverageMat KennedyAndGruberFluxMat1
 #elif PP_VolFlux==10
 #define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
 #else
@@ -428,6 +430,8 @@ END DO; END DO; END DO ! i,j,k
 !
 !#if PP_VolFlux==0
 !#define PP_VolumeFluxAverageMat StandardDGFluxMat 
+!#elif PP_VolFlux==2
+!#define PP_VolumeFluxAverageMat KennedyAndGruberFluxMat1
 !#elif PP_VolFlux==10
 !#define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
 !#else
@@ -705,7 +709,7 @@ PURE SUBROUTINE standardDGFluxMat(U_in,metric_in,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
-USE MOD_Equation_Vars,ONLY:skappaM1,kappaP1,kappaM1
+USE MOD_Equation_Vars,ONLY:kappaM1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -906,7 +910,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: z1L,z1R,z2L,z2R,z3L,z3R,z4L,z4R,z5L,z5R
 REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,z1LN,z2Mean,z5Mean
-REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat,rhoHat_HHat
+REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat
 REAL                                :: qHat
 REAL                                :: metric(3)
 !==================================================================================================================================
@@ -1070,25 +1074,6 @@ DO i=0,PP_N
   END DO !l=i+1,PP_N
 END DO !i=0,PP_N
 
-!! Entropy conserving flux
-!Fstar(1) = rhoHat*uHat
-!Fstar(2) = Fstar(1)*uHat + p1Hat
-!Fstar(3) = Fstar(1)*vHat
-!Fstar(4) = Fstar(1)*wHat
-!Fstar(5) = uHat*rhoHat_HHat
-!
-!Gstar(1) = rhoHat*vHat
-!Gstar(2) = Fstar(3)              !rhoHat*vHat*uHat 
-!Gstar(3) = Gstar(1)*vHat + p1Hat
-!Gstar(4) = Gstar(1)*wHat
-!Gstar(5) = vHat*rhoHat_HHat
-!
-!Hstar(1) = rhoHat*wHat
-!Hstar(2) = Fstar(4)              !rhoHat*wHat*uHat 
-!Hstar(3) = Gstar(4)              !rhoHat*wHat*vHat
-!Hstar(4) = Hstar(1)*wHat + p1Hat
-!Hstar(5) = wHat*rhoHat_HHat
-
 END SUBROUTINE TwoPointEntropyConservingFluxMat
 
 
@@ -1220,6 +1205,74 @@ Fstar(5) = Fstar(1)*eHat + p1Hat*qHat ! =\sum_i=1^3 (0.5*rhoHat*(eL+eR)*0.5*(u_i
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE KennedyAndGruberFluxVec1
+
+!==================================================================================================================================
+!> Computes the skew-symmetric flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
+!> derived by Kennedy and Gruber
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
+PURE SUBROUTINE KennedyAndGruberFluxMat1(U_in,metric_in,Fstar) 
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:kappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_in(PP_nVar,0:PP_N)   !< right state
+!REAL,INTENT(IN) :: Uaux_in(nAuxVar,0:PP_N)!< right auxiliary variables
+REAL,INTENT(IN) :: metric_in(3,0:PP_N)   !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT) :: Fstar(PP_nVar,0:PP_N,0:PP_N)          !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                             :: l,i
+REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat
+REAL                                :: qHat
+REAL                                :: metric(3)
+REAL,DIMENSION(0:PP_N)              :: srho,velU,velv,velW,pres,ee
+!==================================================================================================================================
+srho(:) = 1./U_in(1,:)
+velU(:) = U_in(2,:)*srho(:)
+velV(:) = U_in(3,:)*srho(:)
+velW(:) = U_in(4,:)*srho(:)
+ee(:)   = U_in(5,:)*srho(:)
+pres(:) = kappaM1*(U_in(5,:)-0.5*(U_in(2,:)*velU(:)+U_in(3,:)*velV(:)+U_in(4,:)*velW(:)))
+! Get the inverse density, velocity, and pressure on left and right
+DO i=0,PP_N
+  !consistency euler flux f(Ui,Ui)=f(Ui)
+  qHat =velU(i)*metric_in(1,i)+velV(i)*metric_in(2,i)+velW(i)*metric_in(3,i) 
+  Fstar(1,i,i) = U_in(1,i)*qHat
+  Fstar(2,i,i) = Fstar(1,i,i)*velU(i) + metric_in(1,i)*pres(i)
+  Fstar(3,i,i) = Fstar(1,i,i)*velV(i) + metric_in(2,i)*pres(i)
+  Fstar(4,i,i) = Fstar(1,i,i)*velW(i) + metric_in(3,i)*pres(i)
+  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat
+  DO l=i+1,PP_N
+    ! Convenience variables for the velocity, density, pressure as well as sound speed and enthalpy
+    rhoHat = 0.5*(U_in(1,l) +U_in(1,i))
+    uHat   = 0.5*(  VelU(l) +  VelU(i))
+    vHat   = 0.5*(  VelV(l) +  VelV(i))
+    wHat   = 0.5*(  VelW(l) +  VelW(i))
+    p1Hat  = 0.5*(  pres(l) +  pres(i))
+    !eHat   = 0.5*(    ee(l) +    ee(i)) !0.5*(e_L + e_R)
+    
+    metric(:) = 0.5*(metric_in(:,l)+metric_in(:,i))
+    qHat=uHat*metric(1)+vHat*metric(2)+wHat*metric(3)
+
+    ! Kennedy and Gruber skew-symmetric flux
+    Fstar(1,l,i) = rhoHat*qHat
+    Fstar(2,l,i) = Fstar(1,l,i)*uHat + metric(1)*p1Hat
+    Fstar(3,l,i) = Fstar(1,l,i)*vHat + metric(2)*p1Hat
+    Fstar(4,l,i) = Fstar(1,l,i)*wHat + metric(3)*p1Hat
+    Fstar(5,l,i) = Fstar(1,l,i)*0.5*(ee(l)+ee(i)) + p1Hat*qHat ! =\sum_i=1^3 (0.5*rhoHat*(eL+eR)*0.5*(u_iL+u_iR)+p1Hat*0.5*(u_iL+u_iR))*n_i
+
+!    !symmetry
+    Fstar(:,i,l)=Fstar(:,l,i)
+  END DO !l=i+1,PP_N
+END DO !i=0,PP_N
+
+END SUBROUTINE KennedyAndGruberFluxMat1
 
 
 !==================================================================================================================================

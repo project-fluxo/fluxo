@@ -287,13 +287,6 @@ globopts.extend([
                 ])
 
 baseID=0
-if(args.stage == 2) :
-  summaryfilename=args.path+"/summary."+EQNchoice+"_"+args.param
-  sumfile = open(summaryfilename,'w') #overwrite old file
-  summaryline="SUMMARY: \n "
-  summary = summaryline
-  sumfile.write(summaryline)
-  sumfile.close()
 
 Nchoices= ["N","3","4","5","6","7"]
 for  nnn  in range(0,len(Nchoices)):
@@ -305,13 +298,6 @@ for  nnn  in range(0,len(Nchoices)):
   # relative path from tests folder, parameterfile,Linf[0]<crit for success
   TEST=[]
   TEST.extend([args.path,args.param, "1.0e-12" ])
-  
-  if(args.stage == 2) :
-    summaryline = ("\n Nchoice %s, TESTCASE: %s \n CASEID , PID , NAME  " % (Nchoice,TEST[1]))
-    summary = summary + ("\n") + summaryline
-    sumfile = open(summaryfilename,'a') 
-    sumfile.write(("\n")+summaryline)
-    sumfile.close()
   
   #============================================================================
   #============================================================================
@@ -336,12 +322,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -357,12 +337,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   #============================================================================
@@ -391,12 +365,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -413,12 +381,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -435,12 +397,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -455,12 +411,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -477,12 +427,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -497,12 +441,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -519,12 +457,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -541,12 +473,6 @@ for  nnn  in range(0,len(Nchoices)):
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-     if(args.stage == 2) :
-        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
-        summary = summary + ("\n") + summaryline 
-        sumfile = open(summaryfilename,'a') 
-        sumfile.write(("\n")+summaryline)
-        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -576,7 +502,5 @@ else :
      print( " ==> ALL RUNS SUCCESSFULL!" )
    print( " " )
    print( "/////////////////////////////////////////////////////////" )
-   if(args.stage == 2) :
-     print(summary)
    sys.exit(0)
 
