@@ -258,6 +258,9 @@ USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 USE MOD_VolInt              ,ONLY: VolInt
+#if PP_DiscType==2
+USE MOD_Flux_Average        ,ONLY: VolInt_splitForm_eqn
+#endif
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -320,7 +323,12 @@ CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
+#if PP_DiscType==1
 CALL VolInt(Ut)
+#elif PP_DiscType==2
+CALL VolInt(Ut)
+!CALL VolInt_splitForm_eqn(Ut)
+#endif
 
 
 #if PARABOLIC && MPI

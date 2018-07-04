@@ -124,6 +124,7 @@ END INTERFACE
 PUBLIC:: VolInt_splitForm_eqn
 #endif /*PP_DiscType==2*/
 PUBLIC:: EvalEulerFluxAverage3D_eqn
+PUBLIC:: EvalEulerFluxTilde3D_eqn
 PUBLIC:: EvalUaux
 PUBLIC:: StandardDGFlux
 PUBLIC:: StandardDGFluxVec
@@ -153,7 +154,6 @@ PUBLIC:: LN_MEAN
 CONTAINS
 
 
-
 #if (PP_DiscType==2)
 !==================================================================================================================================
 !> Computes the volume integral using flux differencing 
@@ -181,11 +181,13 @@ REAL,INTENT(INOUT)                                :: Ut(PP_nVar,0:PP_N,0:PP_N,0:
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N):: rtilde
+INTEGER                                           :: i,j,k,l,iElem
 !REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !transformed flux differences, one more dimension!
 !                                                             ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
 !                                                             ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
 !                                                             ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-INTEGER                                           :: i,j,k,l,iElem
+!REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !central euler flux at ijk 
+!REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
 !#if PARABOLIC
 !REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
 !#endif /*PARABOLIC*/
@@ -193,33 +195,97 @@ INTEGER                                           :: i,j,k,l,iElem
 
 DO iElem=1,nElems
 
+  !v1
+!  CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+!                                ,Metrics_fTilde(:,:,:,:,iElem) &
+!                                ,Metrics_gTilde(:,:,:,:,iElem) &
+!                                ,Metrics_hTilde(:,:,:,:,iElem) &
+!                                ,ftilde_c,gtilde_c,htilde_c, Uaux)
+!
+!  DO k=0,PP_N; DO j=0,PP_N
+!    DO i=0,PP_N
+!      !diagonal (consistent) part
+!      ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+!      DO l=i+1,PP_N
+!        CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+!                                               Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
+!                                     Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
+!                                           ftilde(:,l,i,j,k)                                       )
+!        ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
+!      END DO!l=i+1,N
+!    END DO!i
+!  END DO; END DO !j,k
+!  DO k=0,PP_N; DO i=0,PP_N
+!    DO j=0,PP_N
+!      !diagonal (consistent) part
+!      gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+!      DO l=j+1,PP_N
+!        CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+!                                               Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
+!                                     Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
+!                                           gtilde(:,l,i,j,k)                                       )
+!        gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
+!      END DO!l=j+1,N
+!    END DO !j
+!  END DO; END DO ! i,k
+!  DO j=0,PP_N; DO i=0,PP_N
+!    DO k=0,PP_N
+!      !diagonal (consistent) part
+!      htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+!      DO l=k+1,PP_N
+!        CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+!                                               Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
+!                                     Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
+!                                           htilde(:,l,i,j,k)                                       )
+!        htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
+!      END DO!l=k+1,N
+!    END DO!k
+!  END DO; END DO ! i,j,k
+!  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+!    DO l=0,PP_N
+!      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*ftilde(:,l,i,j,k)  &
+!                                            + Dvolsurf_T(l,j)*gtilde(:,l,i,j,k)  &
+!                                            + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
+!    END DO ! l
+!  END DO; END DO; END DO ! i,j,k
+
+#if PP_VolFlux==0
+#define PP_VolumeFluxAverageMat StandardDGFluxMat 
+#elif PP_VolFlux==10
+#define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
+#else
+#define PP_VolumeFluxAverageMat StandardDGFluxMat
+#endif
+
 !  !opt_v2, with larger calls 
   DO k=0,PP_N; DO j=0,PP_N
     !diagonal (consistent) part
-    CALL TwoPointEntropyConservingFluxMat(              U(:,:,j,k,iElem), &
-                                           Metrics_fTilde(:,:,j,k,iElem), &
-                                                   rtilde(:,:,:)         ) 
+    CALL PP_VolumeFluxAverageMat(              U(:,:,j,k,iElem), &
+                                  Metrics_fTilde(:,:,j,k,iElem), &
+                                          rtilde(:,:,:)         ) 
     
     DO i=0,PP_N; DO l=0,PP_N
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*rtilde(:,l,i)
     END DO; END DO !i,l
   END DO; END DO ! j,k
   DO k=0,PP_N; DO i=0,PP_N
-    CALL TwoPointEntropyConservingFluxMat(             U(:,i,:,k,iElem), &
-                                          Metrics_gTilde(:,i,:,k,iElem), &
-                                                  rtilde(:,:,:)          )
+    CALL PP_VolumeFluxAverageMat(             U(:,i,:,k,iElem), &
+                                 Metrics_gTilde(:,i,:,k,iElem), &
+                                         rtilde(:,:,:)          )
     DO j=0,PP_N; DO l=0,PP_N
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,j)*rtilde(:,l,j)
     END DO; END DO !j,l
   END DO; END DO ! i,k
   DO j=0,PP_N; DO i=0,PP_N
-    CALL TwoPointEntropyConservingFluxMat(             U(:,i,j,:,iElem), &
-                                          Metrics_hTilde(:,i,j,:,iElem), &
-                                                  rtilde(:,:,:)          )
+    CALL PP_VolumeFluxAverageMat(             U(:,i,j,:,iElem), &
+                                 Metrics_hTilde(:,i,j,:,iElem), &
+                                         rtilde(:,:,:)          )
     DO k=0,PP_N; DO l=0,PP_N
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,k)*rtilde(:,l,k)
     END DO; END DO !j,l
   END DO; END DO ! i,j
+
+#undef PP_VolumeAverageFluxMat
 
 !SAME SPEED
 !  DO k=0,PP_N; DO j=0,PP_N
@@ -314,6 +380,7 @@ INTEGER             :: i,j,k,l
 #define PP_VolumeFluxAverageVec VolumeFluxAverageVec
 #endif
 
+
 !opt_v1
 CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
                               ,Metrics_fTilde(:,:,:,:,iElem) &
@@ -354,24 +421,36 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=k+1,N
 END DO; END DO; END DO ! i,j,k
 
+
 #undef PP_VolumeFluxAverageVec
 
 !opt_v2,larger calls
+!
+!#if PP_VolFlux==0
+!#define PP_VolumeFluxAverageMat StandardDGFluxMat 
+!#elif PP_VolFlux==10
+!#define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
+!#else
+!#define PP_VolumeFluxAverageMat StandardDGFluxMat
+!#endif
+!
 !DO k=0,PP_N; DO j=0,PP_N
-!  CALL TwoPointEntropyConservingFluxMat(              U(:,:,j,k,iElem), &
-!                                         Metrics_fTilde(:,:,j,k,iElem), &
-!                                               ftilde(:,:,:,j,k)         ) 
+!  CALL PP_VolumeFluxAverageMat(              U(:,:,j,k,iElem), &
+!                               Metrics_fTilde(:,:,j,k,iElem), &
+!                                     ftilde(:,:,:,j,k)         ) 
 !END DO; END DO ! j,k
 !DO k=0,PP_N; DO i=0,PP_N
-!  CALL TwoPointEntropyConservingFluxMat(             U(:,i,:,k,iElem), &
-!                                        Metrics_gTilde(:,i,:,k,iElem), &
-!                                              gtilde(:,:,i,:,k)       )
+!  CALL PP_VolumeFluxAverageMat(             U(:,i,:,k,iElem), &
+!                               Metrics_gTilde(:,i,:,k,iElem), &
+!                                     gtilde(:,:,i,:,k)       )
 !END DO; END DO ! i,k
 !DO j=0,PP_N; DO i=0,PP_N
-!  CALL TwoPointEntropyConservingFluxMat(             U(:,i,j,:,iElem), &
-!                                        Metrics_hTilde(:,i,j,:,iElem), &
-!                                              htilde(:,:,i,j,:)        )
+!  CALL PP_VolumeFluxAverageMat(             U(:,i,j,:,iElem), &
+!                               Metrics_hTilde(:,i,j,:,iElem), &
+!                                     htilde(:,:,i,j,:)        )
 !END DO; END DO ! i,j
+!
+!#undef PP_VolumeAverageFluxMat
 
 !full loop
 !CALL EvalUaux(iElem,Uaux)
@@ -401,6 +480,7 @@ END DO; END DO; END DO ! i,j,k
 !END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE EvalEulerFluxAverage3D_eqn
+
 
 !==================================================================================================================================
 !> Compute Euler fluxes using the conservative variables and derivatives for every volume Gauss point.
@@ -616,6 +696,62 @@ Fstar(5) = 0.5*((rhoE_L + p_L)*q_L    + (rhoE_R + p_R)*q_R )
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE StandardDGFluxVec
 
+
+!==================================================================================================================================
+!> Computes the standard DG euler flux transformed with the metrics 
+!> fstar=1/2((fL*metric1L+gL*metric2L+h*metric3L)+(fR*metric1R+gR*metric2R+h*metric3R)  )
+!==================================================================================================================================
+PURE SUBROUTINE standardDGFluxMat(U_in,metric_in,Fstar) 
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:skappaM1,kappaP1,kappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_in(PP_nVar,0:PP_N)   !< right state
+!REAL,INTENT(IN) :: Uaux_in(nAuxVar,0:PP_N)!< right auxiliary variables
+REAL,INTENT(IN) :: metric_in(3,0:PP_N)   !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT) :: Fstar(PP_nVar,0:PP_N,0:PP_N)          !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                             :: l,i
+REAL,DIMENSION(0:PP_N)              :: qHat,srho,velU,velv,velW,pres,flux1,flux2,flux3,flux4,flux5
+!==================================================================================================================================
+srho(:)  = 1./U_in(1,:)
+velU(:)  = U_in(2,:)*srho(:)
+velV(:)  = U_in(3,:)*srho(:)
+velW(:)  = U_in(4,:)*srho(:)
+pres(:)  = kappaM1*(U_in(5,:)-0.5*(U_in(2,:)*velU(:)+U_in(3,:)*velV(:)+U_in(4,:)*velW(:)))
+qHat     = velU(:)*metric_in(1,:)+velV(:)*metric_in(2,:)+velW(:)*metric_in(3,:) 
+flux1(:) = U_in(1,:)*qHat(:)
+flux2(:) = flux1(:)*velU(:) + metric_in(1,:)*pres(:)
+flux3(:) = flux1(:)*velV(:) + metric_in(2,:)*pres(:)
+flux4(:) = flux1(:)*velW(:) + metric_in(3,:)*pres(:)
+flux5(:) = (U_in(5,:)+pres(:))*qHat(:)
+DO i=0,PP_N
+  !consistency euler flux f(Ui,Ui)=f(Ui)
+  Fstar(1,i,i) = flux1(i)
+  Fstar(2,i,i) = flux2(i)
+  Fstar(3,i,i) = flux3(i)
+  Fstar(4,i,i) = flux4(i)
+  Fstar(5,i,i) = flux5(i)
+  DO l=i+1,PP_N
+    ! 
+    Fstar(1,l,i) = 0.5*(flux1(l)+flux1(i))
+    Fstar(2,l,i) = 0.5*(flux2(l)+flux2(i))
+    Fstar(3,l,i) = 0.5*(flux3(l)+flux3(i))
+    Fstar(4,l,i) = 0.5*(flux4(l)+flux4(i))
+    Fstar(5,l,i) = 0.5*(flux5(l)+flux5(i))
+  
+!    !symmetry
+    Fstar(:,i,l)=Fstar(:,l,i)
+  END DO !l=i+1,PP_N
+END DO !i=0,PP_N
+
+END SUBROUTINE standardDGFluxMat
 
 !==================================================================================================================================
 !> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 ) 

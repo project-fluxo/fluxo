@@ -30,10 +30,7 @@ def copy2temporary(tmp_dir, f) :
 ########################################################################################################
 def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, ntail = 0 ,\
       mpi_procs = 1, L2 = 1., Linf=1.,PID=0. ) :
-   if mpi_procs == 1 :
-      cmd = " "
-   else :
-      cmd = ("mpirun -np %d " % mpi_procs)
+   cmd = ("srun -n %d " % mpi_procs)
 
    cmd=cmd+" "+exec_path.strip()+" "+prm_path.strip()
    if log :
