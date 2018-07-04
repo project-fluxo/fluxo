@@ -232,7 +232,12 @@ WhichRiemannSolver = GETINT('Riemann','1')
 CALL SetRiemannSolver(whichRiemannSolver)
 
 #if (PP_DiscType==2)
+#if PP_VolFlux==-1
 WhichVolumeFlux = GETINT('VolumeFlux','0')
+#else
+WhichVolumeFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
+#endif
 CALL SetVolumeFlux(whichVolumeFlux)
 #endif /*PP_DiscType==2*/
 #if NONCONS
@@ -1242,9 +1247,8 @@ USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
 USE MOD_Flux_Average
 USE MOD_Riemann
 #if (PP_DiscType==2)
-USE MOD_Flux_Average , ONLY: standardDGFluxVec
 USE MOD_DG_Vars,       ONLY: DGinitIsDone,nTotal_vol,U
-USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde
+USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
 #endif /*PP_DiscType==2*/
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY:GLM_ch
@@ -1355,13 +1359,21 @@ mtmp(:)=Metrics_ftilde(:,0,0,0,1) !save metric
 
 U(:,0,0,0,1)=UL
 Metrics_ftilde(:,0,0,0,1)=metricL
-CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+CALL EvalEulerFluxTilde3D_eqn(             U(:,:,:,:,1), &
+                              Metrics_ftilde(:,:,:,:,1), &
+                              Metrics_gtilde(:,:,:,:,1), &
+                              Metrics_htilde(:,:,:,:,1), &
+                              ftildeElem,gtildeElem,htildeElem,UauxElem)
 ULaux=UauxElem(:,0,0,0)
 FrefL = fTildeElem(:,0,0,0)
 
 U(:,0,0,0,1)=UR
 Metrics_ftilde(:,0,0,0,1)=metricR
-CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+CALL EvalEulerFluxTilde3D_eqn(             U(:,:,:,:,1), &
+                              Metrics_ftilde(:,:,:,:,1), &
+                              Metrics_gtilde(:,:,:,:,1), &
+                              Metrics_htilde(:,:,:,:,1), &
+                              ftildeElem,gtildeElem,htildeElem,UauxElem)
 URaux=UauxElem(:,0,0,0)
 FrefR = fTildeElem(:,0,0,0)
 

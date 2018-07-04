@@ -23,9 +23,13 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 
-INTERFACE EvalEulerFluxTilde3D
-  MODULE PROCEDURE EvalEulerFluxTilde3D
+INTERFACE EvalEulerFluxAverage3D_eqn
+  MODULE PROCEDURE EvalEulerFluxAverage3D_eqn
 END INTERFACE
+
+!INTERFACE EvalEulerFluxTilde3D_eqn
+!  MODULE PROCEDURE EvalEulerFluxTilde3D_eqn
+!END INTERFACE
 
 #if NONCONS
 INTERFACE AddNonConsFluxTilde3D
@@ -66,7 +70,8 @@ INTERFACE LN_MEAN
 END INTERFACE
 
 
-PUBLIC::EvalEulerFluxTilde3D
+PUBLIC::EvalEulerFluxAverage3D_eqn
+PUBLIC::EvalEulerFluxTilde3D_eqn
 #if NONCONS
 PUBLIC::AddNonConsFluxTilde3D
 PUBLIC::AddNonConsFluxVec
@@ -82,33 +87,113 @@ PUBLIC::LN_MEAN
 
 CONTAINS
 
+!==================================================================================================================================
+!> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
+!==================================================================================================================================
+SUBROUTINE EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars        ,ONLY:U
+USE MOD_Mesh_Vars      ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+USE MOD_Equation_Vars  ,ONLY:nAuxVar
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)                        :: iElem  !< current element ID from volint
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !central euler flux at ijk 
+REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
+INTEGER             :: i,j,k,l
+!==================================================================================================================================
+#if PP_VolFlux==0
+#define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#elif PP_VolFlux==1
+#define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
+#elif PP_VolFlux==10
+#define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec
+#else
+#define PP_VolumeFluxAverageVec VolumeFluxAverageVec
+#endif
+
+!opt_v1
+CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+                              ,Metrics_fTilde(:,:,:,:,iElem) &
+                              ,Metrics_gTilde(:,:,:,:,iElem) &
+                              ,Metrics_hTilde(:,:,:,:,iElem) &
+                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part
+  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  DO l=i+1,PP_N
+    CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
+                                           Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
+                                 Metrics_fTilde(:,i,j,k,iElem), Metrics_fTilde(:,l,j,k,iElem), &
+                                       ftilde(:,l,i,j,k)                                       )
+    ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
+  END DO!l=i+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part
+  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  DO l=j+1,PP_N
+    CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
+                                           Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
+                                 Metrics_gTilde(:,i,j,k,iElem), Metrics_gTilde(:,i,l,k,iElem), &
+                                       gtilde(:,l,i,j,k)                                       )
+    gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
+  END DO!l=j+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part
+  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  DO l=k+1,PP_N
+    CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
+                                           Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
+                                 Metrics_hTilde(:,i,j,k,iElem), Metrics_hTilde(:,i,j,l,iElem), &
+                                       htilde(:,l,i,j,k)                                       )
+    htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
+  END DO!l=k+1,N
+END DO; END DO; END DO ! i,j,k
+
+#undef PP_VolumeFluxAverageVec
+
+#if NONCONS
+CALL AddNonConsFluxTilde3D(iElem,Uaux,ftilde,gtilde,htilde)
+#endif /*NONCONS*/
+
+END SUBROUTINE EvalEulerFluxAverage3D_eqn
 
 !==================================================================================================================================
 !> Compute MHD transformed fluxes using conservative variables and derivatives for every volume Gauss point.
 !> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
+SUBROUTINE EvalEulerFluxTilde3D_eqn(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde,Uaux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:U
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
 USE MOD_Equation_vars ,ONLY:GLM_ch
 #endif /*PP_GLM*/
-#ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                        :: iElem !< current element index in volint
+REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol)
+REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) 
+REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) 
+REAL,INTENT(IN )   :: M_h(       3,1:nTotal_vol) 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
-REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b)
+REAL,INTENT(OUT)   :: ftilde(1:PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(1:PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(1:PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: Uaux(    nAuxVar,1:nTotal_vol) !< auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
@@ -117,27 +202,20 @@ REAL                :: v1,v2,v3,v_2,p                          ! velocity and pr
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
 REAL                :: Ep                                      ! E + p
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
-  ASSOCIATE(rho   =>U(1,PP_IJK,iElem), &
-            rhov1 =>U(2,PP_IJK,iElem), &
-            rhov2 =>U(3,PP_IJK,iElem), &
-            rhov3 =>U(4,PP_IJK,iElem), &
+DO i=1,nTotal_vol
+  ASSOCIATE(rho   =>U_in(1,i), &
+            rhov1 =>U_in(2,i), &
+            rhov2 =>U_in(3,i), &
+            rhov3 =>U_in(4,i), &
 #ifdef PP_GLM
-            Etotal=>U(5,PP_IJK,iElem)-0.5*smu_0*U(9,PP_IJK,iElem)**2, &
+            Etotal=>U_in(5,i)-0.5*smu_0*U_in(9,i)**2, &
 #else
-            Etotal=>U(5,PP_IJK,iElem), &
+            Etotal=>U_in(5,i), &
 #endif /*def PP_GLM*/
-            b1    =>U(6,PP_IJK,iElem), &
-            b2    =>U(7,PP_IJK,iElem), &
-            b3    =>U(8,PP_IJK,iElem)  ) 
+            b1    =>U_in(6,i), &
+            b2    =>U_in(7,i), &
+            b3    =>U_in(8,i)  ) 
   ! auxiliary variables
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
@@ -150,7 +228,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   p    = kappaM1*(Etotal-0.5*rho*(v_2))-KappaM2*s2mu_0*bb2
   Ep   = (Etotal + p)
   
-  Uaux(:,PP_IJK)=(/srho,v1,v2,v3,p,v_2,bb2,vb/)
+  Uaux(:,i)=(/srho,v1,v2,v3,p,v_2,bb2,vb/)
   ! Advection part
   ! Advection fluxes x-direction
   f(1)=rhov1                     ! rho*u
@@ -181,37 +259,27 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+smu_0*GLM_ch*b1*U(9,PP_IJK,iElem)
-  f(6) = f(6)+GLM_ch*U(9,PP_IJK,iElem)
+  f(5) = f(5)+smu_0*GLM_ch*b1*U_in(9,i)
+  f(6) = f(6)+GLM_ch*U_in(9,i)
   f(9) = GLM_ch*b1
 
-  g(5) = g(5)+smu_0*GLM_ch*b2*U(9,PP_IJK,iElem)
-  g(7) = g(7)+GLM_ch*U(9,PP_IJK,iElem)
+  g(5) = g(5)+smu_0*GLM_ch*b2*U_in(9,i)
+  g(7) = g(7)+GLM_ch*U_in(9,i)
   g(9) = GLM_ch*b2
 
-  h(5) = h(5)+smu_0*GLM_ch*b3*U(9,PP_IJK,iElem)
-  h(8) = h(8)+GLM_ch*U(9,PP_IJK,iElem)
+  h(5) = h(5)+smu_0*GLM_ch*b3*U_in(9,i)
+  h(8) = h(8)+GLM_ch*U_in(9,i)
   h(9) = GLM_ch*b3
 #endif /* PP_GLM */
 
-END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
+  END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-  ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
-  gtilde(:,PP_IJK) =   f(:)*Metrics_gTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_gTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_gTilde(3,PP_IJK,iElem)
-  htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#ifdef OPTIMIZED
+  ftilde(:,i) =   f(:)*M_f(1,i) + g(:)*M_f(2,i) + h(:)*M_f(3,i)
+  gtilde(:,i) =   f(:)*M_g(1,i) + g(:)*M_g(2,i) + h(:)*M_g(3,i)
+  htilde(:,i) =   f(:)*M_h(1,i) + g(:)*M_h(2,i) + h(:)*M_h(3,i)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
-END SUBROUTINE EvalEulerFluxTilde3D
+END SUBROUTINE EvalEulerFluxTilde3D_eqn
 
 
 #if NONCONS
@@ -254,7 +322,7 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   phi_GLM_g_s2(1:2) = (0.5*SUM(Metrics_gtilde(:,i,j,k,iElem)*Uaux(2:4,i,j,k)))*(/U(9,i,j,k,iElem),1./)
   phi_GLM_h_s2(1:2) = (0.5*SUM(Metrics_htilde(:,i,j,k,iElem)*Uaux(2:4,i,j,k)))*(/U(9,i,j,k,iElem),1./)
 #endif /*PP_GLM*/
-  DO l=0,N
+  DO l=0,PP_N
     ftilde(    2:8,l,i,j,k) = ftilde(2:8,l,i,j,k)+(SUM(( Metrics_ftilde(:,i,j,k,iElem) &
                                                         +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi_s4(2:8) 
 #ifdef PP_GLM
@@ -263,21 +331,21 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     !
     ftilde((/5,9/),l,i,j,k) = ftilde((/5,9/),l,i,j,k)                +U(9,l,j,k,iElem) *phi_GLM_f_s2(1:2)
 #endif /*PP_GLM*/
-  END DO !l=0,N
-  DO l=0,N
+  END DO !l=0,PP_N
+  DO l=0,PP_N
     gtilde(    2:8,l,i,j,k) = gtilde(2:8,l,i,j,k)+(SUM(( Metrics_gtilde(:,i,j,k,iElem) & 
                                                         +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi_s4(2:8) 
 #ifdef PP_GLM
     gtilde((/5,9/),l,i,j,k) = gtilde((/5,9/),l,i,j,k)                +U(9,i,l,k,iElem) *phi_GLM_g_s2(1:2)
 #endif /*PP_GLM*/
-  END DO !l=0,N
-  DO l=0,N
+  END DO !l=0,PP_N
+  DO l=0,PP_N
     htilde(2:8,    l,i,j,k) = htilde(2:8,l,i,j,k)+(SUM(( Metrics_htilde(:,i,j,k,iElem) & 
                                                         +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi_s4(2:8) 
 #ifdef PP_GLM
     htilde((/5,9/),l,i,j,k) = htilde((/5,9/),l,i,j,k)                +U(9,i,j,l,iElem) *phi_GLM_h_s2(1:2)
 #endif /*PP_GLM*/
-  END DO !l=0,N
+  END DO !l=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE AddNonConsFluxTilde3D

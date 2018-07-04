@@ -139,6 +139,7 @@ INTEGER                                           :: i,j,k,l,iElem
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
+!  CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
 #if PARABOLIC
   !compute Diffusion flux contribution of 
   CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
@@ -213,7 +214,6 @@ END DO ! iElem
 END SUBROUTINE VolInt_visc
 #endif /*PARABOLIC*/
 
-#ifdef DONOTCOMPILE
 !==================================================================================================================================
 !> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !==================================================================================================================================
@@ -224,7 +224,7 @@ USE MOD_DG_Vars        ,ONLY:U
 USE MOD_Mesh_Vars      ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 USE MOD_Equation_Vars  ,ONLY:nAuxVar
-USE MOD_Flux_Average   ,ONLY:EvalEulerFluxTilde3D
+USE MOD_Flux_Average   ,ONLY:EvalEulerFluxTilde3D_eqn
 #if NONCONS
 USE MOD_Flux_Average   ,ONLY:AddNonConsFluxTilde3D
 #endif /*NONCONS*/
@@ -241,7 +241,11 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !aux
 INTEGER             :: i,j,k,l
 !==================================================================================================================================
 ! due to consisteny, if left and right are the same, its just the transformed eulerflux
-CALL EvalEulerFluxTilde3D(iElem,ftilde_c,gtilde_c,htilde_c,Uaux)
+CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+                              ,Metrics_fTilde(:,:,:,:,iElem) &
+                              ,Metrics_gTilde(:,:,:,:,iElem) &
+                              ,Metrics_hTilde(:,:,:,:,iElem) &
+                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   !diagonal (consistent) part
@@ -280,6 +284,7 @@ CALL AddNonConsFluxTilde3D(iElem,Uaux,ftilde,gtilde,htilde)
 END SUBROUTINE EvalEulerFluxAverage3D
 
 
+#ifdef DONOTCOMPILE
 !==================================================================================================================================
 !> Computes the volume integral using flux differencing 
 !> Attention 1: 1/J(i,j,k) is not yet accounted for

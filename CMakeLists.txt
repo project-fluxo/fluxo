@@ -303,7 +303,7 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input")
 
 ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-   SET(COMPILER_ADD_FLAGS "-inline-max-size=1000 -no-inline-total-max-size" CACHE STRING "additional user defined compiler flags") 
+   SET(COMPILER_ADD_FLAGS "-inline-max-size=1500 -no-inline-max-total-size" CACHE STRING "additional user defined compiler flags") 
    #environment specific variables
    IF(ONHORNET GREATER -1)
       SET(FLUXO_INSTRUCTION "-xCORE-AVX2")
