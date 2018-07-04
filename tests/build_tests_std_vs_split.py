@@ -242,6 +242,7 @@ parser.add_argument('-stage',type=int, default='0',    help="0 : DEFAULT, only b
                                                             "2 : only run examples (checks if code builds exist) ")
 
 parser.add_argument('-ntail', type=int, default=5,     help='    number of last line output of cmake/make screenlog (DEFAULT=5)')
+parser.add_argument('-path', type=str, default=" ",   help="  path to folder with parameterfile" )
 parser.add_argument('-param', type=str, default=" ",   help="    parameter file name in scaling_testcase folder" )
 
 
@@ -285,10 +286,15 @@ globopts.extend([
                     ,"FLUXO_TESTCASE"         ,"default"
                 ])
 
-if(args.stage == 2) :
-  summaryfilename="summary."+EQNchoice+"_"+args.param
-  sumfile = open(summaryfilename,'w') #overwrite old file
 baseID=0
+if(args.stage == 2) :
+  summaryfilename=args.path+"/summary."+EQNchoice+"_"+args.param
+  sumfile = open(summaryfilename,'w') #overwrite old file
+  summaryline="SUMMARY: \n "
+  summary = summaryline
+  sumfile.write(summaryline)
+  sumfile.close()
+
 Nchoices= ["N","3","4","5","6","7"]
 for  nnn  in range(0,len(Nchoices)):
   Nchoice=Nchoices[nnn]
@@ -298,12 +304,14 @@ for  nnn  in range(0,len(Nchoices)):
     baseID=int(Nchoice)*1000
   # relative path from tests folder, parameterfile,Linf[0]<crit for success
   TEST=[]
-  TEST.extend(["../scaling_testcase",args.param, "1.0e-12" ])
+  TEST.extend([args.path,args.param, "1.0e-12" ])
   
   if(args.stage == 2) :
-    summaryline = ("SUMMARY: \n \n Nchoice %s, TESTCASE: %s \n CASEID , PID , NAME  " % (Nchoice,TEST[1]))
-    summary = summaryline
-    sumfile.write(summaryline)
+    summaryline = ("\n Nchoice %s, TESTCASE: %s \n CASEID , PID , NAME  " % (Nchoice,TEST[1]))
+    summary = summary + ("\n") + summaryline
+    sumfile = open(summaryfilename,'a') 
+    sumfile.write(("\n")+summaryline)
+    sumfile.close()
   
   #============================================================================
   #============================================================================
@@ -331,7 +339,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -350,7 +360,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   #============================================================================
@@ -382,7 +394,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -402,7 +416,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -422,7 +438,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -440,7 +458,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -460,7 +480,9 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
@@ -478,7 +500,53 @@ for  nnn  in range(0,len(Nchoices)):
      if(args.stage == 2) :
         summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
         summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
         sumfile.write(("\n")+summaryline)
+        sumfile.close()
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=caseID+1
+  if(cases[0] ==0 or (caseID in cases)) :
+     pname="build_"+EQNchoice+"_splitDG_N_"+Nchoice+"_volFlux_10_para_cons_var"
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "FLUXO_PARABOLIC"        ,"ON"
+              ,"FLUXO_PARABOLIC_LIFTING","br1"
+              ,"FLUXO_PARABOLIC_LIFTING_VAR","cons_var"
+              ,"FLUXO_EQN_VOLFLUX"      ,"10"
+             ])
+     
+     if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+     if(args.stage == 2) :
+        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
+        summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
+        sumfile.write(("\n")+summaryline)
+        sumfile.close()
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=caseID+1
+  if(cases[0] ==0 or (caseID in cases)) :
+     pname="build_"+EQNchoice+"_splitDG_N_"+Nchoice+"_volFlux_10_para_entropy_var"
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "FLUXO_PARABOLIC"        ,"ON"
+              ,"FLUXO_PARABOLIC_LIFTING","br1"
+              ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
+              ,"FLUXO_EQN_VOLFLUX"      ,"10"
+             ])
+     
+     if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+     if(args.stage == 2) :
+        summaryline =("%d , %s , %s" % (caseID,PID,pname))                       
+        summary = summary + ("\n") + summaryline 
+        sumfile = open(summaryfilename,'a') 
+        sumfile.write(("\n")+summaryline)
+        sumfile.close()
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
