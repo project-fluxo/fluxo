@@ -69,7 +69,7 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars
 USE MOD_ReadInTools
-USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide 
+USE MOD_Mesh_Vars         ,ONLY: nElems
 USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -89,11 +89,9 @@ IF (PP_N.LT.2) THEN
   RETURN
 END IF
 ! shock caturing parameters
-ALLOCATE(nu(nElems),nu_Master(nSides),nu_Slave(firstSlaveSide:LastSlaveSide))
+ALLOCATE(nu(nElems))
 nu     = 0.
 nu_max = 0.
-nu_Master = 0.
-nu_Slave = 0.
 
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
@@ -210,9 +208,8 @@ DO l=1,nElems
 
   ! Artificial Viscosity
   eta_min = -9.0
-  eta_max = -6.0
-  eps0 = 0.03
-
+  eta_max = -3.0
+  eps0 = 0.01
   IF (eta_dof.GE.eta_max) THEN
     nu(l) = eps0
   ELSE IF (eta_dof.LE.eta_min) THEN
@@ -257,7 +254,6 @@ DO l=1,nElems
 
   ! Scaling of artificial viscosity
   nu(l) = nu(l)*lambda_max2/(REAL(PP_N))
-!  nu(l) = 0.005
 
 END DO ! l
 

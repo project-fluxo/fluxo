@@ -30,7 +30,9 @@ SAVE
 LOGICAL          :: ShockCapturingInitIsDone=.FALSE.     !< marks whether the shock capturing init routine is complete
 REAL,ALLOCATABLE :: sVdm_Leg(:,:)                        !< 1D inverse Vandermondematrix to Legendre polynomials
 REAL             :: nu_max                               !< Globally maximum artificial viscosity
-REAL,ALLOCATABLE :: nu(:)                                !< Cellwise artificial viscosity
+REAL,ALLOCATABLE :: nu(:),nu_Master(:),nu_Slave(:)       !< Cellwise (Facewise) artificial viscosity
+
+
 !===================================================================================================================================
 
 END MODULE MOD_ShockCapturing_Vars

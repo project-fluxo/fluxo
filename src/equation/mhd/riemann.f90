@@ -75,6 +75,9 @@ CONTAINS
 SUBROUTINE Riemann(F,UL,UR,                                                                       &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
+#if SHOCKCAPTURE
+ 		   nu_L,nu_R,									  &
+#endif
 #endif
                    nv,t1,t2)
 USE MOD_PreProc
@@ -87,6 +90,10 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
 REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
+#if SHOCKCAPTURE
+REAL,INTENT(IN)  :: nu_L !artficial viscosity
+REAL,INTENT(IN)  :: nu_R
+#endif
 #if PARABOLIC                                                 
 REAL,INTENT(IN) :: gradUx_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in x 
 REAL,INTENT(IN) :: gradUx_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in x 
@@ -146,8 +153,19 @@ END DO !j
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute MHD Diffusion flux
-CALL EvalDiffFlux3D(k_L,g_L,j_L,UL,gradUx_L,gradUy_L,gradUz_L)
-CALL EvalDiffFlux3D(k_R,g_R,j_R,UR,gradUx_R,gradUy_R,gradUz_R)
+
+CALL EvalDiffFlux3D(k_L,g_L,j_L,UL, &
+#if SHOCKCAPTURE
+nu_L, &
+#endif
+gradUx_L,gradUy_L,gradUz_L)
+
+CALL EvalDiffFlux3D(k_R,g_R,j_R,UR, &
+#if SHOCKCAPTURE
+nu_R, &
+#endif
+gradUx_R,gradUy_R,gradUz_R)
+
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
 DO iVar=2,PP_nVar

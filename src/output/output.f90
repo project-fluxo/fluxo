@@ -228,6 +228,9 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 #elif (defined(mhd) || defined(navierstokes))
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars ,ONLY: nu
+#endif /*SHOCKCAPTURE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
@@ -308,6 +311,10 @@ DO iElem=1,nElems
     END DO ; END DO ; END DO
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
+#if SHOCKCAPTURE
+! Print artificial viscosity instead of divergence error?
+  U_NVisu(PP_nVar,:,:,:,iElem) = nu(iElem)
+#endif /*SHOCKCAPTURE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
 DEALLOCATE(U_NVisu)

@@ -104,11 +104,13 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transforme
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
+#if SHOCKCAPTURE
 REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
+#endif
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p,ptilde                       ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
-REAL                :: Ep                                      ! E + p
+REAL                :: Ep,mu_eff,etasmu_0eff                                      ! E + p
 #if PARABOLIC
 REAL                :: divv
 REAL                :: lambda 
@@ -242,6 +244,14 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   gradUy(6:PP_nVar)=gradPy(6:PP_nVar,PP_IJK,iElem)
   gradUz(6:PP_nVar)=gradPz(6:PP_nVar,PP_IJK,iElem)
 
+  mu_eff = mu!+nu(iElem)
+  etasmu_0eff = etasmu_0!+nu(iElem)
+
+#else
+
+  mu_eff = mu
+  etasmu_0eff = etasmu_0
+
 #endif /*SHOCKCAPTURE*/
 
   divv      = gradv1x+gradv2y+gradv3z
@@ -251,7 +261,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
-  lambda=mu*KappasPr
+  lambda=mu_eff*KappasPr
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
   Qz=lambda*cv_gradTz
@@ -268,22 +278,22 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f_visc(2)=mu*(2*gradv1x-s23*divv)
-  f_visc(3)=mu*(  gradv2x+gradv1y)   
-  f_visc(4)=mu*(  gradv3x+gradv1z)   
+  f_visc(2)=mu_eff*(2*gradv1x-s23*divv)
+  f_visc(3)=mu_eff*(  gradv2x+gradv1y)   
+  f_visc(4)=mu_eff*(  gradv3x+gradv1z)   
   f_visc(6)=0.
-  f_visc(7)=etasmu_0*(gradB2x-gradB1y)
-  f_visc(8)=etasmu_0*(gradB3x-gradB1z)
+  f_visc(7)=etasmu_0eff*(gradB2x-gradB1y)
+  f_visc(8)=etasmu_0eff*(gradB3x-gradB1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) + Qx
 
   ! viscous fluxes in y-direction      
   g_visc(2)= f_visc(3)                  !mu*(  gradv1y+gradv2x)  
-  g_visc(3)=mu*(2*gradv2y-s23*divv)     
-  g_visc(4)=mu*(  gradv3y+gradv2z)      
+  g_visc(3)=mu_eff*(2*gradv2y-s23*divv)     
+  g_visc(4)=mu_eff*(  gradv3y+gradv2z)      
   g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
   g_visc(7)=0.
-  g_visc(8)=etasmu_0*(gradB3y-gradB2z)
+  g_visc(8)=etasmu_0eff*(gradB3y-gradB2z)
   !energy
   g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) + Qy 
 
@@ -292,7 +302,7 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   ! viscous fluxes in z-direction      
   h_visc(2)= f_visc(4)                       !mu*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                       !mu*(  gradv2z+gradv3y)                
-  h_visc(4)=mu*(2*gradv3z-s23*divv )             
+  h_visc(4)=mu_eff*(2*gradv3z-s23*divv )             
   h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
   h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
   h_visc(8)=0.
@@ -395,7 +405,11 @@ END SUBROUTINE EvalAdvectionFlux1D
 !==================================================================================================================================
 !> Compute the cartesian diffusion flux of the MHD equations, for all face points (PP_N+1)**2
 !==================================================================================================================================
-SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face,gradPx_Face,gradPy_Face,gradPz_Face)
+SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face, &
+#if SHOCKCAPTURE
+nu_Face, &
+#endif
+gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:s23,smu_0,s2mu_0,kappaM1,sKappaM1
@@ -413,6 +427,9 @@ REAL,INTENT(IN)     :: U_Face(PP_nVar,nTotal_face)         !< state variable
 REAL,INTENT(IN)     :: gradPx_Face(PP_nVar,nTotal_face)    !< x gradient of state 
 REAL,INTENT(IN)     :: gradPy_Face(PP_nVar,nTotal_face)    !< y gradient of state 
 REAL,INTENT(IN)     :: gradPz_Face(PP_nVar,nTotal_face)    !< z gradient of state 
+#if SHOCKCAPTURE
+REAL,INTENT(IN)     :: nu_Face			           ! artificial viscosity at interface
+#endif
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -421,11 +438,14 @@ REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: g       !< Cartesian diffusii
 REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: h       !< Cartesian diffusiion flux in z
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+#if SHOCKCAPTURE
+REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
+#endif
 REAL                :: srho,p
 REAL                :: v1,v2,v3                                  ! auxiliary variables
 REAL                :: bb2
 REAL                :: divv
-REAL                :: lambda 
+REAL                :: lambda
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
@@ -441,6 +461,7 @@ DO i=1,nTotal_face
   v2   = U_Face(3,i)*srho
   v3   = U_Face(4,i)*srho
   p    = kappaM1*(U_Face(5,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_Face(6:PP_nVar,i)**2) )
+
   ! Viscous part
   ! ideal gas law
 ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), & 
@@ -452,6 +473,52 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
            gradv1z => gradPz_Face(2,i),  gradB1z => gradPz_Face(6,i), & 
            gradv2z => gradPz_Face(3,i),  gradB2z => gradPz_Face(7,i), & 
            gradv3z => gradPz_Face(4,i),  gradB3z => gradPz_Face(8,i)  )
+
+#if SHOCKCAPTURE
+
+  ! Compute gradient of conservative variables:
+  gradUx(1)=gradPx_Face(1,i)
+  gradUy(1)=gradPy_Face(1,i)
+  gradUz(1)=gradPz_Face(1,i)
+
+  gradUx(2)=gradPx_Face(1,i)*v1+gradv1x*rho
+  gradUy(2)=gradPy_Face(1,i)*v1+gradv1y*rho
+  gradUz(2)=gradPz_Face(1,i)*v1+gradv1z*rho
+
+  gradUx(3)=gradPx_Face(1,i)*v2+gradv2x*rho
+  gradUy(3)=gradPy_Face(1,i)*v2+gradv2y*rho
+  gradUz(3)=gradPz_Face(1,i)*v2+gradv2z*rho
+
+  gradUx(4)=gradPx_Face(1,i)*v3+gradv3x*rho
+  gradUy(4)=gradPy_Face(1,i)*v3+gradv3y*rho
+  gradUz(4)=gradPz_Face(1,i)*v3+gradv3z*rho
+
+  gradUx(5)=sKappaM1*gradPx_Face(5,i)+0.5*gradPx_Face(1,i)*(v1*v1+v2*v2+v3*v3) &
+		+rho*(v1*gradv1x+v2*gradv2x+v3*gradv3x)+B1*gradB1x+B2*gradB2x+B3*gradB3x
+  gradUy(5)=sKappaM1*gradPy_Face(5,i)+0.5*gradPy_Face(1,i)*(v1*v1+v2*v2+v3*v3) &
+		+rho*(v1*gradv1y+v2*gradv2y+v3*gradv3y)+B1*gradB1y+B2*gradB2y+B3*gradB3y
+  gradUz(5)=sKappaM1*gradPz_Face(5,i)+0.5*gradPz_Face(1,i)*(v1*v1+v2*v2+v3*v3) &
+		+rho*(v1*gradv1z+v2*gradv2z+v3*gradv3z)+B1*gradB1z+B2*gradB2z+B3*gradB3z
+#ifdef PP_GLM
+  gradUx(5)=gradUx(5)+gradPx_Face(9,i)*U_face(9,i)
+  gradUy(5)=gradUy(5)+gradPy_Face(9,i)*U_face(9,i)
+  gradUz(5)=gradUz(5)+gradPz_Face(9,i)*U_face(9,i)
+#endif
+
+  gradUx(6:PP_nVar)=gradPx_Face(6:PP_nVar,i)
+  gradUy(6:PP_nVar)=gradPy_Face(6:PP_nVar,i)
+  gradUz(6:PP_nVar)=gradPz_Face(6:PP_nVar,i)
+
+!  mu_eff = mu!+nu(iElem)
+! etasmu_0eff = etasmu_0!+nu(iElem)
+
+!#else
+
+!  mu_eff = mu
+!  etasmu_0eff = etasmu_0
+
+#endif /*SHOCKCAPTURE*/
+
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_face(5,i)-srho*p*gradPx_face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -514,6 +581,13 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   g(9,i) = 0.
   h(9,i) = 0.
 #endif /*PP_GLM*/
+
+#if SHOCKCAPTURE
+  f(:,i)=f(:,i)-nu_Face*gradUx
+  g(:,i)=g(:,i)-nu_Face*gradUy
+  h(:,i)=h(:,i)-nu_Face*gradUz
+#endif
+
 END ASSOCIATE ! gradv1x => gradPx(2,....
 END ASSOCIATE ! b1 => UFace(6,i) ...
 END DO !i=1,nTotal
@@ -553,11 +627,13 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transforme
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f_Visc,g_visc,h_visc              ! Cartesian fluxes (iVar)
+#if SHOCKCAPTURE
 REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
+#endif
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,bb2,p,Psi 
 REAL                :: divv
-REAL                :: lambda 
+REAL                :: lambda,mu_eff,etasmu_0eff 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
@@ -631,6 +707,14 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
   gradUy(6:PP_nVar)=gradPy(6:PP_nVar,PP_IJK,iElem)
   gradUz(6:PP_nVar)=gradPz(6:PP_nVar,PP_IJK,iElem)
 
+  mu_eff = mu!+nu(iElem)
+  etasmu_0eff = etasmu_0!+nu(iElem)
+
+#else
+
+  mu_eff = mu
+  etasmu_0eff = etasmu_0
+
 #endif /*SHOCKCAPTURE*/
 
   divv    = gradv1x+gradv2y+gradv3z
@@ -639,7 +723,7 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
   cv_gradTz  = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
-  lambda=mu*KappasPr
+  lambda=mu_eff*KappasPr
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
   Qz=lambda*cv_gradTz
@@ -658,12 +742,12 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
   f_visc(1)=0.
-  f_visc(2)=-mu*(2*gradv1x-s23*divv)
-  f_visc(3)=-mu*(  gradv2x+gradv1y)   
-  f_visc(4)=-mu*(  gradv3x+gradv1z)   
+  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
+  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)   
+  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)   
   f_visc(6)=0.
-  f_visc(7)=-etasmu_0*(gradB2x-gradB1y)
-  f_visc(8)=-etasmu_0*(gradB3x-gradB1z)
+  f_visc(7)=-etasmu_0eff*(gradB2x-gradB1y)
+  f_visc(8)=-etasmu_0eff*(gradB3x-gradB1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) - Qx
 
@@ -672,11 +756,11 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
   ! viscous fluxes in y-direction      
   g_visc(1)=0.
   g_visc(2)= f_visc(3)                  !-mu*(  gradv1y+gradv2x)  
-  g_visc(3)=-mu*(2*gradv2y-s23*divv)     
-  g_visc(4)=-mu*(  gradv3y+gradv2z)      
+  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)     
+  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)      
   g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
   g_visc(7)=0.
-  g_visc(8)=-etasmu_0*(gradB3y-gradB2z)
+  g_visc(8)=-etasmu_0eff*(gradB3y-gradB2z)
   !energy
   g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) - Qy 
 
@@ -686,7 +770,7 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
   h_visc(1)=0.
   h_visc(2)= f_visc(4)                       !-mu*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                       !-mu*(  gradv2z+gradv3y)                
-  h_visc(4)=-mu*(2*gradv3z-s23*divv )             
+  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )             
   h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
   h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
   h_visc(8)=0.

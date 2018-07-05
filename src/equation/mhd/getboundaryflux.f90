@@ -213,6 +213,9 @@ USE MOD_Riemann,         ONLY: AddNonConsFlux
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars,ONLY:nu_Master
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
@@ -244,6 +247,9 @@ DO iBC=1,nBCs
                    gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                    gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#if SHOCKCAPTURE
+		   nu_Master(SideID),nu_Master(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -266,6 +272,9 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#if SHOCKCAPTURE
+		     nu_Master(SideID),nu_Master(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -286,6 +295,9 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#if SHOCKCAPTURE
+		     nu_Master(SideID),nu_Master(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -325,6 +337,9 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#if SHOCKCAPTURE
+		     nu_Master(SideID),nu_Master(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -350,6 +365,9 @@ DO iBC=1,nBCs
                    gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                    gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#if SHOCKCAPTURE
+		   nu_Master(SideID),nu_Master(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS

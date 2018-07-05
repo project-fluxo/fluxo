@@ -53,6 +53,9 @@ USE MOD_Riemann,         ONLY: AddNonConsFlux
 #if PARABOLIC
 USE MOD_Lifting_Vars,    ONLY: gradPx_Master,gradPy_Master,gradPz_Master
 USE MOD_Lifting_Vars,    ONLY: gradPx_Slave ,gradPy_Slave ,gradPz_Slave
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing_Vars,ONLY:nu_Master,nu_Slave
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -84,8 +87,11 @@ DO SideID=firstSideID,lastSideID
                                   gradPx_Master(:,:,:,SideID),gradPx_Slave(:,:,:,SideID), &
                                   gradPy_Master(:,:,:,SideID),gradPy_Slave(:,:,:,SideID), &
                                   gradPz_Master(:,:,:,SideID),gradPz_Slave(:,:,:,SideID), &
+#if SHOCKCAPTURE
+				  nu_Master(SideID),nu_Slave(SideID), &
+#endif /*SHOCKCAPTURE*/
 #endif /*PARABOLIC*/
-                                  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+				  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 
   !conservative flux:
   Flux_slave(:,:,:,SideID)=Flux_master(:,:,:,SideID)
