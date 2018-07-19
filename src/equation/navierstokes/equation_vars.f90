@@ -303,7 +303,7 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: srho,u,v,w,v2s2,rho_sp,p,s
+REAL                                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
 srho   = 1./cons(1)
 u      = cons(2)*srho
@@ -339,7 +339,7 @@ REAL,INTENT(OUT)    :: Entropy(PP_nVar,dim2) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
-REAL                :: srho,u,v,w,v2s2,rho_sp,p,s
+REAL                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
 DO i=1,dim2
   srho   = 1./cons(1,i)
