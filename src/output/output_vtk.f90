@@ -203,14 +203,17 @@ DO iValVec=1,nValVec
     WRITE(ivtk)REAL(Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems),8)
 #if MPI
     DO iProc=1,nProcessors-1
+      IF(nElems_glob(iProc).EQ.0) CYCLE      
       nElems_proc=nElems_glob(iProc)
-      CALL MPI_RECV(     buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
+      CALL MPI_RECV(   buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
                            nVal_loc*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
       WRITE(ivtk) REAL(  buf2( 1:     nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),8)
     END DO !iProc
   ELSE
-    CALL MPI_SEND(  Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
+    IF(nElems.GT.0)THEN
+      CALL MPI_SEND(  Value(iVal+1:iVal+nVal_loc,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
                            nVal_loc*NPlot_p1_3*nElems,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
+    END IF !nElems>0
 #endif /*MPI*/
   END IF !MPIroot
 END DO       ! iValVec=1,nValVec
@@ -222,14 +225,17 @@ IF(MPIRoot)THEN
   WRITE(ivtk) REAL( Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems),8)
 #if MPI
   DO iProc=1,nProcessors-1
+    IF(nElems_glob(iProc).EQ.0) CYCLE      
     nElems_proc=nElems_glob(iProc)
     CALL MPI_RECV(   buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc), &
                       3*NPlot_p1_3*nElems_proc,MPI_DOUBLE_PRECISION,iProc,0,MPI_COMM_WORLD,MPIstatus,iError)
     WRITE(ivtk) REAL(buf2(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems_proc),8)
   END DO !iProc
 ELSE
-  CALL MPI_SEND(    Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
+  IF(nElems.GT.0)THEN
+    CALL MPI_SEND(    Coord(1:3,0:NPlot,0:NPlot,0:Nplot,1:nElems), &
                       3*NPlot_p1_3*nElems,MPI_DOUBLE_PRECISION, 0,0,MPI_COMM_WORLD,iError)
+  END IF !MPIroot
 #endif /*MPI*/
 END IF !MPIroot
 
