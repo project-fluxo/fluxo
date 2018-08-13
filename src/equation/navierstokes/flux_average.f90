@@ -150,6 +150,45 @@ PUBLIC:: GassnerWintersWalchFluxVec
 PUBLIC:: LN_MEAN
 
 !==================================================================================================================================
+! local definitions for inlining / optimizing routines,
+! depending on PP_VolFlux 
+#if PP_VolFlux==0
+#  define PP_VolumeFluxAverageMat StandardDGFluxMat 
+#elif PP_VolFlux==2
+#  define PP_VolumeFluxAverageMat KennedyAndGruberFluxMat1
+#elif PP_VolFlux==10
+#  define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
+#else
+!default, using PP_VolumeFluxAverageVec inside
+#  define PP_VolumeFluxAverageMat GeneralFluxMat 
+#endif
+
+#if PP_VolFlux==0
+#  define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#elif PP_VolFlux==1
+#  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
+#elif PP_VolFlux==2
+#  define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec1
+#elif PP_VolFlux==3
+#  define PP_VolumeFluxAverageVec DucrosFluxVec
+#elif PP_VolFlux==4
+#  define PP_VolumeFluxAverageVec MorinishiFluxVec
+#elif PP_VolFlux==5
+#  define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec
+#elif PP_VolFlux==6
+#  define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec2
+#elif PP_VolFlux==7
+#  define PP_VolumeFluxAverageVec ggFluxVec
+#elif PP_VolFlux==8
+#  define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec2
+#elif PP_VolFlux==9
+#  define PP_VolumeFluxAverageVec GassnerWintersWalchFluxVec
+#elif PP_VolFlux==10
+#  define PP_VolumeFluxAverageVec TwoPointEntropyConservingFluxVec
+#else
+#  define PP_VolumeFluxAverageVec VolumeFluxAverageVec
+#endif
+!==================================================================================================================================
 
 CONTAINS
 
@@ -249,16 +288,6 @@ DO iElem=1,nElems
 !    END DO ! l
 !  END DO; END DO; END DO ! i,j,k
 
-#if PP_VolFlux==0
-#define PP_VolumeFluxAverageMat StandardDGFluxMat 
-#elif PP_VolFlux==2
-#define PP_VolumeFluxAverageMat KennedyAndGruberFluxMat1
-#elif PP_VolFlux==10
-#define PP_VolumeFluxAverageMat TwoPointEntropyConservingFluxMat
-#else
-#define PP_VolumeFluxAverageMat StandardDGFluxMat
-#endif
-
 !  !opt_v2, with larger calls 
   DO k=0,PP_N; DO j=0,PP_N
     !diagonal (consistent) part
@@ -287,7 +316,6 @@ DO iElem=1,nElems
     END DO; END DO !j,l
   END DO; END DO ! i,j
 
-#undef PP_VolumeAverageFluxMat
 
 !SAME SPEED
 !  DO k=0,PP_N; DO j=0,PP_N
@@ -356,31 +384,6 @@ REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !cen
 REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
 INTEGER             :: i,j,k,l
 !==================================================================================================================================
-#if PP_VolFlux==0
-#define PP_VolumeFluxAverageVec StandardDGFluxVec 
-#elif PP_VolFlux==1
-#define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
-#elif PP_VolFlux==2
-#define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec1
-#elif PP_VolFlux==3
-#define PP_VolumeFluxAverageVec DucrosFluxVec
-#elif PP_VolFlux==4
-#define PP_VolumeFluxAverageVec MorinishiFluxVec
-#elif PP_VolFlux==5
-#define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec
-#elif PP_VolFlux==6
-#define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec2
-#elif PP_VolFlux==7
-#define PP_VolumeFluxAverageVec ggFluxVec
-#elif PP_VolFlux==8
-#define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec2
-#elif PP_VolFlux==9
-#define PP_VolumeFluxAverageVec GassnerWintersWalchFluxVec
-#elif PP_VolFlux==10
-#define PP_VolumeFluxAverageVec TwoPointEntropyConservingFluxVec
-#else
-#define PP_VolumeFluxAverageVec VolumeFluxAverageVec
-#endif
 
 
 !opt_v1
@@ -424,7 +427,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 
-#undef PP_VolumeFluxAverageVec
 
 !opt_v2,larger calls
 !
@@ -454,7 +456,6 @@ END DO; END DO; END DO ! i,j,k
 !                                     htilde(:,:,i,j,:)        )
 !END DO; END DO ! i,j
 !
-!#undef PP_VolumeAverageFluxMat
 
 !full loop
 !CALL EvalUaux(iElem,Uaux)
@@ -593,6 +594,60 @@ END DO; END DO; END DO ! i,j,k
 #endif /*OPTIMIZED*/
 END SUBROUTINE EvalUaux
 
+
+!==================================================================================================================================
+!> General FluxMat routine for  VolInt_SplitForm_eqn, which is basically a wrapper for the FluxVec point-wise operations, 
+!> since not all flux averages have been implemented in the optimized FluxMat way. 
+!> uses PP_VolumeFluxAverageVec, being either the pointer the flux averaging routine set at runtime, or a precompiled routine 
+!> defined by PP_VolFlux parameter.
+!==================================================================================================================================
+PURE SUBROUTINE GeneralFluxMat(U_in,metric_in,Fstar) 
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:kappaM1
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_in(PP_nVar,0:PP_N)   !< right state
+REAL,INTENT(IN) :: metric_in(3,0:PP_N)   !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT) :: Fstar(PP_nVar,0:PP_N,0:PP_N)          !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                             :: l,i
+REAL,DIMENSION(0:PP_N)              :: qHat,srho,velU,velv,velW,v2,pres,flux1
+!==================================================================================================================================
+srho(:)  = 1./U_in(1,:)
+velU(:)  = U_in(2,:)*srho(:)
+velV(:)  = U_in(3,:)*srho(:)
+velW(:)  = U_in(4,:)*srho(:)
+v2(:)    = velU(:)*velU(:)+velV(:)*velV(:)+velW(:)*velW(:)
+pres(:)  = kappaM1*(U_in(5,:)-0.5*U_in(1,:)*v2(:))
+qHat     = velU(:)*metric_in(1,:)+velV(:)*metric_in(2,:)+velW(:)*metric_in(3,:) 
+flux1(:) = U_in(1,:)*qHat(:)
+DO i=0,PP_N
+  !consistency euler flux f(Ui,Ui)=f(Ui)
+  Fstar(1,i,i) = flux1(i)
+  Fstar(2,i,i) = flux1(i)*velU(i) + metric_in(1,i)*pres(i)
+  Fstar(3,i,i) = flux1(i)*velV(i) + metric_in(2,i)*pres(i)
+  Fstar(4,i,i) = flux1(i)*velW(i) + metric_in(3,i)*pres(i)
+  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat(i)
+  DO l=i+1,PP_N
+    ! call fluxvec (general but not the fastest) 
+    CALL PP_VolumeFluxAverageVec(  U_in(:,i)   ,      U_in(:,l), &
+                                   (/srho(i),velU(i),velV(i),velW(i),pres(i),v2(i)/) , & !Uaux(i)
+                                   (/srho(l),velU(l),velV(l),velW(l),pres(l),v2(l)/) , & !Uaux(l)
+                                 Metric_in(:,i), Metric_in(:,l), &
+                                 Fstar(:,l,i)                                       )
+!    !symmetry
+    Fstar(:,i,l)=Fstar(:,l,i)
+  END DO !l=i+1,PP_N
+END DO !i=0,PP_N
+
+END SUBROUTINE GeneralFluxMat
 
 !==================================================================================================================================
 !> Computes the standard flux in x-direction for the Euler equations ( normally used with a rotated state)

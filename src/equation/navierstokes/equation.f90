@@ -462,7 +462,6 @@ REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< state in conservative var
 ! LOCAL VARIABLES 
 REAL                            :: tEval
 REAL                            :: Resu_t(5),Resu_tt(5)          ! state in conservative variables
-REAL                            :: Frequency,Amplitude
 REAL                            :: Omega
 REAL                            :: Vel(3),Cent(3),a
 REAL                            :: Prim(5)
@@ -494,26 +493,24 @@ CASE(1) ! constant
   !Resu(2:4)= Resu(1)*Prim(2:4)
   !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
 CASE(2) ! sinus
-  Frequency=0.01
-  Amplitude=0.3
-  Omega=PP_Pi*Frequency
+  Omega=PP_Pi*IniFrequency
   ! base flow
   prim(1)   = 1.
   prim(2:4) = AdvVel
   prim(5)   = 1.
   Vel=prim(2:4)
   cent=x-Vel*tEval
-  prim(1)=prim(1)*(1.+Amplitude*sin(Omega*SUM(cent(1:3))))
+  prim(1)=prim(1)*(1.+IniAmplitude*sin(Omega*SUM(cent(1:3))))
   ! g(t)
   Resu(1)=prim(1) ! rho
   Resu(2:4)=prim(1)*prim(2:4) ! rho*vel
   Resu(5)=prim(5)*sKappaM1+0.5*prim(1)*SUM(prim(2:4)*prim(2:4)) ! rho*e 
   ! g'(t)
-  Resu_t(1)=-Amplitude*cos(Omega*SUM(cent(1:3)))*Omega*SUM(vel)
+  Resu_t(1)=-IniAmplitude*cos(Omega*SUM(cent(1:3)))*Omega*SUM(vel)
   Resu_t(2:4)=Resu_t(1)*prim(2:4) ! rho*vel
   Resu_t(5)=0.5*Resu_t(1)*SUM(prim(2:4)*prim(2:4))
   ! g''(t)
-  Resu_tt(1)=-Amplitude*sin(Omega*SUM(cent(1:3)))*Omega*SUM(vel)*Omega*SUM(vel)
+  Resu_tt(1)=-IniAmplitude*sin(Omega*SUM(cent(1:3)))*Omega*SUM(vel)*Omega*SUM(vel)
   Resu_tt(2:4)=Resu_tt(1)*prim(2:4) 
   Resu_tt(5)=0.5*Resu_tt(1)*SUM(prim(2:4)*prim(2:4))
 CASE(21) ! linear in rho

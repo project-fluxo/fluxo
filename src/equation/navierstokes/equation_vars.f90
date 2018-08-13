@@ -19,6 +19,7 @@
 !==================================================================================================================================
 MODULE MOD_Equation_Vars
 ! MODULES
+USE MOD_PreProc,ONLY:PP_N
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
@@ -79,11 +80,36 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
                    'Pressure'/)
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 INTEGER             :: WhichRiemannSolver       !< choose riemann solver
-PROCEDURE(),POINTER :: SolveRiemannProblem      !< procedure pointer to riemann solver 
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
-PROCEDURE(),POINTER :: VolumeFluxAverage        !< procedure pointer to 1D two-point average flux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to 3D two-point average flux
+PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
+PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
+ABSTRACT INTERFACE
+  SUBROUTINE i_sub_SolveRiemannProblem(F,U_LL,U_RR)
+    IMPORT PP_N
+    REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+    REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+    REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N),INTENT(INOUT) :: F     !< numerical flux
+  END SUBROUTINE i_sub_SolveRiemannProblem
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverage(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< central flux in x
+    REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+  END SUBROUTINE i_sub_VolumeFluxAverage
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+    REAL,DIMENSION(6),INTENT(IN)        :: UauxL          !< left auxiliary variables
+    REAL,DIMENSION(6),INTENT(IN)        :: UauxR          !< right auxiliary variables
+    REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+    REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+  END SUBROUTINE i_sub_VolumeFluxAverageVec
+END INTERFACE
 
 INTERFACE ConsToPrim_aux
   MODULE PROCEDURE ConsToPrim_aux
