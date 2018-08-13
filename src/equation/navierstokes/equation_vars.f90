@@ -19,7 +19,9 @@
 !==================================================================================================================================
 MODULE MOD_Equation_Vars
 ! MODULES
+#if PP_N == N
 USE MOD_PreProc,ONLY:PP_N
+#endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
@@ -87,7 +89,9 @@ PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !
 !==================================================================================================================================
 ABSTRACT INTERFACE
   SUBROUTINE i_sub_SolveRiemannProblem(F,U_LL,U_RR)
+#if PP_N == N
     IMPORT PP_N
+#endif
     REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
     REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
     REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N),INTENT(INOUT) :: F     !< numerical flux
