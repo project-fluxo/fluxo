@@ -64,6 +64,7 @@ REAL                :: PreShockDens        !< Pre-shock density for ExactFunctio
 REAL                :: AdvVel(3)           !< Advection Velocity for the test cases
 REAL                :: IniCenter(3)        !< for Iniexactfunc, center point
 REAL                :: IniAxis(3)          !< for Iniexactfunc, center axis
+REAL                :: IniWaveNumber(3)    !< for Iniexactfunc, wave numbers in xyz
 REAL                :: IniFrequency        !< for Iniexactfunc, Frequeny       
 REAL                :: IniAmplitude        !< for Iniexactfunc, Amplitude
 REAL                :: IniHalfwidth        !< for Iniexactfunc, Halfwidth

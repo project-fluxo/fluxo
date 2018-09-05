@@ -71,6 +71,7 @@ CALL prms%CreateRealArrayOption('MachShock'   , "for exact function, Mach shock.
 CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock density.")
 CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
 CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
+CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
 CALL prms%CreateRealOption(     'IniFrequency', "for exactfunc, frequency.","1.")
 CALL prms%CreateRealOption(     'IniAmplitude', "for exactfunc, Amplitude.","0.1")
 CALL prms%CreateRealOption(     'IniHalfwidth', "for exactfunc, Halfwidth.","0.2")
@@ -185,6 +186,7 @@ END SELECT ! IniExactFunc
 IniCenter    = GETREALARRAY('IniCenter',3,'0.,0.,0.')
 IniAxis      = GETREALARRAY('IniAxis',3,'0.,0.,1.')
 IniAxis      = IniAxis/SQRT(SUM(IniAxis*IniAxis)) !Normalize
+IniWaveNumber= GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 IniFrequency = GETREAL('IniFrequency','1.0')
 IniAmplitude = GETREAL('IniAmplitude','0.1')
 IniHalfwidth = GETREAL('IniHalfwidth','0.2')
@@ -446,7 +448,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 USE MOD_Preproc
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
-USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis
+USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
@@ -492,25 +494,24 @@ CASE(1) ! constant
   !Resu(1)  = Prim(1)
   !Resu(2:4)= Resu(1)*Prim(2:4)
   !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
-CASE(2) ! sinus
-  Omega=PP_Pi*IniFrequency
+CASE(2) ! sinus in density, wavenumber 1 <-> [-1,1]
   ! base flow
   prim(1)   = 1.
   prim(2:4) = AdvVel
   prim(5)   = 1.
   Vel=prim(2:4)
   cent=x-Vel*tEval
-  prim(1)=prim(1)*(1.+IniAmplitude*sin(Omega*SUM(cent(1:3))))
+  prim(1)=prim(1)*(1.+IniAmplitude*sin(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3))))
   ! g(t)
   Resu(1)=prim(1) ! rho
   Resu(2:4)=prim(1)*prim(2:4) ! rho*vel
   Resu(5)=prim(5)*sKappaM1+0.5*prim(1)*SUM(prim(2:4)*prim(2:4)) ! rho*e 
   ! g'(t)
-  Resu_t(1)=-IniAmplitude*cos(Omega*SUM(cent(1:3)))*Omega*SUM(vel)
+  Resu_t(1)=-IniAmplitude*cos(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3)))*PP_Pi*SUM(IniWaveNumber(:)*vel(:))
   Resu_t(2:4)=Resu_t(1)*prim(2:4) ! rho*vel
   Resu_t(5)=0.5*Resu_t(1)*SUM(prim(2:4)*prim(2:4))
   ! g''(t)
-  Resu_tt(1)=-IniAmplitude*sin(Omega*SUM(cent(1:3)))*Omega*SUM(vel)*Omega*SUM(vel)
+  Resu_tt(1)=-IniAmplitude*sin(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3)))*(PP_Pi*SUM(IniWaveNumber*vel))**2
   Resu_tt(2:4)=Resu_tt(1)*prim(2:4) 
   Resu_tt(5)=0.5*Resu_tt(1)*SUM(prim(2:4)*prim(2:4))
 CASE(21) ! linear in rho
@@ -684,7 +685,7 @@ CASE(12) ! SHU VORTEX,isentropic vortex (adapted from HALO)
   ! base flow
   prim=RefStatePrim(IniRefState,:)  ! Density
   ! ini-Parameter of the Example
-  vel=prim(2:4)
+  vel=prim(2:4)*IniFrequency ! set either =1. / 0. for  time-dependent /not time-dependent
   RT=prim(PP_nVar)/prim(1) !ideal gas
   cent=(iniCenter+vel*tEval)!centerpoint time dependant
   cent=x-cent ! distance to centerpoint
