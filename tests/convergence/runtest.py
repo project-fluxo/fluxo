@@ -58,7 +58,7 @@ args.prm = copy2temporary(tmp_dir, args.prm)
 
 
 # this generates 3 meshes
-Degree    = ['3','2','4','5']
+Degree    = ['2','3','4','5']
 startmesh = [ 2,  2 , 1 , 1 ]
 endmesh   = [ 5,  5 , 4 , 4 ]
 nDegree=len(Degree) 
@@ -185,7 +185,7 @@ for i in range(0,nDegree) :
         eoc = math.log(float(L2_coarse[ivar])/float(L2[ivar]))/math.log(2.0)
         summaryline=summaryline+(", %21.4f " % (eoc) )
     else :
-      for ivar in range(0,2*nVar) :
+      for ivar in range(0,nVar) :
         summaryline=summaryline+(", %21s " % ("---") )
     for ivar in range(0,nVar) :
       summaryline=summaryline+(", %21.11e " % (L2colloc[ivar]) )
@@ -194,7 +194,7 @@ for i in range(0,nDegree) :
         eoc = math.log(float(L2colloc_coarse[ivar])/float(L2colloc[ivar]))/math.log(2.0)
         summaryline=summaryline+(", %21.4f " % (eoc) )
     else :
-      for ivar in range(0,2*nVar) :
+      for ivar in range(0,nVar) :
         summaryline=summaryline+(", %21s " % ("---") )
       
     print( "...SUMMARY: %s" % summaryline)
