@@ -57,6 +57,14 @@ INTERFACE EntropyandKinEnergyConservingFluxVec
   MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec
 END INTERFACE
 
+INTERFACE EntropyandKinEnergyConservingFlux_FloGor
+  MODULE PROCEDURE EntropyandKinEnergyConservingFlux_FloGor
+END INTERFACE
+
+INTERFACE EntropyandKinEnergyConservingFluxVec_FloGor
+  MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec_FloGor
+END INTERFACE
+
 INTERFACE LN_MEAN 
   MODULE PROCEDURE LN_MEAN
 END INTERFACE
@@ -72,6 +80,8 @@ PUBLIC::StandardDGFluxVec
 PUBLIC::StandardDGFluxDealiasedMetricVec
 PUBLIC::EntropyandKinEnergyConservingFlux
 PUBLIC::EntropyandKinEnergyConservingFluxVec
+PUBLIC::EntropyandKinEnergyConservingFlux_FloGor
+PUBLIC::EntropyandKinEnergyConservingFluxVec_FloGor
 PUBLIC::LN_MEAN
 !==================================================================================================================================
 
@@ -236,9 +246,12 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  :: phi
 !==================================================================================================================================
 Phi=0.
 ! Powell
+!Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
+!Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
+!Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+! Brackbill&Barnes
 Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
-Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
-Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   DO l=0,N
     ftilde(:,l,i,j,k) = ftilde(:,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
@@ -458,11 +471,11 @@ Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)
 
 #ifdef PP_GLM
 !without metric dealiasing (=standard DG weak form on curved meshes)
-Fstar(5) = Fstar(5) + 0.5*GLM_ch*(qb_L*UL(9)             + qb_R*UR(9))
-Fstar(6) = Fstar(6) + 0.5*GLM_ch*(     UL(9)*metric_L(1) +      UR(9)*metric_R(1))
-Fstar(7) = Fstar(7) + 0.5*GLM_ch*(     UL(9)*metric_L(2) +      UR(9)*metric_R(2))
-Fstar(8) = Fstar(8) + 0.5*GLM_ch*(     UL(9)*metric_L(3) +      UR(9)*metric_R(3))
-Fstar(9) =            0.5*GLM_ch*(qb_L                   +qb_R                   )
+Fstar(5) = Fstar(5) + 0.5*smu_0*GLM_ch*(qb_L*UL(9)             + qb_R*UR(9))
+Fstar(6) = Fstar(6) + 0.5      *GLM_ch*(     UL(9)*metric_L(1) +      UR(9)*metric_R(1))
+Fstar(7) = Fstar(7) + 0.5      *GLM_ch*(     UL(9)*metric_L(2) +      UR(9)*metric_R(2))
+Fstar(8) = Fstar(8) + 0.5      *GLM_ch*(     UL(9)*metric_L(3) +      UR(9)*metric_R(3))
+Fstar(9) =            0.5      *GLM_ch*(qb_L                   +qb_R                   )
 
 #endif /* PP_GLM */
 
@@ -543,7 +556,7 @@ Fstar(7) = 0.5*(qv_L*b2_L-qb_L*v2_L + qv_R*b2_R-qb_R*v2_R)
 Fstar(8) = 0.5*(qv_L*b3_L-qb_L*v3_L + qv_R*b3_R-qb_R*v3_R)
 
 #ifdef PP_GLM
-Fstar(5) = Fstar(5) + 0.5*GLM_ch*(qb_L*UL(9)+qb_R*UR(9))
+Fstar(5) = Fstar(5) + 0.5*smu_0*GLM_ch*(qb_L*UL(9)+qb_R*UR(9))
 phiHat   = 0.5*GLM_ch*(UL(9)+UR(9))
 Fstar(6) = Fstar(6) + phiHat*metric(1)
 Fstar(7) = Fstar(7) + phiHat*metric(2)
@@ -753,6 +766,197 @@ END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
 
 
 !==================================================================================================================================
+!> entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+!> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+!> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!==================================================================================================================================
+SUBROUTINE EntropyAndKinEnergyConservingFlux_FloGor(UL,UR,Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0,s2mu_0
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: srho_L,srho_R,rhoLN,B2_L,B2_R,v2_L,v2_R
+REAL            :: p_L,p_R,p_avg
+REAL            :: v_L(3),v_R(3)
+REAL            :: BAvg(3),vAvg(3)
+REAL            :: in_e_L,in_e_R
+REAL            :: B2_ZIP,v2_ZIP
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+           rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
+#ifdef PP_GLM
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+            psi_L =>UL(9)   ,  psi_R =>UR(9), &
+#else
+              E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+              B_L => UL(6:8),    B_R => UR(6:8)  )
+! Get the inverse density, velocity, and pressure on left and right
+srho_L = 1./rho_L
+srho_R = 1./rho_R
+v_L = rhoV_L(:)*srho_L
+v_R = rhoV_R(:)*srho_R
+
+
+v2_L = SUM(v_L(:)*v_L(:))
+v2_R = SUM(v_R(:)*v_R(:))
+B2_L = SUM(B_L(:)*B_L(:))
+B2_R = SUM(B_R(:)*B_R(:))
+
+p_L    = kappaM1*(E_L - 0.5*(rho_L*v2_L+smu_0*B2_L))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*v2_R+smu_0*B2_R))
+
+!specific inner energy
+in_e_L = p_L*srho_L*skappaM1
+in_e_R = p_R*srho_R*skappaM1
+
+! Get the averages for the numerical flux
+
+rhoLN      = LN_MEAN( rho_L, rho_R)
+vAvg       = 0.5 * ( v_L +  v_R)
+v2_ZIP   = (v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
+BAvg       = 0.5 * ( B_L +  B_R)
+B2_ZIP   = (B_L(1)*B_R(1)+B_L(2)*B_R(2)+B_L(3)*B_R(3))
+                                                                   
+p_avg     = 0.5*(p_L+p_R)
+
+! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*vAvg(1)
+Fstar(2) = Fstar(1)*vAvg(1)+p_avg+s2mu_0*B2_ZIP- smu_0*ZIP(B_L(1),B_R(1),B_L(1),B_R(1))
+Fstar(3) = Fstar(1)*vAvg(2)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(2),B_R(2))
+Fstar(4) = Fstar(1)*vAvg(3)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(3),B_R(3))
+
+Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R, v_L(1),v_R(1))  &
+         + smu_0*(  ZIPSUM((v_L(1)*B_L(:)),(v_R(1)*B_R(:)), B_L(:),B_R(:))  &
+                   -ZIPSUM((B_L(1)*v_L(:)),(B_R(1)*v_R(:)), B_L(:),B_R(:))  &
+#ifdef PP_GLM
+                  +GLM_ch*ZIP(B_L(1),B_R(1),psi_L,psi_R)  &
+#endif /*PP_GLM*/
+                 )
+
+#ifdef PP_GLM
+Fstar(6) = GLM_ch*0.5*(psi_L+psi_R)
+Fstar(9) = GLM_ch*BAvg(1)
+#else
+Fstar(6) = 0.
+#endif /*PP_GLM*/
+Fstar(7) = 0.5* ((v_L(1)*B_L(2)-v_L(2)*B_L(1)) + (v_R(1)*B_R(2)-v_R(2)*B_R(1)))
+Fstar(8) = 0.5* ((v_L(1)*B_L(3)-v_L(3)*B_L(1)) + (v_R(1)*B_R(3)-v_R(3)*B_R(1)))
+
+
+END ASSOCIATE 
+END SUBROUTINE EntropyAndKinEnergyConservingFlux_FloGor
+
+
+!==================================================================================================================================
+!> entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+!> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+!> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!> firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
+SUBROUTINE EntropyAndKinEnergyConservingFluxVec_FloGor(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:sKappaM1,s2mu_0,smu_0
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                   :: vAvg(3),BAvg(3)
+REAL                   :: rhoLN
+REAL                   :: vm_L,vm_R,Bm_L,Bm_R
+REAL                   :: p_L,p_R,in_e_L,in_e_R
+REAL                   :: p_avg,v2_ZIP,B2_ZIP
+REAL                   :: metric(3)
+!==================================================================================================================================
+metric = 0.5*(metric_L+metric_R)
+
+ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
+              B_L => UL(6:8),    B_R => UR(6:8)  , &
+#ifdef PP_GLM
+            psi_L => UL(9)  ,  psi_R => UR(9)    , &
+#endif /*PP_GLM*/
+              v_L =>UauxL(2:4),  v_R =>UauxR(2:4), &
+             pt_L =>UauxL(5),   pt_R =>UauxR(5)  , & !pt=p+1/(2mu_0)|B|^2
+             v2_L =>UauxL(6),   v2_R =>UauxR(6)  , & !|v|^2 left/right
+             B2_L =>UauxL(7),   B2_R =>UauxR(7)  , & !|B|^2 left/right
+             vB_L =>UauxL(8),   vB_R =>UauxR(8)  )
+
+p_L=pt_L -s2mu_0*B2_L
+p_R=pt_R -s2mu_0*B2_R
+
+! specific inner energy
+in_e_L = p_L/rho_L*skappaM1
+in_e_R = p_R/rho_R*skappaM1
+
+! Get the averages for the numerical flux
+rhoLN     = LN_MEAN( rho_L, rho_R)
+vAvg      = 0.5*( v_L(:)+ v_R(:))
+BAvg      = 0.5*( B_L(:)+ B_R(:))
+v2_ZIP   = (v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
+B2_ZIP   = (B_L(1)*B_R(1)+B_L(2)*B_R(2)+B_L(3)*B_R(3))
+p_avg      = 0.5*(p_L+p_R)
+
+
+vm_L=SUM(v_L(:)*metric(:))
+vm_R=SUM(v_R(:)*metric(:))
+Bm_L=SUM(B_L(:)*metric(:))
+Bm_R=SUM(B_R(:)*metric(:))
+
+! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*0.5*(vm_L+vm_R)
+
+Fstar(2) = Fstar(1)*vAvg(1)+metric(1)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(1),B_R(1),Bm_L,Bm_R)
+Fstar(3) = Fstar(1)*vAvg(2)+metric(2)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(2),B_R(2),Bm_L,Bm_R)
+Fstar(4) = Fstar(1)*vAvg(3)+metric(3)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(3),B_R(3),Bm_L,Bm_R)
+
+Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))&
+         + ZIP(p_L,p_R,vm_L,vm_R) &
+         + smu_0*( ZIPSUM((vm_L*B_L(:)),(vm_R*B_R(:)),B_L(:),B_R(:))           &
+                  -ZIPSUM((Bm_L*v_L(:)),(Bm_R*v_R(:)),B_L(:),B_R(:))           &
+#ifdef PP_GLM
+                  +GLM_ch*ZIP(Bm_L,Bm_R,Psi_L,Psi_R)                           & 
+#endif /*PP_GLM*/
+                 )
+
+#ifdef PP_GLM
+Fstar(6:8) = 0.5* ((vm_L*B_L(1:3)-v_L(1:3)*Bm_L) + (vm_R*B_R(1:3)-v_R(1:3)*Bm_R)  + GLM_ch*(Psi_L+Psi_R)*metric(1:3))
+Fstar(  9) = GLM_ch*0.5*(Bm_L+Bm_R)
+#else                                                            
+Fstar(6:8) = 0.5* ((vm_L*B_L(1:3)-v_L(1:3)*Bm_L) + (vm_R*B_R(1:3)-v_R(1:3)*Bm_R)) 
+#endif /*PP_GLM*/
+END ASSOCIATE !rho_L/R,rhov1_L/R,...
+END SUBROUTINE EntropyAndKinEnergyConservingFluxVec_FloGor
+
+
+!==================================================================================================================================
 !> Computes the logarithmic mean: (aR-aL)/(LOG(aR)-LOG(aL)) = (aR-aL)/LOG(aR/aL)
 !> Problem: if aL~= aR, then 0/0, but should tend to --> 0.5*(aR+aL)
 !>
@@ -786,6 +990,48 @@ LN_MEAN=MERGE((aL+aR)*52.5d0/(105.d0 + u*(35.d0 + u*(21.d0 +u*15.d0))), & !u <ep
               (aR-aL)/LOG(Xi)                                         , & !u>=eps (test false)
               (u.LT.eps)                                              )   !test
 END FUNCTION LN_MEAN
+
+
+!================================================================================================================================
+!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL)
+!================================================================================================================================
+REAL FUNCTION ZIP(aL,aR, bL,bR)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL         :: aL  !< left  a
+REAL         :: aR  !< right a
+REAL         :: bL  !< left  b
+REAL         :: bR  !< right b
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!================================================================================================================================
+ZIP = 0.5*(aL*bR+aR*bL)
+END FUNCTION ZIP
+
+
+!================================================================================================================================
+!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL) and sums over vector components
+!================================================================================================================================
+REAL FUNCTION ZIPSUM(aL,aR, bL,bR)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL         :: aL(3)  !< left  a
+REAL         :: aR(3)  !< right a
+REAL         :: bL(3)  !< left  b
+REAL         :: bR(3)  !< right b
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!================================================================================================================================
+ZIPSUM = 0.5*(aL(1)*bR(1)+aL(2)*bR(2)+aL(3)*bR(3) +aR(1)*bL(1)+aR(2)*bL(2)+aR(3)*bL(3))
+END FUNCTION ZIPSUM
 
 
 END MODULE MOD_Flux_Average

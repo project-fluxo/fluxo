@@ -97,14 +97,16 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "4: HLL, "//&
                                            "5: HLLD (only with mu_0=1), "//&
                                            "10: LLF entropy stable flux, "//&
-                                           "11: entropy conservative flux,")
+                                           "11: entropy conservative flux,"//&
+                                           "12: FloGor entropy conservative flux,")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
                                               "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: entropy conservative flux with metric dealiasing" &
+                                              "10: entropy conservative flux with metric dealiasing" //&
+                                              "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
@@ -259,6 +261,9 @@ CASE(10)
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor  
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -276,6 +281,9 @@ CASE(1)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
+  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -1264,7 +1272,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,6
+DO icase=0,7
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1288,6 +1296,9 @@ DO icase=0,6
   CASE(6)
     fluxProc => EntropyStableFlux
     fluxName = "EntropyStableFlux"
+  CASE(7)
+    fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
+    fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)
@@ -1310,6 +1321,8 @@ DO icase=0,6
   IF(check.GT.1.0e-12)THEN
     WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
     failed=.TRUE.
+  ELSE
+    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" passed",icase,check
   END IF
 END DO !icase
 #if PP_DiscType==2
@@ -1348,7 +1361,7 @@ ELSE
   DEALLOCATE(U)
 END IF
 failed_vol=.FALSE.
-DO icase=0,2
+DO icase=0,3
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1360,6 +1373,9 @@ DO icase=0,2
   CASE(2)
     fluxProc => EntropyandKinEnergyConservingFluxVec
     fluxName = "EntropyandKinEnergyConservingFluxVec"
+  CASE(3)
+    fluxProc => EntropyandKinEnergyConservingFluxVec_FloGor
+    fluxName = "FloGor EntropyandKinEnergyConservingFluxVec"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(   UL,UL,ULaux,ULaux,metricL ,metricL ,Fcheck)
@@ -1382,6 +1398,8 @@ DO icase=0,2
   IF(check.GT.1.0e-12)THEN
     WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
     failed_vol=.TRUE.
+  ELSE
+    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" passed",icase,check
   END IF
   !SYMMETRY
   CALL fluxProc(   UL,UR,ULaux,URaux,metricL ,metricR ,Frefsym)

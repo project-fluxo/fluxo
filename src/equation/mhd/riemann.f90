@@ -186,10 +186,14 @@ phi_L  =0.
 DO i=1,nTotal_Face
   v_L=UL(2:4,i)/UL(1,i)
   !Powell
-  phi_L(6:8)=v_L(:)
-  phi_L(2:4)=UL(6:8,i)
-  phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
+  !phi_L(6:8)=v_L(:)
+  !phi_L(2:4)=UL(6:8,i)
+  !phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
   
+  !Brackbill&Barnes
+   phi_L(2:4)=UL(6:8,i)
+
+
   FL(  :,i)=FL(:,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*phi_L(:)    !B_R*n*phi_L
 #ifdef PP_GLM
   !nonconservative term to restore galilein invariance for GLM term
