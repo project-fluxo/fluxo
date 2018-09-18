@@ -105,6 +105,7 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
 INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
+PROCEDURE(),POINTER :: VolumeFluxAverage        !< procedure pointer to two-point average flux for ES riemann solver
 PROCEDURE(),POINTER :: SolveRiemannProblem      !< pointer to riemann solver routine (depends on WhichRiemannSolver)
 #if (PP_DiscType==2)
 !procedure pointers for split form DG

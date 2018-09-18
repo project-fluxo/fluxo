@@ -166,10 +166,21 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   IF(FLUXO_DISCTYPE EQUAL 2)
     SET(FLUXO_EQN_NONCONS  ON  CACHE BOOL "switch on/off non-conservative source term for mhd.")
     IF(FLUXO_EQN_NONCONS)
-      ADD_DEFINITIONS(-DNONCONS=1)
+      SET(FLUXO_EQN_NCTYPE "Powell" CACHE STRING "type of non-conservative source term for mhd: Powell/Brackbill/Janhunen")
+      SET_PROPERTY(CACHE FLUXO_EQN_NCTYPE PROPERTY STRINGS Powell Brackbill Janhunen )
+      IF(FLUXO_EQN_NCTYPE STREQUAL "Powell")
+        ADD_DEFINITIONS(-DNONCONS=1)
+      ELSEIF(FLUXO_EQN_NCTYPE STREQUAL "Brackbill")
+        ADD_DEFINITIONS(-DNONCONS=2)
+      ELSEIF(FLUXO_EQN_NCTYPE STREQUAL "Janhunen")
+        ADD_DEFINITIONS(-DNONCONS=3)
+      ENDIF()
+    ELSE()
+      UNSET(FLUXO_EQN_NCTYPE  CACHE ) #if not NONCONS=ON
     ENDIF()
   ELSE()
-    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
+    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not DISCTYPE=2
+    UNSET(FLUXO_EQN_NCTYPE  CACHE ) #if not DISCTYPE=2
   ENDIF()
   SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
   IF(FLUXO_EQN_ANISO_HEAT)
@@ -180,6 +191,7 @@ ELSE()
   UNSET(FLUXO_EQN_CT CACHE ) # if not mhd
   UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
   UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
+  UNSET(FLUXO_EQN_NCTYPE  CACHE ) #if not mhd
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")

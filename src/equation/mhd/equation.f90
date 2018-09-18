@@ -98,7 +98,8 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "5: HLLD (only with mu_0=1), "//&
                                            "10: LLF entropy stable flux, "//&
                                            "11: entropy conservative flux,"//&
-                                           "12: FloGor entropy conservative flux,")
+                                           "12: FloGor entropy conservative flux,"//&
+                                           "13: FloGor EC+LLF entropy stable flux")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
@@ -231,6 +232,8 @@ IF(nRefState .GT. 0)THEN
   END DO
 END IF
 
+IF(MPIroot) CALL CheckFluxes()
+
 WhichRiemannSolver = GETINT('Riemann','1')
 SELECT CASE(WhichRiemannSolver)
 CASE(1)
@@ -257,13 +260,18 @@ CASE(10)
   CALL abort(__STAMP__,&
    'Entropy Stable flux can currently only be run with GLM!!!')
 #endif
-  SolveRiemannProblem => EntropyStableFlux  
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
+  SolveRiemannProblem => EntropyStableByLLF  
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor  
+CASE(13)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor  
+  SolveRiemannProblem => EntropyStableByLLF 
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -290,7 +298,13 @@ CASE DEFAULT
 END SELECT
 #endif /*PP_DiscType==2*/
 
-IF(MPIroot) CALL CheckFluxes()
+#if NONCONS==1
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: POWELL    '
+#elif NONCONS==2                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: BRACKBILL '
+#elif NONCONS==3                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: JANHUNEN  '
+#endif /*NONCONS*/
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
@@ -1222,6 +1236,7 @@ SUBROUTINE CheckFluxes()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
 USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
 USE MOD_Flux_Average
 USE MOD_Riemann
@@ -1294,8 +1309,9 @@ DO icase=0,7
     fluxProc => EntropyAndKinEnergyConservingFlux
     fluxName = "EntropyAndKinEnergyConservingFlux"
   CASE(6)
-    fluxProc => EntropyStableFlux
-    fluxName = "EntropyStableFlux"
+    VolumeFluxAverage => EntropyAndKinEnergyConservingFlux !needed by EntropyStableByLLF
+    fluxProc => EntropyStableByLLF
+    fluxName = "EntropyStableByLLF"
   CASE(7)
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
@@ -1319,10 +1335,10 @@ DO icase=0,7
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" failed",icase,check
     failed=.TRUE.
   ELSE
-    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" passed",icase,check
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" passed",icase,check
   END IF
 END DO !icase
 #if PP_DiscType==2
@@ -1396,10 +1412,10 @@ DO icase=0,3
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
     failed_vol=.TRUE.
   ELSE
-    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" passed",icase,check
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" passed",icase,check
   END IF
   !SYMMETRY
   CALL fluxProc(   UL,UR,ULaux,URaux,metricL ,metricR ,Frefsym)

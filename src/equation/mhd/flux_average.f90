@@ -242,24 +242,36 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: htilde !< a
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i,j,k,l
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  :: phi 
+#if NONCONS==1 /*Powell*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=8
+#elif NONCONS==2 /*Brackbill*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=4
+#elif NONCONS==3 /*Janhunen*/
+INTEGER,PARAMETER:: vs=6
+INTEGER,PARAMETER:: ve=8
+#endif /*NONCONSTYPE*/
+REAL,DIMENSION(vs:ve,0:PP_N,0:PP_N,0:PP_N)  :: phi 
 !==================================================================================================================================
-Phi=0.
-! Powell
-!Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
-!Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
-!Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
-! Brackbill&Barnes
+#if NONCONS==1 /*Powell*/
 Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
+Phi(5,:,:,:)  =Uaux(8,:,:,:)      ! vB
+Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+#elif NONCONS==2 /*Brackbill*/
+Phi(2:4,:,:,:)=U(6:8,:,:,:,iElem) ! B
+#elif NONCONS==3 /*Janhunen*/
+Phi(6:8,:,:,:)=Uaux(2:4,:,:,:)    ! v
+#endif /*NONCONSTYPE*/
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   DO l=0,N
-    ftilde(:,l,i,j,k) = ftilde(:,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
-                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi(:,i,j,k) 
-    gtilde(:,l,i,j,k) = gtilde(:,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
-                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi(:,i,j,k) 
-    htilde(:,l,i,j,k) = htilde(:,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
-                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi(:,i,j,k) 
+    ftilde(vs:ve,l,i,j,k) = ftilde(vs:ve,l,i,j,k)+(0.25*SUM((Metrics_ftilde(:,i,j,k,iElem) &
+                           +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi(vs:ve,i,j,k) 
+    gtilde(vs:ve,l,i,j,k) = gtilde(vs:ve,l,i,j,k)+(0.25*SUM((Metrics_gtilde(:,i,j,k,iElem) & 
+                           +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi(vs:ve,i,j,k) 
+    htilde(vs:ve,l,i,j,k) = htilde(vs:ve,l,i,j,k)+(0.25*SUM((Metrics_htilde(:,i,j,k,iElem) & 
+                           +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi(vs:ve,i,j,k) 
 #ifdef PP_GLM
     !nonconservative term to restore galilein invariance for GLM term
     ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => 1/2 vec{Ja^d}_{(m,i),j,k} . vec{v}_ijk \psi_l,j,k
