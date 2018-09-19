@@ -782,6 +782,7 @@ END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
 !> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 !> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !==================================================================================================================================
+#define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 SUBROUTINE EntropyAndKinEnergyConservingFlux_FloGor(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
@@ -850,9 +851,13 @@ Fstar(2) = Fstar(1)*vAvg(1)+p_avg+s2mu_0*B2_ZIP- smu_0*ZIP(B_L(1),B_R(1),B_L(1),
 Fstar(3) = Fstar(1)*vAvg(2)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(2),B_R(2))
 Fstar(4) = Fstar(1)*vAvg(3)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(3),B_R(3))
 
-Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R, v_L(1),v_R(1))  &
-         + smu_0*(  ZIPSUM((v_L(1)*B_L(:)),(v_R(1)*B_R(:)), B_L(:),B_R(:))  &
-                   -ZIPSUM((B_L(1)*v_L(:)),(B_R(1)*v_R(:)), B_L(:),B_R(:))  &
+!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R, v_L(1),v_R(1))  &
+!         + smu_0*(  ZIPSUM((v_L(1)*B_L(:)),(v_R(1)*B_R(:)), B_L(:),B_R(:))  &
+!                   -ZIPSUM((B_L(1)*v_L(:)),(B_R(1)*v_R(:)), B_L(:),B_R(:))  &
+
+Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R,v_L(1),v_R(1))  &
+         + smu_0*(ZIP(v_L(1)*B_L(2),v_R(1)*B_R(2),B_L(2),B_R(2))-ZIP(v_L(2)*B_L(1),v_R(2)*B_R(1),B_L(2),B_R(2)) &
+         +        ZIP(v_L(1)*B_L(3),v_R(1)*B_R(3),B_L(3),B_R(3))-ZIP(v_L(3)*B_L(1),v_R(3)*B_R(1),B_L(3),B_R(3)) &
 #ifdef PP_GLM
                   +GLM_ch*ZIP(B_L(1),B_R(1),psi_L,psi_R)  &
 #endif /*PP_GLM*/
@@ -949,10 +954,16 @@ Fstar(2) = Fstar(1)*vAvg(1)+metric(1)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(1),B_R
 Fstar(3) = Fstar(1)*vAvg(2)+metric(2)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(2),B_R(2),Bm_L,Bm_R)
 Fstar(4) = Fstar(1)*vAvg(3)+metric(3)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(3),B_R(3),Bm_L,Bm_R)
 
+!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))&
+!         + ZIP(p_L,p_R,vm_L,vm_R) &
+!         + smu_0*( ZIPSUM((vm_L*B_L(:)),(vm_R*B_R(:)),B_L(:),B_R(:))           &
+!                  -ZIPSUM((Bm_L*v_L(:)),(Bm_R*v_R(:)),B_L(:),B_R(:))           &
+
 Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))&
          + ZIP(p_L,p_R,vm_L,vm_R) &
-         + smu_0*( ZIPSUM((vm_L*B_L(:)),(vm_R*B_R(:)),B_L(:),B_R(:))           &
-                  -ZIPSUM((Bm_L*v_L(:)),(Bm_R*v_R(:)),B_L(:),B_R(:))           &
+         + smu_0*(ZIP(vm_L*B_L(1),vm_R*B_R(1),B_L(1),B_R(1))-ZIP(v_L(1)*Bm_L,v_R(1)*Bm_R,B_L(1),B_R(1)) &
+                + ZIP(vm_L*B_L(2),vm_R*B_R(2),B_L(2),B_R(2))-ZIP(v_L(2)*Bm_L,v_R(2)*Bm_R,B_L(2),B_R(2)) &
+                + ZIP(vm_L*B_L(3),vm_R*B_R(3),B_L(3),B_R(3))-ZIP(v_L(3)*Bm_L,v_R(3)*Bm_R,B_L(3),B_R(3)) &
 #ifdef PP_GLM
                   +GLM_ch*ZIP(Bm_L,Bm_R,Psi_L,Psi_R)                           & 
 #endif /*PP_GLM*/
@@ -966,6 +977,7 @@ Fstar(6:8) = 0.5* ((vm_L*B_L(1:3)-v_L(1:3)*Bm_L) + (vm_R*B_R(1:3)-v_R(1:3)*Bm_R)
 #endif /*PP_GLM*/
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE EntropyAndKinEnergyConservingFluxVec_FloGor
+#undef ZIP
 
 
 !==================================================================================================================================
@@ -982,15 +994,16 @@ END SUBROUTINE EntropyAndKinEnergyConservingFluxVec_FloGor
 !>  (aR-aL)/Log(xi) = (aR+aL)*f/(2*f*(1 + 1/3 f^2 + 1/5 f^4 + 1/7 f^6)) = (aR+aL)/(2 + 2/3 f^2 + 2/5 f^4 + 2/7 f^6)
 !>  (aR-aL)/Log(xi) = 0.5*(aR+aL)*(105/ (105+35 f^2+ 21 f^4 + 15 f^6)
 !==================================================================================================================================
-REAL FUNCTION LN_MEAN(aL,aR)
+PURE FUNCTION LN_MEAN(aL,aR)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL         :: aL  !< left value
-REAL         :: aR  !< right value
+REAL,INTENT(IN)         :: aL  !< left value
+REAL,INTENT(IN)         :: aR  !< right value
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
+REAL         :: LN_MEAN
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCaR VaLIABLES
 REAL           :: Xi,u
@@ -1004,41 +1017,43 @@ LN_MEAN=MERGE((aL+aR)*52.5d0/(105.d0 + u*(35.d0 + u*(21.d0 +u*15.d0))), & !u <ep
 END FUNCTION LN_MEAN
 
 
-!================================================================================================================================
-!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL)
-!================================================================================================================================
-REAL FUNCTION ZIP(aL,aR, bL,bR)
-! MODULES
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL         :: aL  !< left  a
-REAL         :: aR  !< right a
-REAL         :: bL  !< left  b
-REAL         :: bR  !< right b
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT / OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!================================================================================================================================
-ZIP = 0.5*(aL*bR+aR*bL)
-END FUNCTION ZIP
+!!!================================================================================================================================
+!!!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL)
+!!!================================================================================================================================
+!!PURE FUNCTION ZIP(aL,aR, bL,bR)
+!!! MODULES
+!!IMPLICIT NONE
+!!!----------------------------------------------------------------------------------------------------------------------------------
+!!! INPUT VARIABLES
+!!REAL,INTENT(IN)          :: aL  !< left  a
+!!REAL,INTENT(IN)         :: aR  !< right a
+!!REAL,INTENT(IN)         :: bL  !< left  b
+!!REAL,INTENT(IN)         :: bR  !< right b
+!!!----------------------------------------------------------------------------------------------------------------------------------
+!!! INPUT / OUTPUT VARIABLES
+!!REAL         :: ZIP
+!!!----------------------------------------------------------------------------------------------------------------------------------
+!!! LOCAL VARIABLES
+!!!================================================================================================================================
+!!ZIP = 0.5*(aL*bR+aR*bL)
+!!END FUNCTION ZIP
 
 
 !================================================================================================================================
 !> Computes the ZIP mean = 0.5*( aL*bR + aR*bL) and sums over vector components
 !================================================================================================================================
-REAL FUNCTION ZIPSUM(aL,aR, bL,bR)
+PURE FUNCTION ZIPSUM(aL,aR, bL,bR)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL         :: aL(3)  !< left  a
-REAL         :: aR(3)  !< right a
-REAL         :: bL(3)  !< left  b
-REAL         :: bR(3)  !< right b
+REAL,INTENT(IN)         :: aL(3)  !< left  a
+REAL,INTENT(IN)         :: aR(3)  !< right a
+REAL,INTENT(IN)         :: bL(3)  !< left  b
+REAL,INTENT(IN)         :: bR(3)  !< right b
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
+REAL         :: ZIPSUM
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !================================================================================================================================
