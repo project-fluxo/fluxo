@@ -782,7 +782,6 @@ END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
 !> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 !> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !==================================================================================================================================
-#define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 SUBROUTINE EntropyAndKinEnergyConservingFlux_FloGor(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
@@ -845,15 +844,18 @@ B2_ZIP   = (B_L(1)*B_R(1)+B_L(2)*B_R(2)+B_L(3)*B_R(3))
                                                                    
 p_avg     = 0.5*(p_L+p_R)
 
+#define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*vAvg(1)
+
 Fstar(2) = Fstar(1)*vAvg(1)+p_avg+s2mu_0*B2_ZIP- smu_0*ZIP(B_L(1),B_R(1),B_L(1),B_R(1))
 Fstar(3) = Fstar(1)*vAvg(2)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(2),B_R(2))
 Fstar(4) = Fstar(1)*vAvg(3)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(3),B_R(3))
 
-!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R, v_L(1),v_R(1))  &
-!         + smu_0*(  ZIPSUM((v_L(1)*B_L(:)),(v_R(1)*B_R(:)), B_L(:),B_R(:))  &
-!                   -ZIPSUM((B_L(1)*v_L(:)),(B_R(1)*v_R(:)), B_L(:),B_R(:))  &
+!opt without ZIP
+!Fstar(2) = Fstar(1)*vAvg(1)+p_avg+s2mu_0*B2_ZIP- s2mu_0*(B_L(1)*B_R(1)+B_R(1)*B_L(1)) !1/2 of ZIP in s2mu_0=smu_0*0.5
+!Fstar(3) = Fstar(1)*vAvg(2)                    - s2mu_0*(B_L(1)*B_R(2)+B_R(1)*B_L(2))
+!Fstar(4) = Fstar(1)*vAvg(3)                    - s2mu_0*(B_L(1)*B_R(3)+B_R(1)*B_L(3))
 
 Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_R,v_L(1),v_R(1))  &
          + smu_0*(ZIP(v_L(1)*B_L(2),v_R(1)*B_R(2),B_L(2),B_R(2))-ZIP(v_L(2)*B_L(1),v_R(2)*B_R(1),B_L(2),B_R(2)) &
@@ -861,7 +863,17 @@ Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+ZIP(p_L,p_
 #ifdef PP_GLM
                   +GLM_ch*ZIP(B_L(1),B_R(1),psi_L,psi_R)  &
 #endif /*PP_GLM*/
-                 )
+                  )
+
+!opt without ZIP
+!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))+0.5*(p_L*v_R(1)+p_R*v_L(1))  &
+!         + s2mu_0*((v_L(1)+v_R(1))*B2_ZIP                              &  !1/2 of ZIP in s2mu_0=smu_0*0.5
+!                   -B_L(1)*(v_L(1)*B_R(1)+v_L(2)*B_R(2)+v_L(3)*B_R(3)) &
+!                   -B_R(1)*(B_L(1)*v_R(1)+B_L(2)*v_R(2)+B_L(3)*v_R(3)) &
+!#ifdef PP_GLM
+!                   +GLM_ch*(B_L(1)*psi_R+B_R(1)*psi_L)  &
+!#endif /*PP_GLM*/
+!                  )
 
 #ifdef PP_GLM
 Fstar(6) = GLM_ch*0.5*(psi_L+psi_R)
@@ -872,6 +884,7 @@ Fstar(6) = 0.
 Fstar(7) = 0.5* ((v_L(1)*B_L(2)-v_L(2)*B_L(1)) + (v_R(1)*B_R(2)-v_R(2)*B_R(1)))
 Fstar(8) = 0.5* ((v_L(1)*B_L(3)-v_L(3)*B_L(1)) + (v_R(1)*B_R(3)-v_R(3)*B_R(1)))
 
+#undef ZIP
 
 END ASSOCIATE 
 END SUBROUTINE EntropyAndKinEnergyConservingFlux_FloGor
@@ -947,6 +960,7 @@ vm_R=SUM(v_R(:)*metric(:))
 Bm_L=SUM(B_L(:)*metric(:))
 Bm_R=SUM(B_R(:)*metric(:))
 
+#define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*0.5*(vm_L+vm_R)
 
@@ -954,20 +968,31 @@ Fstar(2) = Fstar(1)*vAvg(1)+metric(1)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(1),B_R
 Fstar(3) = Fstar(1)*vAvg(2)+metric(2)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(2),B_R(2),Bm_L,Bm_R)
 Fstar(4) = Fstar(1)*vAvg(3)+metric(3)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(3),B_R(3),Bm_L,Bm_R)
 
-!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))&
-!         + ZIP(p_L,p_R,vm_L,vm_R) &
-!         + smu_0*( ZIPSUM((vm_L*B_L(:)),(vm_R*B_R(:)),B_L(:),B_R(:))           &
-!                  -ZIPSUM((Bm_L*v_L(:)),(Bm_R*v_R(:)),B_L(:),B_R(:))           &
+!opt without ZIP
+!Fstar(2) = Fstar(1)*vAvg(1)+metric(1)*(p_avg+s2mu_0*B2_ZIP)-s2mu_0*(B_L(1)*Bm_R+B_R(1)*Bm_L) !1/2 of ZIP in s2mu_0=smu_0*0.5
+!Fstar(3) = Fstar(1)*vAvg(2)+metric(2)*(p_avg+s2mu_0*B2_ZIP)-s2mu_0*(B_L(2)*Bm_R+B_R(2)*Bm_L)
+!Fstar(4) = Fstar(1)*vAvg(3)+metric(3)*(p_avg+s2mu_0*B2_ZIP)-s2mu_0*(B_L(3)*Bm_R+B_R(3)*Bm_L)
 
 Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))&
          + ZIP(p_L,p_R,vm_L,vm_R) &
-         + smu_0*(ZIP(vm_L*B_L(1),vm_R*B_R(1),B_L(1),B_R(1))-ZIP(v_L(1)*Bm_L,v_R(1)*Bm_R,B_L(1),B_R(1)) &
-                + ZIP(vm_L*B_L(2),vm_R*B_R(2),B_L(2),B_R(2))-ZIP(v_L(2)*Bm_L,v_R(2)*Bm_R,B_L(2),B_R(2)) &
-                + ZIP(vm_L*B_L(3),vm_R*B_R(3),B_L(3),B_R(3))-ZIP(v_L(3)*Bm_L,v_R(3)*Bm_R,B_L(3),B_R(3)) &
+         + smu_0*(  ZIP(vm_L*B_L(1),vm_R*B_R(1),B_L(1),B_R(1))-ZIP(v_L(1)*Bm_L,v_R(1)*Bm_R,B_L(1),B_R(1)) &
+                  + ZIP(vm_L*B_L(2),vm_R*B_R(2),B_L(2),B_R(2))-ZIP(v_L(2)*Bm_L,v_R(2)*Bm_R,B_L(2),B_R(2)) &
+                  + ZIP(vm_L*B_L(3),vm_R*B_R(3),B_L(3),B_R(3))-ZIP(v_L(3)*Bm_L,v_R(3)*Bm_R,B_L(3),B_R(3)) &
 #ifdef PP_GLM
-                  +GLM_ch*ZIP(Bm_L,Bm_R,Psi_L,Psi_R)                           & 
+                  + GLM_ch*ZIP(Bm_L,Bm_R,Psi_L,Psi_R)                  & 
 #endif /*PP_GLM*/
                  )
+
+!opt without ZIP
+!Fstar(5) = Fstar(1)*(0.5*v2_ZIP+in_e_L*in_e_R/LN_MEAN(in_e_L,in_e_R))   + 0.5*(p_L*vm_R+p_R*vm_L) &
+!         + s2mu_0*((vm_L+vm_R)*B2_ZIP                                &  !1/2 of ZIP in s2mu_0=smu_0*0.5
+!                   -Bm_L*(v_L(1)*B_R(1)+v_L(2)*B_R(2)+v_L(3)*B_R(3)) &
+!                   -Bm_R*(B_L(1)*v_R(1)+B_L(2)*v_R(2)+B_L(3)*v_R(3)) &
+!#ifdef PP_GLM
+!                   + GLM_ch*(Bm_L*Psi_R+Bm_R*Psi_L)                  & 
+!#endif /*PP_GLM*/
+!                 )
+#undef ZIP
 
 #ifdef PP_GLM
 Fstar(6:8) = 0.5* ((vm_L*B_L(1:3)-v_L(1:3)*Bm_L) + (vm_R*B_R(1:3)-v_R(1:3)*Bm_R)  + GLM_ch*(Psi_L+Psi_R)*metric(1:3))
@@ -977,7 +1002,6 @@ Fstar(6:8) = 0.5* ((vm_L*B_L(1:3)-v_L(1:3)*Bm_L) + (vm_R*B_R(1:3)-v_R(1:3)*Bm_R)
 #endif /*PP_GLM*/
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE EntropyAndKinEnergyConservingFluxVec_FloGor
-#undef ZIP
 
 
 !==================================================================================================================================
@@ -1003,7 +1027,7 @@ REAL,INTENT(IN)         :: aL  !< left value
 REAL,INTENT(IN)         :: aR  !< right value
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
-REAL         :: LN_MEAN
+REAL         :: LN_MEAN  !< result
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCaR VaLIABLES
 REAL           :: Xi,u
@@ -1017,48 +1041,26 @@ LN_MEAN=MERGE((aL+aR)*52.5d0/(105.d0 + u*(35.d0 + u*(21.d0 +u*15.d0))), & !u <ep
 END FUNCTION LN_MEAN
 
 
-!!!================================================================================================================================
-!!!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL)
-!!!================================================================================================================================
-!!PURE FUNCTION ZIP(aL,aR, bL,bR)
-!!! MODULES
-!!IMPLICIT NONE
-!!!----------------------------------------------------------------------------------------------------------------------------------
-!!! INPUT VARIABLES
-!!REAL,INTENT(IN)          :: aL  !< left  a
-!!REAL,INTENT(IN)         :: aR  !< right a
-!!REAL,INTENT(IN)         :: bL  !< left  b
-!!REAL,INTENT(IN)         :: bR  !< right b
-!!!----------------------------------------------------------------------------------------------------------------------------------
-!!! INPUT / OUTPUT VARIABLES
-!!REAL         :: ZIP
-!!!----------------------------------------------------------------------------------------------------------------------------------
-!!! LOCAL VARIABLES
-!!!================================================================================================================================
-!!ZIP = 0.5*(aL*bR+aR*bL)
-!!END FUNCTION ZIP
-
-
-!================================================================================================================================
-!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL) and sums over vector components
-!================================================================================================================================
-PURE FUNCTION ZIPSUM(aL,aR, bL,bR)
-! MODULES
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN)         :: aL(3)  !< left  a
-REAL,INTENT(IN)         :: aR(3)  !< right a
-REAL,INTENT(IN)         :: bL(3)  !< left  b
-REAL,INTENT(IN)         :: bR(3)  !< right b
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT / OUTPUT VARIABLES
-REAL         :: ZIPSUM
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!================================================================================================================================
-ZIPSUM = 0.5*(aL(1)*bR(1)+aL(2)*bR(2)+aL(3)*bR(3) +aR(1)*bL(1)+aR(2)*bL(2)+aR(3)*bL(3))
-END FUNCTION ZIPSUM
+!!================================================================================================================================
+!!> Computes the ZIP mean = 0.5*( aL*bR + aR*bL)
+!!================================================================================================================================
+!PURE FUNCTION ZIP(aL,aR, bL,bR)
+!! MODULES
+!IMPLICIT NONE
+!!----------------------------------------------------------------------------------------------------------------------------------
+!! INPUT VARIABLES
+!REAL,INTENT(IN)          :: aL  !< left  a
+!REAL,INTENT(IN)         :: aR  !< right a
+!REAL,INTENT(IN)         :: bL  !< left  b
+!REAL,INTENT(IN)         :: bR  !< right b
+!!----------------------------------------------------------------------------------------------------------------------------------
+!! INPUT / OUTPUT VARIABLES
+!REAL         :: ZIP
+!!----------------------------------------------------------------------------------------------------------------------------------
+!! LOCAL VARIABLES
+!!================================================================================================================================
+!ZIP = 0.5*(aL*bR+aR*bL)
+!END FUNCTION ZIP
 
 
 END MODULE MOD_Flux_Average
