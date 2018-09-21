@@ -193,6 +193,11 @@ DO l=1,nElems
 #endif /*PP_GLM*/
 #endif /*mhd*/
     Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
+ CASE(4)
+    Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)
+#ifdef mhd
+    Uind(1,:,:,:) = Uind(1,:,:,:)+SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#endif /*mhd*/
   END SELECT
   
   ! Transform Uind into modal Legendre interpolant Umod

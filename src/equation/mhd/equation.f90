@@ -97,7 +97,8 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "4: HLL, "//&
                                            "5: HLLD (only with mu_0=1), "//&
                                            "10: LLF entropy stable flux, "//&
-                                           "11: entropy conservative flux,")
+                                           "11: entropy conservative flux,"//&
+					   "12: 9wave entropy stable flux,")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
@@ -259,6 +260,13 @@ CASE(10)
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: 9 wave entropy stable flux!'
+#ifndef PP_GLM
+  CALL abort(__STAMP__,&
+   'Entropy Stable 9 wave flux can currently only be run with GLM!!!')
+#endif
+  SolveRiemannProblem => EntropyStable9WaveFlux 
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -1427,7 +1435,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,6
+DO icase=0,7
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1451,6 +1459,9 @@ DO icase=0,6
   CASE(6)
     fluxProc => EntropyStableFlux
     fluxName = "EntropyStableFlux"
+  CASE(7)
+    fluxProc => EntropyStable9WaveFlux
+    fluxName = "EntropyStable9WaveFlux"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)
