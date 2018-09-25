@@ -1354,7 +1354,7 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
     ! Derigs et al. (2018), (4.63)
     psiSplus =  0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
-                alphas*rhoLN*aLN*aLN/(-1.0) + alphas*cs*rhoLN*uAvg(1) + &
+                alphas*rhoLN*aLN*aLN/kappaM1 + alphas*cs*rhoLN*uAvg(1) + &
                 alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
     psiSminus = 0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
                 alphas*rhoLN*aLN*aLN/kappaM1 - alphas*cs*rhoLN*uAvg(1) - &
