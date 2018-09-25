@@ -1196,6 +1196,7 @@ REAL            :: srho_L,srho_R,rhoLN,srhoLN,rhoAvg
 REAL            :: B2_L,B2_R,B2Avg
 REAL            :: u2_L,u2_R,u2Avg,uAvg2
 REAL            :: pTilde,p_L,p_R,pAvg,pLN
+REAL            :: phi,LambdaMax
 REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
 REAL            :: u_L(3),u_R(3)
 REAL            :: BAvg(3),uAvg(3)
@@ -1476,16 +1477,29 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
                       0.0 /)
 
 
+      phi = sqrt(ABS(1.0-(p_R/p_L))/(1.0+(p_R/p_L)))
+      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
       Dmatrix = 0.0
-      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
-      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
-      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
-      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
-      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
-      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
-      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
-      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
-      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
+      Dmatrix(1,1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
+      Dmatrix(2,2) = (1.-phi)*ABS( uAvg(1) + ca ) + phi*LambdaMax
+      Dmatrix(3,3) = (1.-phi)*ABS( uAvg(1) + cs ) + phi*LambdaMax
+      Dmatrix(4,4) = (1.-phi)*ABS( uAvg(1) + GLM_ch ) + phi*LambdaMax
+      Dmatrix(5,5) = (1.-phi)*ABS( uAvg(1)      ) + phi*LambdaMax
+      Dmatrix(6,6) = (1.-phi)*ABS( uAvg(1) - GLM_ch ) + phi*LambdaMax
+      Dmatrix(7,7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
+      Dmatrix(8,8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
+      Dmatrix(9,9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
+
+!      Dmatrix = 0.0
+!      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
+!      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
+!      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
+!      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
+!      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
+!      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
+!      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
+!      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
+!      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
 
 
 
