@@ -604,9 +604,10 @@ END SUBROUTINE EvalUaux
 PURE SUBROUTINE GeneralFluxMat(U_in,metric_in,Fstar) 
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:nAuxVar
 USE MOD_Equation_Vars,ONLY:kappaM1
-USE MOD_Equation_Vars,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES

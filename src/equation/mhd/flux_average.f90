@@ -86,6 +86,29 @@ PUBLIC::StandardDGFluxDealiasedMetricVec
 PUBLIC::EntropyandKinEnergyConservingFlux
 PUBLIC::EntropyandKinEnergyConservingFluxVec
 PUBLIC::LN_MEAN
+
+!==================================================================================================================================
+! local definitions for inlining / optimizing routines,
+! depending on PP_VolFlux 
+#if PP_VolFlux==0
+#  define PP_VolumeFluxAverageMat StandardDGFluxMat 
+#elif PP_VolFlux==10
+#  define PP_VolumeFluxAverageMat EntropyAndKinEnergyConservingFluxMat
+#else
+!default, using PP_VolumeFluxAverageVec inside
+#  define PP_VolumeFluxAverageMat GeneralFluxMat 
+#endif
+
+#if PP_VolFlux==0
+#  define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#elif PP_VolFlux==1
+#  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
+#elif PP_VolFlux==10
+#  define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec
+#else
+#  define PP_VolumeFluxAverageVec VolumeFluxAverageVec
+#endif
+
 !==================================================================================================================================
 
 CONTAINS
@@ -123,14 +146,6 @@ INTEGER                                           :: i,j,k,l,iElem
 DO iElem=1,nElems
 
 
-#if PP_VolFlux==0
-#define PP_VolumeFluxAverageMat StandardDGFluxMat 
-#elif PP_VolFlux==10
-#define PP_VolumeFluxAverageMat EntropyAndKinEnergyConservingFluxMat
-#else
-#define PP_VolumeFluxAverageMat StandardDGFluxMat
-#endif
-
 !  !opt_v2, with larger calls 
   DO k=0,PP_N; DO j=0,PP_N
     !diagonal (consistent) part
@@ -158,8 +173,6 @@ DO iElem=1,nElems
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,k)*rtilde(:,l,k)
     END DO; END DO !j,l
   END DO; END DO ! i,j
-
-#undef PP_VolumeAverageFluxMat
 
 !SAME SPEED
 !  DO k=0,PP_N; DO j=0,PP_N
@@ -226,15 +239,6 @@ REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N):: ftilde_c,gtilde_c,htilde_c !cen
 REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !auxiliary variables
 INTEGER             :: i,j,k,l
 !==================================================================================================================================
-#if PP_VolFlux==0
-#define PP_VolumeFluxAverageVec StandardDGFluxVec 
-#elif PP_VolFlux==1
-#define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
-#elif PP_VolFlux==10
-#define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec
-#else
-#define PP_VolumeFluxAverageVec VolumeFluxAverageVec
-#endif
 
 !opt_v1
 CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
@@ -275,8 +279,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
   END DO!l=k+1,N
 END DO; END DO; END DO ! i,j,k
-
-#undef PP_VolumeFluxAverageVec
 
 #if NONCONS
 CALL AddNonConsFluxTilde3D(iElem,Uaux,ftilde,gtilde,htilde)
@@ -471,10 +473,6 @@ END SUBROUTINE AddNonConsFluxTilde3D
 SUBROUTINE AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:smu_0
-#ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch
-#endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -560,9 +558,128 @@ END SUBROUTINE EvalUaux
 
 
 !==================================================================================================================================
+!> General FluxMat routine for  VolInt_SplitForm_eqn, which is basically a wrapper for the FluxVec point-wise operations, 
+!> since not all flux averages have been implemented in the optimized FluxMat way. 
+!> uses PP_VolumeFluxAverageVec, being either the pointer the flux averaging routine set at runtime, or a precompiled routine 
+!> defined by PP_VolFlux parameter.
+!==================================================================================================================================
+PURE SUBROUTINE GeneralFluxMat(U_in,metric_in,Fstar) 
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
+#ifdef PP_GLM
+USE MOD_Equation_vars ,ONLY:GLM_ch
+#endif /*PP_GLM*/
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_in(PP_nVar,0:PP_N)   !< right state
+REAL,INTENT(IN) :: metric_in(3,0:PP_N)   !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT) :: Fstar(PP_nVar,0:PP_N,0:PP_N)          !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER                             :: l,i
+REAL,DIMENSION(0:PP_N)            :: qvHat,qBHat,srho,v1,v2,v3,b1,b2,b3,pt,vv,vb,bb
+#ifdef PP_GLM
+REAL,DIMENSION(0:PP_N)              :: Etotal
+#endif 
+#if NONCONS
+REAL                                  :: btilde
+#endif /*NONCONS*/
+!==================================================================================================================================
+srho(:)  = 1./U_in(1,:)
+v1(:)    = U_in(2,:)*srho(:)
+v2(:)    = U_in(3,:)*srho(:)
+v3(:)    = U_in(4,:)*srho(:)
+b1(:)    = U_in(6,:)
+b2(:)    = U_in(7,:)
+b3(:)    = U_in(8,:)
+vv(:)    = v1(:)*v1(:)+v2(:)*v2(:)+v3(:)*v3(:)
+vb(:)    = v1(:)*b1(:)+v2(:)*b2(:)+v3(:)*b3(:)
+bb(:)    = b1(:)*b1(:)+b2(:)*b2(:)+b3(:)*b3(:)
+#ifdef PP_GLM
+Etotal(:)=U_in(5,:)-s2mu_0*U_in(9,:)**2
+#else
+Etotal(:)=U_in(5,:)
+#endif /*def PP_GLM*/
+pt(:)    = kappaM1*(Etotal(:)-0.5*U_in(1,:)*vv(:)) &
+           -kappaM2*s2mu_0*bb(:) ! = -kappaM1*s2mu_0*bb + s2mu_0*bb, include magn. press
+qvHat(:) =   v1(:)*metric_in(1,:) +   v2(:)*metric_in(2,:) +   v3(:)*metric_in(3,:) 
+qbHat(:) =   b1(:)*metric_in(1,:) +   b2(:)*metric_in(2,:) +   b3(:)*metric_in(3,:) 
+
+DO i=0,PP_N
+  !consistency euler flux f(Ui,Ui)=f(Ui)
+  Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
+  Fstar(2,i,i) = (U_in(2,i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat(i)*b1(i)) )
+  Fstar(3,i,i) = (U_in(3,i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat(i)*b2(i)) )
+  Fstar(4,i,i) = (U_in(4,i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat(i)*b3(i)) )
+
+#ifdef PP_GLM
+  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) + GLM_ch*U_in(9,i)*qbHat(i)             
+  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
+  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
+  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
+  Fstar(9,i,i) =                                                        GLM_ch* qbHat(i)                   
+#else
+  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) 
+  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))
+  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))
+  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))
+#endif /* PP_GLM */
+
+  DO l=i+1,PP_N
+    ! call fluxvec (general but not the fastest) 
+    CALL PP_VolumeFluxAverageVec(  U_in(:,i)   ,      U_in(:,l), &
+                                   (/srho(i),v1(i),v2(i),v3(i),pt(i),vv(i),bb(i),vb(i)/) , & !Uaux(i)
+                                   (/srho(l),v1(l),v2(l),v3(l),pt(l),vv(l),bb(l),vb(l)/) , & !Uaux(l)
+                                 Metric_in(:,i), Metric_in(:,l), &
+                                 Fstar(:,l,i)                                       )
+!    !symmetry
+    Fstar(:,i,l)=Fstar(:,l,i)
+  END DO !l=i+1,PP_N
+END DO !i=0,PP_N
+!add nonconservative (non-symmetric!) term
+#if NONCONS
+#ifdef PP_GLM
+qvHat(:)    =   0.5*qvHat(:)
+#endif /*PP_GLM*/
+DO i=0,PP_N
+  DO l=0,PP_N
+    btilde=0.25*(  (metric_in(1,i)+metric_in(1,l))*b1(i)  &
+                  +(metric_in(2,i)+metric_in(2,l))*b2(i)  &
+                  +(metric_in(3,i)+metric_in(3,l))*b3(i)  )
+
+    !powell term
+    Fstar(2,l,i) = Fstar(2,l,i)+ btilde*b1(i)
+    Fstar(3,l,i) = Fstar(3,l,i)+ btilde*b2(i)
+    Fstar(4,l,i) = Fstar(4,l,i)+ btilde*b3(i)
+    Fstar(6,l,i) = Fstar(6,l,i)+ btilde*v1(i)
+    Fstar(7,l,i) = Fstar(7,l,i)+ btilde*v2(i)
+    Fstar(8,l,i) = Fstar(8,l,i)+ btilde*v3(i)
+#ifdef PP_GLM
+    !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
+    ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i) + U_in(9,l)*qvHat(i)*U_in(9,i)
+    Fstar(9,l,i) = Fstar(9,l,i)               + U_in(9,l)*qvHat(i)
+#else
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i)
+#endif /*PP_GLM*/
+  END DO !l=0,PP_N
+END DO !i=0,PP_N
+#endif /*NONCONS*/
+
+END SUBROUTINE GeneralFluxMat
+
+
+!==================================================================================================================================
 !> Computes the standard flux in x-direction for the hyperbolic part ( normally used with a rotated state)
 !==================================================================================================================================
-SUBROUTINE StandardDGFlux(UL,UR,Fstar)
+PURE SUBROUTINE StandardDGFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,kappaM2,smu_0,s2mu_0
@@ -633,7 +750,7 @@ END SUBROUTINE StandardDGFlux
 !> part of the MHD equations
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
@@ -736,6 +853,9 @@ REAL,DIMENSION(1:PP_N+1)              :: qvHat,qBHat,srho,v1,v2,v3,pt,vb,bb,flux
 #ifdef PP_GLM
 REAL,DIMENSION(1:PP_N+1)              :: Etotal,flux9
 #endif 
+#if NONCONS
+REAL                                  :: btilde
+#endif /*NONCONS*/
 !==================================================================================================================================
 ASSOCIATE(  rhov1 =>U_in(2,:), &
             rhov2 =>U_in(3,:), &
@@ -778,7 +898,6 @@ Flux7(:) = (qvHat(:)*b2(:)-qbHat(:)*v2(:))
 Flux8(:) = (qvHat(:)*b3(:)-qbHat(:)*v3(:))
 #endif /* PP_GLM */
 
-END ASSOCIATE
 
 DO i=1,PP_N+1
   !consistency euler flux f(Ui,Ui)=f(Ui)
@@ -811,6 +930,37 @@ DO i=1,PP_N+1
   END DO !l=i+1,PP_N+1
 END DO !i=1,PP_N+1
 
+!add nonconservative (non-symmetric!) term
+#if NONCONS
+#ifdef PP_GLM
+qvHat(:)    =   0.5*qvHat(:)
+#endif /*PP_GLM*/
+DO i=1,PP_N+1
+  DO l=1,PP_N+1
+    btilde=0.25*(  (metric_in(1,i)+metric_in(1,l))*b1(i)  &
+                  +(metric_in(2,i)+metric_in(2,l))*b2(i)  &
+                  +(metric_in(3,i)+metric_in(3,l))*b3(i)  )
+
+    !powell term
+    Fstar(2,l,i) = Fstar(2,l,i)+ btilde*b1(i)
+    Fstar(3,l,i) = Fstar(3,l,i)+ btilde*b2(i)
+    Fstar(4,l,i) = Fstar(4,l,i)+ btilde*b3(i)
+    Fstar(6,l,i) = Fstar(6,l,i)+ btilde*v1(i)
+    Fstar(7,l,i) = Fstar(7,l,i)+ btilde*v2(i)
+    Fstar(8,l,i) = Fstar(8,l,i)+ btilde*v3(i)
+#ifdef PP_GLM
+    !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
+    ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i) + U_in(9,l)*qvHat(i)*U_in(9,i)
+    Fstar(9,l,i) = Fstar(9,l,i)               + U_in(9,l)*qvHat(i)
+#else
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i)
+#endif /*PP_GLM*/
+  END DO !l=1,PP_N+1
+END DO !i=1,PP_N+1
+#endif /*NONCONS*/
+END ASSOCIATE
+
 END SUBROUTINE standardDGFluxMat
 
 !==================================================================================================================================
@@ -818,7 +968,7 @@ END SUBROUTINE standardDGFluxMat
 !> part of the MHD equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:smu_0
@@ -904,7 +1054,7 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 !> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 !> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !==================================================================================================================================
-SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
+PURE SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0
@@ -1005,7 +1155,7 @@ END SUBROUTINE EntropyAndKinEnergyConservingFlux
 !> firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1116,11 +1266,11 @@ REAL,INTENT(OUT) :: Fstar(PP_nVar,1:PP_N+1,1:PP_N+1)          !< transformed flu
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                :: l,i
-REAL,DIMENSION(1:PP_N+1) :: srho,v1,v2,v3,pt,vv,vb,bb,beta
+REAL,DIMENSION(1:PP_N+1) :: srho,v1,v2,v3,pt,vv,vb,bb,beta,qvHat
 #ifdef PP_GLM
 REAL,DIMENSION(1:PP_N+1) :: Etotal
 #endif 
-REAL                   :: qvHat,qBHat,v1Avg,v2Avg,v3Avg,B1Avg,B2Avg,B3Avg
+REAL                   :: qBHat,v1Avg,v2Avg,v3Avg,B1Avg,B2Avg,B3Avg
 REAL                   :: rhoLN,betaLN
 REAL                   :: vm,Bm,pTilde
 #ifdef PP_GLM
@@ -1144,6 +1294,7 @@ srho(:)  = 1./U_in(1,:)
 v1(:)    = rhov1*srho(:)
 v2(:)    = rhov2*srho(:)
 v3(:)    = rhov3*srho(:)
+qvHat(:) = v1(:)*metric_in(1,:) +   v2(:)*metric_in(2,:) +   v3(:)*metric_in(3,:) 
 vv(:)    = v1(:)*v1(:)+v2(:)*v2(:)+v3(:)*v3(:)
 vb(:)    = v1(:)*b1(:)+v2(:)*b2(:)+v3(:)*b3(:)
 bb(:)    = b1(:)*b1(:)+b2(:)*b2(:)+b3(:)*b3(:)
@@ -1155,25 +1306,24 @@ pt(:)    = kappaM1*(Etotal(:)-0.5*U_in(1,:)*vv(:)) &
 beta(:) = 0.5*U_in(1,:)/(pt-s2mu_0*bb(:)) !0.5*rho/p
 
 DO i=1,PP_N+1
-  qvHat    =   v1(i)*metric_in(1,i) +   v2(i)*metric_in(2,i) +   v3(i)*metric_in(3,i) 
   qbHat    =   b1(i)*metric_in(1,i) +   b2(i)*metric_in(2,i) +   b3(i)*metric_in(3,i) 
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = (U_in(1,i)*qvHat  )
-  Fstar(2,i,i) = ( rhov1(i)*qvHat  + metric_in(1,i)*pt(i) -smu_0*(qbHat*b1(i)) )
-  Fstar(3,i,i) = ( rhov2(i)*qvHat  + metric_in(2,i)*pt(i) -smu_0*(qbHat*b2(i)) )
-  Fstar(4,i,i) = ( rhov3(i)*qvHat  + metric_in(3,i)*pt(i) -smu_0*(qbHat*b3(i)) )
+  Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
+  Fstar(2,i,i) = ( rhov1(i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat*b1(i)) )
+  Fstar(3,i,i) = ( rhov2(i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat*b2(i)) )
+  Fstar(4,i,i) = ( rhov3(i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat*b3(i)) )
 
 #ifdef PP_GLM
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat -smu_0*(qbHat*vb(i)) + GLM_ch*U_in(9,i)*qbHat             
-  Fstar(6,i,i) = (qvHat*b1(i)-qbHat*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
-  Fstar(7,i,i) = (qvHat*b2(i)-qbHat*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
-  Fstar(8,i,i) = (qvHat*b3(i)-qbHat*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
+  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) + GLM_ch*U_in(9,i)*qbHat             
+  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
+  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
+  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
   Fstar(9,i,i) =                                                  GLM_ch*qbHat                   
 #else
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat -smu_0*(qbHat*vb(i)) 
-  Fstar(6,i,i) = (qvHat*b1(i)-qbHat*v1(i))
-  Fstar(7,i,i) = (qvHat*b2(i)-qbHat*v2(i))
-  Fstar(8,i,i) = (qvHat*b3(i)-qbHat*v3(i))
+  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) 
+  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))
+  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))
+  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))
 
 #endif /* PP_GLM */
   DO l=i+1,PP_N+1
@@ -1229,10 +1379,10 @@ DO i=1,PP_N+1
 END DO !i=1,PP_N+1
 !add nonconservative (non-symmetric!) term
 #if NONCONS
-DO i=1,PP_N+1
 #ifdef PP_GLM
-  qvHat    =   0.5*(v1(i)*metric_in(1,i) +   v2(i)*metric_in(2,i) +   v3(i)*metric_in(3,i) )
+qvHat(:) =   0.5*qvHat(:)
 #endif /*PP_GLM*/
+DO i=1,PP_N+1
   DO l=1,PP_N+1
     btilde=0.25*(  (metric_in(1,i)+metric_in(1,l))*b1(i)  &
                   +(metric_in(2,i)+metric_in(2,l))*b2(i)  &
@@ -1248,8 +1398,8 @@ DO i=1,PP_N+1
 #ifdef PP_GLM
     !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
     ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
-    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i) + U_in(9,l)*qvHat*U_in(9,i)
-    Fstar(9,l,i) = Fstar(9,l,i)               + U_in(9,l)*qvHat
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i) + U_in(9,l)*qvHat(i)*U_in(9,i)
+    Fstar(9,l,i) = Fstar(9,l,i)               + U_in(9,l)*qvHat(i)
 #else
     Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i)
 #endif /*PP_GLM*/

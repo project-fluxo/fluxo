@@ -105,13 +105,37 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
 INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
-PROCEDURE(),POINTER :: SolveRiemannProblem      !< pointer to riemann solver routine (depends on WhichRiemannSolver)
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
 #endif /*PP_DiscType==2*/
+PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
+PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
+ABSTRACT INTERFACE
+  SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
+    REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsL !<  left conservative state  
+    REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsR !< right conservative state
+    REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
+  END SUBROUTINE i_sub_SolveRiemannProblem
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverage(UL,UR,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< central flux in x
+  END SUBROUTINE i_sub_VolumeFluxAverage
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+    REAL,DIMENSION(8),INTENT(IN)        :: UauxL          !< left auxiliary variables
+    REAL,DIMENSION(8),INTENT(IN)        :: UauxR          !< right auxiliary variables
+    REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+    REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+  END SUBROUTINE i_sub_VolumeFluxAverageVec
+END INTERFACE
 
 INTERFACE ConsToPrim
   MODULE PROCEDURE ConsToPrim 
