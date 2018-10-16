@@ -98,14 +98,17 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "4: HLL, "//&
                                            "5: HLLD (only with mu_0=1), "//&
                                            "10: LLF entropy stable flux, "//&
-                                           "11: entropy conservative flux,")
+                                           "11: entropy conservative flux,"//&
+                                           "12: FloGor entropy conservative flux,"//&
+                                           "13: FloGor EC+LLF entropy stable flux")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
                                               "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: entropy conservative flux with metric dealiasing" &
+                                              "10: entropy conservative flux with metric dealiasing" //&
+                                              "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
@@ -228,6 +231,8 @@ IF(nRefState .GT. 0)THEN
   END DO
 END IF
 
+IF(MPIroot) CALL CheckFluxes()
+
 WhichRiemannSolver = GETINT('Riemann','1')
 CALL SetRiemannSolver(whichRiemannSolver)
 
@@ -241,10 +246,8 @@ SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVo
 CALL SetVolumeFlux(whichVolumeFlux)
 #endif /*PP_DiscType==2*/
 #if NONCONS
-  SWRITE(UNIT_stdOut,'(A)') ' NONCONSERVATIVE TERMS ARE ACTIVE (POWELL)'
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: POWELL    '
 #endif /*NONCONS*/
-
-IF(MPIroot) CALL CheckFluxes()
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
@@ -258,6 +261,7 @@ END SUBROUTINE InitEquation
 SUBROUTINE SetRiemannSolver(which)
 ! MODULES
 USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverage
 USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0
 USE MOD_Riemann
 USE MOD_Flux_Average
@@ -295,10 +299,18 @@ CASE(10)
   CALL abort(__STAMP__,&
    'Entropy Stable flux can currently only be run with GLM!!!')
 #endif
-  SolveRiemannProblem => EntropyStableFlux  
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
+  SolveRiemannProblem => EntropyStableByLLF  
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor  
+CASE(13)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor  
+  SolveRiemannProblem => EntropyStableByLLF 
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -334,6 +346,9 @@ CASE(1)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
+  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -469,6 +484,26 @@ CASE(3) ! alfven wave , domain [-1,1]^3
   Resu_tt(6) = -Resu_tt(2)*sqr
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
+CASE(3001) ! alfven wave , domain [-1,1]^3, rotated
+  Omega=2.*PP_Pi*IniFrequency
+  ! r: lenght-variable = lenght of computational domain
+  r=2.
+  ! e: epsilon = 0.2
+  e=0.2
+  nx  = 1./SQRT(r**2+1.)
+  ny  = r/SQRT(r**2+1.)
+  sqr = 1. !2*SQRT(PP_Pi)
+  Va  = omega/(ny*sqr)
+  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(3)-0.5*r)) - Va*tEval
+  Resu=0.
+  Resu(1) = 1.
+  Resu(2) = -e*ny*COS(phi_alv)
+  Resu(3) =  e*SIN(phi_alv)
+  Resu(4) =  e*nx*COS(phi_alv)
+  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(6) = nx -Resu(2)*sqr
+  Resu(7) =    -Resu(3)*sqr
+  Resu(8) = ny -Resu(4)*sqr
 
 CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
@@ -588,6 +623,20 @@ CASE(6) ! case 5 rotated
   Resu_tt(6)        = Resu_tt(1)
   !Resu_tt(7)        = 0.
   Resu_tt(8)        =-Resu_tt(1)
+CASE(7) ! constant density / pressure / velocity, periodic magnetic field
+  Omega=PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2)=-1.
+  Prim(3)=2.
+  Prim(4)=3.1
+  Prim(5)=1.
+  Prim(6) = -2.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(7) =  3.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(8) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
+
+  CALL PrimToCons(Prim,Resu)
+  
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
@@ -1243,6 +1292,7 @@ SUBROUTINE CheckFluxes()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
 USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
 USE MOD_Flux_Average
 USE MOD_Riemann
@@ -1292,7 +1342,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,6
+DO icase=0,7
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1314,8 +1364,12 @@ DO icase=0,6
     fluxProc => EntropyAndKinEnergyConservingFlux
     fluxName = "EntropyAndKinEnergyConservingFlux"
   CASE(6)
-    fluxProc => EntropyStableFlux
-    fluxName = "EntropyStableFlux"
+    VolumeFluxAverage => EntropyAndKinEnergyConservingFlux !needed by EntropyStableByLLF
+    fluxProc => EntropyStableByLLF
+    fluxName = "EntropyStableByLLF"
+  CASE(7)
+    fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
+    fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)
@@ -1336,8 +1390,10 @@ DO icase=0,6
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" failed",icase,check
     failed=.TRUE.
+  ELSE
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" passed",icase,check
   END IF
 END DO !icase
 #if PP_DiscType==2
@@ -1384,7 +1440,7 @@ ELSE
   DEALLOCATE(U)
 END IF
 failed_vol=.FALSE.
-DO icase=0,2
+DO icase=0,3
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1396,6 +1452,9 @@ DO icase=0,2
   CASE(2)
     fluxProc => EntropyandKinEnergyConservingFluxVec
     fluxName = "EntropyandKinEnergyConservingFluxVec"
+  CASE(3)
+    fluxProc => EntropyandKinEnergyConservingFluxVec_FloGor
+    fluxName = "FloGor EntropyandKinEnergyConservingFluxVec"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(   UL,UL,ULaux,ULaux,metricL ,metricL ,Fcheck)
@@ -1416,8 +1475,10 @@ DO icase=0,2
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
     failed_vol=.TRUE.
+  ELSE
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" passed",icase,check
   END IF
   !SYMMETRY
   CALL fluxProc(   UL,UR,ULaux,URaux,metricL ,metricR ,Frefsym)

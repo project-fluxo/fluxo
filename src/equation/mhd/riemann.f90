@@ -50,8 +50,8 @@ INTERFACE RiemannSolverByRusanov
   MODULE PROCEDURE RiemannSolverByRusanov
 END INTERFACE
 
-INTERFACE EntropyStableFlux
-  MODULE PROCEDURE EntropyStableFlux
+INTERFACE EntropyStableByLLF
+  MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
 
 
@@ -64,7 +64,7 @@ PUBLIC :: RiemannSolverByHLLC
 PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
-PUBLIC :: EntropyStableFlux
+PUBLIC :: EntropyStableByLLF
 !==================================================================================================================================
 
 
@@ -192,7 +192,6 @@ REAL    :: phi_L(2:8),v_L(3)
 !==================================================================================================================================
 DO i=1,nTotal_Face
   v_L=UL(2:4,i)/UL(1,i)
-  !Powell
   phi_L(6:8)=v_L(:)
   phi_L(2:4)=UL(6:8,i)
   phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
@@ -965,7 +964,7 @@ Flux(:)=0.5*Flux(:)
 END SUBROUTINE RiemannSolverByRoe
 
 
-SUBROUTINE EntropyStableFlux(UL,UR,Fstar)
+SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
 ! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
@@ -976,6 +975,7 @@ SUBROUTINE EntropyStableFlux(UL,UR,Fstar)
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage !pointer to EC routine
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY:GLM_ch
 #endif
@@ -993,11 +993,11 @@ REAL            :: sbetaLN,beta_R,beta_L
 REAL            :: srho_L,srho_R,rhoLN,srhoLN
 REAL            :: B2_L,B2_R,B2Avg
 REAL            :: u2_L,u2_R,u2Avg,uAvg2
-REAL            :: pTilde,p_L,p_R,pAvg,pLN
+REAL            :: p_L,p_R,pAvg,pLN !,pTilde
 REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
 REAL            :: u_L(3),u_R(3)
 REAL            :: BAvg(3),uAvg(3)
-REAL            :: u1_B2Avg,uB_Avg
+!REAL            :: u1_B2Avg,uB_Avg
 REAL            :: Hmatrix(5,5),tau,Eavg
 REAL            :: V_jump(PP_nVar)
 #ifdef PP_GLM
@@ -1038,35 +1038,37 @@ uAvg       = 0.5 * ( u_L +  u_R)
 u2Avg      = 0.5 * (u2_L + u2_R)
 BAvg       = 0.5 * ( B_L +  B_R)
 B2Avg      = 0.5 * (B2_L + B2_R)
-u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
-uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
                                                                    
 pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
-pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
 #ifdef PP_GLM
 psiAvg     = 0.5*(psi_L+psi_R)
 #endif
 
-! Entropy conserving and kinetic energy conserving flux
-Fstar(1) = rhoLN*uAvg(1)
-Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
-Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
-Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
-Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
-Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
-#ifdef PP_GLM
-Fstar(6) = GLM_ch*psiAvg
-Fstar(9) = GLM_ch*BAvg(1)
-#endif
+! Entropy conserving and kinetic energy conserving flux, pointer to EC routine
+CALL VolumeFluxAverage(UL,UR,Fstar)
 
-Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
-           + SUM(uAvg(:)*Fstar(2:4)) &
-           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
-                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
-#ifdef PP_GLM
-                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
-#endif
-                   )
+!u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+!uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
+!pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+!Fstar(1) = rhoLN*uAvg(1)
+!Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+!Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+!Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
+!Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
+!Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
+!#ifdef PP_GLM
+!Fstar(6) = GLM_ch*psiAvg
+!Fstar(9) = GLM_ch*BAvg(1)
+!#endif
+!
+!Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
+!           + SUM(uAvg(:)*Fstar(2:4)) &
+!           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+!                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
+!#ifdef PP_GLM
+!                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
+!#endif
+!                   )
 ! MHD wavespeed
 pLN = 0.5*rhoLN*sbetaLN
 
@@ -1146,6 +1148,6 @@ Fstar(  9) = Fstar(  9) - (LambdaMax_s2*tau)*(   psiAvg*V_jump(5)   + V_jump(  9
 #endif
 
 END ASSOCIATE 
-END SUBROUTINE EntropyStableFlux
+END SUBROUTINE EntropyStableByLLF
 
 END MODULE MOD_Riemann
