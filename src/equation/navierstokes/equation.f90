@@ -524,7 +524,7 @@ CASE(21) ! linear in rho
   Resu_t(5)=0.5*Resu_t(1)*SUM(prim(2:4)*prim(2:4))
   ! g''(t)
   Resu_tt=0.
-CASE(3) !Alfen Wave without Magnetic Field
+CASE(3) !Alfven Wave without Magnetic Field
   Omega=PP_Pi*IniFrequency
   ! r_len: lenght-variable = lenght of computational domain
   r_len=2.
@@ -537,8 +537,8 @@ CASE(3) !Alfen Wave without Magnetic Field
   Phi_alv = Omega/ny*(nx*(x(1)-0.5*r_len) + ny*(x(2)-0.5*r_len) - Va*tEval)
   ! g(t)
   Resu(1) = 1.
-  Resu(2) = 0.*nx - e*ny*COS(Phi_alv)
-  Resu(3) = 0.*ny + e*nx*COS(Phi_alv)
+  Resu(2) = Va*nx - e*ny*COS(Phi_alv)
+  Resu(3) = Va*ny + e*nx*COS(Phi_alv)
   Resu(4) = e*SIN(Phi_alv)
   Prim(5) = 1.
   ! note, for rho=1...resu(2:4) = prim(2:4) !!!
