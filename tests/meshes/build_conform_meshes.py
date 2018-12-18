@@ -61,9 +61,9 @@ nElemsY = ['02','04','08','16' ]
 nElemsZ = ['02','04','08','16' ]
 
 #this generates 5 2D refinements
-#nElemsX = ['02','04','08','16' ,'32' ]
-#nElemsY = ['02','04','08','16' ,'32' ]
-#nElemsZ = ['01','01','01','01','01' ]
+#nElemsX = ['02','04','08','16' ,'32','64' ]
+#nElemsY = ['02','04','08','16' ,'32','64' ]
+#nElemsZ = ['01','01','01','01' ,'01','01' ]
 
 projectname = read_prm(args.prm,'ProjectName')
 

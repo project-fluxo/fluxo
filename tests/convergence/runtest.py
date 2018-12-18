@@ -60,7 +60,10 @@ args.prm = copy2temporary(tmp_dir, args.prm)
 # this generates 3 meshes
 Degree    = ['2','3','4','5']
 startmesh = [ 2,  2 , 1 , 1 ]
-endmesh   = [ 5,  5 , 4 , 4 ]
+endmesh   = [ 6,  6 , 5 , 5 ]
+#Degree    = ['2']
+#startmesh = [ 1 ]
+#endmesh   = [ 2 ]
 nDegree=len(Degree) 
 Meshes = sorted(glob.glob('../meshes/*_mesh.h5'))
 Meshes = [ '../meshes/CartBoxPeriodic_02_02_01_mesh.h5'
@@ -68,6 +71,7 @@ Meshes = [ '../meshes/CartBoxPeriodic_02_02_01_mesh.h5'
           ,'../meshes/CartBoxPeriodic_08_08_01_mesh.h5'
           ,'../meshes/CartBoxPeriodic_16_16_01_mesh.h5'
           ,'../meshes/CartBoxPeriodic_32_32_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_64_64_01_mesh.h5'
 ##---
 #         ,'../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
 #         ,'../meshes/CartBoxPeriodic_04_04_04_mesh.h5'
