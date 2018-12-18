@@ -1742,7 +1742,7 @@ END SUBROUTINE MorinishiFluxVec
 PURE SUBROUTINE EntropyAndEnergyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1
+USE MOD_Equation_Vars,ONLY:Kappa,kappaM1,skappaM1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1771,8 +1771,6 @@ p_L    = kappaM1*(UL(5) - UL(1)*Vel2s2_L)
 p_R    = kappaM1*(UR(5) - UR(1)*Vel2s2_R)
 beta_L = 0.5*UL(1)/p_L
 beta_R = 0.5*UR(1)/p_R
-aHat   = 0.
-HHat   = 0.
 
 ! Get the averages for the numerical flux
 
@@ -1783,6 +1781,8 @@ beta_Hat  = LN_MEAN(beta_L,beta_R)
 uHat      = 0.5*(    VelU_L+VelU_R)
 vHat      = 0.5*(    VelV_L+VelV_R)
 wHat      = 0.5*(    VelW_L+VelW_R)
+aHat      = SQRT(Kappa*0.5*(p_L+p_R)/rhoHat)
+HHat      = Kappa/(2.*KappaM1*beta_hat) + 0.5*(velU_L*velU_R+velV_L*velV_R+velW_L*velW_R)
 p1Hat     = 0.5*rho_MEAN/beta_MEAN
 Vel2_M    = Vel2s2_L+Vel2s2_R
 
