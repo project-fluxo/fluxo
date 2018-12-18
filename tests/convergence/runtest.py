@@ -109,6 +109,10 @@ Meshes = [ '../meshes/CartBoxPeriodic_02_02_01_mesh.h5'
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_08_mesh.h5'
          ]
 
+# limit number of procs for small meshes, should have same size as Meshes array
+MeshesMaxProcs=[4,16,64,256,1024,4096]
+
+
 nMeshes=len(Meshes) 
 for m in range(0,nMeshes) :
     print( " Mesh %4i %s  " % (m,Meshes[m]))
@@ -133,10 +137,12 @@ for i in range(0,nDegree) :
     print( "               ")
     meshname = re.sub('\_mesh\.h5','',os.path.basename(Meshes[m]))
 
+    nprocs = min([args.procs,MeshesMaxProcs[m]])
+
     projectnameX = projectname+'_Degree_'+Degree[i]+'_Mesh_'+meshname 
     modify_prm(args.prm, {'ProjectName' : projectnameX})
     print( "               ")
-    print( "%3i %3i === > ProjectName: %s" % (i,m,projectnameX))
+    print( "%3i %3i nprocs: %4i === > ProjectName: %s" % (i,m,nprocs,projectnameX))
     print( "               ")
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
@@ -152,7 +158,7 @@ for i in range(0,nDegree) :
       [L2,L2colloc,PID] = execute(args.exe, args.prm, projectnameX,\
                               [get_last_L2_error, get_last_L2colloc_error, get_cpu_per_dof],\
                               log = True, ntail = args.ntail ,\
-                              mpi_procs = args.procs )
+                              mpi_procs = nprocs )
     except :
       shutil.rmtree(tmp_dir)
       exit(1)
