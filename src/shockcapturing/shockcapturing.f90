@@ -193,11 +193,12 @@ DO l=1,nElems
 #endif /*PP_GLM*/
 #endif /*mhd*/
     Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
- CASE(4)
-    Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)
+    CASE(4)
+    Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)    
 #ifdef mhd
-    Uind(1,:,:,:) = Uind(1,:,:,:)+SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#endif /*mhd*/
+    Uind(1,:,:,:) = Uind(1,:,:,:)+s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#endif
+
   END SELECT
   
   ! Transform Uind into modal Legendre interpolant Umod
@@ -215,8 +216,8 @@ DO l=1,nElems
 
   ! Artificial Viscosity
   eta_min = -9.0
-  eta_max = -6.0
-  eps0 = 0.03
+  eta_max = -3.0
+  eps0 = 0.01
 
   IF (eta_dof.GE.eta_max) THEN
     nu(l) = eps0
@@ -257,6 +258,7 @@ DO l=1,nElems
 
 !  h=2.0*eps0/MINVAL(sJ(:,:,:,l))
 !  lambda_max=MAXVAL(Max_Lambda(1:3))*h
+!  h=0.5/MINVAL(sJ(:,:,:,l))
   h=(8.0/MINVAL(sJ(:,:,:,l)))**(1.0/3.0)
   lambda_max2=MAXVAL(Max_Lambda(4:6))*h
 

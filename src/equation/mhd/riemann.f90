@@ -1234,7 +1234,7 @@ B2_R = SUM(B_R(:)*B_R(:))
 p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
 p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
 beta_L = 0.5*rho_L/p_L
-beta_R = 0.5*rho_R/p_R
+beta_R = 0.5*rho_R/P_R
 
 ! Get the averages for the numerical flux
 
@@ -1288,8 +1288,8 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
     ! Compute additional averages
     rhoAvg = 0.5*(rho_L + rho_R)
     pLN = 0.5*rhoLN*sbetaLN
-    srhoLN = 1./rhoLN
     u2Avg = u_L(1)*u_R(1) + u_L(2)*u_R(2) + u_L(3)*u_R(3)
+    srhoLN = 1./rhoLN
     aA = SQRT(kappa*pAvg/rhoLN)
     aLN = SQRT(kappa*pLN/rhoLN)
     abeta = SQRT(0.5*kappa/betaAvg)
@@ -1361,10 +1361,10 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
                 alphas*rhoLN*aLN*aLN/kappaM1 - alphas*cs*rhoLN*uAvg(1) - &
                 alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
 
-    psiFplus =  0.5*alphaf*rhoLN*u2Avg + abeta*alphas*rhoLN*bperpA + &
+    psiFplus =  0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
                 alphaf*rhoLN*aLN*aLN/kappaM1 + alphaf*cf*rhoLN*uAvg(1) - &
                 alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
-    psiFminus = 0.5*alphaf*rhoLN*u2Avg + abeta*alphas*rhoLN*bperpA + &
+    psiFminus = 0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
                 alphaf*rhoLN*aLN*aLN/kappaM1 - alphaf*cf*rhoLN*uAvg(1) + &
                 alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
 
@@ -1476,8 +1476,7 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
                       alphas*abeta*beta3A*SQRT(rhoLN), &
                       0.0 /)
 
-
-      phi = sqrt(ABS(1.0-(p_R/p_L))/(1.0+(p_R/p_L)))
+      phi = sqrt(ABS(1.0-(p_R*rho_R/(p_L*rho_L)))/(1.0+(p_R*rho_R/(p_L*rho_L))))
       LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
       Dmatrix = 0.0
       Dmatrix(1,1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
@@ -1501,8 +1500,6 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 !      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
 !      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
 
-
-
     ! Diagonal scaling matrix as described in Winters et al., eq. (4.15)
     Tmatrix = 0.0
     Tmatrix(1,1) = 0.5/kappa/rhoLN ! + f
@@ -1520,7 +1517,7 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
     RT = TRANSPOSE(Rmatrix)
 
     ! Compute entropy-stable fluxes
-    Fstar(:) = Fstar(:) - 0.5*MATMUL(MATMUL(Rmatrix,MATMUL(Dmatrix,RT)),V_jump(:))
+    Fstar = Fstar - 0.5*MATMUL(MATMUL(Rmatrix,MATMUL(Dmatrix,RT)),V_jump)
 
 
 END ASSOCIATE 

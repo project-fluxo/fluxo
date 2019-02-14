@@ -1170,8 +1170,8 @@ USE MOD_Equation_Vars, ONLY:doCalcSource
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
-USE MOD_DG_Vars,       ONLY:U
 #endif
+USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
