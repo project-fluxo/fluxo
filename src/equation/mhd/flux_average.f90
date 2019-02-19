@@ -596,12 +596,10 @@ REAL,INTENT(OUT) :: Fstar(PP_nVar,0:PP_N,0:PP_N)          !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                             :: l,i
-REAL,DIMENSION(0:PP_N)            :: qvHat,qBHat,srho,v1,v2,v3,b1,b2,b3,pt,vv,vb,bb
-#ifdef PP_GLM
+REAL,DIMENSION(0:PP_N)              :: qvHat,qBHat,srho,v1,v2,v3,b1,b2,b3,pt,vv,vb,bb
 REAL,DIMENSION(0:PP_N)              :: Etotal
-#endif 
 #if NONCONS
-REAL                                  :: btilde
+REAL                                :: btilde
 #endif /*NONCONS*/
 !==================================================================================================================================
 srho(:)  = 1./U_in(1,:)
