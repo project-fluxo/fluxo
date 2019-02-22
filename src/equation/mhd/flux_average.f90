@@ -100,14 +100,18 @@ PUBLIC::LN_MEAN
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines,
 ! depending on PP_VolFlux 
-#if PP_VolFlux==0
-#  define PP_VolumeFluxAverageMat StandardDGFluxMat 
-#elif PP_VolFlux==10
-#  define PP_VolumeFluxAverageMat EntropyAndKinEnergyConservingFluxMat
-#else
-!default, using PP_VolumeFluxAverageVec inside
+!!!--------
+!!! volFlux specific MAT routines have FSP problems also with GLM...
+!!!#if PP_VolFlux==0
+!!!#  define PP_VolumeFluxAverageMat StandardDGFluxMat 
+!!!#elif PP_VolFlux==10
+!!!#  define PP_VolumeFluxAverageMat EntropyAndKinEnergyConservingFluxMat
+!!!#else
+!!!default, using PP_VolumeFluxAverageVec inside
 #  define PP_VolumeFluxAverageMat GeneralFluxMat 
-#endif
+!!!#endif
+!!!... use generalFluxMat up to now!
+!!!--------
 
 #if PP_VolFlux==0
 #  define PP_VolumeFluxAverageVec StandardDGFluxVec 
