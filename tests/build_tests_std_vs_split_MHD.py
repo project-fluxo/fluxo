@@ -330,6 +330,22 @@ for  nnn  in range(0,len(Nchoices)):
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   caseID=caseID+1
   if(cases[0] ==0 or (caseID in cases)) :
+     pname="build_"+EQNchoice+"_stdDG_N_"+Nchoice+"_GLM_nopara"
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "FLUXO_PARABOLIC"        ,"OFF"
+              ,"FLUXO_EQN_GLM"          ,"ON"
+             ])
+     
+     if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=baseID+150 
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=caseID+1
+  if(cases[0] ==0 or (caseID in cases)) :
      pname="build_"+EQNchoice+"_stdDG_N_"+Nchoice+"_noGLM_para_cons_var"
      print( "caseID: %d name: %s" % (caseID,pname) )
   
@@ -339,20 +355,6 @@ for  nnn  in range(0,len(Nchoices)):
               ,"FLUXO_PARABOLIC_LIFTING","br1"
               ,"FLUXO_PARABOLIC_LIFTING_VAR","cons_var"
               ,"FLUXO_EQN_GLM"          ,"OFF"
-             ])
-     
-     if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  caseID=caseID+1
-  if(cases[0] ==0 or (caseID in cases)) :
-     pname="build_"+EQNchoice+"_stdDG_N_"+Nchoice+"_GLM_nopara"
-     print( "caseID: %d name: %s" % (caseID,pname) )
-  
-     options=[]; options.extend(globopts) ; options.extend(baseopts)
-     options.extend([
-               "FLUXO_PARABOLIC"        ,"OFF"
-              ,"FLUXO_EQN_GLM"          ,"ON"
              ])
      
      if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
@@ -405,6 +407,11 @@ for  nnn  in range(0,len(Nchoices)):
        
        if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                               stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=baseID+250 
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  for  vvv  in range(0,len(volfluxes)):
+    volflux=volfluxes[vvv]
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     caseID=caseID+1
     if(cases[0] ==0 or (caseID in cases)) :
@@ -458,7 +465,7 @@ for  nnn  in range(0,len(Nchoices)):
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     caseID=caseID+1
     if(cases[0] ==0 or (caseID in cases)) :
-       pname="build_"+EQNchoice+"_splitDG_N_"+Nchoice+"_noGLM_NONCONS_"+volflux+"_nopara"
+       pname="build_"+EQNchoice+"_splitDG_N_"+Nchoice+"_noGLM_NONCONS_volflux_"+volflux+"_nopara"
        print( "caseID: %d name: %s" % (caseID,pname) )
     
        options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -469,6 +476,12 @@ for  nnn  in range(0,len(Nchoices)):
        
        if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                               stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=baseID+350 
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  for  vvv  in range(0,len(volfluxes)):
+    volflux=volfluxes[vvv]
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     caseID=caseID+1
     if(cases[0] ==0 or (caseID in cases)) :
@@ -518,6 +531,7 @@ for  nnn  in range(0,len(Nchoices)):
               ,"FLUXO_EQN_GLM"          ,"ON"
               ,"FLUXO_EQN_NONCONS"      ,"OFF"
            ]
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   for  vvv  in range(0,len(volfluxes)):
     volflux=volfluxes[vvv]
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -534,6 +548,11 @@ for  nnn  in range(0,len(Nchoices)):
        
        if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                               stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=baseID+450 
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  for  vvv  in range(0,len(volfluxes)):
+    volflux=volfluxes[vvv]
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     caseID=caseID+1
     if(cases[0] ==0 or (caseID in cases)) :
@@ -598,6 +617,11 @@ for  nnn  in range(0,len(Nchoices)):
        
        if(not dbg ) : [stat,PID] = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                               stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=baseID+550 
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  for  vvv  in range(0,len(volfluxes)):
+    volflux=volfluxes[vvv]
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     caseID=caseID+1
     if(cases[0] ==0 or (caseID in cases)) :
