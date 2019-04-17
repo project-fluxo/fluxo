@@ -245,9 +245,15 @@ SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVo
 #endif
 CALL SetVolumeFlux(whichVolumeFlux)
 #endif /*PP_DiscType==2*/
-#if NONCONS
+
+#if NONCONS==1
   SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: POWELL    '
+#elif NONCONS==2                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: BRACKBILL '
+#elif NONCONS==3                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: JANHUNEN  '
 #endif /*NONCONS*/
+
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
@@ -275,6 +281,9 @@ INTEGER,INTENT(IN) :: which
 ! LOCAL VARIABLES
 !==================================================================================================================================
 SELECT CASE(Which)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: average standard DG flux'
+  SolveRiemannProblem => StandardDGFlux
 CASE(1)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Lax-Friedrichs'
   SolveRiemannProblem => RiemannSolverByRusanov

@@ -35,9 +35,11 @@ INTERFACE VolInt
 #if (PP_DiscType==1)
   MODULE PROCEDURE VolInt_weakForm
 #elif (PP_DiscType==2)
-  !optimized VolInt with general 4D flux array
-  !MODULE PROCEDURE VolInt_SplitForm
-  !Optimized line-by-line Volint in flux_average.f90 dependent of equation module (for inlining)
+  !optimized VolInt with general 4D flux array from flux_average.f90, only advection part!
+  !runs faster with GFORTRAN than INTEL version below!
+  !MODULE PROCEDURE VolInt_Adv_SplitForm
+
+  !OPTIMIZED FOR INTEL line-by-line Volint in flux_average.f90 dependent of equation module (for inlining), only advection!!
   MODULE PROCEDURE VolInt_SplitForm_eqn
 
   ! low memory but full loop version, 2x slower than version above
@@ -114,7 +116,7 @@ END SUBROUTINE VolInt_weakForm
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut=0. and is updated with the volume flux derivatives
 !==================================================================================================================================
-SUBROUTINE VolInt_SplitForm(Ut)
+SUBROUTINE VolInt_Adv_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
@@ -137,33 +139,12 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-#if PARABOLIC
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
-#endif /*PARABOLIC*/
 INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
-!  CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
-#if PARABOLIC
-  !compute Diffusion flux contribution of 
-  CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
-  ! Update the time derivative with the spatial derivatives of the transformed fluxes
-  ! euler fluxes in flux differencing form: strong, but surface parts included 
-  ! diffusion fluxes are accouted in the standard weak form
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    DO l=0,PP_N
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*  ftilde(:,l,i,j,k)  &
-                                            + Dvolsurf_T(l,j)*  gtilde(:,l,i,j,k)  &
-                                            + Dvolsurf_T(l,k)*  htilde(:,l,i,j,k)  &
-                                            +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
-                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
-                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
-    END DO ! l
-  END DO; END DO; END DO ! i,j,k
-#else  
   !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -173,9 +154,8 @@ DO iElem=1,nElems
                                             + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
     END DO ! l
   END DO; END DO; END DO ! i,j,k
-#endif /*PARABOLIC*/
 END DO ! iElem
-END SUBROUTINE VolInt_SplitForm
+END SUBROUTINE VolInt_Adv_SplitForm
 
 #if PARABOLIC
 !==================================================================================================================================
@@ -292,6 +272,75 @@ END SUBROUTINE EvalEulerFluxAverage3D
 
 
 #ifdef DONOTCOMPILE
+!==================================================================================================================================
+!> Computes the volume integral using flux differencing 
+!> Attention 1: 1/J(i,j,k) is not yet accounted for
+!> Attention 2: input Ut=0. and is updated with the volume flux derivatives
+!==================================================================================================================================
+SUBROUTINE VolInt_SplitForm_withPara(Ut)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars   ,ONLY:DvolSurf_T
+USE MOD_Mesh_Vars ,ONLY:nElems
+!USE MOD_Flux_Average   ,ONLY:EvalEulerFluxAverage3D_eqn
+#if PARABOLIC
+USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
+USE MOD_DG_Vars   ,ONLY:D_Hat_T
+#endif /*PARABOLIC*/
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT)                                :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+!< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !transformed flux differences, one more dimension!
+                                                                           ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
+                                                                           ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
+                                                                           ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
+#if PARABOLIC
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
+#endif /*PARABOLIC*/
+INTEGER                                           :: i,j,k,l,iElem
+!==================================================================================================================================
+
+DO iElem=1,nElems
+  !compute Euler contribution of the fluxes, 
+!  CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
+  CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
+#if PARABOLIC
+  !compute Diffusion flux contribution of 
+  CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
+  ! Update the time derivative with the spatial derivatives of the transformed fluxes
+  ! euler fluxes in flux differencing form: strong, but surface parts included 
+  ! diffusion fluxes are accouted in the standard weak form
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    DO l=0,PP_N
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*  ftilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,j)*  gtilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,k)*  htilde(:,l,i,j,k)  &
+                                            +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
+                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
+                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
+    END DO ! l
+  END DO; END DO; END DO ! i,j,k
+#else  
+  !only euler
+  ! Update the time derivative with the spatial derivatives of the transformed fluxes
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    DO l=0,PP_N
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*ftilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,j)*gtilde(:,l,i,j,k)  &
+                                            + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
+    END DO ! l
+  END DO; END DO; END DO ! i,j,k
+#endif /*PARABOLIC*/
+END DO ! iElem
+END SUBROUTINE VolInt_SplitForm_withPara
+
+
 !==================================================================================================================================
 !> Computes the volume integral using flux differencing 
 !> Attention 1: 1/J(i,j,k) is not yet accounted for

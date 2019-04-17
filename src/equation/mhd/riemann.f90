@@ -188,20 +188,23 @@ REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i
-REAL    :: phi_L(2:8),v_L(3)
+REAL    :: v_L(3)
 !==================================================================================================================================
 DO i=1,nTotal_Face
   v_L=UL(2:4,i)/UL(1,i)
-  phi_L(6:8)=v_L(:)
-  phi_L(2:4)=UL(6:8,i)
-  phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
-  
-  FL(2:8,i)=FL(2:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*phi_L(2:8)    !B_R*n*phi_L
-#ifdef PP_GLM
+#if NONCONS==1 /*Powell*/
+  FL(2:8,i)=FL(2:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
+#elif NONCONS==2 /*Brackbill*/
+  FL(2:4,i)=FL(2:4,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*UL(6:8,i)
+#elif NONCONS==3 /*Janhunen*/
+  FL(6:8,i)=FL(6:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*v_L(1:3)
+#endif /*NONCONSTYPE*/
+
+
+#if defined (PP_GLM) && defined (PP_NC_GLM)
   !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,PP_nVar/),i)=FL((/5,PP_nVar/),i)  &
-                   +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(PP_nVar,i)*UR(PP_nVar,i),UR(PP_nVar,i)/)
-#endif /*PP_GLM*/
+  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*UR(9,i),UR(9,i)/)
+#endif /*PP_GLM and PP_NC_GLM*/
 
 END DO !i=1,nTotal_Face
 

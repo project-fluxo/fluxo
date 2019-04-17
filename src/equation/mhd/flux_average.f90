@@ -434,46 +434,60 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: htilde !< a
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i,j,k,l
-!REAL :: phi(PP_nVar) 
-REAL :: phi_s4(2:8) 
-#ifdef PP_GLM
+#if NONCONS==1 /*Powell*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=8
+#elif NONCONS==2 /*Brackbill*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=4
+#elif NONCONS==3 /*Janhunen*/
+INTEGER,PARAMETER:: vs=6
+INTEGER,PARAMETER:: ve=8
+#endif /*NONCONSTYPE*/
+REAL :: phi_s4(vs:ve) 
+#if defined(PP_GLM) && defined (PP_NC_GLM)
 REAL :: phi_GLM_f_s2(2),phi_GLM_g_s2(2),phi_GLM_h_s2(2) 
-#endif
+#endif /*PP_GLM and PP_NC_GLM*/
 !==================================================================================================================================
 !phi=0.
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  ! Powell
+#if NONCONS==1 /*Powell*/
   Phi_s4(2:4)=0.25* U(   6:8,i,j,k,iElem) ! B
   Phi_s4(  5)=0.25* Uaux(  8,i,j,k)      ! vB
   Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k)    ! v
-#ifdef PP_GLM
+#elif NONCONS==2 /*Brackbill*/
+  Phi_s4(2:4)=0.25* U(   6:8,i,j,k,iElem) ! B
+#elif NONCONS==3 /*Janhunen*/
+  Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k)    ! v
+#endif /*NONCONSTYPE*/
+#if defined(PP_GLM) && defined (PP_NC_GLM)
   phi_GLM_f_s2(1:2) = (0.5*SUM(Metrics_ftilde(:,i,j,k,iElem)*Uaux(2:4,i,j,k)))*(/U(9,i,j,k,iElem),1./)
   phi_GLM_g_s2(1:2) = (0.5*SUM(Metrics_gtilde(:,i,j,k,iElem)*Uaux(2:4,i,j,k)))*(/U(9,i,j,k,iElem),1./)
   phi_GLM_h_s2(1:2) = (0.5*SUM(Metrics_htilde(:,i,j,k,iElem)*Uaux(2:4,i,j,k)))*(/U(9,i,j,k,iElem),1./)
-#endif /*PP_GLM*/
+#endif /*PP_GLM and PP_NC_GLM*/
   DO l=0,PP_N
-    ftilde(    2:8,l,i,j,k) = ftilde(2:8,l,i,j,k)+(SUM(( Metrics_ftilde(:,i,j,k,iElem) &
-                                                        +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi_s4(2:8) 
-#ifdef PP_GLM
+    ftilde(vs:ve,l,i,j,k) = ftilde(vs:ve,l,i,j,k)+(SUM(( Metrics_ftilde(:,i,j,k,iElem) &
+                                                        +Metrics_ftilde(:,l,j,k,iElem))*U(6:8,l,j,k,iElem)))*Phi_s4(vs:ve) 
+#if defined(PP_GLM) && defined (PP_NC_GLM)
     !nonconservative term to restore galilein invariance for GLM term: (grad\psi) (0,0,0,0,vec{v}\psi, 0,0,0, \vec{v})
     ! => 5/9. component: 1/2 vec{Ja^d}_{(l,i),jk} . vec{v}_ijk \psi_ljk (\psi_ijk,1)
     !
     ftilde((/5,9/),l,i,j,k) = ftilde((/5,9/),l,i,j,k)                +U(9,l,j,k,iElem) *phi_GLM_f_s2(1:2)
-#endif /*PP_GLM*/
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
   DO l=0,PP_N
-    gtilde(    2:8,l,i,j,k) = gtilde(2:8,l,i,j,k)+(SUM(( Metrics_gtilde(:,i,j,k,iElem) & 
-                                                        +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi_s4(2:8) 
-#ifdef PP_GLM
+    gtilde(vs:ve,l,i,j,k) = gtilde(vs:ve,l,i,j,k)+(SUM(( Metrics_gtilde(:,i,j,k,iElem) & 
+                                                        +Metrics_gtilde(:,i,l,k,iElem))*U(6:8,i,l,k,iElem)))*Phi_s4(vs:ve) 
+#if defined(PP_GLM) && defined (PP_NC_GLM)
     gtilde((/5,9/),l,i,j,k) = gtilde((/5,9/),l,i,j,k)                +U(9,i,l,k,iElem) *phi_GLM_g_s2(1:2)
-#endif /*PP_GLM*/
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
   DO l=0,PP_N
-    htilde(2:8,    l,i,j,k) = htilde(2:8,l,i,j,k)+(SUM(( Metrics_htilde(:,i,j,k,iElem) & 
-                                                        +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi_s4(2:8) 
-#ifdef PP_GLM
+    htilde(vs:ve,l,i,j,k) = htilde(vs:ve,l,i,j,k)+(SUM(( Metrics_htilde(:,i,j,k,iElem) & 
+                                                        +Metrics_htilde(:,i,j,l,iElem))*U(6:8,i,j,l,iElem)))*Phi_s4(vs:ve) 
+#if defined(PP_GLM) && defined (PP_NC_GLM)
     htilde((/5,9/),l,i,j,k) = htilde((/5,9/),l,i,j,k)                +U(9,i,j,l,iElem) *phi_GLM_h_s2(1:2)
-#endif /*PP_GLM*/
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
@@ -500,20 +514,21 @@ REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: Fstar   !< added to flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-  ! Powell
-  !Phi(2:4)=UL(6:8)
-  !Phi(5)  =UauxL(8)      ! vB
-  !Phi(6:8)=UauxL(2:4)    ! v
-  Fstar(2:8) = Fstar(2:8) &
-               +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8))) &
-                *(/UL(6:8),UauxL(8),UauxL(2:4)/)
-#ifdef PP_GLM
+#if NONCONS==1 /*Powell*/
+  ! Powell: Phi(2:8) =B,vB,v
+  Fstar(2:8) = Fstar(2:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*(/UL(6:8),UauxL(8),UauxL(2:4)/)
+#elif NONCONS==2 /*Brackbill*/
+  ! Brackbill: Phi(2:4) =B
+  Fstar(2:4) = Fstar(2:4) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UL(6:8)
+#elif NONCONS==3 /*Janhunen*/
+  ! Janhunen: Phi(6:8) =v
+  Fstar(6:8) = Fstar(6:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UauxL(2:4)
+#endif /*NONCONSTYPE*/
+#if defined(PP_GLM) && defined (PP_NC_GLM)
   !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
   ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
-  Fstar((/5,9/)) = Fstar((/5,9/))  &
-                   +(UR(9)*0.5*SUM(metric_L(:)*UauxL(2:4))) &
-                   *(/UL(9),1./)
-#endif /*PP_GLM*/
+  Fstar((/5,9/)) = Fstar((/5,9/)) +(UR(9)*0.5*SUM(metric_L(:)*UauxL(2:4))) *(/UL(9),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
 
 END SUBROUTINE AddNonConsFluxVec
 
@@ -550,20 +565,28 @@ DO i=0,PP_N
                  +(metric_in(3,i)+metric_in(3,l))*b3(l)  ) 
 
     !powell term
+#if NONCONS==1 /*Powell*/
     Fstar(2,l,i) = Fstar(2,l,i)+ btilde*b1(i)
     Fstar(3,l,i) = Fstar(3,l,i)+ btilde*b2(i)
     Fstar(4,l,i) = Fstar(4,l,i)+ btilde*b3(i)
+    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i)
     Fstar(6,l,i) = Fstar(6,l,i)+ btilde*v1(i)
     Fstar(7,l,i) = Fstar(7,l,i)+ btilde*v2(i)
     Fstar(8,l,i) = Fstar(8,l,i)+ btilde*v3(i)
-#ifdef PP_GLM
+#elif NONCONS==2 /*Brackbill*/
+    Fstar(2,l,i) = Fstar(2,l,i)+ btilde*b1(i)
+    Fstar(3,l,i) = Fstar(3,l,i)+ btilde*b2(i)
+    Fstar(4,l,i) = Fstar(4,l,i)+ btilde*b3(i)
+#elif NONCONS==3 /*Janhunen*/
+    Fstar(6,l,i) = Fstar(6,l,i)+ btilde*v1(i)
+    Fstar(7,l,i) = Fstar(7,l,i)+ btilde*v2(i)
+    Fstar(8,l,i) = Fstar(8,l,i)+ btilde*v3(i)
+#endif /*NONCONSTYPE*/
+#if defined(PP_GLM) && defined (PP_NC_GLM)
     !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
-    ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
-    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i) + U_in(9,l)*qvHat_s2(i)*U_in(9,i)
-    Fstar(9,l,i) = Fstar(9,l,i)               + U_in(9,l)*qvHat_s2(i)
-#else
-    Fstar(5,l,i) = Fstar(5,l,i)+ btilde*vb(i)
-#endif /*PP_GLM*/
+    Fstar(5,l,i) = Fstar(5,l,i) + U_in(9,l)*qvHat_s2(i)*U_in(9,i)
+    Fstar(9,l,i) = Fstar(9,l,i) + U_in(9,l)*qvHat_s2(i)
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
 END DO !i=0,PP_N
 
