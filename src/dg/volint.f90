@@ -20,6 +20,9 @@ MODULE MOD_VolInt
 ! Computes the volume integral contribution based on U and updates Ut
 !==================================================================================================================================
 ! MODULES
+#if PP_DiscType==2
+USE MOD_Flux_Average        ,ONLY: VolInt_splitForm_eqn
+#endif /*PP_DiscType*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PRIVATE
@@ -32,7 +35,11 @@ INTERFACE VolInt
 #if (PP_DiscType==1)
   MODULE PROCEDURE VolInt_weakForm
 #elif (PP_DiscType==2)
-  MODULE PROCEDURE VolInt_SplitForm
+  !optimized VolInt with general 4D flux array
+  !MODULE PROCEDURE VolInt_SplitForm
+  !Optimized line-by-line Volint in flux_average.f90 dependent of equation module (for inlining)
+  MODULE PROCEDURE VolInt_SplitForm_eqn
+
   ! low memory but full loop version, 2x slower than version above
   !MODULE PROCEDURE VolInt_SplitForm2 
   !new optimized version, other versions are still here, see below, not working for noncons(!)

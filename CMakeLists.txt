@@ -287,7 +287,7 @@ GET_FILENAME_COMPONENT (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
 
 
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-  SET(COMPILER_ADD_FLAGS " " CACHE STRING "additional user defined compiler flags") 
+  SET(COMPILER_ADD_FLAGS " -finline-limit=1500 " CACHE STRING "additional user defined compiler flags") 
   #environment specific variables
   IF(ONHORNET GREATER -1)
     SET(FLUXO_INSTRUCTION "-march=core-avx2")

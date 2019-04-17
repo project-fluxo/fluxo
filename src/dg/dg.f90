@@ -257,10 +257,8 @@ USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
-#if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt
-#elif PP_DiscType==2
-USE MOD_Flux_Average        ,ONLY: VolInt_splitForm_eqn
+#if PP_DiscType==2
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
 #endif /*PARABOLIC*/
@@ -310,7 +308,7 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
 #if PP_DiscType==2
-CALL VolInt_splitForm_eqn(Ut)
+CALL VolInt(Ut)
 #endif
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
