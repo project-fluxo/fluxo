@@ -11,8 +11,9 @@ The solver is parallelized very efficiently and scales up
 to hundreds of thousand cores.
 
 The main contributers are
-* from Mathematical Institute, University of Cologne: Gregor Gassner, Andrew Winters
+* from Mathematical Institute, University of Cologne: Gregor Gassner
 * from Max Planck Institute for Plasma Physics, Garching: Florian Hindenlang
+* form Department of Mathematics, Linköping University: Andrew Winters
 
 FLUXO is a spin-off of the FLEXI code (https://github.com/flexi-framework/flexi) 
 that is developed at the Institute for Aero- and Gasdynamics at University Stuttgart 
