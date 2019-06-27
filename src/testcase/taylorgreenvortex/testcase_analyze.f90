@@ -113,6 +113,8 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"-dEmag/dt"'
   A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar)='"Maximum Current"'
+  A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Magnetic Enstrophy"'
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeTestcase
@@ -147,7 +149,7 @@ REAL,INTENT(IN)                 :: Time
 ! LOCAL VARIABLES
 INTEGER                         :: iElem,i,j,k,p,q
 REAL                            :: Vel(1:3),GradVel(1:3,1:3),Ekin,uprime,BField(1:3),GradB(1:3,1:3)
-REAL                            :: Vorticity(1:3),max_Vorticity,mean_temperature,temperature,curlB(1:3)
+REAL                            :: Vorticity(1:3),max_Vorticity,mean_temperature,temperature,curlB(1:3),max_Current
 REAL                            :: S(1:3,1:3)                    !< Strain rate tensor S (symmetric)
 REAL                            :: Sd(1:3,1:3)                   !< Deviatoric part of the strain rate tensor S 
 REAL                            :: divU                          !< Divergence of velocity vector
@@ -165,7 +167,7 @@ REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_co
 REAL                            :: DR_u,DR_S,DR_Sd,DR_p          !< Contributions to dissipation rate
 REAL                            :: Pressure,rho0,negdEkindt,negdEmagdt
 #ifdef MPI
-REAL                            :: buf(12)
+REAL                            :: buf(13)
 #endif
 !===================================================================================================================================
 IF(.NOT.doTCanalyze)RETURN
@@ -178,6 +180,7 @@ Mag_Enstrophy=0.
 
 DR_u=0.;DR_S=0.;DR_Sd=0.;DR_p=0.
 max_Vorticity=-1.
+max_Current=-1.
 mean_Temperature=0.
 
 DO iElem=1,nElems
@@ -224,10 +227,11 @@ DO iElem=1,nElems
         max_Vorticity=MAX(max_Vorticity,SQRT(SUM(Vorticity(:)*Vorticity(:))))
         ! compute enstrophy integrand
         ens=0.5*rho*SUM(Vorticity(1:3)*Vorticity(1:3))
-        ! compute curl(B) (the current)
+        ! compute curl(B) (the current) and max(current)
         curlB(1)=GradB(3,2) - GradB(2,3)
         curlB(2)=GradB(1,3) - GradB(3,1)
         curlB(3)=GradB(2,1) - GradB(1,2)
+        max_Current=MAX(max_Current,SQRT(SUM(curlB(:)*curlB(:))))
         ! compute magnetic enstrophy integrand
         mag_ens=s2mu_0*SUM(curlB(1:3)*curlB(1:3))
         ! compute the entropy integrand
@@ -285,11 +289,12 @@ buf( 8) = Enstrophy_comp
 buf( 9) = Entropy_comp
 buf(10) = mean_temperature
 buf(11) = Emag_comp
-buf(12) = Mag_Enstrophy
+buf(12) = max_Current
+buf(13) = Mag_Enstrophy
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,13,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ELSE
-  CALL MPI_REDUCE(buf  ,0           ,13,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(buf  ,0           ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
 max_Vorticity    = buf( 1)
 DR_u             = buf( 2)
@@ -302,7 +307,8 @@ Enstrophy_comp   = buf( 8)
 Entropy_comp     = buf( 9)
 mean_temperature = buf(10)
 Emag_comp        = buf(11)
-Mag_Enstrophy    = buf(12)
+max_Current      = buf(12)
+Mag_Enstrophy    = buf(13)
 #endif /*MPI*/
 IF(MPIroot)THEN
   ! some turbulent quantities
@@ -376,6 +382,8 @@ IF(MPIroot)THEN
     A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
     A2F_iVar=A2F_iVar+1
     A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=max_Current      !'"Maximum Current"'
     A2F_iVar=A2F_iVar+1
     A2F_data(A2F_iVar)=Mag_Enstrophy    !'"Magnetic Enstrophy"'
   END IF !doAnalyzeToFile
