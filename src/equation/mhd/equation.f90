@@ -92,6 +92,7 @@ CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of G
 CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization" &
                                 ,multiple=.TRUE.)
 CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
+                                           "0: Central flux, "//&
                                            "1: Lax-Friedrichs, "//&
                                            "2: HLLC, "//&
                                            "3: Roe, "//&
@@ -454,7 +455,12 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(5)=6.0
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
-CASE(3) ! alfven wave , domain [-1,1]^3
+CASE(3,301) ! alfven wave , domain [-1,1]^3
+  IF(ExactFunction.EQ.301)THEN
+    Prim(5)=RefStatePrim(IniRefState,5)
+  ELSE
+    Prim(5)=1.
+  END IF
   Omega=2.*PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
@@ -470,7 +476,7 @@ CASE(3) ! alfven wave , domain [-1,1]^3
   Resu(2) = -e*ny*COS(phi_alv)
   Resu(3) =  e*nx*COS(phi_alv)
   Resu(4) =  e*SIN(phi_alv)
-  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(5) = Prim(5)*sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !rho=1, CASE(3): p=1, CASE(301):p from RefState
   Resu(6) = nx -Resu(2)*sqr
   Resu(7) = ny -Resu(3)*sqr
   Resu(8) =    -Resu(4)*sqr
@@ -645,6 +651,19 @@ CASE(7) ! constant density / pressure / velocity, periodic magnetic field
   Prim(8) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
 
   CALL PrimToCons(Prim,Resu)
+CASE(8) ! 2D constant density / pressure / magnetic field , periodic velocity
+  Omega=PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2) = -2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(3) =  2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(4) = -0.1
+  Prim(5)=1.
+  Prim(6)=-1.
+  Prim(7)=2.
+  Prim(8)=3.1
+
+  CALL PrimToCons(Prim,Resu)
   
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
@@ -798,6 +817,23 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
   Prim(5)=1.
   Prim(7)=1.-2./(1+EXP(2*5*(x(1)-0.5))) !tanh((x(1)-0.5)/lambda) lambda=0.2
   Prim(8)=SQRT(1-Prim(7)*Prim(7))
+  CALL PrimToCons(Prim,Resu)
+
+CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
+        ! eta=0, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=0.5 , constant field Bz=1
+  Prim=0.
+  Prim(8)=1.0
+  Prim(2)=IniAmplitude*TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  
+  Prim(1)=1.0
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=REAL(0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
+    END DO
+  END DO
+  Prim(3)=IniDisturbance*Prim(3)
+  Prim(5)=0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(80) ! 2D island coalesence domain [-1,1]^2

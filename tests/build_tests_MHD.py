@@ -288,8 +288,8 @@ globopts.extend([
 
 baseID=0
 
-Nchoices= ["N","3","4","5","6","7"]
-#Nchoices= ["N"]
+#Nchoices= ["N","3","4","5","6","7"]
+Nchoices= ["N"]
 
 #volfluxes=["0","10"]
 volfluxes=["-1"]
@@ -302,7 +302,7 @@ for  nnn  in range(0,len(Nchoices)):
     baseID=int(Nchoice)*1000
   # relative path from tests folder, parameterfile,Linf[0]<crit for success
   TEST=[]
-  TEST.extend([args.path,args.param, "1.0e-12" ])
+  TEST.extend([args.path,args.param, "1.0e-10" ])
   
   #============================================================================
   #============================================================================

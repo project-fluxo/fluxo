@@ -27,6 +27,10 @@ INTERFACE Riemann
   MODULE PROCEDURE Riemann
 END INTERFACE
 
+INTERFACE RiemannSolverCentral
+  MODULE PROCEDURE RiemannSolverCentral
+END INTERFACE
+
 INTERFACE RiemannSolverByRusanov
   MODULE PROCEDURE RiemannSolverByRusanov
 END INTERFACE
@@ -64,6 +68,7 @@ INTERFACE RiemannSolver_ECKEP_LLF
 END INTERFACE
 
 PUBLIC:: Riemann
+PUBLIC:: RiemannSolverCentral
 PUBLIC:: RiemannSolverByRusanov
 PUBLIC:: RiemannSolverByHLL
 PUBLIC:: RiemannSolverByHLLC
@@ -170,6 +175,34 @@ END DO
 #endif /* PARABOLIC */
 END SUBROUTINE Riemann
 
+
+!==================================================================================================================================
+!> Central / Average Euler flux
+!==================================================================================================================================
+SUBROUTINE RiemannSolverCentral(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+! Euler Fluxes
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+
+F=0.5*(F_L+F_R)
+
+END SUBROUTINE RiemannSolverCentral
 
 
 !==================================================================================================================================

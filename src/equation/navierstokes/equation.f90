@@ -94,6 +94,7 @@ CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent."
 #endif /*PP_VISC==2*/
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
+                                           "  0: Central"//&
                                            "  1: Local Lax-Friedrichs"//&
                                            " 22: HLL"//&
                                            "  2: HLLC"//&
@@ -271,6 +272,9 @@ END IF
 
 WhichRiemannSolver = GETINT('Riemann','1')
 SELECT CASE(WhichRiemannSolver)
+  CASE(0)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: average standard DG flux'
+    SolveRiemannProblem     => RiemannSolverCentral
   CASE(1)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Local Lax-Friedrichs'
     SolveRiemannProblem     => RiemannSolverByRusanov
