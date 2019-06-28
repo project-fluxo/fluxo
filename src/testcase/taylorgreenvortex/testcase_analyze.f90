@@ -204,7 +204,12 @@ DO iElem=1,nElems
         GradB=0.
 #endif
         ! Pressure
+#ifdef PP_GLM
+        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*(SUM(BField(1:3)*BField(1:3))&
+                          +U(9,i,j,k,iElem)*U(9,i,j,k,iElem)))
+#else
         Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*SUM(BField(1:3)*BField(1:3)))
+#endif /*PP_GLM*/
         ! compute divergence of velocity
         divU=GradVel(1,1)+GradVel(2,2)+GradVel(3,3)
         ! compute tensor of velocity gradients
@@ -270,7 +275,11 @@ DO iElem=1,nElems
           ! dissipation rate epsilon 3 from pressure times div u (compressible)
         DR_p=DR_p+eps3*Intfactor
           ! compute mean temperature
+#ifdef PP_GLM
+Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho-s2mu_0*U(9,i,j,k,iElem)*U(9,i,j,k,iElem))
+#else
         Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho)
+#endif /*PP_GLM*/
         mean_temperature=mean_temperature+Temperature*Intfactor       
       END DO
     END DO
