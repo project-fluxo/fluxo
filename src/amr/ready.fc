@@ -1,0 +1,177 @@
+
+void p4est_destroy_f(p4est_t **p4est)
+{
+    p4est_destroy(*p4est);
+}
+
+void p4est_connectivity_destroy_f(p4est_connectivity_t **conn)
+{
+    p4est_connectivity_destroy(*conn);
+}
+
+
+
+
+static void
+ElementCounterSetOldToZero_iter(p4est_iter_volume_info_t *info, void *user_data)
+{
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
+    // p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
+    int i;
+    //ElementID must be set in previous function (for example getData444)
+
+
+    for (i = 0; i < 8; i++)
+    {
+        dataquad->OldElementID[i] = 0;
+    }
+    dataquad->OldElementID[0] = dataquad->ElementID;
+    dataquad->IsChanged=0;
+
+#ifndef NON_OPTIMIZED
+    for (i = 0; i < 6; i++)
+    {
+        dataquad->OldSidesID[i] = dataquad->SidesID[i];
+
+    }
+#endif
+    return;
+}
+
+static void
+ElementCounter_iter(p4est_iter_volume_info_t *info, void *user_data)
+{
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
+    p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
+    int i;
+    //ElementID must be set in previous function (for example getData444)
+    dataquad->ElementID = ++data->nElems;
+    dataquad->IsChanged=0;
+    for (i = 0; i < 6; i++)
+    {
+        dataquad->OldSidesID[i] = dataquad->SidesID[i];
+        dataquad->SidesID[i] = 0;
+
+    }
+
+        return;
+}
+
+
+static void
+ElementCounterNew_iter(p4est_iter_volume_info_t *info, void *user_data)
+{
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
+    int *nElems = (int *)user_data;
+    int i;
+    dataquad->ElementID = ++(*nElems);
+    
+    for (i = 0; i < 8; i++)
+    {
+        dataquad->OldElementID[i]=0;
+    }
+    dataquad->OldElementID[0] = dataquad->ElementID;
+    for (i = 0; i < 6; i++)
+    {
+        dataquad->SidesID[i] = -1;
+#ifndef NON_OPTIMIZED
+        dataquad->OldSidesID[i] = -1;
+#endif
+        dataquad->flips[i] = -1;
+        // dataquad->SidesRatio[i] = 0;
+    }
+    // printf("dataquad->ElementID = %d \n", dataquad->ElementID);
+    // fflush(stdout);
+
+    // data->nElems++;
+    return;
+}
+
+
+
+int p4est_init_f(int mpicomm1)
+{
+    // int mpiret = 0;
+
+    /* Initialize MPI; see sc_mpi.h.
+   * If configure --enable-mpi is given these are true MPI calls.
+   * Else these are dummy functions that simulate a single-processor run. */
+    // mpiret = sc_MPI_Init(NULL, NULL);
+    // SC_CHECK_MPI(mpiret);
+    // mpicomm = sc_MPI_COMM_WORLD;
+    mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C
+    // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
+
+    // printf("mpicomm = %d, size = %d \n", mpicomm, sizeof(mpicomm));
+    // fflush(stdout);
+    /* These functions are optional.  If called they store the MPI rank as a
+   * static variable so subsequent global p4est log messages are only issued
+   * from processor zero.  Here we turn off most of the logging; see sc.h. */
+    // sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR sc.h. */
+    sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
+    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
+    p4est_init(NULL, SC_LP_ERROR); //SC_LP_SILENT , SC_LP_ERROR
+    return 0;
+}
+
+
+void p4est_finalize()
+{
+      sc_finalize ();
+
+}
+
+/** Broadcast a connectivity structure that exists only on one process to all.
+!  *  On the other processors, it will be allocated using p8est_connectivity_new.
+!  *  \param [in] conn_in For the root process the connectivity to be broadcast,
+!  *                      for the other processes it must be NULL.
+!  *  \param [in] root    The rank of the process that provides the connectivity.
+!  *  \param [in] comm    The MPI communicator.
+!  *  \return             For the root process this is a pointer to \a conn_in.
+!  *                      Else, a pointer to a newly allocated connectivity
+!  *                      structure with the same values as \a conn_in on the
+!  *                      root process.
+!  */
+p8est_connectivity_t *p8est_conn_bcast(p8est_connectivity_t *conn_in,
+                                               int root, /* The owner of CONN*/
+                                               int comm){
+    
+    int mpimyrank;
+    MPI_Comm_rank(MPI_Comm_f2c(comm), &mpimyrank);
+    if (mpimyrank!=root)
+    {
+        p4est_connectivity_destroy(conn_in);
+        conn_in = NULL;
+    }
+
+    fflush(stdout);
+
+
+    return p8est_connectivity_bcast(conn_in, root, MPI_Comm_f2c(comm));
+    // return NULL;
+};
+
+p4est_mpi_data_t * p4estGetMPIData_f(p4est_t *p4est){
+    p4est_mpi_data_t *data;
+    data = (p4est_mpi_data_t *)malloc(sizeof(p4est_mpi_data_t));
+    data->mpisize = p4est->mpisize;
+    data->mpirank = p4est->mpirank;
+    data->local_num_quad = p4est->local_num_quadrants;
+    data->global_num_quad = p4est->global_num_quadrants;
+    data->offsetMPI = p4est->global_first_quadrant;
+    return data;
+}
+
+void p4estDelMPIData_f(p4est_mpi_data_t *data)
+{
+    free(data);
+    data=NULL;
+}
+
+p4est_connectivity_t *p8est_connectivity_new_periodic_f()
+{
+    return p8est_connectivity_new_periodic();
+}

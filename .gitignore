@@ -1,0 +1,55 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.err
+
+# scripts needed for the CHEOPS cluster in Cologne
+*.sh
+
+# others
+build
+share
+doc/ford/out
+.DS_*
+*~
+*State*
+*vtu
+*_mesh.h5
+*.pvd
+*.pvsm
+*.dat
+log.*
+log_*
+*.csv
+*.pyc
+tests/meshes/*mesh.h5
+ini/mhd/TGV/*mesh.h5
+tests/dirx_*
+CMakeCache.txt
+CMakeFiles/

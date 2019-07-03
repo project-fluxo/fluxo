@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "optimisation.h": "c",
+        "*.fc": "c"
+    }
+}
