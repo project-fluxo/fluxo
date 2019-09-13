@@ -70,6 +70,7 @@ INTEGER                                      :: l
 !gradPy=0.
 !gradPz=0.
 
+Flux = 0.
 DO iElem=1,nElems
   CALL EvalLiftingVolumeFlux(iElem,Flux)
   DO k=0,PP_N

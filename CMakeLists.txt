@@ -1,16 +1,18 @@
 # =========================================================================
 # FLUXO CMake configuration
 # =========================================================================
-# NOTE: use minimum CMake version required by tools/libs (Paraview, HDF5, FFTW)
-CMAKE_MINIMUM_REQUIRED(VERSION 3.0.0)
-# Policies (see https://cmake.org/cmake/help/v3.8/manual/cmake-policies.7.html)
-cmake_policy (SET CMP0045 OLD)
-cmake_policy (SET CMP0046 OLD)
-# Folder for custom CMake source files
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
+# TODO: eventually require CMake 3.0 in future releases
+# Advantages: Possible to split string
+IF ("${CMAKE_VERSION}" VERSION_GREATER 3.0.0)
+  cmake_policy (SET CMP0045 OLD)
+  cmake_policy (SET CMP0046 OLD)
+ENDIF()
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
 INCLUDE(ExternalProject)
 INCLUDE(CMakeDependentOption)
+
 
 # =========================================================================
 # Check whether we are using Git ssh or https
@@ -27,8 +29,9 @@ SET (HDF5TAG "hdf5-1_10_1" CACHE STRING "HDF5 version tag")
 SET (P4ESTDOWNLOAD https://github.com/cburstedde/p4est.git )
 SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
 
+
 # =========================================================================
-# Detect machine environements
+# Detect machine environments
 # =========================================================================
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
@@ -51,7 +54,7 @@ ENDIF()
 # Project definitions and output paths
 # =========================================================================
 PROJECT(Fluxo)
-ENABLE_LANGUAGE(Fortran C CXX)
+ENABLE_LANGUAGE(Fortran  C CXX)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 SET(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
@@ -80,21 +83,21 @@ MACRO(SUBDIRLIST result curdir)
 ENDMACRO()
 
 #generate lists of subfolders to be used as choices for the variables of the configuration
-SUBDIRLIST(TESTCASES  ${CMAKE_CURRENT_SOURCE_DIR}/src/testcase/)
+
 SUBDIRLIST(EQNSYSTEMS ${CMAKE_CURRENT_SOURCE_DIR}/src/equation/)
+SUBDIRLIST(TESTCASES  ${CMAKE_CURRENT_SOURCE_DIR}/src/testcase/)
 SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
 
 OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 #OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
-OPTION(FLUXO_BUILD_HDF5 "Compile and build HDF5 library" OFF)
+OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 OPTION(FLUXO_AMR        "Compile and build with p4est / AMR support" ON)
-
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
-                        "Choice of equation system (linearscalaradvection/navierstokes/mhd/maxwell)" )
+                        "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
 SET(   FLUXO_TESTCASE   "default"      CACHE STRING
@@ -115,11 +118,6 @@ SET(FLUXO_DISCTYPE "2" CACHE STRING "disc type for volint. 1: standard form, 2: 
 SET_PROPERTY(CACHE FLUXO_DISCTYPE  PROPERTY STRINGS "1" "2")
 ADD_DEFINITIONS(-DPP_DiscType=${FLUXO_DISCTYPE})
 
-SET(FLUXO_DISC_CARTESIANFLUX  OFF  CACHE BOOL "switch on only if cartesian meshes are used.")
-IF(FLUXO_DISC_CARTESIANFLUX)
-  ADD_DEFINITIONS(-DCARTESIANFLUX=${FLUXO_DISC_CARTESIANFLUX} )
-ENDIF()
-
 IF (CMAKE_BUILD_TYPE MATCHES "Debug")
   UNSET(FLUXO_OPTIMIZED CACHE) # unset if debug
 ELSE()
@@ -129,20 +127,19 @@ IF(FLUXO_OPTIMIZED)
   ADD_DEFINITIONS(-DOPTIMIZED)
 ENDIF()
 
-##### Node type
 SET(FLUXO_DISC_NODETYPE "GAUSS-LOBATTO" CACHE STRING "Set of nodes used for representing the solution (GAUSS/GAUSS-LOBATTO).")
-SET_PROPERTY(CACHE FLUXO_DISC_NODETYPE PROPERTY STRINGS "GAUSS" "GAUSS-LOBATTO")
+SET_PROPERTY(CACHE FLUXO_DISC_NODETYPE PROPERTY STRINGS GAUSS GAUSS-LOBATTO)
 IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   ADD_DEFINITIONS(-DPP_NodeType=1)
 ELSEIF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS-LOBATTO")
   ADD_DEFINITIONS(-DPP_NodeType=2)
 ELSE()
-  MESSAGE(SEND_ERROR "No such node type known.")
+  MESSAGE(ERROR " No such node type known.")
 ENDIF()
 
 IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   IF(FLUXO_DISCTYPE EQUAL 2)
-    MESSAGE(SEND_ERROR " Split form discretization (DiscType=2) + Gauss nodes is not possible! Choose either DiscType=2 + Gauss-Lob., or DiscType=1 + Gauss / Gauss-Lob. ")
+    MESSAGE(ERROR " Split form discretization (DiscType=2) + Gauss nodes is not possible! Choose either DiscType=2 + Gauss-Lob., or DiscType=1 + Gauss / Gauss-Lob. ")
   ENDIF()
 ENDIF()
 
@@ -152,6 +149,10 @@ IF(FLUXO_AMR)
 ELSE()
   ADD_DEFINITIONS(-DUSE_AMR=0)
 ENDIF()
+
+# Enable or disable unit tests
+#OPTION(FLUXO_UNITTESTS "Enable unit tests after build" ON)
+#MARK_AS_ADVANCED(FLUXO_UNITTESTS)
 
 # =========================================================================
 # Equation system
@@ -180,6 +181,14 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   ELSE()
     ADD_DEFINITIONS( -DPP_nVar=8)
   ENDIF()
+  IF(FLUXO_DISCTYPE EQUAL 2)
+    SET(FLUXO_EQN_NONCONS  ON  CACHE BOOL "switch on/off non-conservative source term for mhd.")
+    IF(FLUXO_EQN_NONCONS)
+      ADD_DEFINITIONS(-DNONCONS=1)
+    ENDIF()
+  ELSE()
+    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
+  ENDIF()
   SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
   IF(FLUXO_EQN_ANISO_HEAT)
     ADD_DEFINITIONS(-DPP_ANISO_HEAT=1)
@@ -187,19 +196,20 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
 ELSE()
   UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd
   UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
+  UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
   SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=8 -Dmaxwell)
   IF (FLUXO_PARABOLIC)
-    MESSAGE(SEND_ERROR " Do not use parabolic flag with maxwell equation system!")
+    MESSAGE(ERROR " Do not use parabolic flag with maxwell equation system!")
   ENDIF()
 ENDIF()
 
 IF(NOT EQNSYSNAME_FOUND ) 
   # no given equation system
-  MESSAGE(SEND_ERROR " This equation system does not appear in CMakeLists.txt!")
+  MESSAGE(ERROR " This equation system does not appear in CMakeLists.txt!")
 ENDIF()
 
 
@@ -209,18 +219,27 @@ IF (FLUXO_PARABOLIC)
   ADD_DEFINITIONS(-DPARABOLIC=1)
 
   #### Set the lifting
-  SET(FLUXO_PARABOLIC_LIFTING "br2" CACHE STRING "Lifting method used for PARABOLIC")
+  SET(FLUXO_PARABOLIC_LIFTING "br1" CACHE STRING "Lifting method used for PARABOLIC")
   SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING PROPERTY STRINGS ${LIFTINGS})
 
+  SET(FLUXO_PARABOLIC_LIFTING_VAR "cons_var" CACHE STRING "variable used for BR1 lifting, cons/prim/entropy_var: conservative/primitive/entropy variables.")
+  SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING_VAR PROPERTY STRINGS cons_var prim_var entropy_var)
+  IF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "cons_var")
+    ADD_DEFINITIONS(-DPP_Lifting_Var=1)
+  ELSEIF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "prim_var")
+    ADD_DEFINITIONS(-DPP_Lifting_Var=2)
+  ELSEIF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "entropy_var")
+    ADD_DEFINITIONS(-DPP_Lifting_Var=3)
+  ENDIF()
   IF(FLUXO_PARABOLIC_LIFTING STREQUAL "br1")
     ADD_DEFINITIONS(-DPP_Lifting=1)
   ELSEIF(FLUXO_PARABOLIC_LIFTING STREQUAL "br2")
     ADD_DEFINITIONS(-DPP_Lifting=2)
   ELSE()
-    MESSAGE(SEND_ERROR " No such LIFTING known.")
+    MESSAGE(ERROR " No such LIFTING known.")
   ENDIF()
 
-  #### Set the law for viscosity
+  #### Set the viscosity
   IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
     SET(FLUXO_EQN_VISCOSITY "constant" CACHE STRING 
                       "Method to calculate viscosity (constant/sutherland/powerlaw)")
@@ -232,40 +251,19 @@ IF (FLUXO_PARABOLIC)
     ELSEIF(FLUXO_EQN_VISCOSITY STREQUAL "powerlaw")
       ADD_DEFINITIONS(-DPP_VISC=2)
     ELSE()
-      MESSAGE(SEND_ERROR " No such VISCOSITY known.")
+      MESSAGE(ERROR " No such VISCOSITY known.")
     ENDIF()
   ELSE()
     UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if parabolic & not navierstokes
   ENDIF()
 ELSE()
-  UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if not parabolic & not navierstokes
-  UNSET(FLUXO_PARABOLIC_LIFTING CACHE ) #if not parabolic
+  #if not parabolic
+  UNSET(FLUXO_PARABOLIC_LIFTING_VAR CACHE )
+  UNSET(FLUXO_EQN_VISCOSITY CACHE ) 
+  UNSET(FLUXO_PARABOLIC_LIFTING CACHE )
   ADD_DEFINITIONS(-DPARABOLIC=0)
 ENDIF()
 
-# =========================================================================
-# CMake option output
-# =========================================================================
-
-# A function to get all user defined variables with a specified prefix
-function (getListOfVarsStartingWith _prefix _varResult)
-    GET_CMAKE_PROPERTY(_vars CACHE_VARIABLES)
-    STRING(REGEX MATCHALL "(^|;)${_prefix}[A-Za-z0-9_]*" _matchedVars "${_vars}")
-    SET(${_varResult} ${_matchedVars} PARENT_SCOPE)
-endfunction()
-
-# A function to get all user defined variables with a specified prefix
-SET(configuration ${CMAKE_Fortran_MODULE_DIRECTORY}/configuration-cmake.f90)
-FILE(WRITE ${configuration} "!This file is included during compilation in fluxo.f90 to show the configuration on the screen output. \n")
-FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A)') \" THIS IS AN OUTPUT OF THE FLUXO OPTIONS USED IN CMAKE:\" \n")
-GETLISTOFVARSSTARTINGWITH("FLUXO_" fluxoVars)
-FOREACH (_var IN LISTS fluxoVars)
-  GET_PROPERTY(currentHelpString CACHE "${_var}" PROPERTY HELPSTRING)
-  IF(${_var})
-    STRING(REPLACE "\\" "\\\\" ${_var} ${${_var}})
-  ENDIF()
-  FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A18,A30,A3,A40)')  \"   CMAKE-OPTION : \",\" ${_var} \",\" : \",\"${${_var}}\"\n")
-ENDFOREACH()
 
 
 # =========================================================================
@@ -291,7 +289,7 @@ ENDIF()
 SET(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
 
 # add basedir for location of corresponding userblock-file
-ADD_DEFINITIONS("-DBASEDIR='\"${CMAKE_CURRENT_BINARY_DIR}/\"'")
+#ADD_DEFINITIONS("-DBASEDIR='\"${CMAKE_CURRENT_BINARY_DIR}/\"'")
 
 # =========================================================================
 # COMPILER FLAGS
@@ -299,6 +297,7 @@ ADD_DEFINITIONS("-DBASEDIR='\"${CMAKE_CURRENT_BINARY_DIR}/\"'")
 
 # FFLAGS depend on the compiler
 GET_FILENAME_COMPONENT (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
+
 
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   #environment specific variables
@@ -313,7 +312,7 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -finline-functions ") #gives segfault: -fstack-arrays
   SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -ffpe-trap=invalid -fbounds-check -finit-real=snan -fbacktrace -Wall -Wextra")
   # add flags only for compiling not linking!
-  SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input -fPIC")
+  SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input")
 
 ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
    #environment specific variables
@@ -330,7 +329,7 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
   SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
   SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
    # add flags only for compiling not linking!
-   SET (FLUXO_COMPILE_FLAGS "-fpp -allow nofpp_comments -assume bscc")
+   SET (FLUXO_COMPILE_FLAGS "-fpp -assume bscc")
 
 ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   # set Flags
@@ -342,7 +341,7 @@ ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   SET (FLUXO_COMPILE_FLAGS "-F")
 
 ELSE()
-  MESSAGE(SEND_ERROR "Unknown compiler")
+   MESSAGE(ERROR " Unknown compiler")
 ENDIF()
 
 # =========================================================================
@@ -360,12 +359,24 @@ ENDIF()
 SET(FLUXO_COMPILERS FC=${FLUXO_FC} CC=${FLUXO_CC} CXX=${FLUXO_CXX})
 
 
-IF(FLUXO_BUILD_MPI)
-  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+# IF(FLUXO_BUILD_MPI)
+#   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+# ELSE()
+#   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+# ENDIF()
+# MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
+
+IF(FLUXO_BUILD_HDF5)
+  IF(FLUXO_BUILD_MPI)
+    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+  ELSE()
+    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+  ENDIF()
 ELSE()
-  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+  UNSET(FLUXO_EXTERNAL_LIB_DIR CACHE ) 
 ENDIF()
 MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
+
 
 # =========================================================================
 # p4est library
@@ -419,17 +430,28 @@ IF(NOT FLUXO_BUILD_HDF5)
       MESSAGE (STATUS "h5diff found:${HDF5_DIFF_EXECUTABLE}")
     ENDIF()
   ENDIF()
+  UNSET(HDF5TAG CACHE ) #if not build hdf5
+  UNSET(HDF5DOWNLOAD CACHE ) #if not build hdf5
   UNSET(FLUXO_HDF5_DLDIR CACHE ) #if not build hdf5
   UNSET(FLUXO_HDF5_DIR CACHE ) #if not build hdf5
+  UNSET(FLUXO_HDF5FC CACHE ) 
+  UNSET(FLUXO_HDF5CC CACHE ) 
 ELSE()
+  # define here the path to download from
+  SET (HDF5DOWNLOAD https://bitbucket.hdfgroup.org/scm/hdffv/hdf5.git )
+  SET (HDF5TAG "hdf5-1_10_0-patch1" CACHE STRING "HDF5 version tag")
 
   SET(FLUXO_HDF5_DLDIR ${FLUXO_EXTERNAL_LIB_DIR}/HDF5)
   SET(FLUXO_HDF5_DIR  ${FLUXO_HDF5_DLDIR}/build)
   IF (NOT EXISTS "${FLUXO_HDF5_DIR}/lib/libhdf5.a")
     IF(FLUXO_BUILD_MPI)
       SET(FLUXO_HDF5PARALLEL --enable-parallel)
+      SET(FLUXO_HDF5FC ${MPI_Fortran_COMPILER})
+      SET(FLUXO_HDF5CC ${MPI_C_COMPILER})
     ELSE()
       UNSET(FLUXO_HDF5PARALLEL)
+      SET(FLUXO_HDF5FC ${CMAKE_Fortran_COMPILER})
+      SET(FLUXO_HDF5CC ${CMAKE_C_COMPILER} )
     ENDIF()
     #NOTE: old 1.8.X versions of HDF5 require additional flag --enable-fortran2003
     ExternalProject_Add(HDF5
@@ -437,9 +459,18 @@ ELSE()
       GIT_TAG ${HDF5TAG}
       PREFIX ${FLUXO_HDF5_DIR}
       UPDATE_COMMAND ""
-      CONFIGURE_COMMAND ${FLUXO_COMPILERS} ${FLUXO_HDF5_DIR}/src/HDF5/configure --prefix=${FLUXO_HDF5_DIR} --with-pic --enable-fortran ${FLUXO_HDF5PARALLEL} --disable-shared --libdir=${FLUXO_HDF5_DIR}/lib
+      CONFIGURE_COMMAND FC=${FLUXO_HDF5FC} CC=${FLUXO_HDF5CC} ${FLUXO_HDF5_DIR}/src/HDF5/configure --prefix=${FLUXO_HDF5_DIR} --enable-fortran ${FLUXO_HDF5PARALLEL} --disable-shared --libdir=${FLUXO_HDF5_DIR}/lib
       BUILD_COMMAND ${MAKE}
     )
+    # CMake HDF5 is fast but not that reliable
+    #ExternalProject_Add(HDF5
+    #  GIT_REPOSITORY ${HDF5DOWNLOAD}
+    #  GIT_TAG ${HDF5TAG}
+    #  PREFIX ${FLUXO_HDF5_DIR}
+    #  UPDATE_COMMAND ""
+    #  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${FLUXO_HDF5_DIR} -DCMAKE_C_COMPILER=${FLUXO_HDF5CC} -DCMAKE_Fortran_COMPILER=${FLUXO_HDF5FC} -DBUILD-TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_FORTRAN=ON -DHDF5_ENABLE_PARALLEL=ON
+    #  BUILD_COMMAND ${MAKE}
+    #)
   ENDIF()
 
   SET(HDF5_hdf5_LIBRARY_RELEASE         ${FLUXO_HDF5_DIR}/lib/libhdf5.a)
@@ -462,6 +493,8 @@ IF(FLUXO_BUILD_HDF5_CMAKE)
   LIST(APPEND linkedlibs ${HDF5_FORTRAN_STATIC_LIBRARY} ${HDF5_LIBRARIES})
 ELSE()
   INCLUDE_DIRECTORIES (${HDF5_INCLUDE_DIR_FORTRAN} ${HDF5_INCLUDE_DIR})
+  LIST(INSERT HDF5_LIBRARIES 0 ${HDF5_hdf5_fortran_LIBRARY_RELEASE})
+  LIST(REMOVE_DUPLICATES HDF5_LIBRARIES)
   MESSAGE(STATUS "Found HDF5 Libs: " ${HDF5_LIBRARIES})
   LIST(APPEND linkedlibs ${HDF5_LIBRARIES} )
 ENDIF()
@@ -545,15 +578,16 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/timedisc/*.f90            )
 
 
-# collect F90 files of 'dg' directory (non-recursive) in a new list 'dgF90'
+
 FILE(GLOB dgF90            ./src/dg/*.f90)
-# append F90 files of lifting to 'dgF90'-list
 IF (FLUXO_PARABOLIC)
   FILE(GLOB liftingF90     ./src/dg/${FLUXO_PARABOLIC_LIFTING}/*.f90)
   LIST(APPEND dgF90 ${liftingF90})
 ENDIF()
 
-# append 'dgF90'-list to 'fluxoF90'-list
+
+# define libs
+# ADD_LIBRARY(fluxolibF90 OBJECT ${dgF90})
 LIST(APPEND fluxoF90 ${dgF90})
 
 IF (FLUXO_AMR)
@@ -589,7 +623,14 @@ ENDIF()
 # define libs
 ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} )
 ADD_DEPENDENCIES(fluxolibF90 HDF5)
+
 SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS}) 
+#ADD_LIBRARY(userblocklib OBJECT ./src/output/read_userblock.c)
+#SET_TARGET_PROPERTIES(userblocklib PROPERTIES LINKER_LANGUAGE C)
+#ADD_LIBRARY(fluxolib STATIC $<TARGET_OBJECTS:fluxolibF90> $<TARGET_OBJECTS:userblocklib>)
+
+# ADD_LIBRARY(fluxolib STATIC $<TARGET_OBJECTS:fluxolibF90> )
+# ADD_DEPENDENCIES(fluxolibF90 HDF5)
 LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibF90>)
 IF (fluxoC)
   ADD_LIBRARY(fluxolibC OBJECT ${fluxoC} )
@@ -597,7 +638,6 @@ IF (fluxoC)
   SET_TARGET_PROPERTIES(fluxolibC PROPERTIES COMPILE_FLAGS "-fPIC") # TODO: add C default flags
   LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibC>)
 ENDIF()
-
 ADD_LIBRARY(fluxolib STATIC ${fluxoobj})
 LIST(APPEND fluxodeps fluxolib HDF5)
 IF (FLUXO_AMR)
@@ -605,11 +645,12 @@ IF (FLUXO_AMR)
 ENDIF()
 
 add_exec(fluxo ./src/fluxo.f90)
+# ADD_DEPENDENCIES(fluxo fluxolib HDF5)
 ADD_DEPENDENCIES(fluxo ${fluxodeps})
 
 IF (_BUILD_FLUXO_POST)
   add_exec(fluxo_post ./src/fluxo_post.f90)
-  ADD_DEPENDENCIES(fluxo_post ${fluxodeps})
+  ADD_DEPENDENCIES(fluxo_post fluxolib HDF5)
 ENDIF()
 
 # special compiler flags to avoid warnings for empty functions of testcase.f90 and overwrite of intrinsic abort in globals.f90
@@ -635,3 +676,96 @@ ADD_CUSTOM_TARGET(preproc_defines COMMAND echo ${comp_defs_str})
 # =========================================================================
 
 INSTALL(FILES    ${CMAKE_Fortran_MODULE_DIRECTORY}/configuration-cmake.f90 DESTINATION include )
+
+#INSTALL(FILES    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/userblock.txt DESTINATION bin)
+
+
+# =========================================================================
+# USERBLOCK + Preproc_flags
+# =========================================================================
+
+# A function to get all user defined variables with a specified prefix
+function (getListOfVarsStartingWith _prefix _varResult)
+    GET_CMAKE_PROPERTY(_vars CACHE_VARIABLES)
+    STRING(REGEX MATCHALL "(^|;)${_prefix}[A-Za-z0-9_]*" _matchedVars "${_vars}")
+    SET(${_varResult} ${_matchedVars} PARENT_SCOPE)
+endfunction()
+
+# A function to get all user defined variables with a specified prefix
+SET(configuration ${CMAKE_Fortran_MODULE_DIRECTORY}/configuration-cmake.f90)
+FILE(WRITE ${configuration} "!This file is included during compilation in fluxo.f90 to show the configuration on the screen output. \n")
+FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A)') \" THIS IS AN OUTPUT OF THE FLUXO OPTIONS USED IN CMAKE:\" \n")
+GETLISTOFVARSSTARTINGWITH("FLUXO_" fluxoVars)
+FOREACH (_var IN LISTS fluxoVars)
+  GET_PROPERTY(currentHelpString CACHE "${_var}" PROPERTY HELPSTRING)
+#  SET(boolian (${${_var}} STREQUAL "ON" OR ${${_var}} STREQUAL "OFF")) 
+#  IF(${boolian})
+#    #FILE(APPEND ${configuration} "OPTION(${_var} \"${currentHelpString}\" ${${_var}})\n")
+#    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,*)  \"   CMAKE,OPTION: ${_var} ${${_var}} \" \n")
+#  ELSE()
+    IF(${_var})
+      STRING(REPLACE "\\" "\\\\" ${_var} ${${_var}})
+    ENDIF()
+    #FILE(APPEND ${configuration} "SET(${_var} \"${${_var}}\" CACHE STRING \"${currentHelpString}\")\n")
+    FILE(APPEND ${configuration} "  WRITE(UNIT_stdOut,'(A18,A30,A3,A40)')  \"   CMAKE-OPTION : \",\" ${_var} \",\" : \",\"${${_var}}\"\n")
+#  ENDIF()
+ENDFOREACH()
+
+# =========================================================================
+# Add FLUXO2VTK tool
+# =========================================================================
+#add_exec(fluxo2vtk ./src/fluxo2vtk.f90)
+#ADD_DEPENDENCIES(fluxo2vtk fluxolib HDF5)
+
+# =========================================================================
+# RegressionCheck tool && Examples
+# =========================================================================
+#add_exec(regressioncheck ./regressioncheck/regressioncheck.f90
+#                         ./regressioncheck/regressioncheck_vars.f90
+#                         ./regressioncheck/regressioncheck_build.f90
+#                         ./regressioncheck/regressioncheck_compare.f90
+#                         ./regressioncheck/regressioncheck_run.f90
+#                         ./regressioncheck/regressioncheck_tools.f90 )
+#ADD_DEFINITIONS(-DH5DIFF="${HDF5_DIFF_EXECUTABLE}")
+#SET(FLUXO_REGRESSIONCHECK_EXAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/regressioncheck/examples")
+
+
+# =========================================================================
+# Ctags
+# =========================================================================
+#SET(EQNS_WO_ACTUAL ${EQNSYSTEMS})
+#LIST(REMOVE_ITEM EQNS_WO_ACTUAL ${FLUXO_EQNSYSNAME})
+#SET(EXLUDES "")
+#FOREACH(item ${EQNS_WO_ACTUAL})
+#   SET(EXLUDES "--exclude=src/equations/${item}/*" ${EXLUDES})
+#ENDFOREACH()
+#SET(LIFTINGS_WO_ACTUAL ${LIFTINGS})
+#LIST(REMOVE_ITEM LIFTINGS_WO_ACTUAL ${FLUXO_PARABOLIC_LIFTING})
+#FOREACH(item ${LIFTINGS_WO_ACTUAL})
+#   SET(EXLUDES "--exclude=src/dg/${item}/*" ${EXLUDES})
+#ENDFOREACH()
+#SET(TESTCASES_WO_ACTUAL ${TESTCASES})
+#LIST(REMOVE_ITEM TESTCASES_WO_ACTUAL ${FLUXO_TESTCASE})
+#FOREACH(item ${TESTCASES_WO_ACTUAL})
+#   SET(EXLUDES "--exclude=src/testcase/${item}/*" ${EXLUDES})
+#ENDFOREACH()
+#ADD_CUSTOM_COMMAND(OUTPUT ctags.txt COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && ctags -R --fortran-kinds=+i+L -f ctags.txt ${EXLUDES} src)
+#ADD_CUSTOM_TARGET(tags DEPENDS ctags.txt)
+#FIND_PROGRAM(CTAGS_PATH ctags)
+#IF(CTAGS_PATH)
+#    MESSAGE(STATUS "Found ctags: ${CTAGS_PATH}")
+#    ADD_DEPENDENCIES(fluxo tags)
+#ENDIF(CTAGS_PATH)
+
+# =========================================================================
+# Tests
+# =========================================================================
+
+# Deactivate tests on hornet since no programs are allowed to run on frontend
+#IF(ONHORNET GREATER -1)
+#  SET(FLUXO_UNITTESTS OFF CACHE BOOL "Enable unit tests after build" FORCE)
+#ENDIF()
+#IF(FLUXO_UNITTESTS)
+#  INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/unitTests/CMakeLists.txt)
+#ENDIF()
+

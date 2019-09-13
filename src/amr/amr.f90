@@ -187,6 +187,9 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs, offsetElemMPI
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   USE MOD_Mesh_Vars,          ONLY: nMPISides_MINE, nMPISides_YOUR,nGlobalElems, firstMPISide_YOUR, firstMPISide_MINE,firstMortarMPISide
+#if PARABOLIC
+ USE MOD_Lifting_Vars
+#endif /* PARABOLIC */
   USE, INTRINSIC :: ISO_C_BINDING
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
@@ -405,6 +408,68 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
         DEALLOCATE(U_SLAVE)
         DEALLOCATE(Flux_master)
         DEALLOCATE(Flux_SLAVE)
+#if PARABOLIC
+        IF (ALLOCATED(gradPx_slave))  THEN 
+          DEALLOCATE(gradPx_slave); 
+          ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+        ENDIF
+
+        IF (ALLOCATED(gradPy_slave))  THEN 
+          DEALLOCATE(gradPy_slave); 
+          ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+        ENDIF
+        
+        IF (ALLOCATED(gradPz_slave))  THEN 
+          DEALLOCATE(gradPz_slave); 
+          ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+        ENDIF
+
+        IF (ALLOCATED(gradPx_master))  THEN 
+          DEALLOCATE(gradPx_master); 
+          ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+
+        IF (ALLOCATED(gradPy_master))  THEN 
+          DEALLOCATE(gradPy_master); 
+          ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+
+        IF (ALLOCATED(gradPz_master))  THEN 
+          DEALLOCATE(gradPz_master); 
+          ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+        
+        IF (ALLOCATED(gradPx))  THEN 
+          DEALLOCATE(gradPx); 
+          ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+        
+        IF (ALLOCATED(gradPy))  THEN 
+          DEALLOCATE(gradPy); 
+          ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+        
+        IF (ALLOCATED(gradPz))  THEN 
+          DEALLOCATE(gradPz); 
+          ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+
+        IF (ALLOCATED(FluxX))  THEN 
+          DEALLOCATE(FluxX); 
+          ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+        
+        IF (ALLOCATED(FluxY))  THEN 
+          DEALLOCATE(FluxY); 
+          ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+        
+        IF (ALLOCATED(FluxZ))  THEN 
+          DEALLOCATE(FluxZ); 
+          ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+
+#endif /* PARABOLIC */
 
         IF (ALLOCATED(dtElem)) THEN  
           DEALLOCATE(dtElem); 

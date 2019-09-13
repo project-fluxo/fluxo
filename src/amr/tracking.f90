@@ -39,8 +39,8 @@ SUBROUTINE RunAMR()
   INTEGER               :: iXMax(3), iXMin(3)
   LOGICAL :: doBalance = .TRUE.
 
-MaxLevel = 2;
-MinLevel = 2;
+MaxLevel = 1;
+MinLevel = 0;
 
 !MaxLevel = 3;
 
@@ -139,7 +139,7 @@ CALL AMR_TEST_RUN(ElemToRefineAndCoarse);
 !Print *,1
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. 1) THEN
+IF (doLBalance .EQ. -2) THEN
     doLBalance = 0;
     IF (doBalance) CALL LoadBalancingAMR()
     IF (MPIRoot) THEN
@@ -152,7 +152,7 @@ END SUBROUTINE RunAMR
 SUBROUTINE InitVortex()
     USE MOD_DG_Vars,            ONLY: U
     USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
-    USE MOD_Equation_Vars,      ONLY:skappa, kappam1, skappam1, PrimToCons, kappa, IniExactFunc
+    USE MOD_Equation_Vars,      ONLY: kappam1, skappam1, PrimToCons, kappa, IniExactFunc
     USE MOD_Equation,           ONLY: ExactFunc
     IMPLICIT NONE
     INTEGER :: iElem, i,j,k,PP, nVar, Iter

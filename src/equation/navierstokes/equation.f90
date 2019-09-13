@@ -480,33 +480,34 @@ CASE(0)
   CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
-  !Resu(1)  = Prim(1)
-  !Resu(2:4)= Resu(1)*Prim(2:4)
-  !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
+  
+  ! Resu(1)  = Prim(1)
+  ! Resu(2:4)= Resu(1)*Prim(2:4)
+  ! Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
   
   
 
 
   ! Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
-  delta = 0.10
-  Radius = 0.20
-  Prim(1) = Resu(1)
-  rhoOut=Prim(1)
-  rhoIn=rhoOut /2.
-  Cent = (/0.5, .5, .5/) ! 0.5 Radius of Bubble
+  ! delta = 0.10
+  ! Radius = 0.20
+  ! Prim(1) = Resu(1)
+  ! rhoOut=Prim(1)
+  ! rhoIn=rhoOut /2.
+  ! Cent = (/0.5, .5, .5/) ! 0.5 Radius of Bubble
 
-  IF (SUM((x - cent)**2) .LT. Radius**2)  THEN
-    Prim(1)= rhoIn;!.1  
-  ELSEIF (SUM((x - cent)**2) .LT. (Radius + delta)**2) THEN
+  ! IF (SUM((x - cent)**2) .LT. Radius**2)  THEN
+  !   Prim(1)= rhoIn;!.1  
+  ! ELSEIF (SUM((x - cent)**2) .LT. (Radius + delta)**2) THEN
 
-    R=SQRT(SUM((x - cent)**2))
-    Prim(1)= rhoIn + (rhoOut - RhoIn) * (1 - COS((R - Radius)/delta *PP_Pi))/2.
-  else
-    Prim(1) = rhoOut
-  ENDIF
-  Prim(2:4) = Resu(2:4)/Resu(1)
-  Prim(5) = (Resu(5) - 0.5*Resu(1)*SUM(Resu(2:4)*Resu(2:4)))/sKappaM1
-  !Resu(2:4)= Resu(2:4)*Resu(1)/RefStateCons(IniRefState,2:4)
+  !   R=SQRT(SUM((x - cent)**2))
+  !   Prim(1)= rhoIn + (rhoOut - RhoIn) * (1 - COS((R - Radius)/delta *PP_Pi))/2.
+  ! else
+  !   Prim(1) = rhoOut
+  ! ENDIF
+  ! Prim(2:4) = Resu(2:4)/Resu(1)
+  ! Prim(5) = (Resu(5) - 0.5*Resu(1)*SUM(Resu(2:4)*Resu(2:4)))/sKappaM1
+  ! !Resu(2:4)= Resu(2:4)*Resu(1)/RefStateCons(IniRefState,2:4)
  ! Resu(5)  = Prim(5)*sKappaM1 + 0.5*Prim(1)*SUM(Prim(2:4)*Prim(2:4))
   !   ELSE
 ! print *, "Prim = ", Prim
@@ -524,7 +525,7 @@ CASE(1) ! constant
   !   prim(4)=-0.3
     
   !   prim(5)=20.
-  CALL PrimToCons(prim,Resu)
+  ! CALL PrimToCons(prim,Resu)
 CASE(2) ! sinus
   Frequency=0.01
   Amplitude=0.3
