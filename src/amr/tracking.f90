@@ -21,12 +21,12 @@ SUBROUTINE RunAMR()
     USE MOD_PreProc
   USE MOD_Globals,              ONLY: MPIroot
   USE MOD_DG_Vars,            ONLY: U
-  USE MOD_AMR,                 ONLY: AMR_TEST_RUN,LoadBalancingAMR, SaveMesh;
+  USE MOD_AMR,                 ONLY: AMR_TEST_RUN,LoadBalancingAMR, SaveMesh,LoadBalancingAMRold;
   USE MOD_Mesh_Vars,           ONLY:nElems, Elem_xGP, nGlobalElems
   USE MOD_Interpolation_Vars, ONLY: xGP
   USE MOD_Basis,         ONLY: BuildLegendreVdm
   USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
-  USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
+  ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
   IMPLICIT NONE
   ! SAVE
     !Local variables
@@ -39,8 +39,8 @@ SUBROUTINE RunAMR()
   INTEGER               :: iXMax(3), iXMin(3)
   LOGICAL :: doBalance = .TRUE.
 
-MaxLevel = 1;
-MinLevel = 0;
+MaxLevel = 2;
+MinLevel = 2;
 
 !MaxLevel = 3;
 
@@ -52,7 +52,7 @@ ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
 CALL BuildLegendreVdm(PP_N,xGP,Vdm_Leg,sVdm_Leg)
 
 !print *, RefStatePrim(IniRefState,:)
-RhoInf = RefStatePrim(IniRefState,1)
+! RhoInf = RefStatePrim(IniRefState,1)
 !CALL EXIT()
 DO l=1,nElems
 !     ! if (l .EQ. 1) U()
@@ -136,14 +136,17 @@ ENDDO
  !   ENDIF
 !ENDDO
 CALL AMR_TEST_RUN(ElemToRefineAndCoarse);
-!Print *,1
+IF (MPIRoot) THEN
+  Print *, "AMR RUN!"
+ENDIF
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. -2) THEN
+IF (doLBalance .EQ. 5) THEN
     doLBalance = 0;
+    IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
     IF (doBalance) CALL LoadBalancingAMR()
     IF (MPIRoot) THEN
-        print *, "nGloballems = ", nGlobalElems
+        print *, "Balance Loading END: Number of Global Elements = ", nGlobalElems
     ENDIF
 ENDIF
 

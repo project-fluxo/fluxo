@@ -264,7 +264,7 @@ DO i=1,nTotal_face
     v2   = U_Face(3,i)*srho ! v
     v3   = U_Face(4,i)*srho ! w
     p    = kappaM1*(U_Face(5,i)-0.5*(U_Face(2,i)*v1+U_Face(3,i)*v2+U_Face(4,i)*v3))
-    ! Euler fluxes x-directi
+    ! Euler fluxes x-direction
     F_Face(1,i)= U_Face(2,i)          ! rho*u
     F_Face(2,i)= U_Face(2,i)*v1+p     ! rho*u²+p
     F_Face(3,i)= U_Face(2,i)*v2       ! rho*u*v
@@ -647,9 +647,6 @@ INTEGER  :: p,q
 REAL     :: F_m(PP_nVar,0:PP_N,0:PP_N)
 REAL     :: F_s(PP_nVar,0:PP_N,0:PP_N)
 !==================================================================================================================================
-! flux = 0.
-F_m = 0.
-F_s = 0.
 #if (PP_Lifting_Var==1)
   F_m=U_master(:,:,:,SideID)
   F_s=U_slave(:,:,:,SideID)

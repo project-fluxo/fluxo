@@ -2,7 +2,8 @@
 #include "connectivity.h"
 #include "p4fluxo.h"
 #include "ready.fc"
- #include "optimisation.c"
+#include "optimisation.c"
+#include "p8est_communication.h"
 
 //#define NON_OPTIMIZED //Optimized Variant not ready yet
  
@@ -2165,6 +2166,56 @@ ReturnData(p4est_iter_volume_info_t *info, void *user_data)
                 }
     ctx->nElems++;
 }
+
+
+void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
+{
+    // p4set_gloidx_t  *dest; // before
+    // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
+    p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
+    p4est_gloidx_t * src = nullptr; //(p4set_gloidx_t  *)desptr; // after
+
+    src = (p4est_gloidx_t *)malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
+    int i;
+    for (i = 0; i <=p4est->mpisize; ++i)
+    { 
+        src[i] = p4est->global_first_quadrant[i];
+        
+    }
+    data->src_gfq = (p4est_gloidx_t *) src;
+    const int allow_coarsening=1;
+    p4est_partition(p4est, allow_coarsening, NULL);
+    // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
+    data->nElems = p4est->local_num_quadrants;
+    printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);
+    return;
+}
+
+void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer)
+{ 
+   
+    p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
+    
+    // p4est_gloidx_t * dest = malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
+    // int i;
+    // for (i = 0; i <=p4est->mpisize; ++i)
+    // { 
+    //      dest[i] = p4est->global_first_quadrant[i];
+    //     //  printf(" dest[i] = %d \n",  dest[i]);
+    // }
+    // p4est_transfer_fixed(data->src_gfq, dest,  p4est->mpicomm, 0,data->U_old, data->U_new,  data->DataSize);
+    // printf("data->Elem_xGP_new = %p \n", data->U_new);
+    // printf("data->Elem_xGP_old= %p \n", data->U_old);
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 1, data->U_new, data->U_old, data->DataSize);
+    //  printf("data->GPSize= %d \n", data->GPSize);
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 0, data->Elem_xGP_new, data->Elem_xGP_old, data->GPSize);
+
+    free(data->src_gfq);
+    // free(dest);
+    return;
+
+}
+
 
 void p4est_loadbalancing(p4est_t *p4est, void *user_pointer)
 {

@@ -191,9 +191,9 @@ CALL DGTimeDerivative(t)
 
 
 ! Write the state at time=0, i.e. the initial condition
-!CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
+CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
  
-!CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
@@ -305,9 +305,9 @@ ENDIF
     writeCounter=writeCounter+1
     IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
       ! Visualize data
-      !CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+      CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
       ! Write state to file
-      !CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
+      CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
       writeCounter=0
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
     END IF

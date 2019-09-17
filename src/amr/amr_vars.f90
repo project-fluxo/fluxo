@@ -74,12 +74,24 @@ END TYPE P4EST_FORTRAN_DATA
 
 TYPE p4est_balance_data
     INTEGER ::  nVar
-    INTEGER ::  PP_N
+    INTEGER ::  PP
     INTEGER ::  nElems;
     INTEGER ::  DataSize
     TYPE(C_PTR) ::  DataSetU;
     TYPE(C_PTR) ::  DataSetElem_xGP;
 END TYPE p4est_balance_data
+
+
+TYPE p4est_balance_datav2
+    INTEGER ::  DataSize !DataSize of 1 Elem U = number of REALs
+    INTEGER ::  GPSize !DataSize of 1 ElemxGP = number of REALs
+    INTEGER ::  nElems ! Number of new elements
+    TYPE(C_PTR) ::  GlbIdxData; ! For transfer data. for p4est only
+    TYPE(C_PTR) ::  ElemxGPnew_Ptr; ! new Array ElemxGP
+    TYPE(C_PTR) ::  ElemxGPold_Ptr; ! old Array ElemxGP
+    TYPE(C_PTR) ::  Unew_Ptr; !new U
+    TYPE(C_PTR) ::  Uold_Ptr; !old U 
+END TYPE p4est_balance_datav2
 
 TYPE p4est_mpi_data
     INTEGER ::  mpisize

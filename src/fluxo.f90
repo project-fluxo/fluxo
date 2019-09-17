@@ -149,12 +149,7 @@ CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
 
-!    print *, "This is ELSE!", size(Elem_xGP(:,1,1,1,1)),  size(Elem_xGP(1,:,1,1,1)), size(Elem_xGP(1,1,:,1,1)), size(Elem_xGP(1,1,1,:,1)), size(Elem_xGP(1,1,1,1,:))
-!    print *, "This is ELSE! ALLOCATED", ALLOCATED(Elem_xGP),  ALLOCATED(U) !, ALLOCATED(U_new),ALLOCATED(Elem_xGP_New)
-                     
-!    print *, "This is ELSE U", U(1,5,5,5,2), size(U(:,1,1,1,1)),  size(U(1,:,1,1,1)), size(U(1,1,:,1,1)), size(U(1,1,1,:,1)), size(U(1,1,1,1,:))
-                         
-!    CALL MPI_FINALIZE(iError);print *, "MPIRoot = ", MPIroot;CALL EXIT();
+
                                                 
                                                 
 

@@ -39,6 +39,9 @@ INTERFACE LoadBalancingAMR
   MODULE PROCEDURE LoadBalancingAMR
 END INTERFACE
 
+INTERFACE LoadBalancingAMRold
+  MODULE PROCEDURE LoadBalancingAMRold
+END INTERFACE
 
 INTERFACE SaveMesh
   MODULE PROCEDURE SaveMesh
@@ -52,8 +55,8 @@ PUBLIC::AMR_TEST_RUN
 PUBLIC::InitAMR_Connectivity
 PUBLIC::DefineParametersAMR
 PUBLIC::LoadBalancingAMR
-
-INTEGER :: COUNT =0 
+PUBLIC::LoadBalancingAMRold
+! INTEGER :: COUNT =0 
 CONTAINS
 
 
@@ -188,7 +191,8 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   USE MOD_Mesh_Vars,          ONLY: nMPISides_MINE, nMPISides_YOUR,nGlobalElems, firstMPISide_YOUR, firstMPISide_MINE,firstMortarMPISide
 #if PARABOLIC
- USE MOD_Lifting_Vars
+  USE  MOD_Lifting_Vars
+  USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
 #endif /* PARABOLIC */
   USE, INTRINSIC :: ISO_C_BINDING
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
@@ -219,7 +223,7 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
-  COUNT = COUNT + 1
+  ! COUNT = COUNT + 1
   nVar=size(U(:,1,1,1,1))
   PP=size(U(1,:,1,1,1))-1
   NELM=size(U(1,1,1,1,:))
@@ -343,7 +347,11 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
       ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
       MPIRequest_U      = MPI_REQUEST_NULL
       MPIRequest_Flux   = MPI_REQUEST_NULL
-
+#if PARABOLIC
+      SDEALLOCATE(MPIRequest_Lifting)
+      ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
+      MPIRequest_Lifting = MPI_REQUEST_NULL
+#endif /*PARABOLIC*/
       IF (nNbProcs .EQ. 0) nNbProcs =1;
     ENDIF
     
@@ -567,7 +575,7 @@ SUBROUTINE AMR_TEST_RUN(ElemToRefineAndCoarse)
             ELSE
               IF (iE .LE. 0) THEN
                 print *, "Error, iE = 0!, iElem = ", ielem
-                print *, Count
+                ! print *, Count
                 CALL EXIT()
               ENDIF
             ! This is simple case of renumeration of Elements
@@ -839,10 +847,93 @@ SUBROUTINE InterpolateCoarseRefine(Unew, Uold,Elem_xGPnew,Elem_xGPold)
 
     END SUBROUTINE InterpolateCoarseRefine
 
+
+
 !============================================================================================================================
 !> Deallocate mesh data.
 !============================================================================================================================
 SUBROUTINE LoadBalancingAMR()
+  ! MODULES
+  USE MOD_AMR_Vars
+  USE MOD_P4EST
+  USE MOD_DG_Vars,            ONLY: U
+  USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
+  USE, INTRINSIC :: ISO_C_BINDING
+  IMPLICIT NONE
+  
+  REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
+  ! REAL,ALLOCATABLE, TARGET :: ExGP_New(:,:), ExGP_old(:,:)
+  INTEGER :: PP, nVar
+  ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
+  ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
+  ! REAL, POINTER :: UP(:,:,:,:,:)
+  !============================================================================================================================
+  ! Deallocate global variables, needs to go somewhere else later
+  TYPE(p4est_balance_datav2), TARGET :: BalanceData;
+  
+  IF (.NOT. UseAMR) THEN
+    RETURN;
+  ENDIF
+  
+  
+  BalanceData%DataSize = sizeof(U(:,:,:,:,1))
+  BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
+  PP = size(U(1,:,0,0,1))-1
+  ! PRINT *, "BalanceData%DataSize =", BalanceData%DataSize
+  ! PRINT *, "BalanceData%GPSize =", BalanceData%GPSize
+  BalanceData%Uold_Ptr = C_LOC(U)
+  BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
+  ! BalanceData%Uold_Ptr = C_LOC(U)
+ 
+  ! BalanceData%ElemxGPold_Ptr = C_LOC(ExGP_old)
+  
+  nVar = size(U(:,0,0,0,1))
+  
+  CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
+  ! PRINT *, "BalanceData%nElems =", BalanceData%nElems
+
+  ! CALL p4est_loadbalancing(P4EST_PTR, C_LOC(BalanceData))
+  ALLOCATE(Elem_xGP_New(1:3,0:PP,0:PP,0:PP,1:BalanceData%nElems))
+  ALLOCATE(U_New(1:nVar,0:PP,0:PP,0:PP,1:BalanceData%nElems))
+  BalanceData%Unew_Ptr = C_LOC(U_New)
+  BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
+  ! ALLOCATE(ExGP_New(1000,1:BalanceData%nElems))
+  ! BalanceData%ElemxGPnew_Ptr = C_LOC(ExGP_New)
+  CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
+
+
+  CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+  CALL MOVE_ALLOC(U_New, U)
+
+  !-- 
+  ! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
+  ! nElemsNew=BalanceData%nElems;
+  ! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
+  ! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
+  ! SDEALLOCATE(Elem_xGP)
+  ! SDEALLOCATE(U)
+  ! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
+  ! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+  
+  ! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
+  ! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+  
+  ! CALL free_balance_memory(C_LOC(BalanceData))
+  
+  ! DEALLOCATE(U_new)
+  ! NULLIFY(U_New)
+  ! NULLIFY(Elem_xGP_New)
+  CALL AMR_TEST_RUN()
+  ! PRINT *,"YAHOOOO!!!! "
+  ! CALL EXIT()
+ 
+END SUBROUTINE LoadBalancingAMR
+      
+
+!============================================================================================================================
+!> Deallocate mesh data.
+!============================================================================================================================
+SUBROUTINE LoadBalancingAMRold()
 ! MODULES
 USE MOD_AMR_Vars
 USE MOD_P4EST
@@ -866,9 +957,9 @@ ENDIF
 ! UP=>U
 ! Elem_xGPP=>Elem_xGP
 BalanceData%nVar = size(U(:,0,0,0,1))
-BalanceData%PP_N = size(U(1,:,0,0,1))-1
+BalanceData%PP = size(U(1,:,0,0,1))-1
 nVar = BalanceData%nVar
-PP = BalanceData%PP_N
+PP = BalanceData%PP
 BalanceData%nElems = size(U(1,0,0,0,:))
 BalanceData%DataSize=INT(sizeof(U(:,:,:,:,1)) + sizeof(Elem_xGP(:,:,:,:,1)))
 
@@ -899,7 +990,7 @@ CALL AMR_TEST_RUN()
 ! CALL EXIT()
 
 
-END SUBROUTINE LoadBalancingAMR
+END SUBROUTINE LoadBalancingAMRold
 
 
 

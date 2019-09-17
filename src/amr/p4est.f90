@@ -79,6 +79,19 @@ PUBLIC
       TYPE(C_PTR), VALUE ::user_pointer
   END SUBROUTINE p4est_loadbalancing
 
+
+  SUBROUTINE p4est_loadbalancing_init(P4, user_pointer)  BIND(C, NAME='p4est_loadbalancing_init')
+    IMPORT :: C_PTR
+    TYPE(C_PTR), VALUE :: P4
+    TYPE(C_PTR), VALUE ::user_pointer
+END SUBROUTINE p4est_loadbalancing_init
+
+SUBROUTINE p4est_loadbalancing_go(P4, user_pointer)  BIND(C, NAME='p4est_loadbalancing_go')
+  IMPORT :: C_PTR
+  TYPE(C_PTR), VALUE :: P4
+  TYPE(C_PTR), VALUE ::user_pointer
+END SUBROUTINE p4est_loadbalancing_go
+
   SUBROUTINE p4est_connectivity_destroy(CONN) BIND(C, NAME='p4est_connectivity_destroy_f')
       IMPORT :: C_PTR
       TYPE(C_PTR) :: CONN

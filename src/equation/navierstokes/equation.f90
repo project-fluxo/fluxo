@@ -468,7 +468,7 @@ REAL                            :: factors(256)
 REAL                            :: sines(256)
 INTEGER                         :: f
 ! needed for cylinder potential flow
-REAL                            :: phi, delta, rhoIn, rhoOut, Radius, R
+REAL                            :: phi
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
@@ -480,52 +480,9 @@ CASE(0)
   CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
-  
-  ! Resu(1)  = Prim(1)
-  ! Resu(2:4)= Resu(1)*Prim(2:4)
-  ! Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
-  
-  
-
-
-  ! Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
-  ! delta = 0.10
-  ! Radius = 0.20
-  ! Prim(1) = Resu(1)
-  ! rhoOut=Prim(1)
-  ! rhoIn=rhoOut /2.
-  ! Cent = (/0.5, .5, .5/) ! 0.5 Radius of Bubble
-
-  ! IF (SUM((x - cent)**2) .LT. Radius**2)  THEN
-  !   Prim(1)= rhoIn;!.1  
-  ! ELSEIF (SUM((x - cent)**2) .LT. (Radius + delta)**2) THEN
-
-  !   R=SQRT(SUM((x - cent)**2))
-  !   Prim(1)= rhoIn + (rhoOut - RhoIn) * (1 - COS((R - Radius)/delta *PP_Pi))/2.
-  ! else
-  !   Prim(1) = rhoOut
-  ! ENDIF
-  ! Prim(2:4) = Resu(2:4)/Resu(1)
-  ! Prim(5) = (Resu(5) - 0.5*Resu(1)*SUM(Resu(2:4)*Resu(2:4)))/sKappaM1
-  ! !Resu(2:4)= Resu(2:4)*Resu(1)/RefStateCons(IniRefState,2:4)
- ! Resu(5)  = Prim(5)*sKappaM1 + 0.5*Prim(1)*SUM(Prim(2:4)*Prim(2:4))
-  !   ELSE
-! print *, "Prim = ", Prim
-
-  ! RefStatePrim(i,:)  = GETREALARRAY('RefState',5)
-  ! RefStateCons(i,1)  = RefStatePrim(i,1) !cant use primtocons yet
-  ! RefStateCons(i,2:4)= RefStatePrim(i,2:4)*RefStatePrim(i,1)
-  ! RefStateCons(i,5)  = sKappaM1*RefStatePrim(i,5)+0.5*SUM(RefStateCons(i,2:4)*RefStatePrim(i,2:4))
-  ! Resu(1)  = Prim(1)
-  !   prim(1)=.1
-  !   END IF
-
-  !   prim(2)= 0.1
-  !   prim(3)=0.2
-  !   prim(4)=-0.3
-    
-  !   prim(5)=20.
-  ! CALL PrimToCons(prim,Resu)
+  !Resu(1)  = Prim(1)
+  !Resu(2:4)= Resu(1)*Prim(2:4)
+  !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
 CASE(2) ! sinus
   Frequency=0.01
   Amplitude=0.3
@@ -774,8 +731,6 @@ USE MOD_Globals,ONLY:Abort
 USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
 USE MOD_Equation_Vars, ONLY: Kappa,KappaM1,AdvVel,doCalcSource
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
-USE MOD_DG_Vars,     ONLY:U
-
 #if PARABOLIC
 USE MOD_Equation_Vars,ONLY:mu0,Pr
 #endif
@@ -795,45 +750,6 @@ REAL                            :: sinXGP,sinXGP2,cosXGP
 REAL                            :: tmp(6)
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
-
-CASE(1) ! exact function
-!   Omega=PP_Pi*IniFrequency
-!   a=AdvVel(1)*2.*PP_Pi
-!   tmp(1)=-a+3*Omega
-!   tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
-!   tmp(3)=IniAmplitude*Omega*KappaM1
-!   tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a)
-!   tmp(5)=IniAmplitude*(3.*Omega*Kappa-a)
-! #if PARABOLIC
-!   tmp(6)=3.*mu0*Kappa*Omega*Omega/Pr
-! #else
-!   tmp(6)=0.
-! #endif
-!   tmp=tmp*IniAmplitude
-!   at=a*tIn
-!   DO iElem=1,nElems
-!     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!       cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-!       sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-!       sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*t))
-!       Ut_src(1)   = tmp(1)*cosXGP
-!       Ut_src(2:4) = tmp(2)*cosXGP + tmp(3)*sinXGP2
-!       Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-!       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
-!     END DO; END DO; END DO ! i,j,k
-!   END DO ! iElem
-
-  DO iElem=1,nElems
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      Ut_src(1)   = 0
-      Ut_src(2:3) = 0!tmp(2)*cosXGP + tmp(3)*sinXGP2
-      Ut_src(4) = 9.80665 * U(1,i,j,k,iElem)
-      Ut_src(5)   = Ut_src(4) * U(4,i,j,k,iElem) !tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
-    END DO; END DO; END DO ! i,j,k
-  END DO ! iElem
-
-
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
   tmp(1)=-Omega+3*Omega
