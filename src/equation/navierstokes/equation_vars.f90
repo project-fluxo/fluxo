@@ -34,7 +34,6 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:)   !< =primToCons(RefStatePrim)
 INTEGER,PARAMETER   :: nAuxVar=6           !< number of auxiliary variables for average flux
 ! Boundary condition arrays
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)
-
 INTEGER,ALLOCATABLE :: nBCByType(:)        !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)       !< SideIDs for BC types
 #if PARABOLIC
@@ -66,7 +65,6 @@ REAL                :: IniFrequency        !< for Iniexactfunc, Frequeny
 REAL                :: IniAmplitude        !< for Iniexactfunc, Amplitude
 REAL                :: IniHalfwidth        !< for Iniexactfunc, Halfwidth
 
-REAL                :: P0 = 100000.        !< for Iniexactfunc, Halfwidth
 CHARACTER(LEN=255),DIMENSION(5),PARAMETER :: StrVarNames(5)=(/ CHARACTER(LEN=255) :: 'Density',    &
                                                                                      'MomentumX',  &
                                                                                      'MomentumY',  &
@@ -174,43 +172,27 @@ END SUBROUTINE ConsToPrim_aux
 !==================================================================================================================================
 !> Transformation from conservative variables to primitive variables
 !==================================================================================================================================
-PURE SUBROUTINE ConsToPrim(prim,cons, z)
+PURE SUBROUTINE ConsToPrim(prim,cons)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)     :: cons(5) !< vector of conservative variables
-REAL,INTENT(IN), OPTIONAL     :: Z !< The parameter for the density
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: prim(5) !< vector of primitive variables + soundspeed,energy and total energy
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                :: sRho, ThetaS, ThetaB, R   !< 1/Rho, theta small with ', ThetaSmall
+REAL                :: sRho    !< 1/Rho
 !==================================================================================================================================
-IF (Present(Z)) THEN
-  sRho=1./(cons(1) + Rho(z))
-! rho
-  prim(1)=(cons(1) + Rho(z))
-! vel/rho
-  prim(2:4)=cons(2:4)*sRho
-
-  ThetaB = (cons(5) + Theta(Z))*sRho
-  R=287.
-!pressure
-  prim(5) = P0*(R*ThetaB/P0)**1.4
-  !prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4)))
-
-ELSE
-sRho=1./cons(1) 
+sRho=1./cons(1)
 ! rho
 prim(1)=cons(1)
 ! vel/rho
 prim(2:4)=cons(2:4)*sRho
 !pressure
 prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4)))
-ENDIF
 END SUBROUTINE ConsToPrim
 
 
@@ -491,66 +473,5 @@ END IF
 END FUNCTION muSuth
 #endif
 #endif /*PARABOLIC*/
-
-
-!==================================================================================================================================
-!> Calculate the Hydrostatic Density
-!==================================================================================================================================
-PURE FUNCTION RHO(Z) RESULT(rho1)
-! MODULES
-IMPLICIT NONE 
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN)     :: Z !< Height
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL                :: rho1      !< Density
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
-!==================================================================================================================================
-rho1 = 1.29 ! Simple case. It can be used the function of Z
-
-END FUNCTION RHO
-!==================================================================================================================================
-!> Calculate the Hydrostatic Pressure
-!==================================================================================================================================
-PURE FUNCTION Pressure(Z) RESULT(P)
-! MODULES
-IMPLICIT NONE 
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN)     :: Z !< Height
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL                :: P     !< Pressure
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
-!==================================================================================================================================
-P = P0 - Rho(z)*9.80665*Z! Simple case. It can be used the function of Z
-
-END FUNCTION Pressure
-
-!==================================================================================================================================
-!> Calculate the Hydrostatic Potential temperature
-!==================================================================================================================================
-PURE FUNCTION Theta(Z) RESULT(Theta1)
-! MODULES
-IMPLICIT NONE 
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN)     :: Z !< Height, Theta 
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL                :: P, R  , Theta1   !< Pressure
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
-!==================================================================================================================================
-R = 287.
-P = Pressure(z)
-Theta1 = P0/R*(P/P0)**1.4! Simple case. It can be used the function of Z
-
-END FUNCTION Theta
-
-
 
 END MODULE MOD_Equation_Vars

@@ -42,7 +42,7 @@ USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTe
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
 ! Added for AMR ->
-USE MOD_AMR,                 ONLY: AMR_TEST_RUN,LoadBalancingAMR, SaveMesh;
+USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh;
 USE MOD_Mesh_Vars,           ONLY:nElems, Elem_xGP
 USE MOD_AMR_vars,                 ONLY:UseAMR
 USE MOD_AMR_tracking
@@ -149,16 +149,11 @@ CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
 
-!    print *, "This is ELSE!", size(Elem_xGP(:,1,1,1,1)),  size(Elem_xGP(1,:,1,1,1)), size(Elem_xGP(1,1,:,1,1)), size(Elem_xGP(1,1,1,:,1)), size(Elem_xGP(1,1,1,1,:))
-!    print *, "This is ELSE! ALLOCATED", ALLOCATED(Elem_xGP),  ALLOCATED(U) !, ALLOCATED(U_new),ALLOCATED(Elem_xGP_New)
-                     
-!    print *, "This is ELSE U", U(1,5,5,5,2), size(U(:,1,1,1,1)),  size(U(1,:,1,1,1)), size(U(1,1,:,1,1)), size(U(1,1,1,:,1)), size(U(1,1,1,1,:))
-                         
-!    CALL MPI_FINALIZE(iError);print *, "MPIRoot = ", MPIroot;CALL EXIT();
+
                                                 
                                                 
 
-CALL AMR_TEST_RUN() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+CALL RunAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 

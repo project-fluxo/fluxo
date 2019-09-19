@@ -149,8 +149,8 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
-USE MOD_AMR_tracking        ,ONLY: RunAMR
- USE MOD_AMR_Vars           ,ONLY: UseAMR
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR
+USE MOD_AMR_Vars            ,ONLY: UseAMR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -191,9 +191,9 @@ CALL DGTimeDerivative(t)
 
 
 ! Write the state at time=0, i.e. the initial condition
-!CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
+CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
  
-!CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
@@ -229,9 +229,9 @@ CalcTimeStart=FLUXOTIME()
 DO
 IF (UseAMR) THEN 
   doAMR = doAMR + 1;
-  IF (doAMR .EQ. -16) THEN
+  IF (doAMR .EQ. 2) THEN
     doAMR = 0;
-    CALL RunAMR()
+    CALL ShockCapturingAMR()
   ENDIF
 ENDIF 
   IF(nCalcTimestepMax.EQ.1)THEN
@@ -305,9 +305,9 @@ ENDIF
     writeCounter=writeCounter+1
     IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
       ! Visualize data
-      !CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+      CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
       ! Write state to file
-      !CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
+      CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
       writeCounter=0
       tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
     END IF

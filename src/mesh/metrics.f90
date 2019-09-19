@@ -570,7 +570,7 @@ CALL ChangeBasis3D(3,PP_N,NGeo,Vdm_GLN_GLNGeo ,XGL_N   ,XGL_Ngeo)
 !~   ! check for negative Jacobians
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IF(detJac_N(1,i,j,k).LE.0.)&
-      WRITE(Unit_StdOut,*) 'Negative Jacobian found on Gauss point. Coords:', Elem_xGP(:,i,j,k,iElem)
+      WRITE(Unit_StdOut,*) 'Negative Jacobian found on Gauss point. Coords:', Elem_xGP(:,i,j,k,iElem), iElem , myrank
   END DO; END DO; END DO !i,j,k=0,N
 
 

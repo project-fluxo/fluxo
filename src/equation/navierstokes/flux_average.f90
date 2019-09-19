@@ -242,7 +242,7 @@ END SUBROUTINE EvalEulerFluxTilde3D
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2) from state U
 !==================================================================================================================================
-SUBROUTINE EvalUaux(iElem,Uaux, z)
+SUBROUTINE EvalUaux(iElem,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars       ,ONLY:U
@@ -254,7 +254,6 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN)  :: iElem                               !<current element in volint
-REAL,INTENT(IN), OPTIONAL  :: z                               !<current element in volint 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)

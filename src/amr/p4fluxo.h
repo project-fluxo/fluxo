@@ -9,6 +9,7 @@
 #include <p8est_extended.h>
 #include <p4est_to_p8est.h>
 
+#define nullptr ((void*)0)
 static sc_MPI_Comm mpicomm;
  
 
@@ -64,6 +65,19 @@ typedef struct p4est_balance_data
     void *DataSetElem_xGP; //for                                                      each process and 1 beyond * /
     // int8_t CoarsedRefined;
 } p4est_balance_data_t;
+
+
+typedef struct p4est_balance_datav2
+{
+    int DataSize; //DataSize of 1 Elem
+    int GPSize; //DataSize of 1 ElemxGP
+    int nElems;// Number of new elements
+    p4est_gloidx_t *src_gfq; // For transfer data. for p4est only
+    void *Elem_xGP_new; // new Array ElemxGP
+    void *Elem_xGP_old; // old Array ElemxGP
+    void *U_new; // new U
+    void *U_old; // old U 
+} p4est_balance_datav2_t;
 
 typedef struct p4est_mpi_data
 {
