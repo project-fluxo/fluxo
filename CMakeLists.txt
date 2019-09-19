@@ -27,7 +27,9 @@ ENDIF()
 SET (HDF5DOWNLOAD https://bitbucket.hdfgroup.org/scm/hdffv/hdf5.git )
 SET (HDF5TAG "hdf5-1_10_1" CACHE STRING "HDF5 version tag")
 SET (P4ESTDOWNLOAD https://github.com/cburstedde/p4est.git )
-SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
+
+# SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
+SET (P4ESTSHA "7752b1e12b596663667d5949aa922e805a42b9b6" CACHE STRING "P4EST commit SHA")
 
 
 # =========================================================================

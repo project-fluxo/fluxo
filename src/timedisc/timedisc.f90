@@ -149,7 +149,7 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
-USE MOD_AMR_tracking        ,ONLY: RunAMR
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR
 USE MOD_AMR_Vars            ,ONLY: UseAMR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@ IF (UseAMR) THEN
   doAMR = doAMR + 1;
   IF (doAMR .EQ. 2) THEN
     doAMR = 0;
-    CALL RunAMR()
+    CALL ShockCapturingAMR()
   ENDIF
 ENDIF 
   IF(nCalcTimestepMax.EQ.1)THEN

@@ -7,8 +7,8 @@
 !==================================================================================================================================
 MODULE MOD_AMR_tracking
 
-INTERFACE RunAMR
-  MODULE PROCEDURE RunAMR
+INTERFACE ShockCapturingAMR
+  MODULE PROCEDURE ShockCapturingAMR
 END INTERFACE
 
 
@@ -16,12 +16,12 @@ END INTERFACE
   INTEGER :: doLBalance = 0
 CONTAINS
 
-SUBROUTINE RunAMR()
+SUBROUTINE ShockCapturingAMR()
 !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
     USE MOD_PreProc
-  USE MOD_Globals,              ONLY: MPIroot
+  USE MOD_Globals,              ONLY: MPIroot, myrank
   USE MOD_DG_Vars,            ONLY: U
-  USE MOD_AMR,                 ONLY: AMR_TEST_RUN,LoadBalancingAMR, SaveMesh,LoadBalancingAMRold;
+  USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh,LoadBalancingAMRold;
   USE MOD_Mesh_Vars,           ONLY:nElems, Elem_xGP, nGlobalElems
   USE MOD_Interpolation_Vars, ONLY: xGP
   USE MOD_Basis,         ONLY: BuildLegendreVdm
@@ -135,28 +135,30 @@ ENDDO
  !   CALL EXIT()
  !   ENDIF
 !ENDDO
-CALL AMR_TEST_RUN(ElemToRefineAndCoarse);
-IF (MPIRoot) THEN
-  Print *, "AMR RUN!"
-ENDIF
+CALL RunAMR(ElemToRefineAndCoarse);
+! IF (MPIRoot) THEN
+!   Print *, "AMR RUN!"
+! ENDIF
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. 5) THEN
+IF (doLBalance .EQ. 8) THEN
     doLBalance = 0;
-    IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
+    ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
+    ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems
     IF (doBalance) CALL LoadBalancingAMR()
     IF (MPIRoot) THEN
-        print *, "Balance Loading END: Number of Global Elements = ", nGlobalElems
+        print *, "LoadBalance: Done!"
     ENDIF
 ENDIF
 
-END SUBROUTINE RunAMR
+END SUBROUTINE ShockCapturingAMR
 
 SUBROUTINE InitVortex()
     USE MOD_DG_Vars,            ONLY: U
     USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
     USE MOD_Equation_Vars,      ONLY: kappam1, skappam1, PrimToCons, kappa, IniExactFunc
     USE MOD_Equation,           ONLY: ExactFunc
+    USE MOD_AMR,                 ONLY: RunAMR
     IMPLICIT NONE
     INTEGER :: iElem, i,j,k,PP, nVar, Iter
     REAL :: X0, Y0, X, Y, Rho, Ux,Vy, F, OMEGA,R, S, MachInf, Beta,alfa, PInf, Tinf, sigma, P, Prim(5)
