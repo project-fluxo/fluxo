@@ -141,7 +141,7 @@ CALL RunAMR(ElemToRefineAndCoarse);
 ! ENDIF
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. 8) THEN
+IF (doLBalance .EQ. 2) THEN
     doLBalance = 0;
     ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
     ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems

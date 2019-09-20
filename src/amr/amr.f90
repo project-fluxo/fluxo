@@ -198,16 +198,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE, INTRINSIC :: ISO_C_BINDING
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Ut_New(:,:,:,:,:), Metrics_fTilde_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Metrics_gTilde_New(:,:,:,:,:), Metrics_hTilde_New(:,:,:,:,:)
 
-  REAL,ALLOCATABLE :: dXGL_N_New(:,:,:,:,:,:), sJ_new(:,:,:,:)
+  ! REAL,ALLOCATABLE :: Ut_New(:,:,:,:,:), Metrics_fTilde_New(:,:,:,:,:)
+  ! REAL,ALLOCATABLE :: Metrics_gTilde_New(:,:,:,:,:), Metrics_hTilde_New(:,:,:,:,:)
 
-  REAL,ALLOCATABLE :: DetJac_Ref_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Face_xGP_New(:,:,:,:)
+  ! REAL,ALLOCATABLE :: dXGL_N_New(:,:,:,:,:,:), sJ_new(:,:,:,:)
+
+  ! REAL,ALLOCATABLE :: DetJac_Ref_New(:,:,:,:,:)
+  ! REAL,ALLOCATABLE :: Face_xGP_New(:,:,:,:)
   
-  REAL,ALLOCATABLE :: NormVec_New(:,:,:,:), TangVec1_New(:,:,:,:)
-  REAL,ALLOCATABLE :: TangVec2_New(:,:,:,:), SurfElem_New(:,:,:)
+  ! REAL,ALLOCATABLE :: NormVec_New(:,:,:,:), TangVec1_New(:,:,:,:)
+  ! REAL,ALLOCATABLE :: TangVec2_New(:,:,:,:), SurfElem_New(:,:,:)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: PP, NELM, Ie, nVar;
@@ -365,43 +366,43 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
 
 
-    SDEALLOCATE(Ut_new)
-    ALLOCATE(Ut_new(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Ut)
+    ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_fTilde_new)
-    ALLOCATE(Metrics_fTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_fTilde)
+    ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_gTilde_new)
-    ALLOCATE(Metrics_gTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_gTilde)
+    ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_hTilde_new)
-    ALLOCATE(Metrics_hTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_hTilde)
+    ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(dXGL_N_new)
-    ALLOCATE(dXGL_N_new      (3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(dXGL_N)
+    ALLOCATE(dXGL_N(3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(sJ_new)
-    ALLOCATE(            sJ_new(  0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(sJ)
+    ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
     
-    SDEALLOCATE(DetJac_Ref_new)
+    SDEALLOCATE(DetJac_Ref)
     NGeoRef=3*NGeo ! build jacobian at higher degree
-    ALLOCATE(    DetJac_Ref_new(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
+    ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
 ! surface data
-    SDEALLOCATE(Face_xGP_new)
-    ALLOCATE(      Face_xGP_new(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(Face_xGP)
+    ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
     ! Face_xGP=0;
-    SDEALLOCATE(NormVec_new)
-    ALLOCATE(       NormVec_new(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(NormVec)
+    ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
     
-    SDEALLOCATE(TangVec1_new)
-    ALLOCATE(      TangVec1_new(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(TangVec1)
+    ALLOCATE(      TangVec1(3,0:PP_N,0:PP_N,1:nSides))
     
-    SDEALLOCATE(TangVec2_new)
+    SDEALLOCATE(TangVec2)
     
-    ALLOCATE(      TangVec2_new(3,0:PP_N,0:PP_N,1:nSides))
-    SDEALLOCATE(SurfElem_new)
-    ALLOCATE(      SurfElem_new(  0:PP_N,0:PP_N,1:nSides))
+    ALLOCATE(      TangVec2(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(SurfElem)
+    ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 
 
     CALL RecalculateParameters(DataF)
@@ -413,10 +414,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
         nTotal_IP=nTotal_vol*nElems
         nTotalU=PP_nVar*nTotal_vol*nElems
 
-        DEALLOCATE(U_master)
-        DEALLOCATE(U_SLAVE)
-        DEALLOCATE(Flux_master)
-        DEALLOCATE(Flux_SLAVE)
+      
 #if PARABOLIC
         IF (ALLOCATED(gradPx_slave))  THEN 
           DEALLOCATE(gradPx_slave); 
@@ -427,8 +425,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           DEALLOCATE(gradPy_slave); 
           ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
         ENDIF
-        
+
         IF (ALLOCATED(gradPz_slave))  THEN 
+
           DEALLOCATE(gradPz_slave); 
           ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
         ENDIF
@@ -447,17 +446,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           DEALLOCATE(gradPz_master); 
           ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ENDIF
-        
+
         IF (ALLOCATED(gradPx))  THEN 
           DEALLOCATE(gradPx); 
           ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
         ENDIF
-        
+
         IF (ALLOCATED(gradPy))  THEN 
           DEALLOCATE(gradPy); 
           ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
         ENDIF
-        
+
         IF (ALLOCATED(gradPz))  THEN 
           DEALLOCATE(gradPz); 
           ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
@@ -467,34 +466,41 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           DEALLOCATE(FluxX); 
           ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ENDIF
-        
+
         IF (ALLOCATED(FluxY))  THEN 
           DEALLOCATE(FluxY); 
           ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ENDIF
-        
+
         IF (ALLOCATED(FluxZ))  THEN 
           DEALLOCATE(FluxZ); 
           ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ENDIF
 
+        
 #endif /* PARABOLIC */
 
-        IF (ALLOCATED(dtElem)) THEN  
+        IF (ALLOCATED(dtElem))  THEN 
           DEALLOCATE(dtElem); 
           ALLOCATE(dtElem(nElems)); 
         ENDIF
         
-        
-        IF (ALLOCATED(ElemVol)) THEN  
+        IF (ALLOCATED(ElemVol))  THEN 
           DEALLOCATE(ElemVol); 
           ALLOCATE(ElemVol(nElems)); 
-        ENDIF
-        
+        ENDIF 
 
-        DEALLOCATE(AnalyzeSide)
-        ALLOCATE(AnalyzeSide(1:nSides))
-        AnalyzeSide=0;
+        IF (ALLOCATED(ElemVol))  THEN 
+
+          DEALLOCATE(AnalyzeSide)
+          ALLOCATE(AnalyzeSide(1:nSides))
+          AnalyzeSide=0;
+        ENDIF
+
+        DEALLOCATE(U_master)
+        DEALLOCATE(U_SLAVE)
+        DEALLOCATE(Flux_master)
+        DEALLOCATE(Flux_SLAVE)
         ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 
@@ -502,130 +508,99 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
         ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 
-!   ALLOCATE(ElementToCalc(DataF%nElems))
-  ALLOCATE(ElementToCalc(DataF%nElems))
-  do j=1,DataF%nElems
-    ElementToCalc(j)=j;
-  enddo
+  ! ALLOCATE(ElementToCalc(DataF%nElems))
+  ! do j=1,DataF%nElems
+  !   ElementToCalc(j)=j;
+  ! enddo
 
-  ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,DataF%nElems))
-  ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,DataF%nElems))
-  iElem=0;
-  !  DO iElem=1,DataF%nElems
-   DO 
-   iElem=iElem+1;
-   if (iElem .GT. DataF%nElems) EXIT
-          i=1;
-           Ie= ChangeElem(i,iElem);
-        !    print *, "iElem = ", iElem
-           IF (Ie .LT. 0) THEN
-            !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-            ! contains the number of child element 
-            ! print *, "Ie = ", Ie
-        !   IF ((Elem_xGP(1,PP,0,0,-iE) - Elem_xGP(1,0,0,0,-iE)) .LT. 0.015*2.) THEN
+  IF (PRESENT(ElemToRefineAndCoarse)) THEN
+   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,DataF%nElems))
+   ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,DataF%nElems))
+   iElem=0;
+   !  DO iElem=1,DataF%nElems
+    DO 
+    iElem=iElem+1;
+    IF (iElem .GT. DataF%nElems) EXIT
+           i=1;
+            Ie= ChangeElem(i,iElem);
+         !    print *, "iElem = ", iElem
+            IF (Ie .LT. 0) THEN
+             !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+             ! contains the number of child element 
+             ! print *, "Ie = ", Ie
+         !   IF ((Elem_xGP(1,PP,0,0,-iE) - Elem_xGP(1,0,0,0,-iE)) .LT. 0.015*2.) THEN
 
-         !  Print *, "Error!!!", "COUNT =",COUNT
-         !  Print *, "ElemToRefineAndCoarse =" ,ElemToRefineAndCoarse(-iE)
-         !  Print *, "ChangeElem(:,iElem);=", ChangeElem(:,iElem);
-         !  CALL EXIT()
-         !  ENDIF
-            CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
-                                        U(:,:,:,:,-Ie:-Ie),&
-                                        Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                        Elem_xGP(:,:,:,:,-Ie:-Ie))
-            !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
-            iElem=iElem+7;
-           ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-           !This is COARSE. Array ChangeElem(:,iElem) Contains 
-           ! 8 Element which must be COARSED to the new number iElem
-            CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
-                                        U(:,:,:,:,ChangeElem(:,iElem)),&
-                                        Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                        Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
+          !  Print *, "Error!!!", "COUNT =",COUNT
+          !  Print *, "ElemToRefineAndCoarse =" ,ElemToRefineAndCoarse(-iE)
+          !  Print *, "ChangeElem(:,iElem);=", ChangeElem(:,iElem);
+          !  CALL EXIT()
+          !  ENDIF
+             CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
+                                         U(:,:,:,:,-Ie:-Ie),&
+                                         Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
+                                         Elem_xGP(:,:,:,:,-Ie:-Ie))
+             !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
+             iElem=iElem+7;
+            ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+            !This is COARSE. Array ChangeElem(:,iElem) Contains 
+            ! 8 Element which must be COARSED to the new number iElem
+             CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
+                                         U(:,:,:,:,ChangeElem(:,iElem)),&
+                                         Elem_xGP_New(:,:,:,:,iElem:iElem),&
+                                         Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
 
-         ! else IF (ChangeElem(2,iElem) .EQ. -1) THEN
-          !     ! Reserve for creating the array for calculating Sides 
-          !     ! Neighbours of refined Elements
-          !     Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-          !     U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
+          ! else IF (ChangeElem(2,iElem) .EQ. -1) THEN
+           !     ! Reserve for creating the array for calculating Sides 
+           !     ! Neighbours of refined Elements
+           !     Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+           !     U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
 
-          !     Ut_new(:,:,:,:,iElem) = Ut(:,:,:,:,Ie)
-          !     Metrics_fTilde_new(:,:,:,:,iElem) = Metrics_fTilde(:,:,:,:,Ie)
-          !     Metrics_gTilde_new(:,:,:,:,iElem) = Metrics_gTilde(:,:,:,:,Ie)
-          !     Metrics_hTilde_new(:,:,:,:,iElem) = Metrics_hTilde(:,:,:,:,Ie)
-          !     dXGL_N_new(:,:,:,:,:,iElem)=dXGL_N(:,:,:,:,:,Ie)
+           !     Ut_new(:,:,:,:,iElem) = Ut(:,:,:,:,Ie)
+           !     Metrics_fTilde_new(:,:,:,:,iElem) = Metrics_fTilde(:,:,:,:,Ie)
+           !     Metrics_gTilde_new(:,:,:,:,iElem) = Metrics_gTilde(:,:,:,:,Ie)
+           !     Metrics_hTilde_new(:,:,:,:,iElem) = Metrics_hTilde(:,:,:,:,Ie)
+           !     dXGL_N_new(:,:,:,:,:,iElem)=dXGL_N(:,:,:,:,:,Ie)
 
-          !     sJ_new(:,:,:,iElem) = sJ(:,:,:,Ie)
-          !     DetJac_Ref_new(:,:,:,:,iElem) = DetJac_Ref(:,:,:,:,Ie)
-          !     ! ElemToSide(1,:, iElem) - Sides
-    
-          !     DO i=1,6
-          !       IF (ChangeElem(i+2,iElem) .GT. nSides) THEN 
-          !         PRINT *, "ERROR: Side number > nSides"
-          !         CALL EXIT()
-          !       ENDIF
-          !       Face_xGP_new(:,:,:,ElemToSide(1,i,iElem)) = Face_xGP(:,:,:,ChangeElem(i+2,iElem))
-          !       NormVec_new(:,:,:,ElemToSide(1,i,iElem)) = NormVec(:,:,:,ChangeElem(i+2,iElem))
-          !       TangVec1_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec1(:,:,:,ChangeElem(i+2,iElem))
-          !       TangVec2_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec2(:,:,:,ChangeElem(i+2,iElem))
-          !       SurfElem_new(:,:,ElemToSide(1,i,iElem)) = SurfElem(:,:,ChangeElem(i+2,iElem))
+           !     sJ_new(:,:,:,iElem) = sJ(:,:,:,Ie)
+           !     DetJac_Ref_new(:,:,:,:,iElem) = DetJac_Ref(:,:,:,:,Ie)
+           !     ! ElemToSide(1,:, iElem) - Sides
+            
+           !     DO i=1,6
+           !       IF (ChangeElem(i+2,iElem) .GT. nSides) THEN 
+           !         PRINT *, "ERROR: Side number > nSides"
+           !         CALL EXIT()
+           !       ENDIF
+           !       Face_xGP_new(:,:,:,ElemToSide(1,i,iElem)) = Face_xGP(:,:,:,ChangeElem(i+2,iElem))
+           !       NormVec_new(:,:,:,ElemToSide(1,i,iElem)) = NormVec(:,:,:,ChangeElem(i+2,iElem))
+           !       TangVec1_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec1(:,:,:,ChangeElem(i+2,iElem))
+           !       TangVec2_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec2(:,:,:,ChangeElem(i+2,iElem))
+           !       SurfElem_new(:,:,ElemToSide(1,i,iElem)) = SurfElem(:,:,ChangeElem(i+2,iElem))
 
-          !       ! Print *, ",ElemToSide(1,i,iElem) = ", ElemToSide(1,i,iElem), "ChangeElem(i+2,iElem) = ",ChangeElem(i+2,iElem)
-          !     ENDDO
-          !     ! ElementToCalc(iElem)=0;
-            ELSE
-              IF (iE .LE. 0) THEN
-                print *, "Error, iE = 0!, iElem = ", ielem
-                ! print *, Count
-                CALL EXIT()
-              ENDIF
-            ! This is simple case of renumeration of Elements
-              ! IF (myrank .EQ. 1) THEN
-              !   PRINT *, "Renumeration new iElem = ", iElem, "Old iElem = ", iE
-              ! ENDIF
-               Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-               U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-            ENDIF
-  
-   END DO
-  CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
-  CALL MOVE_ALLOC(U_New, U)
+           !       ! Print *, ",ElemToSide(1,i,iElem) = ", ElemToSide(1,i,iElem), "ChangeElem(i+2,iElem) = ",ChangeElem(i+2,iElem)
+           !     ENDDO
+           !     ! ElementToCalc(iElem)=0;
+             ELSE
+               IF (iE .LE. 0) THEN
+                 print *, "Error, iE = 0!, iElem = ", ielem
+                 ! print *, Count
+                 CALL EXIT()
+               ENDIF
+             ! This is simple case of renumeration of Elements
+               ! IF (myrank .EQ. 1) THEN
+               !   PRINT *, "Renumeration new iElem = ", iElem, "Old iElem = ", iE
+               ! ENDIF
+                Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+                U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
+             ENDIF
+            
+    END DO
+     CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+     CALL MOVE_ALLOC(U_New, U)
+  ENDIF
 
-
-
-
-    CALL MOVE_ALLOC(Ut_new, Ut)
-
-  CALL MOVE_ALLOC(Metrics_fTilde_new,Metrics_fTilde)
-  CALL MOVE_ALLOC(Metrics_gTilde_new,Metrics_gTilde)
-  CALL MOVE_ALLOC(Metrics_hTilde_new,Metrics_hTilde)
-
-  CALL MOVE_ALLOC(dXGL_N_new,dXGL_N)
-  CALL MOVE_ALLOC(sJ_new,sJ)
-  CALL MOVE_ALLOC(DetJac_Ref_new,DetJac_Ref)
-
-  CALL MOVE_ALLOC(Face_xGP_new,Face_xGP)
-  
-  CALL MOVE_ALLOC(NormVec_new,NormVec)
-  CALL MOVE_ALLOC(TangVec1_new,TangVec1)
-    CALL MOVE_ALLOC(TangVec2_new,TangVec2)
-      CALL MOVE_ALLOC(SurfElem_new,SurfElem)
-
-            ! PRint *,  ElementToCalc(:);
-            ! CALL EXIT()
-
-
-  ! CALL EXIT()
-
-    !IF (PRESENT(ElemToRefineAndCoarse) ) THEN
-      ! IF (myrank .EQ. 0) THEN 
-        ! CALL CalcMetrics(ElementToCalc)
-      ! ENDIF
-        ! CALL EXIT()
-    !ELSE 
-      CALL CalcMetrics(ElementToCalc)
-
-  Deallocate(ElementToCalc)
+    !//  CALL CalcMetrics(ElementToCalc)
+      CALL CalcMetrics((/0/))
+  ! Deallocate(ElementToCalc)
 
 
 

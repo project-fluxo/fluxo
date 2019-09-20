@@ -2193,7 +2193,7 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
     // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
     p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
     p4est_gloidx_t * src = nullptr; //(p4set_gloidx_t  *)desptr; // after
-
+     p4est_reset_data(p4est, 0, NULL, NULL);
     src = (p4est_gloidx_t *)malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
     int i;
     for (i = 0; i <=p4est->mpisize; ++i)
