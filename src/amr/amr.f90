@@ -231,6 +231,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   NELM=size(U(1,1,1,1,:))
   PP_N=PP
   
+  nElemsOld = nElems;
+  nSidesOld = nSides
+  
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
     DATAPtr=RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ELSE
@@ -356,8 +359,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /*PARABOLIC*/
       IF (nNbProcs .EQ. 0) nNbProcs =1;
     ENDIF
-    nElemsOld = nElems;
-    nSideOld = nSides
+
     nElems=DataF%nElems
     nSides=DataF%nSides
 
@@ -365,52 +367,101 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
 
 
-
+  ! Reallocate Arrays if the nElems was changed
   IF (nElemsOld .NE. nElems) THEN
-    SDEALLOCATE(Ut)
-    ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Ut); ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_fTilde)
-    ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_fTilde); ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_gTilde)
-    ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_gTilde); ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(Metrics_hTilde)
-    ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(Metrics_hTilde); ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(dXGL_N)
-    ALLOCATE(dXGL_N(3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(dXGL_N); ALLOCATE(dXGL_N(3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-    SDEALLOCATE(sJ)
-    ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
+    SDEALLOCATE(sJ); ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
     
-    SDEALLOCATE(DetJac_Ref)
+    SDEALLOCATE(DetJac_Ref); 
     NGeoRef=3*NGeo ! build jacobian at higher degree
     ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
-  ENDIF
 
+    IF (ALLOCATED(dtElem))  THEN
+      DEALLOCATE(dtElem); ALLOCATE(dtElem(nElems)); 
+    ENDIF
+    
+    IF (ALLOCATED(ElemVol))  THEN 
+      DEALLOCATE(ElemVol); ALLOCATE(ElemVol(nElems)); 
+    ENDIF 
+  
+#if PARABOLIC
+    IF (ALLOCATED(gradPx))  THEN 
+      DEALLOCATE(gradPx); ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
+
+    IF (ALLOCATED(gradPy))  THEN 
+      DEALLOCATE(gradPy); ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
+
+    IF (ALLOCATED(gradPz))  THEN 
+      DEALLOCATE(gradPz); ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
+#endif /* PARABOLIC */
+  ENDIF  !IF (nElemsOld .NE. nElems)
+
+    
   IF (nSidesOld .NE. nSides) THEN
 ! surface data
-    SDEALLOCATE(Face_xGP)
-    ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(Face_xGP); ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
     ! Face_xGP=0;
-    SDEALLOCATE(NormVec)
-    ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(NormVec); ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
     
-    SDEALLOCATE(TangVec1)
-    ALLOCATE(      TangVec1(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(TangVec1); ALLOCATE(      TangVec1(3,0:PP_N,0:PP_N,1:nSides))
     
-    SDEALLOCATE(TangVec2)
-    
-    ALLOCATE(      TangVec2(3,0:PP_N,0:PP_N,1:nSides))
-    SDEALLOCATE(SurfElem)
-    ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(TangVec2); ALLOCATE(      TangVec2(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(SurfElem); ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 
-  ENDIF
+#if PARABOLIC
+   
+    IF (ALLOCATED(FluxX))  THEN 
+      DEALLOCATE(FluxX); ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(FluxY))  THEN 
+      DEALLOCATE(FluxY); ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(FluxZ))  THEN 
+      DEALLOCATE(FluxZ); ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+
+    IF (ALLOCATED(gradPx_master))  THEN 
+      DEALLOCATE(gradPx_master); ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(gradPy_master))  THEN 
+      DEALLOCATE(gradPy_master); ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(gradPz_master))  THEN 
+      DEALLOCATE(gradPz_master); ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+#endif /* PARABOLIC */
+    IF (ALLOCATED(AnalyzeSide))  THEN 
+        DEALLOCATE(AnalyzeSide); ALLOCATE(AnalyzeSide(1:nSides))
+        AnalyzeSide=0;
+    ENDIF
+    DEALLOCATE(U_master)
+    ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+  
+    DEALLOCATE(Flux_master)
+    ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+
+
+  ENDIF !  IF (nSidesOld .NE. nSides) THEN
 
    CALL RecalculateParameters(DataF)
-    !From DG Vars ????
+    !From DG Vars 
     nDOFElem=(PP_N+1)**3
     nTotalU=PP_nVar*nDOFElem*nElems
     nTotal_face=(PP_N+1)*(PP_N+1)
@@ -434,81 +485,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           DEALLOCATE(gradPz_slave); 
           ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
         ENDIF
-
-      
-      IF (nSidesOld .NE. nSides) THEN
-        IF (ALLOCATED(FluxX))  THEN 
-          DEALLOCATE(FluxX); 
-          ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(FluxY))  THEN 
-          DEALLOCATE(FluxY); 
-          ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(FluxZ))  THEN 
-          DEALLOCATE(FluxZ); 
-          ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-
-        IF (ALLOCATED(gradPx_master))  THEN 
-          DEALLOCATE(gradPx_master); 
-          ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPy_master))  THEN 
-          DEALLOCATE(gradPy_master); 
-          ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPz_master))  THEN 
-          DEALLOCATE(gradPz_master); 
-          ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-      ENDIF
-
-    IF (nElemsOld .NE. nElems) THEN
-        IF (ALLOCATED(gradPx))  THEN 
-          DEALLOCATE(gradPx); 
-          ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
-        IF (ALLOCATED(gradPy))  THEN 
-          DEALLOCATE(gradPy); 
-          ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
-        IF (ALLOCATED(gradPz))  THEN 
-          DEALLOCATE(gradPz); 
-          ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-    ENDIF    
+   
 #endif /* PARABOLIC */
-    IF (nElemsOld .NE. nElems) THEN 
-        IF (ALLOCATED(dtElem))  THEN 
-          DEALLOCATE(dtElem); 
-          ALLOCATE(dtElem(nElems)); 
-        ENDIF
-        
-        IF (ALLOCATED(ElemVol))  THEN 
-          DEALLOCATE(ElemVol); 
-          ALLOCATE(ElemVol(nElems)); 
-        ENDIF 
-    ENDIF
+
     
-    IF (nSidesOld .NE. nSides) THEN
-        IF (ALLOCATED(AnalyzeSide))  THEN 
-          DEALLOCATE(AnalyzeSide)
-          ALLOCATE(AnalyzeSide(1:nSides))
-          AnalyzeSide=0;
-        ENDIF
-        DEALLOCATE(U_master)
-        DEALLOCATE(Flux_master)
-        ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-    ENDIF      
 
         DEALLOCATE(U_SLAVE)
         DEALLOCATE(Flux_SLAVE)
