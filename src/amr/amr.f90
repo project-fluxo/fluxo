@@ -220,7 +220,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
   INTEGER, POINTER :: offsetMPISides_MINEF(:), offsetMPISides_YOURF(:), nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-  INTEGER :: nElemsOld, nSidesOld
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
 
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -233,7 +233,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   
   nElemsOld = nElems;
   nSidesOld = nSides
-  
+  LastSlaveSideOld = LastSlaveSide;
+  firstSlaveSideOld = firstSlaveSide;
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
     DATAPtr=RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ELSE
@@ -460,44 +461,40 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   ENDIF !  IF (nSidesOld .NE. nSides) THEN
 
-   CALL RecalculateParameters(DataF)
+  CALL RecalculateParameters(DataF)
     !From DG Vars 
-    nDOFElem=(PP_N+1)**3
-    nTotalU=PP_nVar*nDOFElem*nElems
-    nTotal_face=(PP_N+1)*(PP_N+1)
-    nTotal_vol=nTotal_face*(PP_N+1)
-    nTotal_IP=nTotal_vol*nElems
-    nTotalU=PP_nVar*nTotal_vol*nElems
-
+   nDOFElem=(PP_N+1)**3
+   nTotalU=PP_nVar*nDOFElem*nElems
+   nTotal_face=(PP_N+1)*(PP_N+1)
+   nTotal_vol=nTotal_face*(PP_N+1)
+   nTotal_IP=nTotal_vol*nElems
+   nTotalU=PP_nVar*nTotal_vol*nElems
+  
+  IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. (firstSlaveSideOld .NE. firstSlaveSide)) THEN
 #if PARABOLIC
-        IF (ALLOCATED(gradPx_slave))  THEN 
-          DEALLOCATE(gradPx_slave); 
-          ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
-
-        IF (ALLOCATED(gradPy_slave))  THEN 
-          DEALLOCATE(gradPy_slave); 
-          ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
-
-        IF (ALLOCATED(gradPz_slave))  THEN 
-
-          DEALLOCATE(gradPz_slave); 
-          ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
-   
+      IF (ALLOCATED(gradPx_slave))  THEN 
+        DEALLOCATE(gradPx_slave); 
+        ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
+     
+      IF (ALLOCATED(gradPy_slave))  THEN 
+        DEALLOCATE(gradPy_slave); 
+        ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
+     
+      IF (ALLOCATED(gradPz_slave))  THEN 
+        DEALLOCATE(gradPz_slave); 
+        ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
 #endif /* PARABOLIC */
-
-    
-
-        DEALLOCATE(U_SLAVE)
-        DEALLOCATE(Flux_SLAVE)
-        ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-
-        ! ALLOCATE(Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-
-  ! ALLOCATE(ElementToCalc(DataF%nElems))
+      DEALLOCATE(U_SLAVE)
+      ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      DEALLOCATE(Flux_SLAVE)
+      
+      ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
+  
+    ! ALLOCATE(ElementToCalc(DataF%nElems))
   ! do j=1,DataF%nElems
   !   ElementToCalc(j)=j;
   ! enddo
