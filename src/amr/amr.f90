@@ -211,7 +211,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! REAL,ALLOCATABLE :: TangVec2_New(:,:,:,:), SurfElem_New(:,:,:)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-  INTEGER :: PP, NELM, Ie, nVar;
+  INTEGER :: PP, Ie, nVar;
   INTEGER, ALLOCATABLE, TARGET ::  ElementToCalc(:)
   TYPE(C_PTR) :: DataPtr;
   TYPE(p4est_fortran_data), POINTER :: DataF
@@ -228,7 +228,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! COUNT = COUNT + 1
   nVar=size(U(:,1,1,1,1))
   PP=size(U(1,:,1,1,1))-1
-  NELM=size(U(1,1,1,1,:))
+  ! nElm=size(U(1,1,1,1,:))
   PP_N=PP
   
   nElemsOld = nElems;

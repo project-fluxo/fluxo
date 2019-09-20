@@ -11,7 +11,7 @@
  
 
 //#endif
-int KKK = 0; // Trigger for debugging. Delete after debugging 
+// int KKK = 0; // Trigger for debugging. Delete after debugging 
 //  * \return 1 if \a q should be refined,   0 otherwise.           * /
 static int
 refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
@@ -25,10 +25,12 @@ refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
         exit(1);
     }*/
     // if (ToRefine[dataquad->ElementID - 1] > 0)
+    // printf("ToRefine[dataquad->ElementID - 1] %d \n", ToRefine[dataquad->ElementID - 1]);
+    // printf(" q->level %d \n",  q->level);
     if ((ToRefine[dataquad->ElementID - 1] > 0 && ToRefine[dataquad->ElementID - 1] > q->level)
-    ||   ( - ToRefine[dataquad->ElementID - 1] -1 > q->level))
-     
+            ||   ( - ToRefine[dataquad->ElementID - 1] -1 > q->level))
     {
+        // printf("REFINE!!!!!!!!!!!!!!! \n");
         return 1;
     }
     else
@@ -134,11 +136,11 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
 
 
 #ifndef NON_OPTIMIZED
-                    for (i1 = 0; i1 < 6; i1++)
-                    // Safe for redefinition of Element. Insist on Metrics recalculation
-                    {
-                        childquaddata->OldSidesID[i1]=-1; 
-                    }
+                    // for (i1 = 0; i1 < 6; i1++)
+                    // // Safe for redefinition of Element. Insist on Metrics recalculation
+                    // {
+                    //     childquaddata->OldSidesID[i1]=-1; 
+                    // }
 #endif
             }
         }
@@ -1014,10 +1016,13 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data)
     }
 }
 
+
+
+#ifndef NON_OPTIMIZED
 ///////////////////////////////////////////////////////////////////////////////
 //
 // Set the SidesRatio. = 0 is non hanging Side. -1 = Small Side, +1 = big Side
-//  it is not used also the ghost layer.
+//  it is not used  the ghost layer.
 //
 ///////////////////////////////////////////////////////////////////////////////
 static void
@@ -1073,7 +1078,6 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
             dataquad->SidesRatio[Bigface] = 1;
- 
         }
         else
         { //We have only 4 small sides
@@ -1086,8 +1090,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
                     // not ghost side, but local
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *)quad->p.user_data;
-                    dataquad->SidesRatio[SmallFace] = -1;
-
+                   dataquad->SidesRatio[SmallFace] = -1;
                     // continue;
                 }
             }
@@ -1108,6 +1111,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             quad = side[SideIn]->is.full.quad;
             int face = side[SideIn]->face;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
+
             dataquad->SidesRatio[face] = 0;
         }
         else //No Ghosts
@@ -1126,7 +1130,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             return;
     }
 }
-
+#endif //  NON_OPTIMIZED
 #ifndef NON_OPTIMIZED
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -1394,18 +1398,20 @@ p4est_t *p4est_new_f(p4est_connectivity_t **conn)
     // p4est_fortran_data->nInnerSides = 0;
     // p4est_fortran_data->nMPISides = 0;
     // p4est_fortran_data->nMortarMPISides = 0;
+// #ifndef NON_OPTIMIZED
     p4est_iterate(p4,                     /* the forest */
                   NULL,                   /* the ghost layer May be LAter!!! */
                   (void *)&nElems,         /* the synchronized ghost data */
                   ElementCounterNew_iter, /* callback to compute each quad's
                                              interior contribution to du/dt */
-                  SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
+                  NULL, //SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
                                //              faces' contributions to du/du */
                   NULL,                   /* there is no callback for the
                                              edges between quadrants */
                   NULL);                  /* there is no callback for the
                                              corners between quadrants */
     // free(p4est_fortran_data);
+// #endif //  NON_OPTIMIZED
     return p4;
     // return NULL;
 }
@@ -1427,18 +1433,19 @@ ElementNumberChanges(p4est_iter_volume_info_t *info, void *user_data)
         {
              ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldElementID[i];
         }
-
-    if (dataquad->IsChanged == 0)
-    {
-        // Not Changed
-        i=1;
-        ChangeElements[(iElem - 1) * 8 + (i)] = -1;
-        for (i = 2; i < 8; i++)
-        { /// Convertion of Sides!!!!!!!!!
-            Fside = P2H_side[i-2]; //Hopr ID of Side 1..6
-            ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldSidesID[Fside-1];
-        }
-    }
+#ifndef NON_OPTIMIZED
+    // if (dataquad->IsChanged == 0)
+    // {
+    //     // Not Changed
+    //     i=1;
+    //     ChangeElements[(iElem - 1) * 8 + (i)] = -1;
+    //     for (i = 2; i < 8; i++)
+    //     { /// Convertion of Sides!!!!!!!!!
+    //         Fside = P2H_side[i-2]; //Hopr ID of Side 1..6
+    //         ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldSidesID[Fside-1];
+    //     }
+    // }
+#endif //  NON_OPTIMIZED
 
         // printf("iElem = %d, i = %d\n", iElem, dataquad->OldElementID[0]);
         // fflush(stdout);
@@ -1807,7 +1814,7 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
         SetSide_data = NULL;
 
 
-
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1111
         // Allocate EtS and StE
         int i, j, iElem, k, iSide;
         i = 1;
@@ -1885,16 +1892,16 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
             ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
         }
 #ifndef NON_OPTIMIZED
-    p4est_iterate(p4est,
-                  NULL,
-                  (void *)p4est_fortran_data,
-                  NULL,
+    // p4est_iterate(p4est,
+    //               NULL,
+    //               (void *)p4est_fortran_data,
+    //               NULL,
 
-                  CheckChanges,
+    //               CheckChanges,
 
-                  NULL,
+    //               NULL,
 
-                  NULL);
+    //               NULL);
 #endif
 
 // if (KKK>0) exit(1);
@@ -1911,7 +1918,7 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
 
 
     // exit(1);*/
-    int *ChangeSides = p4est_fortran_data->ChngSidePtr = malloc(0 /* Oder? */ * nSides * sizeof(int));
+    // int *ChangeSides = p4est_fortran_data->ChngSidePtr = malloc(0 /* Oder? */ * nSides * sizeof(int));
 
   
     {
@@ -1935,10 +1942,6 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
     pfree(SetMPISideData);
     pfree(ghost_data);
     p8est_ghost_destroy(ghost);
-
-    //    printf("===== HiER 222222222222 !!!! \n\n");    fflush(stdout);
-    //     exit(1);
-    // exit(1);
     
     return p4est_fortran_data;
 }
@@ -1951,18 +1954,19 @@ p4est_fortran_data_t *RefineCoarse(p4est_t *p4est, void *ElemToRC)
     // p4est_fortran_data_t *back;
     // Refine And Coarse
     p4est->user_pointer = ElemToRC;
-   
+// #ifndef NON_OPTIMIZED
     p4est_iterate(p4est,                           /* the forest */
                   NULL,                            /* the ghost layer May be LAter!!! */
                   NULL,                            /* the synchronized ghost data */
                   ElementCounterSetOldToZero_iter, /* callback to compute each quad's
                                              interior contribution to du/dt */
-                  SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
-                                             faces' contributions to du/du */
+                 NULL,// SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
+               //                              faces' contributions to du/du */
                   NULL,                            /* there is no callback for the
                                              edges between quadrants */
                   NULL);
-    KKK++;
+
+// #endif //  NON_OPTIMIZED
     int recursive = 0;
     int Callbackorphans = 0;
     int allowed_level = P4EST_QMAXLEVEL;

@@ -10,6 +10,7 @@
 #include <p4est_to_p8est.h>
 
 #define nullptr ((void*)0)
+#define NON_OPTIMIZED
 static sc_MPI_Comm mpicomm;
  
 

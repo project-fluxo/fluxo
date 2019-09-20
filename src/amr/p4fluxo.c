@@ -23,7 +23,7 @@ void free_data_memory(void *N)
 
     pfree(data->ChngElementPtr);
 
-    pfree(data->ChngSidePtr);
+    // pfree(data->ChngSidePtr);
 
     pfree(data->MTPtr);
 
