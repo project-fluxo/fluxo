@@ -220,7 +220,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
   INTEGER, POINTER :: offsetMPISides_MINEF(:), offsetMPISides_YOURF(:), nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-
+  INTEGER :: nElemsOld, nSidesOld
 
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -356,7 +356,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /*PARABOLIC*/
       IF (nNbProcs .EQ. 0) nNbProcs =1;
     ENDIF
-    
+    nElemsOld = nElems;
+    nSideOld = nSides
     nElems=DataF%nElems
     nSides=DataF%nSides
 
@@ -365,7 +366,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
 
 
-
+  IF (nElemsOld .NE. nElems) THEN
     SDEALLOCATE(Ut)
     ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 
@@ -387,7 +388,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     SDEALLOCATE(DetJac_Ref)
     NGeoRef=3*NGeo ! build jacobian at higher degree
     ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
+  ENDIF
 
+  IF (nSidesOld .NE. nSides) THEN
 ! surface data
     SDEALLOCATE(Face_xGP)
     ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
@@ -404,17 +407,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     SDEALLOCATE(SurfElem)
     ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 
+  ENDIF
 
-    CALL RecalculateParameters(DataF)
-        !From DG Vars ????
-        nDOFElem=(PP_N+1)**3
-        nTotalU=PP_nVar*nDOFElem*nElems
-        nTotal_face=(PP_N+1)*(PP_N+1)
-        nTotal_vol=nTotal_face*(PP_N+1)
-        nTotal_IP=nTotal_vol*nElems
-        nTotalU=PP_nVar*nTotal_vol*nElems
+   CALL RecalculateParameters(DataF)
+    !From DG Vars ????
+    nDOFElem=(PP_N+1)**3
+    nTotalU=PP_nVar*nDOFElem*nElems
+    nTotal_face=(PP_N+1)*(PP_N+1)
+    nTotal_vol=nTotal_face*(PP_N+1)
+    nTotal_IP=nTotal_vol*nElems
+    nTotalU=PP_nVar*nTotal_vol*nElems
 
-      
 #if PARABOLIC
         IF (ALLOCATED(gradPx_slave))  THEN 
           DEALLOCATE(gradPx_slave); 
@@ -432,36 +435,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
         ENDIF
 
-        IF (ALLOCATED(gradPx_master))  THEN 
-          DEALLOCATE(gradPx_master); 
-          ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPy_master))  THEN 
-          DEALLOCATE(gradPy_master); 
-          ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPz_master))  THEN 
-          DEALLOCATE(gradPz_master); 
-          ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPx))  THEN 
-          DEALLOCATE(gradPx); 
-          ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
-        IF (ALLOCATED(gradPy))  THEN 
-          DEALLOCATE(gradPy); 
-          ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
-        IF (ALLOCATED(gradPz))  THEN 
-          DEALLOCATE(gradPz); 
-          ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
+      
+      IF (nSidesOld .NE. nSides) THEN
         IF (ALLOCATED(FluxX))  THEN 
           DEALLOCATE(FluxX); 
           ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
@@ -477,9 +452,41 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ENDIF
 
-        
-#endif /* PARABOLIC */
 
+        IF (ALLOCATED(gradPx_master))  THEN 
+          DEALLOCATE(gradPx_master); 
+          ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+
+        IF (ALLOCATED(gradPy_master))  THEN 
+          DEALLOCATE(gradPy_master); 
+          ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+
+        IF (ALLOCATED(gradPz_master))  THEN 
+          DEALLOCATE(gradPz_master); 
+          ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ENDIF
+      ENDIF
+
+    IF (nElemsOld .NE. nElems) THEN
+        IF (ALLOCATED(gradPx))  THEN 
+          DEALLOCATE(gradPx); 
+          ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+
+        IF (ALLOCATED(gradPy))  THEN 
+          DEALLOCATE(gradPy); 
+          ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+
+        IF (ALLOCATED(gradPz))  THEN 
+          DEALLOCATE(gradPz); 
+          ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+        ENDIF
+    ENDIF    
+#endif /* PARABOLIC */
+    IF (nElemsOld .NE. nElems) THEN 
         IF (ALLOCATED(dtElem))  THEN 
           DEALLOCATE(dtElem); 
           ALLOCATE(dtElem(nElems)); 
@@ -489,23 +496,25 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           DEALLOCATE(ElemVol); 
           ALLOCATE(ElemVol(nElems)); 
         ENDIF 
-
-        IF (ALLOCATED(ElemVol))  THEN 
-
+    ENDIF
+    
+    IF (nSidesOld .NE. nSides) THEN
+        IF (ALLOCATED(AnalyzeSide))  THEN 
           DEALLOCATE(AnalyzeSide)
           ALLOCATE(AnalyzeSide(1:nSides))
           AnalyzeSide=0;
         ENDIF
-
         DEALLOCATE(U_master)
-        DEALLOCATE(U_SLAVE)
         DEALLOCATE(Flux_master)
-        DEALLOCATE(Flux_SLAVE)
         ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+        ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF      
+
+        DEALLOCATE(U_SLAVE)
+        DEALLOCATE(Flux_SLAVE)
         ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 
         ! ALLOCATE(Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
         ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 
   ! ALLOCATE(ElementToCalc(DataF%nElems))
@@ -622,11 +631,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   NULLIFY(nBCsF)
   
   NULLIFY(DataF)
-    !  print *," ERRRORRRR !!!!!!!!!!!!"
-!   IF (MPIroot) THEN
-! ! 
-!   ! ELSE 
-
 
 END SUBROUTINE RunAMR
 
