@@ -9,13 +9,13 @@ void free_data_memory(void *N)
 
     // pfree(data->nMPISides_Proc);
 
-    pfree(data->nMPISides_MINE_Proc);
+    // pfree(data->nMPISides_MINE_Proc);
 
-    pfree(data->nMPISides_YOUR_Proc);
+    // pfree(data->nMPISides_YOUR_Proc);
 
-    pfree(data->offsetMPISides_MINE);
+    // pfree(data->offsetMPISides_MINE);
 
-    pfree(data->offsetMPISides_YOUR);
+    // pfree(data->offsetMPISides_YOUR);
 
     // pfree(data->EtSPtr);s
 

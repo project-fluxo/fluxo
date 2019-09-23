@@ -254,7 +254,31 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     SDEALLOCATE(nMPISides_Proc)
     ALLOCATE(nMPISides_Proc(1:nNbProcs))
     DataF%nMPISides_Proc = C_LOC(nMPISides_Proc)
+   
+    ! CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
+    SDEALLOCATE(nMPISides_MINE_Proc)
+    ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs))
+    DataF%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
+  
+    ! CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
+    SDEALLOCATE(nMPISides_YOUR_Proc)
+    ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs))
+    DataF%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
 
+    ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
+  
+  ! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
+    ! CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
+    SDEALLOCATE(offsetMPISides_YOUR)
+    ALLOCATE(offsetMPISides_YOUR(0:nNbProcs))
+    DataF%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
+
+  ! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
+    ! CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
+    SDEALLOCATE(offsetMPISides_MINE)
+    ALLOCATE(offsetMPISides_MINE(0:nNbProcs))
+    DataF%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
+    
   ENDIF
 
   CALL GetData(p4est_ptr,DATAPtr)
@@ -271,26 +295,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
 
 
-  CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
-  SDEALLOCATE(nMPISides_MINE_Proc)
-  ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),SOURCE = nMPISides_MINE_ProcF)
-
-
-  CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
-  SDEALLOCATE(nMPISides_YOUR_Proc)
-  ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs),SOURCE = nMPISides_YOUR_ProcF)
-  
-  ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
-
-! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
-  CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
-  SDEALLOCATE(offsetMPISides_YOUR)
-  ALLOCATE(offsetMPISides_YOUR(0:nNbProcs), SOURCE = offsetMPISides_YOURF)
-
-! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
-  CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
-  SDEALLOCATE(offsetMPISides_MINE)
-  ALLOCATE(offsetMPISides_MINE(0:nNbProcs),SOURCE = offsetMPISides_MINEF)
 
 
   SDEALLOCATE(nMPISides_send)
