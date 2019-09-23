@@ -5,7 +5,7 @@ void free_data_memory(void *N)
     p4est_fortran_data_t *data;
     data = N;
 
-    pfree(data->nNbProc);
+    // pfree(data->nNbProc);
 
     pfree(data->nMPISides_Proc);
 
@@ -17,15 +17,15 @@ void free_data_memory(void *N)
 
     pfree(data->offsetMPISides_YOUR);
 
-    pfree(data->EtSPtr);
+    // pfree(data->EtSPtr);s
 
-    pfree(data->StEPtr);
+    // pfree(data->StEPtr);
 
-    pfree(data->ChngElementPtr);
+    // pfree(data->ChngElementPtr);
 
     // pfree(data->ChngSidePtr);
 
-    pfree(data->MTPtr);
+    // pfree(data->MTPtr);
 
     pfree(data->MIPtr);
 

@@ -37,7 +37,7 @@ INTEGER             :: DataSizeSide             !< datasize of one face, =PP_nVa
 
 INTEGER             :: SideID_start,SideID_end
 INTEGER             :: nNbProcs                 !< number of neighbor procs, is set in ReadMesh
-INTEGER,ALLOCATABLE :: NbProc(:)                !< list of neighbor procs; allocated from 1:nNbProcs, is set in ReadMesh
+INTEGER,ALLOCATABLE, TARGET :: NbProc(:)                !< list of neighbor procs; allocated from 1:nNbProcs, is set in ReadMesh
 INTEGER,ALLOCATABLE :: nMPISides_Proc(:)        !< number of mpisides for all neighbor procs, is set in ReadMesh
 INTEGER,ALLOCATABLE :: nMPISides_MINE_Proc(:)   !< number of MINE mpisides for all neighbor procs, is set in setLocalSideIDs
                                                 !< (prepare_mesh.f90)

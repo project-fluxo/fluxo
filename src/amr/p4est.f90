@@ -138,12 +138,20 @@ END SUBROUTINE p4est_loadbalancing_go
       TYPE(C_PTR),VALUE ::P4fortrandata
     END SUBROUTINE GetData
 
+
+    SUBROUTINE SetEtSandStE(P4EST, P4fortrandata) BIND(C, NAME='SetEtSandStE') 
+      IMPORT :: C_PTR
+      TYPE(C_PTR),VALUE :: P4EST
+      ! TYPE(C_PTR) ::GetData
+      TYPE(C_PTR),VALUE ::P4fortrandata
+    END SUBROUTINE SetEtSandStE
+
     FUNCTION GetnNBProcs(P4EST) BIND(C, NAME='GetnNBProcs') 
       IMPORT :: C_PTR
       TYPE(C_PTR),VALUE :: P4EST
       TYPE(C_PTR) ::GetnNBProcs
     END FUNCTION GetnNBProcs
-
+    
     SUBROUTINE RefineCoarse(P4EST, ElemToRC) BIND(C, NAME='RefineCoarse') 
       IMPORT :: C_PTR
       TYPE(C_PTR),VALUE :: P4EST, ElemToRC

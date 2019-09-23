@@ -180,7 +180,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
-  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs
+  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
@@ -216,7 +216,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   TYPE(C_PTR) :: DataPtr;
   TYPE(p4est_fortran_data), POINTER :: DataF
   ! TYPE (P4EST_FORTRAN_DATA) :: 
-  INTEGER, POINTER :: EtSF(:,:,:), MType(:,:), MInfo(:,:,:), StEF(:,:), ChangeElem(:,:), ChangeSide(:,:)
+  INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
   INTEGER, POINTER :: offsetMPISides_MINEF(:), offsetMPISides_YOURF(:), nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
@@ -240,18 +240,128 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ENDIF 
 
   DATAPtr = GetnNBProcs(p4est_ptr)
-  CALL GetData(p4est_ptr,DATAPtr)
-  CALL p4estSetMPIData()
-  
   CALL C_F_POINTER(DataPtr, DataF)
+
   
-  ! PRINT *, "DataF%nElems = ", DataF%nElems, myrank
+  IF (nProcessors .GT. 1) THEN
+    nNbProcs=DataF%nNBProcs
+    IF (ALLOCATED(NbProc)) THEN 
+      DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
+    ENDIF
+    DataF%nNbProc = C_LOC(NbProc)
+    ! CALL C_F_POINTER(DataF%nNbProc, nNbProcF,[nNbProcs])
+
+  ENDIF
+
+  CALL GetData(p4est_ptr,DATAPtr)
+
+  ! PRINT *, " NbProc = ", NbProc
+  ! CALL EXIT()
+  IF (nProcessors .GT. 1) THEN
+    nNbProcs=DataF%nNBProcs
+
+ 
+
+  ! Here reallocate all arrays and redefine  all parameters
 
 
-  CALL C_F_POINTER(DataF%EtSPtr, EtSF,[2,6,DataF%nElems])
+  CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
+  SDEALLOCATE(nMPISides_Proc)
+  ALLOCATE(nMPISides_Proc(1:nNbProcs),SOURCE = nMPISides_ProcF)
+
+  CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
+  SDEALLOCATE(nMPISides_MINE_Proc)
+  ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),SOURCE = nMPISides_MINE_ProcF)
+
+
+  CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
+  SDEALLOCATE(nMPISides_YOUR_Proc)
+  ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs),SOURCE = nMPISides_YOUR_ProcF)
+  
+  ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
+
+! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
+  CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
+  SDEALLOCATE(offsetMPISides_YOUR)
+  ALLOCATE(offsetMPISides_YOUR(0:nNbProcs), SOURCE = offsetMPISides_YOURF)
+
+! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
+  CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
+  SDEALLOCATE(offsetMPISides_MINE)
+  ALLOCATE(offsetMPISides_MINE(0:nNbProcs),SOURCE = offsetMPISides_MINEF)
+
+
+  SDEALLOCATE(nMPISides_send)
+  ALLOCATE(nMPISides_send(       nNbProcs,2))
+  
+  nMPISides_send(:,1)     =nMPISides_MINE_Proc
+  nMPISides_send(:,2)     =nMPISides_YOUR_Proc
+
+  SDEALLOCATE(nMPISides_rec)
+  ALLOCATE(nMPISides_rec(        nNbProcs,2))
+  nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
+  nMPISides_rec(:,2)      =nMPISides_MINE_Proc
+
+  SDEALLOCATE(OffsetMPISides_send)
+  ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
+  OffsetMPISides_send(:,1)=OffsetMPISides_MINE
+  OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
+
+  SDEALLOCATE(OffsetMPISides_rec)
+  ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
+  OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
+  OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
+
+  SDEALLOCATE(MPIRequest_U)
+  SDEALLOCATE(MPIRequest_Flux)
+  ALLOCATE(MPIRequest_U(nNbProcs,2)    )
+  ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
+  MPIRequest_U      = MPI_REQUEST_NULL
+  MPIRequest_Flux   = MPI_REQUEST_NULL
+#if PARABOLIC
+  SDEALLOCATE(MPIRequest_Lifting)
+  ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
+  MPIRequest_Lifting = MPI_REQUEST_NULL
+#endif /*PARABOLIC*/
+  IF (nNbProcs .EQ. 0) nNbProcs =1;
+ENDIF
+
+
+CALL p4estSetMPIData()
+nElems=DataF%nElems
+nSides=DataF%nSides
+
+IF (nElemsOld .NE. nElems) THEN
   deallocate(ElemToSide)
+  ALLOCATE(ElemToSide(2,6,DataF%nElems))
+
+
+ENDIF
+
+IF (nSidesOld .NE. nSides) THEN
+  ! CALL C_F_POINTER(DataF%StEPtr, StEF,[5,DataF%nSides])
+  deallocate(SideToElem)
+  ALLOCATE(SideToElem(5,nSides))
+
+
+  ! CALL C_F_POINTER(DataF%MTPtr, MType,[2,DataF%nSides])
+  deallocate(MortarType)
+  ALLOCATE(MortarType(2,nSides))
+ENDIF
+DataF%EtSPtr = C_LOC(ElemToSide)
+DataF%StEPtr = C_LOC(SideToElem)
+DataF%MTPtr = C_LOC(MortarType)
+! CALL C_F_POINTER(DataF%ChngElmPtr, ChangeElem,[8,DataF%nElems])
+ALLOCATE(ChangeElem(8,DataF%nElems))
+DataF%ChngElmPtr = C_LOC(ChangeElem)
+
+CALL SetEtSandStE(p4est_ptr,DATAPtr)
+
+
+  
+ 
+  ! CALL C_F_POINTER(DataF%EtSPtr, EtSF,[2,6,DataF%nElems])
   ! ALLOCATE(ElemToSide(2,6,DataF%nElems),SOURCE=EtSF)
-  ALLOCATE(ElemToSide(2,6,DataF%nElems), SOURCE  = EtSF)
 
 
   ! i=DataF%nBCSides;
@@ -264,14 +374,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
  
 
 
-  CALL C_F_POINTER(DataF%StEPtr, StEF,[5,DataF%nSides])
-  deallocate(SideToElem)
-  ALLOCATE(SideToElem(5,DataF%nSides),SOURCE = StEF)
-
-
-  CALL C_F_POINTER(DataF%MTPtr, MType,[2,DataF%nSides])
-  deallocate(MortarType)
-  ALLOCATE(MortarType(2,DataF%nSides),SOURCE = MType)
+ 
 !   ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
 
 
@@ -285,84 +388,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
 
 
-  CALL C_F_POINTER(DataF%ChngElmPtr, ChangeElem,[8,DataF%nElems])
 
 
 
-  IF (nProcessors .GT. 1) THEN
-        nNbProcs=DataF%nNBProcs
-
-     
-
-      ! Here reallocate all arrays and redefine  all parameters
-      CALL C_F_POINTER(DataF%nNbProc, nNbProcF,[nNbProcs])
-      SDEALLOCATE(NbProc)
-      ALLOCATE(NbProc(1:nNbProcs), SOURCE = nNbProcF)
-   
-      CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_Proc)
-      ALLOCATE(nMPISides_Proc(1:nNbProcs),SOURCE = nMPISides_ProcF)
-
-      CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_MINE_Proc)
-      ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),SOURCE = nMPISides_MINE_ProcF)
-   
-
-      CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_YOUR_Proc)
-      ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs),SOURCE = nMPISides_YOUR_ProcF)
-      
-      ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
-
-    ! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
-      CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
-      SDEALLOCATE(offsetMPISides_YOUR)
-      ALLOCATE(offsetMPISides_YOUR(0:nNbProcs), SOURCE = offsetMPISides_YOURF)
-
-    ! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
-      CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
-      SDEALLOCATE(offsetMPISides_MINE)
-      ALLOCATE(offsetMPISides_MINE(0:nNbProcs),SOURCE = offsetMPISides_MINEF)
 
 
-      SDEALLOCATE(nMPISides_send)
-      ALLOCATE(nMPISides_send(       nNbProcs,2))
-      
-      nMPISides_send(:,1)     =nMPISides_MINE_Proc
-      nMPISides_send(:,2)     =nMPISides_YOUR_Proc
-
-      SDEALLOCATE(nMPISides_rec)
-      ALLOCATE(nMPISides_rec(        nNbProcs,2))
-      nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
-      nMPISides_rec(:,2)      =nMPISides_MINE_Proc
-
-      SDEALLOCATE(OffsetMPISides_send)
-      ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
-      OffsetMPISides_send(:,1)=OffsetMPISides_MINE
-      OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
-
-      SDEALLOCATE(OffsetMPISides_rec)
-      ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
-      OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
-      OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
-
-      SDEALLOCATE(MPIRequest_U)
-      SDEALLOCATE(MPIRequest_Flux)
-      ALLOCATE(MPIRequest_U(nNbProcs,2)    )
-      ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
-      MPIRequest_U      = MPI_REQUEST_NULL
-      MPIRequest_Flux   = MPI_REQUEST_NULL
-#if PARABOLIC
-      SDEALLOCATE(MPIRequest_Lifting)
-      ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
-      MPIRequest_Lifting = MPI_REQUEST_NULL
-#endif /*PARABOLIC*/
-      IF (nNbProcs .EQ. 0) nNbProcs =1;
-    ENDIF
-
-    nElems=DataF%nElems
-    nSides=DataF%nSides
-
+  
     PP_N=PP
 
 
@@ -598,12 +629,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   NULLIFY(nNbProcF)
   NULLIFY(nMPISides_ProcF)
-  NULLIFY(ChangeSide)
-  NULLIFY(ChangeElem)
-  NULLIFY(EtSF) 
-  NULLIFY(StEF)
+  ! NULLIFY(ChangeSide)
+  DEALLOCATE(ChangeElem)
+  ! NULLIFY(EtSF) 
+  ! NULLIFY(StEF)
   NULLIFY(MInfo)
-  NULLIFY(MType)
+  ! NULLIFY(MType)
   NULLIFY(nBCsF)
   
   NULLIFY(DataF)
