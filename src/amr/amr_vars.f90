@@ -70,6 +70,9 @@ TYPE P4EST_FORTRAN_DATA
     TYPE(C_PTR) ::  offsetMPISides_MINE; !
     TYPE(C_PTR) ::  offsetMPISides_YOUR; ! 
     TYPE(C_PTR) ::  BCs;
+    TYPE(C_PTR) ::  GhostPtr; ! Used in C only
+    TYPE(C_PTR) ::  GhostDataPtr; !Used in C only
+    TYPE(C_PTR) ::  ghost_to_proc_Ptr; !Used in C only
 END TYPE P4EST_FORTRAN_DATA
 
 TYPE p4est_balance_data

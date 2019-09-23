@@ -180,7 +180,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
-  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData
+  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
@@ -212,7 +212,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: PP, Ie, nVar;
-  INTEGER, ALLOCATABLE, TARGET ::  ElementToCalc(:)
+  ! INTEGER, ALLOCATABLE, TARGET ::  ElementToCalc(:)
   TYPE(C_PTR) :: DataPtr;
   TYPE(p4est_fortran_data), POINTER :: DataF
   ! TYPE (P4EST_FORTRAN_DATA) :: 
@@ -228,7 +228,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! COUNT = COUNT + 1
   nVar=size(U(:,1,1,1,1))
   PP=size(U(1,:,1,1,1))-1
-  ! nElm=size(U(1,1,1,1,:))
+
   PP_N=PP
   
   nElemsOld = nElems;
@@ -236,12 +236,11 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   LastSlaveSideOld = LastSlaveSide;
   firstSlaveSideOld = firstSlaveSide;
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    DATAPtr=RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
-  ELSE
-    DATAPtr = GetData(p4est_ptr)
+    CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ENDIF 
 
-  
+  DATAPtr = GetnNBProcs(p4est_ptr)
+  CALL GetData(p4est_ptr,DATAPtr)
   CALL p4estSetMPIData()
   
   CALL C_F_POINTER(DataPtr, DataF)
