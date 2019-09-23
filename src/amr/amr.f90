@@ -199,25 +199,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
 
-  ! REAL,ALLOCATABLE :: Ut_New(:,:,:,:,:), Metrics_fTilde_New(:,:,:,:,:)
-  ! REAL,ALLOCATABLE :: Metrics_gTilde_New(:,:,:,:,:), Metrics_hTilde_New(:,:,:,:,:)
-
-  ! REAL,ALLOCATABLE :: dXGL_N_New(:,:,:,:,:,:), sJ_new(:,:,:,:)
-
-  ! REAL,ALLOCATABLE :: DetJac_Ref_New(:,:,:,:,:)
-  ! REAL,ALLOCATABLE :: Face_xGP_New(:,:,:,:)
-  
-  ! REAL,ALLOCATABLE :: NormVec_New(:,:,:,:), TangVec1_New(:,:,:,:)
-  ! REAL,ALLOCATABLE :: TangVec2_New(:,:,:,:), SurfElem_New(:,:,:)
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ 
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: PP, Ie, nVar;
-  ! INTEGER, ALLOCATABLE, TARGET ::  ElementToCalc(:)
   TYPE(C_PTR) :: DataPtr;
   TYPE(p4est_fortran_data), POINTER :: DataF
-  ! TYPE (P4EST_FORTRAN_DATA) :: 
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
-  ! INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
@@ -225,7 +212,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
-  ! COUNT = COUNT + 1
+ 
   nVar=size(U(:,1,1,1,1))
   PP=size(U(1,:,1,1,1))-1
 
@@ -627,20 +614,10 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
 
   call free_data_memory(DataPtr)
- 
-  ! NULLIFY(nMPISides_YOUR_ProcF)
-  ! NULLIFY(nMPISides_MINE_ProcF)
-  ! NULLIFY(offsetMPISides_MINEF)
-  ! NULLIFY(offsetMPISides_YOURF)
 
-  ! NULLIFY(nNbProcF)
-  ! NULLIFY(nMPISides_ProcF)
-  ! NULLIFY(ChangeSide)
+
   DEALLOCATE(ChangeElem)
-  ! NULLIFY(EtSF) 
-  ! NULLIFY(StEF)
   NULLIFY(MInfo)
-  ! NULLIFY(MType)
   NULLIFY(nBCsF)
   
   NULLIFY(DataF)
