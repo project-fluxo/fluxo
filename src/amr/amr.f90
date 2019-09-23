@@ -217,8 +217,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   TYPE(p4est_fortran_data), POINTER :: DataF
   ! TYPE (P4EST_FORTRAN_DATA) :: 
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
-  INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
-  INTEGER, POINTER :: offsetMPISides_MINEF(:), offsetMPISides_YOURF(:), nBCsF(:)
+  ! INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
+  INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
 
@@ -628,13 +628,13 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
   call free_data_memory(DataPtr)
  
-  NULLIFY(nMPISides_YOUR_ProcF)
-  NULLIFY(nMPISides_MINE_ProcF)
-  NULLIFY(offsetMPISides_MINEF)
-  NULLIFY(offsetMPISides_YOURF)
+  ! NULLIFY(nMPISides_YOUR_ProcF)
+  ! NULLIFY(nMPISides_MINE_ProcF)
+  ! NULLIFY(offsetMPISides_MINEF)
+  ! NULLIFY(offsetMPISides_YOURF)
 
-  NULLIFY(nNbProcF)
-  NULLIFY(nMPISides_ProcF)
+  ! NULLIFY(nNbProcF)
+  ! NULLIFY(nMPISides_ProcF)
   ! NULLIFY(ChangeSide)
   DEALLOCATE(ChangeElem)
   ! NULLIFY(EtSF) 
