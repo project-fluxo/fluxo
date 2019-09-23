@@ -7,7 +7,7 @@ void free_data_memory(void *N)
 
     // pfree(data->nNbProc);
 
-    pfree(data->nMPISides_Proc);
+    // pfree(data->nMPISides_Proc);
 
     pfree(data->nMPISides_MINE_Proc);
 

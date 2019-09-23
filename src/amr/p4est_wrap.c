@@ -1626,10 +1626,10 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data)
 
     // int *nNbProc; //ALLOCATE(NbProc(nNbProcs),nMPISides_Proc(1:nNbProcs))
     // int *nMPISides_Proc;
-    p4est_fortran_data->nMPISides_Proc = nullptr;
+    // p4est_fortran_data->nMPISides_Proc = nullptr;
     // if (p4est->mpisize > 1)
     {
-        p4est_fortran_data->nMPISides_Proc = (int *)malloc(nNBProcs * sizeof(int)); //Number of the sides for each processor
+        // p4est_fortran_data->nMPISides_Proc = (int *)malloc(nNBProcs * sizeof(int)); //Number of the sides for each processor
         int i;
         for (i = 0; i < nNBProcs; i++)
         {

@@ -250,6 +250,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ENDIF
     DataF%nNbProc = C_LOC(NbProc)
     ! CALL C_F_POINTER(DataF%nNbProc, nNbProcF,[nNbProcs])
+    !CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
+    SDEALLOCATE(nMPISides_Proc)
+    ALLOCATE(nMPISides_Proc(1:nNbProcs))
+    DataF%nMPISides_Proc = C_LOC(nMPISides_Proc)
 
   ENDIF
 
@@ -265,9 +269,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! Here reallocate all arrays and redefine  all parameters
 
 
-  CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
-  SDEALLOCATE(nMPISides_Proc)
-  ALLOCATE(nMPISides_Proc(1:nNbProcs),SOURCE = nMPISides_ProcF)
+
 
   CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
   SDEALLOCATE(nMPISides_MINE_Proc)
