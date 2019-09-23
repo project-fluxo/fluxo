@@ -136,7 +136,7 @@ ENDDO
  !   CALL EXIT()
  !   ENDIF
 !ENDDO
-PRINT *, "RunAMRs"
+! PRINT *, "RunAMRs"
 ElemToRefineAndCoarse = 0
 IF (MPIRoot) THEN
   ElemToRefineAndCoarse(1) = 2
