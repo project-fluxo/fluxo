@@ -110,77 +110,75 @@ SUBROUTINE InitAMR()
     UseAMR = GETLOGICAL('UseAMR','.FALSE.')
     IF (UseAMR) THEN
       p4estFile = GETSTR('p4estFile')
-      ! PRINT *, "!!!!!!!!!!!!!!!!!!!!!!!!USE  AMR = ", UseAMR
-      ! PRINT *, "!!!!!!!!!!!!!!!!!!!!!!!!p4estFile  AMR = ", p4estFile
     ELSE
-      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR is FALSE!'
+      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
       RETURN;
     ENDIF
-    RET=P4EST_INIT(MPI_COMM_WORLD);
+  
+    RET=P4EST_INIT(MPI_COMM_WORLD); 
+
 
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
     SWRITE(UNIT_StdOut,'(132("-"))')
     CALL InitAMR_Connectivity()
     CALL InitAMR_P4est()
-    ! CALL EXIT()
-    ! CALL EXIT()
+  
 END SUBROUTINE InitAMR
 
 !==================================================================================================================================
 !> Routine creating and 
 !==================================================================================================================================
 SUBROUTINE InitAMR_Connectivity()
-    ! MODULES
-    USE MOD_Globals
-    USE MOD_Mesh_Vars,             ONLY: MeshFile
-    ! USE MOD_P4Mesh_ReadIn,         ONLY: P4ReadMesh,ReadMeshHeader
-    USE MOD_P4EST
-    USE MOD_AMR_Vars,              ONLY: connectivity_ptr
-    USE MODH_Mesh,                 ONLY: InitMesh, FinalizeMesh
-    USE MODH_Mesh_ReadIn,        ONLY: ReadMeshHeader,ReadMeshFromHDF5
-    ! USE MOD_IO_HDF5,              ONLY: nDims
-    ! USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
-    !  USE MOD_P4EST_Binding, ONLY: p4_initvars
-    USE, INTRINSIC :: ISO_C_BINDING
-    IMPLICIT NONE
-    INTEGER CONN_OWNER
-    !----------------------------------------------------------------------------------------------------------------------------------
-    ! INPUT/OUTPUT VARIABLES
-    !----------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES
-    !==================================================================================================================================
-
-    ! MeshFile = GETSTR('MeshFile')
-        ! print *, "~~~~~~~~~~~~~~~~~~~~~~ n Dims ~~~~~~~~~~~~~~~~~~:",nDims
-        CONN_OWNER=0;
-    ! IF(MPIroot)THEN
-    !   CONN_OWNER=myrank
-    ! ENDIF
-        CALL InitMesh()
-    ! ! Create Connectivity
-        CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
-    !  print *, " myrank = ", myrank
-        CALL ReadMeshFromHDF5(MeshFile)
-        ! The result is connectivity PTR
-
-
-    connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
-
-    CALL FinalizeMesh()
+   ! MODULES
+   USE MOD_Globals
+   USE MOD_Mesh_Vars,             ONLY: MeshFile
+   ! USE MOD_P4Mesh_ReadIn,         ONLY: P4ReadMesh,ReadMeshHeader
+   USE MOD_P4EST
+   USE MOD_AMR_Vars,              ONLY: connectivity_ptr
+   USE MODH_Mesh,                 ONLY: InitMesh, FinalizeMesh
+   USE MODH_Mesh_ReadIn,        ONLY: ReadMeshHeader,ReadMeshFromHDF5
+   ! USE MOD_IO_HDF5,              ONLY: nDims
+   ! USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
+   !  USE MOD_P4EST_Binding, ONLY: p4_initvars
+   USE, INTRINSIC :: ISO_C_BINDING
+   IMPLICIT NONE
+   INTEGER CONN_OWNER
+   !----------------------------------------------------------------------------------------------------------------------------------
+   ! INPUT/OUTPUT VARIABLES
+   !----------------------------------------------------------------------------------------------------------------------------------
+   ! LOCAL VARIABLES
+   !==================================================================================================================================
+   ! MeshFile = GETSTR('MeshFile')
    
+   CONN_OWNER=0;
+     CALL InitMesh()
+   ! Create Connectivity
+   CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
+   CALL ReadMeshFromHDF5(MeshFile)
+  
+   ! The result is connectivity PTR
+   connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
+   CALL FinalizeMesh()
+  
 END SUBROUTINE InitAMR_Connectivity
 
 
 
+!==================================================================================================================================
+!>  The main SUBROUTINE used for Coarse/Refine Mesh.
+!> IF Array ElemToRefineAndCoarse is not Present, then the SUBROUTINE just rebuild the FLUXO Nesh 
+!>  according to the p4est Data
+!>
+!==================================================================================================================================
 
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
   USE MOD_Analyze_Vars,        ONLY: ElemVol
-  USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR
+  USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
-  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData
+  USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
@@ -196,467 +194,340 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
 #endif /* PARABOLIC */
   USE, INTRINSIC :: ISO_C_BINDING
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Ut_New(:,:,:,:,:), Metrics_fTilde_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Metrics_gTilde_New(:,:,:,:,:), Metrics_hTilde_New(:,:,:,:,:)
-
-  REAL,ALLOCATABLE :: dXGL_N_New(:,:,:,:,:,:), sJ_new(:,:,:,:)
-
-  REAL,ALLOCATABLE :: DetJac_Ref_New(:,:,:,:,:)
-  REAL,ALLOCATABLE :: Face_xGP_New(:,:,:,:)
-  
-  REAL,ALLOCATABLE :: NormVec_New(:,:,:,:), TangVec1_New(:,:,:,:)
-  REAL,ALLOCATABLE :: TangVec2_New(:,:,:,:), SurfElem_New(:,:,:)
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ 
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-  INTEGER :: PP, NELM, Ie, nVar;
-  INTEGER, ALLOCATABLE, TARGET ::  ElementToCalc(:)
+  INTEGER :: PP, Ie, nVar;
   TYPE(C_PTR) :: DataPtr;
-  TYPE(p4est_fortran_data), POINTER :: DataF
-  ! TYPE (P4EST_FORTRAN_DATA) :: 
-  INTEGER, POINTER :: EtSF(:,:,:), MType(:,:), MInfo(:,:,:), StEF(:,:), ChangeElem(:,:), ChangeSide(:,:)
-  INTEGER, POINTER :: nNBProcF(:), nMPISides_ProcF(:), nMPISides_MINE_ProcF(:), nMPISides_YOUR_ProcF(:)
-  INTEGER, POINTER :: offsetMPISides_MINEF(:), offsetMPISides_YOURF(:), nBCsF(:)
+  INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
+  INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-
-
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
+!==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
-  ! COUNT = COUNT + 1
+ 
   nVar=size(U(:,1,1,1,1))
   PP=size(U(1,:,1,1,1))-1
-  NELM=size(U(1,1,1,1,:))
+
   PP_N=PP
   
+  nElemsOld = nElems;
+  nSidesOld = nSides
+  LastSlaveSideOld = LastSlaveSide;
+  firstSlaveSideOld = firstSlaveSide;
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    DATAPtr=RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
-  ELSE
-    DATAPtr = GetData(p4est_ptr)
+    CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ENDIF 
 
+  DATAPtr = C_LOC(FortranData)
+  CALL GetnNBProcs(p4est_ptr, DATAPtr)
+  ! CALL C_F_POINTER(DataPtr, FortranData)
+
   
-  CALL p4estSetMPIData()
+  IF (nProcessors .GT. 1) THEN
+    nNbProcs=FortranData%nNBProcs
+    IF (ALLOCATED(NbProc)) THEN 
+      DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
+    ENDIF
+    FortranData%nNbProc = C_LOC(NbProc)
   
-  CALL C_F_POINTER(DataPtr, DataF)
+    SDEALLOCATE(nMPISides_Proc)
+    ALLOCATE(nMPISides_Proc(1:nNbProcs))
+    FortranData%nMPISides_Proc = C_LOC(nMPISides_Proc)
+   
+    
+    SDEALLOCATE(nMPISides_MINE_Proc)
+    ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs))
+    FortranData%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
   
-  ! PRINT *, "DataF%nElems = ", DataF%nElems, myrank
+   
+    SDEALLOCATE(nMPISides_YOUR_Proc)
+    ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs))
+    FortranData%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
+
+   
+    SDEALLOCATE(offsetMPISides_YOUR)
+    ALLOCATE(offsetMPISides_YOUR(0:nNbProcs))
+    FortranData%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
+
+    SDEALLOCATE(offsetMPISides_MINE)
+    ALLOCATE(offsetMPISides_MINE(0:nNbProcs))
+    FortranData%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
+    
+  ENDIF
+
+  CALL GetData(p4est_ptr,DATAPtr)
+
+  
+  IF (nProcessors .GT. 1) THEN
+    nNbProcs=FortranData%nNBProcs
+  ! Here reallocate all arrays and redefine  all parameters
+
+  SDEALLOCATE(nMPISides_send)
+  ALLOCATE(nMPISides_send(       nNbProcs,2))
+  
+  nMPISides_send(:,1)     =nMPISides_MINE_Proc
+  nMPISides_send(:,2)     =nMPISides_YOUR_Proc
+
+  SDEALLOCATE(nMPISides_rec)
+  ALLOCATE(nMPISides_rec(        nNbProcs,2))
+  nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
+  nMPISides_rec(:,2)      =nMPISides_MINE_Proc
+
+  SDEALLOCATE(OffsetMPISides_send)
+  ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
+  OffsetMPISides_send(:,1)=OffsetMPISides_MINE
+  OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
+
+  SDEALLOCATE(OffsetMPISides_rec)
+  ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
+  OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
+  OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
+
+  SDEALLOCATE(MPIRequest_U)
+  SDEALLOCATE(MPIRequest_Flux)
+  ALLOCATE(MPIRequest_U(nNbProcs,2)    )
+  ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
+  MPIRequest_U      = MPI_REQUEST_NULL
+  MPIRequest_Flux   = MPI_REQUEST_NULL
+#if PARABOLIC
+  SDEALLOCATE(MPIRequest_Lifting)
+  ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
+  MPIRequest_Lifting = MPI_REQUEST_NULL
+#endif /*PARABOLIC*/
+  IF (nNbProcs .EQ. 0) nNbProcs =1;
+ENDIF
 
 
-  CALL C_F_POINTER(DataF%EtSPtr, EtSF,[2,6,DataF%nElems])
+CALL p4estSetMPIData()
+nElems=FortranData%nElems
+nSides=FortranData%nSides
+
+IF (nElemsOld .NE. nElems) THEN
   deallocate(ElemToSide)
-  ! ALLOCATE(ElemToSide(2,6,DataF%nElems),SOURCE=EtSF)
-  ALLOCATE(ElemToSide(2,6,DataF%nElems), SOURCE  = EtSF)
+  ALLOCATE(ElemToSide(2,6,FortranData%nElems))
 
 
-  ! i=DataF%nBCSides;
- 
-  CALL C_F_POINTER(DataF%BCs, nBCsF,[DataF%nBCSides])
-  SDEALLOCATE(BC)
-  ALLOCATE(BC(DataF%nBCSides),SOURCE = nBCsF)
+ENDIF
 
-
- 
-
-
-  CALL C_F_POINTER(DataF%StEPtr, StEF,[5,DataF%nSides])
+IF (nSidesOld .NE. nSides) THEN
+  
   deallocate(SideToElem)
-  ALLOCATE(SideToElem(5,DataF%nSides),SOURCE = StEF)
+  ALLOCATE(SideToElem(5,nSides))
 
-
-  CALL C_F_POINTER(DataF%MTPtr, MType,[2,DataF%nSides])
   deallocate(MortarType)
-  ALLOCATE(MortarType(2,DataF%nSides),SOURCE = MType)
-!   ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
+  ALLOCATE(MortarType(2,nSides))
+ENDIF
+FortranData%EtSPtr = C_LOC(ElemToSide)
+FortranData%StEPtr = C_LOC(SideToElem)
+FortranData%MTPtr = C_LOC(MortarType)
+
+ALLOCATE(ChangeElem(8,FortranData%nElems))
+FortranData%ChngElmPtr = C_LOC(ChangeElem)
+
+CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
 
-    nMortarSides    = DataF%nMortarInnerSides +  DataF%nMortarMPISides
+  
+ 
+ 
+  CALL C_F_POINTER(FortranData%BCs, nBCsF,[FortranData%nBCSides])
+  SDEALLOCATE(BC)
+  ALLOCATE(BC(FortranData%nBCSides),SOURCE = nBCsF)
 
-  CALL C_F_POINTER(DataF%MIPtr, MInfo,[2,4,nMortarSides])
+  nMortarSides    = FortranData%nMortarInnerSides +  FortranData%nMortarMPISides
+
+  CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,4,nMortarSides])
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
-  
+  PP_N=PP
 
+  ! Reallocate Arrays if the nElems was changed
+  IF (nElemsOld .NE. nElems) THEN
+    SDEALLOCATE(Ut); ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 
+    SDEALLOCATE(Metrics_fTilde); ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-  CALL C_F_POINTER(DataF%ChngElmPtr, ChangeElem,[8,DataF%nElems])
+    SDEALLOCATE(Metrics_gTilde); ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
+    SDEALLOCATE(Metrics_hTilde); ALLOCATE(Metrics_hTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
+    SDEALLOCATE(dXGL_N); ALLOCATE(dXGL_N(3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
-  IF (nProcessors .GT. 1) THEN
-        nNbProcs=DataF%nNBProcs
+    SDEALLOCATE(sJ); ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
+    
+    SDEALLOCATE(DetJac_Ref); 
+    NGeoRef=3*NGeo ! build jacobian at higher degree
+    ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
-     
-
-      ! Here reallocate all arrays and redefine  all parameters
-      CALL C_F_POINTER(DataF%nNbProc, nNbProcF,[nNbProcs])
-      SDEALLOCATE(NbProc)
-      ALLOCATE(NbProc(1:nNbProcs), SOURCE = nNbProcF)
-   
-      CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_Proc)
-      ALLOCATE(nMPISides_Proc(1:nNbProcs),SOURCE = nMPISides_ProcF)
-
-      CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_MINE_Proc)
-      ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),SOURCE = nMPISides_MINE_ProcF)
-   
-
-      CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
-      SDEALLOCATE(nMPISides_YOUR_Proc)
-      ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs),SOURCE = nMPISides_YOUR_ProcF)
-      
-      ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
-
-    ! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
-      CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
-      SDEALLOCATE(offsetMPISides_YOUR)
-      ALLOCATE(offsetMPISides_YOUR(0:nNbProcs), SOURCE = offsetMPISides_YOURF)
-
-    ! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
-      CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
-      SDEALLOCATE(offsetMPISides_MINE)
-      ALLOCATE(offsetMPISides_MINE(0:nNbProcs),SOURCE = offsetMPISides_MINEF)
-
-
-      SDEALLOCATE(nMPISides_send)
-      ALLOCATE(nMPISides_send(       nNbProcs,2))
-      
-      nMPISides_send(:,1)     =nMPISides_MINE_Proc
-      nMPISides_send(:,2)     =nMPISides_YOUR_Proc
-
-      SDEALLOCATE(nMPISides_rec)
-      ALLOCATE(nMPISides_rec(        nNbProcs,2))
-      nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
-      nMPISides_rec(:,2)      =nMPISides_MINE_Proc
-
-      SDEALLOCATE(OffsetMPISides_send)
-      ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
-      OffsetMPISides_send(:,1)=OffsetMPISides_MINE
-      OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
-
-      SDEALLOCATE(OffsetMPISides_rec)
-      ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
-      OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
-      OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
-
-      SDEALLOCATE(MPIRequest_U)
-      SDEALLOCATE(MPIRequest_Flux)
-      ALLOCATE(MPIRequest_U(nNbProcs,2)    )
-      ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
-      MPIRequest_U      = MPI_REQUEST_NULL
-      MPIRequest_Flux   = MPI_REQUEST_NULL
-#if PARABOLIC
-      SDEALLOCATE(MPIRequest_Lifting)
-      ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
-      MPIRequest_Lifting = MPI_REQUEST_NULL
-#endif /*PARABOLIC*/
-      IF (nNbProcs .EQ. 0) nNbProcs =1;
+    IF (ALLOCATED(dtElem))  THEN
+      DEALLOCATE(dtElem); ALLOCATE(dtElem(nElems)); 
     ENDIF
     
-    nElems=DataF%nElems
-    nSides=DataF%nSides
-
-    PP_N=PP
-
-
-
-
-
-    SDEALLOCATE(Ut_new)
-    ALLOCATE(Ut_new(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-
-    SDEALLOCATE(Metrics_fTilde_new)
-    ALLOCATE(Metrics_fTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
-
-    SDEALLOCATE(Metrics_gTilde_new)
-    ALLOCATE(Metrics_gTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
-
-    SDEALLOCATE(Metrics_hTilde_new)
-    ALLOCATE(Metrics_hTilde_new(3,0:PP_N,0:PP_N,0:PP_N,nElems))
-
-    SDEALLOCATE(dXGL_N_new)
-    ALLOCATE(dXGL_N_new      (3,3,0:PP_N,0:PP_N,0:PP_N,nElems))
-
-    SDEALLOCATE(sJ_new)
-    ALLOCATE(            sJ_new(  0:PP_N,0:PP_N,0:PP_N,nElems))
-    
-    SDEALLOCATE(DetJac_Ref_new)
-    NGeoRef=3*NGeo ! build jacobian at higher degree
-    ALLOCATE(    DetJac_Ref_new(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
-
-! surface data
-    SDEALLOCATE(Face_xGP_new)
-    ALLOCATE(      Face_xGP_new(3,0:PP_N,0:PP_N,1:nSides))
-    ! Face_xGP=0;
-    SDEALLOCATE(NormVec_new)
-    ALLOCATE(       NormVec_new(3,0:PP_N,0:PP_N,1:nSides))
-    
-    SDEALLOCATE(TangVec1_new)
-    ALLOCATE(      TangVec1_new(3,0:PP_N,0:PP_N,1:nSides))
-    
-    SDEALLOCATE(TangVec2_new)
-    
-    ALLOCATE(      TangVec2_new(3,0:PP_N,0:PP_N,1:nSides))
-    SDEALLOCATE(SurfElem_new)
-    ALLOCATE(      SurfElem_new(  0:PP_N,0:PP_N,1:nSides))
-
-
-    CALL RecalculateParameters(DataF)
-        !From DG Vars ????
-        nDOFElem=(PP_N+1)**3
-        nTotalU=PP_nVar*nDOFElem*nElems
-        nTotal_face=(PP_N+1)*(PP_N+1)
-        nTotal_vol=nTotal_face*(PP_N+1)
-        nTotal_IP=nTotal_vol*nElems
-        nTotalU=PP_nVar*nTotal_vol*nElems
-
-        DEALLOCATE(U_master)
-        DEALLOCATE(U_SLAVE)
-        DEALLOCATE(Flux_master)
-        DEALLOCATE(Flux_SLAVE)
+    IF (ALLOCATED(ElemVol))  THEN 
+      DEALLOCATE(ElemVol); ALLOCATE(ElemVol(nElems)); 
+    ENDIF 
+  
 #if PARABOLIC
-        IF (ALLOCATED(gradPx_slave))  THEN 
-          DEALLOCATE(gradPx_slave); 
-          ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
+    IF (ALLOCATED(gradPx))  THEN 
+      DEALLOCATE(gradPx); ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
 
-        IF (ALLOCATED(gradPy_slave))  THEN 
-          DEALLOCATE(gradPy_slave); 
-          ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
-        
-        IF (ALLOCATED(gradPz_slave))  THEN 
-          DEALLOCATE(gradPz_slave); 
-          ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-        ENDIF
+    IF (ALLOCATED(gradPy))  THEN 
+      DEALLOCATE(gradPy); ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
 
-        IF (ALLOCATED(gradPx_master))  THEN 
-          DEALLOCATE(gradPx_master); 
-          ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPy_master))  THEN 
-          DEALLOCATE(gradPy_master); 
-          ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
-        IF (ALLOCATED(gradPz_master))  THEN 
-          DEALLOCATE(gradPz_master); 
-          ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-        
-        IF (ALLOCATED(gradPx))  THEN 
-          DEALLOCATE(gradPx); 
-          ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-        
-        IF (ALLOCATED(gradPy))  THEN 
-          DEALLOCATE(gradPy); 
-          ALLOCATE(gradPy(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-        
-        IF (ALLOCATED(gradPz))  THEN 
-          DEALLOCATE(gradPz); 
-          ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-        ENDIF
-
-        IF (ALLOCATED(FluxX))  THEN 
-          DEALLOCATE(FluxX); 
-          ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-        
-        IF (ALLOCATED(FluxY))  THEN 
-          DEALLOCATE(FluxY); 
-          ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-        
-        IF (ALLOCATED(FluxZ))  THEN 
-          DEALLOCATE(FluxZ); 
-          ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ENDIF
-
+    IF (ALLOCATED(gradPz))  THEN 
+      DEALLOCATE(gradPz); ALLOCATE(gradPz(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    ENDIF
 #endif /* PARABOLIC */
+  ENDIF  !IF (nElemsOld .NE. nElems)
 
-        IF (ALLOCATED(dtElem)) THEN  
-          DEALLOCATE(dtElem); 
-          ALLOCATE(dtElem(nElems)); 
-        ENDIF
-        
-        
-        IF (ALLOCATED(ElemVol)) THEN  
-          DEALLOCATE(ElemVol); 
-          ALLOCATE(ElemVol(nElems)); 
-        ENDIF
-        
-
-        DEALLOCATE(AnalyzeSide)
-        ALLOCATE(AnalyzeSide(1:nSides))
-        AnalyzeSide=0;
-        ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-
-        ! ALLOCATE(Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-        ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-
-!   ALLOCATE(ElementToCalc(DataF%nElems))
-  ALLOCATE(ElementToCalc(DataF%nElems))
-  do j=1,DataF%nElems
-    ElementToCalc(j)=j;
-  enddo
-
-  ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,DataF%nElems))
-  ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,DataF%nElems))
-  iElem=0;
-  !  DO iElem=1,DataF%nElems
-   DO 
-   iElem=iElem+1;
-   if (iElem .GT. DataF%nElems) EXIT
-          i=1;
-           Ie= ChangeElem(i,iElem);
-        !    print *, "iElem = ", iElem
-           IF (Ie .LT. 0) THEN
-            !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-            ! contains the number of child element 
-            ! print *, "Ie = ", Ie
-        !   IF ((Elem_xGP(1,PP,0,0,-iE) - Elem_xGP(1,0,0,0,-iE)) .LT. 0.015*2.) THEN
-
-         !  Print *, "Error!!!", "COUNT =",COUNT
-         !  Print *, "ElemToRefineAndCoarse =" ,ElemToRefineAndCoarse(-iE)
-         !  Print *, "ChangeElem(:,iElem);=", ChangeElem(:,iElem);
-         !  CALL EXIT()
-         !  ENDIF
-            CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
-                                        U(:,:,:,:,-Ie:-Ie),&
-                                        Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                        Elem_xGP(:,:,:,:,-Ie:-Ie))
-            !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
-            iElem=iElem+7;
-           ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-           !This is COARSE. Array ChangeElem(:,iElem) Contains 
-           ! 8 Element which must be COARSED to the new number iElem
-            CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
-                                        U(:,:,:,:,ChangeElem(:,iElem)),&
-                                        Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                        Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
-
-         ! else IF (ChangeElem(2,iElem) .EQ. -1) THEN
-          !     ! Reserve for creating the array for calculating Sides 
-          !     ! Neighbours of refined Elements
-          !     Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-          !     U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-
-          !     Ut_new(:,:,:,:,iElem) = Ut(:,:,:,:,Ie)
-          !     Metrics_fTilde_new(:,:,:,:,iElem) = Metrics_fTilde(:,:,:,:,Ie)
-          !     Metrics_gTilde_new(:,:,:,:,iElem) = Metrics_gTilde(:,:,:,:,Ie)
-          !     Metrics_hTilde_new(:,:,:,:,iElem) = Metrics_hTilde(:,:,:,:,Ie)
-          !     dXGL_N_new(:,:,:,:,:,iElem)=dXGL_N(:,:,:,:,:,Ie)
-
-          !     sJ_new(:,:,:,iElem) = sJ(:,:,:,Ie)
-          !     DetJac_Ref_new(:,:,:,:,iElem) = DetJac_Ref(:,:,:,:,Ie)
-          !     ! ElemToSide(1,:, iElem) - Sides
     
-          !     DO i=1,6
-          !       IF (ChangeElem(i+2,iElem) .GT. nSides) THEN 
-          !         PRINT *, "ERROR: Side number > nSides"
-          !         CALL EXIT()
-          !       ENDIF
-          !       Face_xGP_new(:,:,:,ElemToSide(1,i,iElem)) = Face_xGP(:,:,:,ChangeElem(i+2,iElem))
-          !       NormVec_new(:,:,:,ElemToSide(1,i,iElem)) = NormVec(:,:,:,ChangeElem(i+2,iElem))
-          !       TangVec1_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec1(:,:,:,ChangeElem(i+2,iElem))
-          !       TangVec2_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec2(:,:,:,ChangeElem(i+2,iElem))
-          !       SurfElem_new(:,:,ElemToSide(1,i,iElem)) = SurfElem(:,:,ChangeElem(i+2,iElem))
+  IF (nSidesOld .NE. nSides) THEN
+! surface data
+    SDEALLOCATE(Face_xGP); ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
+    ! Face_xGP=0;
+    SDEALLOCATE(NormVec); ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
+    
+    SDEALLOCATE(TangVec1); ALLOCATE(      TangVec1(3,0:PP_N,0:PP_N,1:nSides))
+    
+    SDEALLOCATE(TangVec2); ALLOCATE(      TangVec2(3,0:PP_N,0:PP_N,1:nSides))
+    SDEALLOCATE(SurfElem); ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 
-          !       ! Print *, ",ElemToSide(1,i,iElem) = ", ElemToSide(1,i,iElem), "ChangeElem(i+2,iElem) = ",ChangeElem(i+2,iElem)
-          !     ENDDO
-          !     ! ElementToCalc(iElem)=0;
-            ELSE
-              IF (iE .LE. 0) THEN
-                print *, "Error, iE = 0!, iElem = ", ielem
-                ! print *, Count
-                CALL EXIT()
-              ENDIF
-            ! This is simple case of renumeration of Elements
-              ! IF (myrank .EQ. 1) THEN
-              !   PRINT *, "Renumeration new iElem = ", iElem, "Old iElem = ", iE
-              ! ENDIF
-               Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-               U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-            ENDIF
+#if PARABOLIC
+   
+    IF (ALLOCATED(FluxX))  THEN 
+      DEALLOCATE(FluxX); ALLOCATE(FluxX        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(FluxY))  THEN 
+      DEALLOCATE(FluxY); ALLOCATE(FluxY        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(FluxZ))  THEN 
+      DEALLOCATE(FluxZ); ALLOCATE(FluxZ        (PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+
+    IF (ALLOCATED(gradPx_master))  THEN 
+      DEALLOCATE(gradPx_master); ALLOCATE(gradPx_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(gradPy_master))  THEN 
+      DEALLOCATE(gradPy_master); ALLOCATE(gradPy_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+
+    IF (ALLOCATED(gradPz_master))  THEN 
+      DEALLOCATE(gradPz_master); ALLOCATE(gradPz_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    ENDIF
+#endif /* PARABOLIC */
+    IF (ALLOCATED(AnalyzeSide))  THEN 
+        DEALLOCATE(AnalyzeSide); ALLOCATE(AnalyzeSide(1:nSides))
+        AnalyzeSide=0;
+    ENDIF
+    DEALLOCATE(U_master)
+    ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
   
-   END DO
-  CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
-  CALL MOVE_ALLOC(U_New, U)
+    DEALLOCATE(Flux_master)
+    ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
 
 
+  ENDIF !  IF (nSidesOld .NE. nSides) THEN
 
-
-    CALL MOVE_ALLOC(Ut_new, Ut)
-
-  CALL MOVE_ALLOC(Metrics_fTilde_new,Metrics_fTilde)
-  CALL MOVE_ALLOC(Metrics_gTilde_new,Metrics_gTilde)
-  CALL MOVE_ALLOC(Metrics_hTilde_new,Metrics_hTilde)
-
-  CALL MOVE_ALLOC(dXGL_N_new,dXGL_N)
-  CALL MOVE_ALLOC(sJ_new,sJ)
-  CALL MOVE_ALLOC(DetJac_Ref_new,DetJac_Ref)
-
-  CALL MOVE_ALLOC(Face_xGP_new,Face_xGP)
+  CALL RecalculateParameters(FortranData)
+    !From DG Vars 
+   nDOFElem=(PP_N+1)**3
+   nTotalU=PP_nVar*nDOFElem*nElems
+   nTotal_face=(PP_N+1)*(PP_N+1)
+   nTotal_vol=nTotal_face*(PP_N+1)
+   nTotal_IP=nTotal_vol*nElems
+   nTotalU=PP_nVar*nTotal_vol*nElems
   
-  CALL MOVE_ALLOC(NormVec_new,NormVec)
-  CALL MOVE_ALLOC(TangVec1_new,TangVec1)
-    CALL MOVE_ALLOC(TangVec2_new,TangVec2)
-      CALL MOVE_ALLOC(SurfElem_new,SurfElem)
+  IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. (firstSlaveSideOld .NE. firstSlaveSide)) THEN
+#if PARABOLIC
+      IF (ALLOCATED(gradPx_slave))  THEN 
+        DEALLOCATE(gradPx_slave); 
+        ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
+     
+      IF (ALLOCATED(gradPy_slave))  THEN 
+        DEALLOCATE(gradPy_slave); 
+        ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
+     
+      IF (ALLOCATED(gradPz_slave))  THEN 
+        DEALLOCATE(gradPz_slave); 
+        ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      ENDIF
+#endif /* PARABOLIC */
+      DEALLOCATE(U_SLAVE)
+      ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+      DEALLOCATE(Flux_SLAVE)
+      
+      ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
+  
+    ! ALLOCATE(ElementToCalc(FortranData%nElems))
+  ! do j=1,FortranData%nElems
+  !   ElementToCalc(j)=j;
+  ! enddo
 
-            ! PRint *,  ElementToCalc(:);
-            ! CALL EXIT()
+  IF (PRESENT(ElemToRefineAndCoarse)) THEN
+   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
+   ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
+   iElem=0;
+   !  DO iElem=1,FortranData%nElems
+    DO 
+    iElem=iElem+1;
+    IF (iElem .GT. FortranData%nElems) EXIT
+      i=1;
+      Ie= ChangeElem(i,iElem);
+      IF (Ie .LT. 0) THEN
+        !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+        ! contains the number of child element 
+        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
+                                     U(:,:,:,:,-Ie:-Ie),&
+                                     Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
+                                     Elem_xGP(:,:,:,:,-Ie:-Ie))
+        !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
+        iElem=iElem+7;
+      ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+       !  This is COARSE. Array ChangeElem(:,iElem) Contains 
+       !  8 Element which must be COARSED to the new number iElem
+        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
+                                     U(:,:,:,:,ChangeElem(:,iElem)),&
+                                     Elem_xGP_New(:,:,:,:,iElem:iElem),&
+                                     Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
+      ELSE
+        IF (iE .LE. 0) THEN
+        print *, "Error, iE = 0!, iElem = ", ielem
+        CALL EXIT()
+      ENDIF
+      ! This is simple case of renumeration of Elements
+      Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+      U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
+    ENDIF
+            
+    END DO
+     CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+     CALL MOVE_ALLOC(U_New, U)
+  ENDIF
 
-
-  ! CALL EXIT()
-
-    !IF (PRESENT(ElemToRefineAndCoarse) ) THEN
-      ! IF (myrank .EQ. 0) THEN 
-        ! CALL CalcMetrics(ElementToCalc)
-      ! ENDIF
-        ! CALL EXIT()
-    !ELSE 
-      CALL CalcMetrics(ElementToCalc)
-
-  Deallocate(ElementToCalc)
-
-
+  CALL CalcMetrics((/0/))
 
   call free_data_memory(DataPtr)
- 
-  NULLIFY(nMPISides_YOUR_ProcF)
-  NULLIFY(nMPISides_MINE_ProcF)
-  NULLIFY(offsetMPISides_MINEF)
-  NULLIFY(offsetMPISides_YOURF)
-
-  NULLIFY(nNbProcF)
-  NULLIFY(nMPISides_ProcF)
-  NULLIFY(ChangeSide)
-  NULLIFY(ChangeElem)
-  NULLIFY(EtSF) 
-  NULLIFY(StEF)
+  DEALLOCATE(ChangeElem)
   NULLIFY(MInfo)
-  NULLIFY(MType)
   NULLIFY(nBCsF)
-  
-  NULLIFY(DataF)
-    !  print *," ERRRORRRR !!!!!!!!!!!!"
-!   IF (MPIroot) THEN
-! ! 
-!   ! ELSE 
-
-
 END SUBROUTINE RunAMR
 
 
-  SUBROUTINE RecalculateParameters(DataF)
+  SUBROUTINE RecalculateParameters(FortranData)
         USE MOD_AMR_Vars,            ONLY: P4EST_FORTRAN_DATA
         USE MOD_Mesh_Vars
         USE MOD_MPI_Vars,             ONLY:  offsetElemMPI
@@ -665,24 +536,20 @@ END SUBROUTINE RunAMR
         USE MOD_P4est,               ONLY: p4estGetMPIData
 
         IMPLICIT NONE
-        TYPE(p4est_fortran_data), POINTER :: DataF
+        TYPE(p4est_fortran_data) :: FortranData
         ! TYPE(C_PTR) :: DataPtr;
         INTEGER     ::firstMasterSide, lastMasterSide, nMortarMPISide
 
-        ! DataPtr = p4estGetMPIData(p4est_ptr)
-        ! CALL C_F_POINTER(DataPtr, DATAF)
-  
-
-        nBCSides            =   DataF%nBCSides
-        nElems              =   DataF%nElems
-        nGlobalElems        =   DataF%nGlobalElems
-        nSides              =   DataF%nSides
-        nMortarInnerSides   =   DataF%nMortarInnerSides
-        nInnerSides         =   DataF%nInnerSides
+        nBCSides            =   FortranData%nBCSides
+        nElems              =   FortranData%nElems
+        nGlobalElems        =   FortranData%nGlobalElems
+        nSides              =   FortranData%nSides
+        nMortarInnerSides   =   FortranData%nMortarInnerSides
+        nInnerSides         =   FortranData%nInnerSides
         ! Must be set later, for parallel version
-        nMortarMPISide         = DataF%nMortarMPISides
-        nMPISides_MINE         = DataF%nMPISides_MINE
-        nMPISides_YOUR         = DataF%nMPISides_YOUR
+        nMortarMPISide         = FortranData%nMortarMPISides
+        nMPISides_MINE         = FortranData%nMPISides_MINE
+        nMPISides_YOUR         = FortranData%nMPISides_YOUR
 
 
         firstBCSide          = 1
@@ -865,15 +732,11 @@ SUBROUTINE LoadBalancingAMR()
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
-  
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  ! REAL,ALLOCATABLE, TARGET :: ExGP_New(:,:), ExGP_old(:,:)
   INTEGER :: PP, nVar
-  ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
-  ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
-  ! REAL, POINTER :: UP(:,:,:,:,:)
   !============================================================================================================================
-  ! Deallocate global variables, needs to go somewhere else later
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
   
   IF (.NOT. UseAMR) THEN
@@ -885,64 +748,35 @@ SUBROUTINE LoadBalancingAMR()
   BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
   PP = size(U(1,:,0,0,1))-1
   nVar = size(U(:,0,0,0,1))
-  ! PRINT *, "BalanceData%DataSize =", BalanceData%DataSize
-  ! PRINT *, "BalanceData%GPSize =", BalanceData%GPSize
-  ! PRINT *, "PP =", PP
-  ! PRINT *, "nVar =", nVar
+  
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
   
-  ! BalanceData%ElemxGPold_Ptr = C_LOC(ExGP_old)
+  
   
   
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
-  ! PRINT *, "BalanceData%nElems =", BalanceData%nElems
-
-  ! CALL p4est_loadbalancing(P4EST_PTR, C_LOC(BalanceData))
+ 
   ALLOCATE(U_New(PP_nVar,0:PP,0:PP,0:PP,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,BalanceData%nElems))
-  ! Elem_xGP_New = 0.
-  ! U_new = 0.
+ 
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
-  ! ALLOCATE(ExGP_New(1000,1:BalanceData%nElems))
-  ! BalanceData%ElemxGPnew_Ptr = C_LOC(ExGP_New)
+ 
   CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
 
-  IF (Myrank .EQ. 1) THEN
-    ! PRINT *, "1-177", Elem_xGP_New(:,:,1,1,177)
-  ENDIF
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
   CALL p4est_ResetElementNumber(P4EST_PTR)
-  !-- 
-  ! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
-  ! nElemsNew=BalanceData%nElems;
-  ! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
-  ! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
-  ! SDEALLOCATE(Elem_xGP)
-  ! SDEALLOCATE(U)
-  ! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
-  ! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
   
-  ! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
-  ! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
-  
-  ! CALL free_balance_memory(C_LOC(BalanceData))
-  
-  ! DEALLOCATE(U_new)
-  ! NULLIFY(U_New)
-  ! NULLIFY(Elem_xGP_New)
   CALL RunAMR()
-  ! PRINT *,"YAHOOOO!!!! "
-  ! CALL EXIT()
- 
+  
 END SUBROUTINE LoadBalancingAMR
       
 
 !============================================================================================================================
-!> Deallocate mesh data.
+!> Old LoadBalancing SUBROUTINE, is used for testing
 !============================================================================================================================
 SUBROUTINE LoadBalancingAMRold()
 ! MODULES
@@ -1032,7 +866,7 @@ SUBROUTINE SaveMesh(FileString)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
   TYPE(C_PTR) :: DataPtr;
-  TYPE(p4est_save_data), POINTER :: DataF
+  TYPE(p4est_save_data), POINTER :: FortranDataSave
   INTEGER, POINTER :: ElInfoF(:,:), SiInfoF(:,:)  ! ElemInfo and SideInfo to pass the data
   INTEGER, POINTER :: OffSideMPIF(:), OffSideArrIndMPIF(:)  ! OffsetSideMPI and OffsetSideArrIndexMPI to pass the data
   INTEGER, ALLOCATABLE :: OffsetSideMPI(:), OffsetSideArrIndexMPI(:), ElemInfoW(:,:)
@@ -1060,9 +894,9 @@ SUBROUTINE SaveMesh(FileString)
 
   mpisize = nProcessors
   DATAPtr=SaveMeshP4(p4est_ptr)
-  CALL C_F_POINTER(DataPtr, DataF)
+  CALL C_F_POINTER(DataPtr, FortranDataSave)
 
-  CALL C_F_POINTER(DataF%ElemInfo, ElInfoF,[6,nElems])
+  CALL C_F_POINTER(FortranDataSave%ElemInfo, ElInfoF,[6,nElems])
   !read local ElemInfo from data file
 FirstElemInd=offsetElem+1
 LastElemInd=offsetElem+nElems
@@ -1071,12 +905,12 @@ ElemInfoW = ElInfoF
   ! ALLOCATE(ElemInfo1(6,nElems))
   nIndexSide = ElInfoF(4,nElems)
   
-  CALL C_F_POINTER(DataF%SideInfo, SiInfoF,[5,nIndexSide])
+  CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
   
-  CALL C_F_POINTER(DataF%OffsetSideMPI, OffSideMPIF,[mpisize+1])
+  CALL C_F_POINTER(FortranDataSave%OffsetSideMPI, OffSideMPIF,[mpisize+1])
   ALLOCATE(OffsetSideMPI(0:mpisize), SOURCE  = OffSideMPIF)
 
-  CALL C_F_POINTER(DataF%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
+  CALL C_F_POINTER(FortranDataSave%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
   ALLOCATE(OffsetSideArrIndexMPI(0:mpisize), SOURCE  = OffSideArrIndMPIF)
   
 
@@ -1204,7 +1038,7 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
     CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
 
-nLocalIndSides = DataF%nSidesArrIndex
+nLocalIndSides = FortranDataSave%nSidesArrIndex
 nGlobalIndSides = OffsetSideArrIndexMPI(mpisize)
 OffsetIndSides = OffsetSideArrIndexMPI(myrank)
 

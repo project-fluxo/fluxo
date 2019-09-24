@@ -39,8 +39,8 @@ SUBROUTINE ShockCapturingAMR()
   INTEGER               :: iXMax(3), iXMin(3)
   LOGICAL :: doBalance = .TRUE.
 
-MaxLevel = 2;
-MinLevel = 2;
+MaxLevel = 1;
+MinLevel = 1;
 
 !MaxLevel = 3;
 
@@ -125,7 +125,8 @@ DO l=1,nElems
     ! nu(l) = 0.5*eps0*(1.0+SIN(PP_Pi*(eta_dof-0.5*(eta_max+eta_min))/(eta_max-eta_min)))
     ElemToRefineAndCoarse(l) = 0
   END IF
-
+ 
+ 
 ENDDO
 !CALL EXIT()
 !DO l=1,nElems
@@ -135,13 +136,19 @@ ENDDO
  !   CALL EXIT()
  !   ENDIF
 !ENDDO
+! PRINT *, "RunAMRs"
+ElemToRefineAndCoarse = 0
+IF (MPIRoot) THEN
+  ElemToRefineAndCoarse(1) = 2
+ENDIF
 CALL RunAMR(ElemToRefineAndCoarse);
+! CALL RunAMR(ElemToRefineAndCoarse);
 ! IF (MPIRoot) THEN
 !   Print *, "AMR RUN!"
 ! ENDIF
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. 8) THEN
+IF (doLBalance .EQ. 2) THEN
     doLBalance = 0;
     ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
     ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems
@@ -194,7 +201,7 @@ SUBROUTINE InitVortex()
 		CALL ExactFunc(IniExactFunc, 0., Elem_xGP(:,i,j,k,iElem), U(:,i,j,k,iElem));
         ENDDO; ENDDO; ENDDO;! i,j,k
 	ENDDO ! nElems
-    Call RunAMR();
+    ! Call RunAMR();
     ENDDO !Iter
 
 END SUBROUTINE

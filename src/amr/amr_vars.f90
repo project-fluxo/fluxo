@@ -10,8 +10,6 @@ IMPLICIT NONE
 PUBLIC
 SAVE
 
-
-
 ! !-----------------------------------------------------------------------------------------------------------------------------------
 ! ! P4EST related data structures 
 ! !-----------------------------------------------------------------------------------------------------------------------------------
@@ -22,17 +20,6 @@ LOGICAL                     :: AMRInitIsDone
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       !
 
-! typedef struct p4est_savef_data
-! {   
-!     int nGlobalSides;
-!     int nLocalSides;
-!     int nSidesArrIndex;
-!     int *OffsetSideMPI;
-!     int *OffsetSideArrIndexMPI;
-!     int *ElemInfo; // ElemInfo in HDF5
-!     int *SideInfo; // SideInfo in HDF5
-
-! } p4est_savef_data_t;
 
 TYPE p4est_save_data
     INTEGER ::  nGlobalSides
@@ -46,14 +33,14 @@ END TYPE p4est_save_data
 
 ! Data strcuture to pass data from p4est to FLUXO
 TYPE P4EST_FORTRAN_DATA
-    INTEGER ::  nGlobalElems;
-    INTEGER ::  nElems
-    INTEGER ::  nSides
-    INTEGER ::  nBCSides
-    INTEGER ::  nMortarInnerSides
-    INTEGER ::  nInnerSides
-    INTEGER ::  nMPISides
-    INTEGER ::  nMortarMPISides
+    INTEGER     ::  nGlobalElems;
+    INTEGER     ::  nElems
+    INTEGER     ::  nSides
+    INTEGER     ::  nBCSides
+    INTEGER     ::  nMortarInnerSides
+    INTEGER     ::  nInnerSides
+    INTEGER     ::  nMPISides
+    INTEGER     ::  nMortarMPISides
     TYPE(C_PTR) ::  EtSPtr; !
     TYPE(C_PTR) ::  StEPtr; !
     TYPE(C_PTR) ::  MTPtr; !
@@ -62,30 +49,33 @@ TYPE P4EST_FORTRAN_DATA
     TYPE(C_PTR) ::  ChngSidePtr; !NOT
     TYPE(C_PTR) ::  nNbProc; !
     TYPE(C_PTR) ::  nMPISides_Proc; !
-    INTEGER ::   nNBProcs;
+    INTEGER     ::   nNBProcs;
     TYPE(C_PTR) ::  nMPISides_MINE_Proc; !
     TYPE(C_PTR) ::  nMPISides_YOUR_Proc; !
-    INTEGER ::   nMPISides_YOUR;
-    INTEGER ::   nMPISides_MINE; 
+    INTEGER     ::   nMPISides_YOUR;
+    INTEGER     ::   nMPISides_MINE; 
     TYPE(C_PTR) ::  offsetMPISides_MINE; !
     TYPE(C_PTR) ::  offsetMPISides_YOUR; ! 
     TYPE(C_PTR) ::  BCs;
+    TYPE(C_PTR) ::  GhostPtr; ! Used in C only
+    TYPE(C_PTR) ::  GhostDataPtr; !Used in C only
+    TYPE(C_PTR) ::  ghost_to_proc_Ptr; !Used in C only
 END TYPE P4EST_FORTRAN_DATA
 
 TYPE p4est_balance_data
-    INTEGER ::  nVar
-    INTEGER ::  PP
-    INTEGER ::  nElems;
-    INTEGER ::  DataSize
+    INTEGER     ::  nVar
+    INTEGER     ::  PP
+    INTEGER     ::  nElems;
+    INTEGER     ::  DataSize
     TYPE(C_PTR) ::  DataSetU;
     TYPE(C_PTR) ::  DataSetElem_xGP;
 END TYPE p4est_balance_data
 
 
 TYPE p4est_balance_datav2
-    INTEGER ::  DataSize !DataSize of 1 Elem U = number of REALs
-    INTEGER ::  GPSize !DataSize of 1 ElemxGP = number of REALs
-    INTEGER ::  nElems ! Number of new elements
+    INTEGER     ::  DataSize !DataSize of 1 Elem U = number of REALs
+    INTEGER     ::  GPSize !DataSize of 1 ElemxGP = number of REALs
+    INTEGER     ::  nElems ! Number of new elements
     TYPE(C_PTR) ::  GlbIdxData; ! For transfer data. for p4est only
     TYPE(C_PTR) ::  ElemxGPnew_Ptr; ! new Array ElemxGP
     TYPE(C_PTR) ::  ElemxGPold_Ptr; ! old Array ElemxGP
@@ -100,23 +90,10 @@ TYPE p4est_mpi_data
     P4EST_F90_GLOIDX ::  global_num_quad
     TYPE(C_PTR) ::  offsetMPI;
 END TYPE p4est_mpi_data
-! !-----------------------------------------------------------------------------------------------------------------------------------
-! INTEGER,PARAMETER   :: EdgeToElemNode(1:2,1:12) = RESHAPE((/ 1, 2,&  ! CGNS corner nodes mapped 
-!                                                              4, 3,&  ! to p4est edges
-!                                                              5, 6,&
-!                                                              8, 7,&
-!                                                              1, 4,&
-!                                                              2, 3,&
-!                                                              5, 8,&
-!                                                              6, 7,&
-!                                                              1, 5,&
-!                                                              2, 6,&
-!                                                              4, 8,&
-!                                                              3, 7 /),(/2,12/))
+
 INTEGER,PARAMETER   :: H2P_FaceMap(1:6)     =  (/4,2,1,3,0,5/)     !mapping from local face order (CGNS) to p4est face
 INTEGER,PARAMETER   :: P2H_FaceMap(0:5)     =  (/5,3,2,4,1,6/)     !mapping from p4est face to local face order (CGNS) 
 INTEGER,PARAMETER   :: H2P_VertexMap(1:8)   =  (/0,1,3,2,4,5,7,6/) !mapping from local node order (CGNS) to p4est node order 
-! INTEGER,PARAMETER   :: P2H_VertexMap(0:7)   =  (/1,2,4,3,5,6,8,7/) !mapping from local node order (CGNS) to p4est node order 
 
 ! ! mapping from CGNS node of local sides to P4EST nodes of local sides
 INTEGER,PARAMETER   :: H2P_FaceNodeMap(1:4,1:6) = &
@@ -157,43 +134,7 @@ INTEGER,PARAMETER   :: P4P(0:7,0:3) = TRANSPOSE(RESHAPE((/ 0,1,2,3,&
                                                            2,3,0,1,&
                                                            3,1,2,0,&
                                                            3,2,1,0 /),(/4,8/)))
-! INTEGER,PARAMETER   :: H_MortarCase(1:4,1:4) = &                              !  first CGNS node and second CGNS node->Mortar Case [1:8]
-!                                       TRANSPOSE(RESHAPE((/  0,1,0,2,&                         ! (1,2)->1, (1,4)->2
-!                                                             3,0,4,0,&                         ! (2,1)->3, (2,3)->4
-!                                                             0,5,0,6,&                         ! (3,2)->5, (3,4)->6
-!                                                             7,0,8,0 /),(/4,4/)))              ! (4,1)->7, (4,3)->8
-! INTEGER,PARAMETER   :: P2H_MortarMap(0:3,1:8) = &                 !p4est mortar ID, MortarCase -> iMortar CGNS
-!                                       RESHAPE((/ 1,2,3,4,&        ! iMortar = P2H_MortarMap(iPMortar, H_MortarCase( node1, node2) ) 
-!                                                  1,3,2,4,&
-!                                                  2,1,4,3,&
-!                                                  2,4,1,3,&
-!                                                  4,2,3,1,&
-!                                                  4,3,2,1,&
-!                                                  3,1,4,2,&
-!                                                  3,4,1,2 /),(/4,8/))
-! INTEGER,PARAMETER   :: P_FaceToEdge(0:3,0:5) = &  !mapping from face edges 0...3 (zordered) for each face 0..5 -> element edges  0..11
-!                                       RESHAPE((/  4, 6, 8,10,&     
-!                                                   5, 7, 9,11,&
-!                                                   0, 2, 8, 9,&
-!                                                   1, 3,10,11,&
-!                                                   0, 1, 4, 5,&
-!                                                   2, 3, 6, 7 /),(/4,6/))
-! INTEGER,PARAMETER   :: P_EdgeToFaces(1:6,0:11) = & !mapping from element edges  0..11 -> first and second adjacent face 0...6 , i/j direction(0/1) and lower/upper bound(0/1)
-!                                       RESHAPE((/  2,1,0,4,1,0,&    !edge 0: Face2,j=0-Face4,j=0
-!                                                   3,1,0,4,1,1,&    !edge 1: Face3,j=0-Face4,j=N
-!                                                   2,1,1,5,1,0,&    !edge 2: Face2,j=N-Face5,j=0
-!                                                   3,1,1,5,1,1,&    !edge 3: Face3,j=N-Face5,j=N
-!                                                   0,1,0,4,0,0,&    !edge 4: Face0,j=0-Face4,i=0
-!                                                   1,1,0,4,0,1,&    !edge 5: Face1,j=0-Face4,i=N
-!                                                   0,1,1,5,0,0,&    !edge 6: Face0,j=N-Face5,i=0
-!                                                   1,1,1,5,0,1,&    !edge 7: Face1,j=N-Face5,i=N
-!                                                   0,0,0,2,0,0,&    !edge 8: Face0,i=0-Face2,i=0
-!                                                   1,0,0,2,0,1,&    !edge 9: Face1,i=0-Face2,i=N
-!                                                   0,0,1,3,0,0,&    !edge10: Face0,i=N-Face3,i=0
-!                                                   1,0,1,3,0,1 &    !edge11: Face1,i=N-Face3,i=N
-!                                                   /),(/6,12/))
-
 ! !===================================================================================================================================
-
+    TYPE(P4EST_FORTRAN_DATA), TARGET    :: FortranData
 
 END MODULE MOD_AMR_Vars

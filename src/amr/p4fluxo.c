@@ -5,33 +5,33 @@ void free_data_memory(void *N)
     p4est_fortran_data_t *data;
     data = N;
 
-    pfree(data->nNbProc);
+    // pfree(data->nNbProc);
 
-    pfree(data->nMPISides_Proc);
+    // pfree(data->nMPISides_Proc);
 
-    pfree(data->nMPISides_MINE_Proc);
+    // pfree(data->nMPISides_MINE_Proc);
 
-    pfree(data->nMPISides_YOUR_Proc);
+    // pfree(data->nMPISides_YOUR_Proc);
 
-    pfree(data->offsetMPISides_MINE);
+    // pfree(data->offsetMPISides_MINE);
 
-    pfree(data->offsetMPISides_YOUR);
+    // pfree(data->offsetMPISides_YOUR);
 
-    pfree(data->EtSPtr);
+    // pfree(data->EtSPtr);s
 
-    pfree(data->StEPtr);
+    // pfree(data->StEPtr);
 
-    pfree(data->ChngElementPtr);
+    // pfree(data->ChngElementPtr);
 
-    pfree(data->ChngSidePtr);
+    // pfree(data->ChngSidePtr);
 
-    pfree(data->MTPtr);
+    // pfree(data->MTPtr);
 
     pfree(data->MIPtr);
 
     pfree(data->BCs);
     // p4est_fortran_data_t *p4est_fortran_data;
-    pfree(data);
+    // pfree(data);
     return;
 }
 

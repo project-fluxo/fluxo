@@ -439,7 +439,7 @@ USE MOD_Mesh_Vars,     ONLY:Ngeo, NgeoRef,offsetElem,crossProductMetrics
 USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
 USE MOD_Mesh_Vars,     ONLY:dXGL_N,Vdm_GLN_N,Vdm_N_GLN
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP
+USE MOD_Mesh_Vars,     ONLY:Elem_xGP, nElems
 USE MOD_Interpolation_Vars
 USE MOD_Interpolation, ONLY:GetVandermonde,GetNodesAndWeights,GetDerivativeMatrix
 USE MOD_ChangeBasis,   ONLY:changeBasis3D
@@ -451,7 +451,7 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER, INTENT (IN) :: iElemIn(1:)
-INTEGER :: i,j,k,q,iElem
+INTEGER :: i,j,k,q,iElem, nElems_local
 INTEGER :: ll,IEl
 ! Jacobian on GL N and NGeoRef
 REAL    :: DetJac_N( 1,0:PP_N,   0:PP_N,   0:PP_N)
@@ -512,9 +512,10 @@ CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 
 ! Outer loop over all elements
 
-!DO iElem=1,nElems
-DO iEl=1, size(iElemIn)
-iElem=iElemIn(iEl)
+! IF (iElemIn(1) .EQ. 0)
+DO iElem=1,nElems
+! DO iEl=1, size(iElemIn)
+! iElem=iElemIn(iEl)
 IF (iElem.EQ. 0) THEN; CYCLE; ENDIF;
   !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
 !~  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_GLNGeo,NodeCoords(:,:,:,:,iElem) ,XGL_Ngeo               )
