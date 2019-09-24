@@ -10,6 +10,7 @@
 #include <p4est_to_p8est.h>
 
 #define nullptr ((void*)0)
+#define NON_OPTIMIZED
 static sc_MPI_Comm mpicomm;
  
 
@@ -119,8 +120,9 @@ typedef struct p4est_fortran_data
     int *offsetMPISides_MINE;// !
     int *offsetMPISides_YOUR; // !
     int *BCs;
-
-    // int *ghost_to_proc;
+    p8est_ghost_t *ghost_ptr;
+    p4est_inner_data_t *ghost_data_ptr;
+    int *ghost_to_proc;
 } p4est_fortran_data_t;
 
 //Auxilary data for Set MPI Sides

@@ -11,7 +11,7 @@
  
 
 //#endif
-int KKK = 0; // Trigger for debugging. Delete after debugging 
+// int KKK = 0; // Trigger for debugging. Delete after debugging 
 //  * \return 1 if \a q should be refined,   0 otherwise.           * /
 static int
 refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
@@ -25,10 +25,12 @@ refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
         exit(1);
     }*/
     // if (ToRefine[dataquad->ElementID - 1] > 0)
+    // printf("ToRefine[dataquad->ElementID - 1] %d \n", ToRefine[dataquad->ElementID - 1]);
+    // printf(" q->level %d \n",  q->level);
     if ((ToRefine[dataquad->ElementID - 1] > 0 && ToRefine[dataquad->ElementID - 1] > q->level)
-    ||   ( - ToRefine[dataquad->ElementID - 1] -1 > q->level))
-     
+            ||   ( - ToRefine[dataquad->ElementID - 1] -1 > q->level))
     {
+        // printf("REFINE!!!!!!!!!!!!!!! \n");
         return 1;
     }
     else
@@ -134,11 +136,11 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
 
 
 #ifndef NON_OPTIMIZED
-                    for (i1 = 0; i1 < 6; i1++)
-                    // Safe for redefinition of Element. Insist on Metrics recalculation
-                    {
-                        childquaddata->OldSidesID[i1]=-1; 
-                    }
+                    // for (i1 = 0; i1 < 6; i1++)
+                    // // Safe for redefinition of Element. Insist on Metrics recalculation
+                    // {
+                    //     childquaddata->OldSidesID[i1]=-1; 
+                    // }
 #endif
             }
         }
@@ -1014,10 +1016,13 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data)
     }
 }
 
+
+
+#ifndef NON_OPTIMIZED
 ///////////////////////////////////////////////////////////////////////////////
 //
 // Set the SidesRatio. = 0 is non hanging Side. -1 = Small Side, +1 = big Side
-//  it is not used also the ghost layer.
+//  it is not used  the ghost layer.
 //
 ///////////////////////////////////////////////////////////////////////////////
 static void
@@ -1073,7 +1078,6 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
             dataquad->SidesRatio[Bigface] = 1;
- 
         }
         else
         { //We have only 4 small sides
@@ -1086,8 +1090,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
                     // not ghost side, but local
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *)quad->p.user_data;
-                    dataquad->SidesRatio[SmallFace] = -1;
-
+                   dataquad->SidesRatio[SmallFace] = -1;
                     // continue;
                 }
             }
@@ -1108,6 +1111,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             quad = side[SideIn]->is.full.quad;
             int face = side[SideIn]->face;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
+
             dataquad->SidesRatio[face] = 0;
         }
         else //No Ghosts
@@ -1126,7 +1130,7 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
             return;
     }
 }
-
+#endif //  NON_OPTIMIZED
 #ifndef NON_OPTIMIZED
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -1394,18 +1398,20 @@ p4est_t *p4est_new_f(p4est_connectivity_t **conn)
     // p4est_fortran_data->nInnerSides = 0;
     // p4est_fortran_data->nMPISides = 0;
     // p4est_fortran_data->nMortarMPISides = 0;
+// #ifndef NON_OPTIMIZED
     p4est_iterate(p4,                     /* the forest */
                   NULL,                   /* the ghost layer May be LAter!!! */
                   (void *)&nElems,         /* the synchronized ghost data */
                   ElementCounterNew_iter, /* callback to compute each quad's
                                              interior contribution to du/dt */
-                  SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
+                  NULL, //SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
                                //              faces' contributions to du/du */
                   NULL,                   /* there is no callback for the
                                              edges between quadrants */
                   NULL);                  /* there is no callback for the
                                              corners between quadrants */
     // free(p4est_fortran_data);
+// #endif //  NON_OPTIMIZED
     return p4;
     // return NULL;
 }
@@ -1427,48 +1433,38 @@ ElementNumberChanges(p4est_iter_volume_info_t *info, void *user_data)
         {
              ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldElementID[i];
         }
-
-    if (dataquad->IsChanged == 0)
-    {
-        // Not Changed
-        i=1;
-        ChangeElements[(iElem - 1) * 8 + (i)] = -1;
-        for (i = 2; i < 8; i++)
-        { /// Convertion of Sides!!!!!!!!!
-            Fside = P2H_side[i-2]; //Hopr ID of Side 1..6
-            ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldSidesID[Fside-1];
-        }
-    }
+#ifndef NON_OPTIMIZED
+    // if (dataquad->IsChanged == 0)
+    // {
+    //     // Not Changed
+    //     i=1;
+    //     ChangeElements[(iElem - 1) * 8 + (i)] = -1;
+    //     for (i = 2; i < 8; i++)
+    //     { /// Convertion of Sides!!!!!!!!!
+    //         Fside = P2H_side[i-2]; //Hopr ID of Side 1..6
+    //         ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldSidesID[Fside-1];
+    //     }
+    // }
+#endif //  NON_OPTIMIZED
 
         // printf("iElem = %d, i = %d\n", iElem, dataquad->OldElementID[0]);
         // fflush(stdout);
         return;
 }
 
-p4est_fortran_data_t *GetData(p4est_t *p4est)
+p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void* FortranData)
 {
-    // printf("Error not here!!!\n");
-    // fflush(stdout);
-    int i1, j1 = 0, k1 = 0;
-    p8est_ghost_t *ghost = NULL;
-    p4est_locidx_t local_num_quad, num_ghost =0;
-    p4est_locidx_t jl;
-    int *ghost_to_proc = NULL;
-    p4est_inner_data_t *ghost_data = NULL;
-    p4est_fortran_data_t *p4est_fortran_data = NULL;
-    p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
-    
-    ghost = p8est_ghost_new(p4est, P8EST_CONNECT_FACE);
-    ghost_data = (p4est_inner_data_t *)malloc(ghost->ghosts.elem_count * sizeof(p4est_inner_data_t));
-    // p4est_ghost_exchange_data(p4est, ghost, ghost_data);
-
-
-        /* Calculate ghost information */
+    p4est_fortran_data_t *p4est_fortran_data = (p4est_fortran_data_t *) FortranData;
+    // p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
+    p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr = p8est_ghost_new(p4est, P8EST_CONNECT_FACE);
+    p4est_fortran_data->ghost_data_ptr = (p4est_inner_data_t *)malloc(ghost->ghosts.elem_count * sizeof(p4est_inner_data_t));
     int rank = 0;
-    int nNBProcs = 0;
+    p4est_locidx_t jl;
+    p4est_locidx_t num_ghost =0;
+     int nNBProcs = 0;
 
         num_ghost = (p4est_locidx_t)ghost->ghosts.elem_count;
-        ghost_to_proc = (int *)malloc(num_ghost * sizeof(int));
+         p4est_fortran_data->ghost_to_proc = (int *)malloc(num_ghost * sizeof(int));
 
         for (jl = 0; jl < num_ghost; ++jl)
         {
@@ -1478,19 +1474,139 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
                 ++rank;
                 P4EST_ASSERT(rank < p4est->mpisize);
             }
-            ghost_to_proc[jl] = rank;
+             p4est_fortran_data->ghost_to_proc[jl] = rank;
         }
         if (num_ghost > 0) nNBProcs=1;
         int iGh;
         for (iGh = 1; iGh < num_ghost; ++iGh)
         {
-            if (ghost_to_proc[iGh] != ghost_to_proc[iGh - 1])
+            if ( p4est_fortran_data->ghost_to_proc[iGh] !=  p4est_fortran_data->ghost_to_proc[iGh - 1])
                 // if (ghost->proc_offsets[rank + 1] != ghost->proc_offsets[rank])
                 nNBProcs++;
         }
     
  
+    p4est_fortran_data->nNBProcs = nNBProcs;
+    return p4est_fortran_data;
+}
 
+void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data)
+{
+        // Allocate EtS and StE
+        int i, j, iElem, iSide;
+        i = 1;
+        int nElems = p4est_fortran_data->nElems;
+        int nSides = p4est_fortran_data->nSides;
+        p4est_inner_data_t *ghost_data = p4est_fortran_data->ghost_data_ptr;
+        p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr;
+
+        int *EtS = p4est_fortran_data->EtSPtr;//= (int *)malloc(2 * 6 * nElems * sizeof(int));
+        // for (iElem = 1; iElem <= nElems; ++iElem)
+        //     for (j = 1; j <= 6; j++)
+        //         for (i = 1; i <= 2; i++)
+        //         {
+        //             // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+        //             EtS[(iElem - 1) * 6 * 2 + (j - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
+        //         }
+        
+        int *StE = p4est_fortran_data->StEPtr;//! = (int *)malloc(5 * nSides * sizeof(int));
+        StE[1] = -1;
+        // printf("Pointer  = %p \n!!", StE);
+    
+        for (iSide = 1; iSide <= nSides; ++iSide)
+            for (i = 1; i <= 5; i++)
+            {
+                // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+                StE[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
+            }
+
+        // Now Mortar Type
+        int *MoTy = p4est_fortran_data->MTPtr;//! = (int *)malloc(2 * nSides * sizeof(int));
+        for (iSide = 1; iSide <= nSides; ++iSide)
+            for (i = 1; i <= 2; i++)
+            {
+                // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+                MoTy[(iSide - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
+            }
+
+       // Now MortarInfo
+        int nMortarSides = p4est_fortran_data->nMortarInnerSides + p4est_fortran_data->nMortarMPISides;
+
+        int *MoInf = p4est_fortran_data->MIPtr = (int *)malloc(2 * 4 * nMortarSides * sizeof(int));
+        for (iSide = 1; iSide <= nMortarSides; ++iSide)
+            for (i = 1; i <= 2; i++)
+                for (j = 1; i <= 4; i++)
+                {
+                    // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+                    // MoInf[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
+                    MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
+                }
+
+    int *BCs = p4est_fortran_data->BCs = (int *)malloc(p4est_fortran_data->nBCSides * sizeof(int32_t));
+    for (iSide = 1; iSide <= p4est_fortran_data->nBCSides; ++iSide)
+    {
+        BCs[iSide - 1] = -1;
+    }
+    p4est->user_pointer = (void *)ghost_data;
+    p4est_iterate(p4est,                      /* the forest */
+           ghost,                      /* the ghost layer May be LAter!!! */
+           (void *)p4est_fortran_data, /* the synchronized ghost data */
+           SetElementToSide_iter,      /* callback to compute each quad's
+   //                           interior contribution to du/dt */
+           SetSideToElement_iter,      /* SidesCount_iter,            /* callback to compute each quads'
+     //                         faces' contributions to du/du */
+           NULL,                       /* there is no callback for the
+                              edges between quadrants */
+           NULL);
+        p4est->user_pointer = NULL;
+    int *ChangeElements = p4est_fortran_data->ChngElementPtr;// = (int*) malloc(8 * nElems * sizeof(int));
+    for (iElem = 1; iElem <= nElems; ++iElem)
+        for (i = 1; i <= 8; i++)
+        {
+            // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+            ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
+        }
+#ifndef NON_OPTIMIZED
+    // p4est_iterate(p4est,
+    //               NULL,
+    //               (void *)p4est_fortran_data,
+    //               NULL,
+
+    //               CheckChanges,
+
+    //               NULL,
+
+    //               NULL);
+#endif
+
+    p4est_iterate(p4est,                      
+          NULL,                       
+          (void *)p4est_fortran_data, 
+          ElementNumberChanges,       
+          NULL,                       
+          NULL,                       
+          NULL);
+
+    pfree(ghost_data);
+    p8est_ghost_destroy(ghost);
+    return;
+
+}
+
+void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data)
+{
+    int i1, j1 = 0, k1 = 0;
+   int rank = 0;
+    p4est_locidx_t local_num_quad, num_ghost =0;
+  
+    p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr;
+    p4est_inner_data_t *ghost_data = p4est_fortran_data->ghost_data_ptr;
+    int *ghost_to_proc = p4est_fortran_data->ghost_to_proc;
+    int nNBProcs = p4est_fortran_data->nNBProcs ;
+ 
+
+        /* Calculate ghost information */
+   
     int nElems = p4est_fortran_data->nElems = 0;
     int nSides = p4est_fortran_data->nSides = 0;
     p4est_fortran_data->nGlobalElems = p4est->global_num_quadrants;
@@ -1500,23 +1616,15 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
     p4est_fortran_data->nMPISides = 0;
     p4est_fortran_data->nMortarMPISides = 0;
 
-    // int *nNbProc; //ALLOCATE(NbProc(nNbProcs),nMPISides_Proc(1:nNbProcs))
-    // int *nMPISides_Proc;
-    p4est_fortran_data->nMPISides_Proc=NULL;
     // if (p4est->mpisize > 1)
     {
-        p4est_fortran_data->nMPISides_Proc = (int *)malloc(nNBProcs * sizeof(int)); //Number of the sides for each processor
         int i;
         for (i = 0; i < nNBProcs; i++)
         {
             p4est_fortran_data->nMPISides_Proc[i] = 0;
         }
-        // if (nNBProcs == 0)
-        //     nNBProcs = 1; //1 Processor case
-        p4est_fortran_data->nNBProcs = nNBProcs;
-        p4est_fortran_data->nNbProc = (int *)malloc(nNBProcs * sizeof(int)); //Neighbour Processor's numbers
-
-        int iProc = 0;
+      
+          int iProc = 0;
         if (p4est->mpisize > 1)
         {
             for (rank = 0; rank < p4est->mpisize; rank++)
@@ -1547,26 +1655,25 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
                                   // // Count  Elements and Sides*/
    
 
- //   printf("p4est_fortran_data->nBCSides = %d \n",p4est_fortran_data->nBCSides);
     nElems = p4est_fortran_data->nElems;
     nSides = p4est_fortran_data->nSides;
 
- //   exit(1);
-    // printf("nSides= %d \n ", nSides);
-
+ 
     // Set Sides Number in the Quad data
     // Use special struct called Counter - because every number begins not from the 0. e.g. nMortarSides begins with nBCSides
 
-    p4est_SetMPISide_data_t *SetMPISideData = NULL  ;
-   
-    p4est_aux_data_t *aux_data = NULL;
-    SetMPISideData = malloc(sizeof(p4est_SetMPISide_data_t));
+    p4est_SetMPISide_data_t SetMPISideData_t;
+    p4est_SetMPISide_data_t *SetMPISideData = &SetMPISideData_t;
+    SetMPISideData->nMPISidesCount = nullptr;
+    
+    p4est_aux_data_t aux_data_t;
+    p4est_aux_data_t *aux_data = &aux_data_t;
+
 
     // if (p4est->mpisize > 1)
     {
 
         SetMPISideData->nMPISides_Proc = p4est_fortran_data->nMPISides_Proc;
-        // p4est_fortran_data->ghost_to_proc = ghost_to_proc;
         SetMPISideData->ghost_to_proc = ghost_to_proc;
         SetMPISideData->nMPISidesCount = (int *)malloc(p4est->mpisize * sizeof(int));
         // int INBProc = 0;
@@ -1598,22 +1705,18 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
             int rank = p4est_fortran_data->nNbProc[iNB];
             if (rank == p4est->mpirank)
                 continue;
-            // printf("!===== rank == %d!!!! \t nNBProcs = %d , \t iProc = %d \n\n", rank, nNBProcs, iProc);
-            // printf("!===== SetMPISideData->nMPISidesCount[rank] = %d!!!! \n\n", SetMPISideData->nMPISidesCount[rank]);
-            // fflush(stdout);
+            
             if (SetMPISideData->nMPISidesCount[rank] > 0)
             {
                 int iNBProc = p4est_fortran_data->nNbProc[iNB];
-                // printf("!===== iNB = %d , iNBProc = %d \n", iNB, iNBProc);
-                // printf("!!!!===== SetMPISideData->nMPISidesCount[rank] = %d , \n", SetMPISideData->nMPISidesCount[rank]);
-                // printf("!==!==!= iNB = %d , SetMPISideData->nMPISides_Proc[iNB] = %d \n", iNB, SetMPISideData->nMPISides_Proc[iNB]);
+             
                 SetMPISideData->nMPISides_Proc[iNB] = SetMPISideData->nMPISidesCount[rank];
                 // printf("!==!==!= iNB = %d , SetMPISideData->nMPISides_Proc[iNB] = %d , iNBProc = %d \n", iNB, SetMPISideData->nMPISides_Proc[iNB], iNBProc);
             };
         }
      
-        SetMPISideData->nMPISides_MINE_Proc = (int *)malloc(nNBProcs * sizeof(int));
-        SetMPISideData->nMPISides_YOUR_Proc = (int *)malloc(nNBProcs * sizeof(int));
+        SetMPISideData->nMPISides_MINE_Proc = p4est_fortran_data->nMPISides_MINE_Proc;//(int *)malloc(nNBProcs * sizeof(int));
+        SetMPISideData->nMPISides_YOUR_Proc = p4est_fortran_data->nMPISides_YOUR_Proc;//(int *)malloc(nNBProcs * sizeof(int));
         int i;
         for (i = 0; i < nNBProcs; i++)
         {
@@ -1649,24 +1752,28 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
         
         // Set offsetMPISides_YOUR
         // and offsetMPISides_MINE
-        SetMPISideData->offsetMPISides_MINE = (int *)malloc((nNBProcs + 1) * sizeof(int));
-        SetMPISideData->offsetMPISides_YOUR = (int *)malloc((nNBProcs + 1) * sizeof(int));
-        for (iNbProc = 0; iNbProc <= nNBProcs; iNbProc++)
+        SetMPISideData->offsetMPISides_MINE = p4est_fortran_data->offsetMPISides_MINE;
+        SetMPISideData->offsetMPISides_YOUR = p4est_fortran_data->offsetMPISides_YOUR;
+        if (nNBProcs > 0)
         {
-            SetMPISideData->offsetMPISides_MINE[iNbProc] = 0;
-            SetMPISideData->offsetMPISides_YOUR[iNbProc] = 0;
-        }
-        SetMPISideData->offsetMPISides_MINE[0] = p4est_fortran_data->nInnerSides + p4est_fortran_data->nBCSides + p4est_fortran_data->nMortarInnerSides;
-        for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++)
-        {
-            SetMPISideData->offsetMPISides_MINE[iNbProc + 1] = SetMPISideData->offsetMPISides_MINE[iNbProc] + SetMPISideData->nMPISides_MINE_Proc[iNbProc];
-        }
-        SetMPISideData->offsetMPISides_YOUR[0] = SetMPISideData->offsetMPISides_MINE[nNBProcs];
-        for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++)
-        {
-            SetMPISideData->offsetMPISides_YOUR[iNbProc + 1] = SetMPISideData->offsetMPISides_YOUR[iNbProc] + SetMPISideData->nMPISides_YOUR_Proc[iNbProc];
-        }
+            for (iNbProc = 0; iNbProc <= nNBProcs; iNbProc++)
+            {
+                SetMPISideData->offsetMPISides_MINE[iNbProc] = 0;
+                    SetMPISideData->offsetMPISides_YOUR[iNbProc] = 0;
+            }
 
+            SetMPISideData->offsetMPISides_MINE[0] = p4est_fortran_data->nInnerSides + p4est_fortran_data->nBCSides + p4est_fortran_data->nMortarInnerSides;
+            for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++)
+            {
+                SetMPISideData->offsetMPISides_MINE[iNbProc + 1] = SetMPISideData->offsetMPISides_MINE[iNbProc] + SetMPISideData->nMPISides_MINE_Proc[iNbProc];
+            }
+            
+            SetMPISideData->offsetMPISides_YOUR[0] = SetMPISideData->offsetMPISides_MINE[nNBProcs];
+            for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++)
+            {
+                SetMPISideData->offsetMPISides_YOUR[iNbProc + 1] = SetMPISideData->offsetMPISides_YOUR[iNbProc] + SetMPISideData->nMPISides_YOUR_Proc[iNbProc];
+            }
+        }
         
         for (i = 0; i < num_ghost; i++)
         {   int Side=0;
@@ -1674,7 +1781,6 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
                 ghost_data[i].SidesID[Side] = 0;
         }
 
-        aux_data = malloc(sizeof(p4est_aux_data_t));
         int iNBProc = 0;
         for (iNBProc = 0; iNBProc < nNBProcs; iNBProc++) // Main cycle over NB Processors
         {
@@ -1700,7 +1806,7 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
                           NULL,                 /* EDGE Iter */
                           NULL);                /* CORNER Iter */
         }
-
+         pfree(ghost_to_proc);
         // 1. Optimisation of MPIMortar side with MPI MINE small Side (shift to MPIInnerSide)
         int AddToMortarInnerSide = 0; //How many Mortar sides must be shifted to Innner.
 
@@ -1731,9 +1837,6 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
         if (AddToMortarInnerSide > 0)
         {
             aux_data->tmp[0] = &AddToMortarInnerSide;
-            // aux_data->tmp[1] = &MortarSideNumeration;
-            // aux_data->tmp[2] = &FirstMPIMINESide;
-            // aux_data->tmp[3] = &LastMPIMINESide;
             p4est->user_pointer = aux_data;
             p4est_iterate(p4est,                  /* the forest */
                           ghost,                  /* Ghost*/
@@ -1745,7 +1848,7 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
         }
 
 
-        //!!! change Numeration for MPISide and arrays OffsetMPI and so on. see FLUXO
+        // change Numeration for MPISide and arrays OffsetMPI and so on. see FLUXO
         p4est_fortran_data->nMortarInnerSides += AddToMortarInnerSide;
         p4est_fortran_data->nMortarMPISides -= AddToMortarInnerSide;
         for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++)
@@ -1757,7 +1860,11 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
     }
     // Right now there is a Numeration for MPISides_MINE and MPISides_YOUR
     // Now we can set up the rest of Numeration
-    p4est_SetSide_data_t *SetSide_data = (p4est_SetSide_data_t *)malloc(sizeof(p4est_SetSide_data_t));
+
+    p4est_SetSide_data_t SetSide_data_t;// = (p4est_SetSide_data_t *)malloc(sizeof(p4est_SetSide_data_t));
+
+    p4est_SetSide_data_t *SetSide_data = &SetSide_data_t;
+
     SetSide_data->CurrentBCSide = 1;
     
     SetSide_data->CurrentMortrarInnerSide = SetSide_data->CurrentBCSide + p4est_fortran_data->nBCSides;
@@ -1799,170 +1906,38 @@ p4est_fortran_data_t *GetData(p4est_t *p4est)
     //                                          corners between quadrants */
 
     
-            free(aux_data);
+        
         p4est->user_pointer = NULL;
-
-
-        free(SetSide_data);
-        SetSide_data = NULL;
-
-
-
-        // Allocate EtS and StE
-        int i, j, iElem, k, iSide;
-        i = 1;
-        k = 0;
-        int *EtS = p4est_fortran_data->EtSPtr = malloc(2 * 6 * nElems * sizeof(int));
-        for (iElem = 1; iElem <= nElems; iElem++)
-            for (j = 1; j <= 6; j++)
-                for (i = 1; i <= 2; i++)
-                {
-                    // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-                    EtS[(iElem - 1) * 6 * 2 + (j - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
-                }
-        k = 0;
-        int *StE = p4est_fortran_data->StEPtr = malloc(5 * nSides * sizeof(int));
-        for (iSide = 1; iSide <= nSides; iSide++)
-            for (i = 1; i <= 5; i++)
-            {
-                // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-                StE[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
-            }
-
-      
-        k = 0; // Now Mortar Type
-        int *MoTy = p4est_fortran_data->MTPtr = malloc(2 * nSides * sizeof(int));
-        for (iSide = 1; iSide <= nSides; iSide++)
-            for (i = 1; i <= 2; i++)
-            {
-                // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-                MoTy[(iSide - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
-            }
-
-        k = 0; // Now Mortar Type
-        int nMortarSides = p4est_fortran_data->nMortarInnerSides + p4est_fortran_data->nMortarMPISides;
-
-        int *MoInf = p4est_fortran_data->MIPtr = malloc(2 * 4 * nMortarSides * sizeof(int));
-        for (iSide = 1; iSide <= nMortarSides; iSide++)
-            for (i = 1; i <= 2; i++)
-                for (j = 1; i <= 4; i++)
-                {
-                    // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-                    // MoInf[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
-                    MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
-                }
-
-        int *BCs = p4est_fortran_data->BCs = (int *)malloc(p4est_fortran_data->nBCSides * sizeof(int32_t));
-        for (iSide = 1; iSide <= p4est_fortran_data->nBCSides; iSide++)
-        {
-            BCs[iSide - 1] = -1;
-        }
-
-            p4est->user_pointer = (void *)ghost_data;
-
-        // if (KKK ==0 )
-        {
-            p4est_iterate(p4est,                      /* the forest */
-                          ghost,                      /* the ghost layer May be LAter!!! */
-                          (void *)p4est_fortran_data, /* the synchronized ghost data */
-                          SetElementToSide_iter,      /* callback to compute each quad's
-                  //                           interior contribution to du/dt */
-                          SetSideToElement_iter,      /* SidesCount_iter,            /* callback to compute each quads'
-                    //                         faces' contributions to du/du */
-                          NULL,                       /* there is no callback for the
-                                             edges between quadrants */
-                          NULL);
-    }
- 
-
-    k = 0;
-    p4est->user_pointer = NULL;
-    int *ChangeElements = p4est_fortran_data->ChngElementPtr = malloc(8 * nElems * sizeof(int));
-    for (iElem = 1; iElem <= nElems; iElem++)
-        for (i = 1; i <= 8; i++)
-        {
-            // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-            ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
-        }
-#ifndef NON_OPTIMIZED
-    p4est_iterate(p4est,
-                  NULL,
-                  (void *)p4est_fortran_data,
-                  NULL,
-
-                  CheckChanges,
-
-                  NULL,
-
-                  NULL);
-#endif
-
-// if (KKK>0) exit(1);
-    p4est_iterate(p4est,                      
-                  NULL,                       
-                  (void *)p4est_fortran_data, 
-                  ElementNumberChanges,       
-
-                  NULL,                       
-
-                  NULL,                       
-                                              
-                  NULL);
-
-
-    // exit(1);*/
-    int *ChangeSides = p4est_fortran_data->ChngSidePtr = malloc(0 /* Oder? */ * nSides * sizeof(int));
-
-  
-    {
-        p4est_fortran_data->nMPISides_MINE_Proc = SetMPISideData->nMPISides_MINE_Proc;
-        p4est_fortran_data->nMPISides_YOUR_Proc = SetMPISideData->nMPISides_YOUR_Proc;
-
-        p4est_fortran_data->nMPISides_MINE_Proc = SetMPISideData->nMPISides_MINE_Proc;
-
+   
         p4est_fortran_data->nMPISides_YOUR = SetMPISideData->nMPISides_YOUR;
         p4est_fortran_data->nMPISides_MINE = SetMPISideData->nMPISides_MINE;
-        p4est_fortran_data->offsetMPISides_MINE = SetMPISideData->offsetMPISides_MINE;
-        p4est_fortran_data->offsetMPISides_YOUR = SetMPISideData->offsetMPISides_YOUR;
-    }
 
-    // else 
-   
-    if (SetMPISideData != NULL)
         pfree(SetMPISideData->nMPISidesCount);
-    
-    pfree(ghost_to_proc);
-    pfree(SetMPISideData);
-    pfree(ghost_data);
-    p8est_ghost_destroy(ghost);
-
-    //    printf("===== HiER 222222222222 !!!! \n\n");    fflush(stdout);
-    //     exit(1);
-    // exit(1);
-    
-    return p4est_fortran_data;
+   
+  return;
 }
 
 
 
-p4est_fortran_data_t *RefineCoarse(p4est_t *p4est, void *ElemToRC)
+ void RefineCoarse(p4est_t *p4est, void *ElemToRC)
 {   
     int *ElemToRefineCoarse = (int *)ElemToRC;
     // p4est_fortran_data_t *back;
     // Refine And Coarse
     p4est->user_pointer = ElemToRC;
-   
+// #ifndef NON_OPTIMIZED
     p4est_iterate(p4est,                           /* the forest */
                   NULL,                            /* the ghost layer May be LAter!!! */
                   NULL,                            /* the synchronized ghost data */
                   ElementCounterSetOldToZero_iter, /* callback to compute each quad's
                                              interior contribution to du/dt */
-                  SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
-                                             faces' contributions to du/du */
+                 NULL,// SetSidesRatio,                   /* SidesCount_iter,            /* callback to compute each quads'
+               //                              faces' contributions to du/du */
                   NULL,                            /* there is no callback for the
                                              edges between quadrants */
                   NULL);
-    KKK++;
+
+// #endif //  NON_OPTIMIZED
     int recursive = 0;
     int Callbackorphans = 0;
     int allowed_level = P4EST_QMAXLEVEL;
@@ -1984,8 +1959,8 @@ p4est_fortran_data_t *RefineCoarse(p4est_t *p4est, void *ElemToRC)
         p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
                           replace_quads);
         p4est->user_pointer = NULL;
-     
-        return GetData(p4est);
+
+        return ;//    return GetData(p4est);
 }
 
 // Build p4est data structures with existing connectivity from HDF5 mesh
@@ -2193,7 +2168,7 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
     // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
     p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
     p4est_gloidx_t * src = nullptr; //(p4set_gloidx_t  *)desptr; // after
-
+     p4est_reset_data(p4est, 0, NULL, NULL);
     src = (p4est_gloidx_t *)malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
     int i;
     for (i = 0; i <=p4est->mpisize; ++i)

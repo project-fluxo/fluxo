@@ -131,17 +131,32 @@ END SUBROUTINE p4est_loadbalancing_go
 
     
   ! This function is called in RefineAndCourse
-    FUNCTION GetData(P4EST) BIND(C, NAME='GetData') 
+    SUBROUTINE GetData(P4EST, P4fortrandata) BIND(C, NAME='GetData') 
       IMPORT :: C_PTR
       TYPE(C_PTR),VALUE :: P4EST
-      TYPE(C_PTR) ::GetData
-    END FUNCTION GetData
+      ! TYPE(C_PTR) ::GetData
+      TYPE(C_PTR),VALUE ::P4fortrandata
+    END SUBROUTINE GetData
 
-    FUNCTION RefineCoarse(P4EST, ElemToRC) BIND(C, NAME='RefineCoarse') 
+
+    SUBROUTINE SetEtSandStE(P4EST, P4fortrandata) BIND(C, NAME='SetEtSandStE') 
+      IMPORT :: C_PTR
+      TYPE(C_PTR),VALUE :: P4EST
+      ! TYPE(C_PTR) ::GetData
+      TYPE(C_PTR),VALUE ::P4fortrandata
+    END SUBROUTINE SetEtSandStE
+
+    SUBROUTINE GetnNBProcs(P4EST, P4fortrandata) BIND(C, NAME='GetnNBProcs') 
+      IMPORT :: C_PTR
+      TYPE(C_PTR),VALUE :: P4EST
+      TYPE(C_PTR),VALUE ::P4fortrandata
+    END SUBROUTINE GetnNBProcs
+    
+    SUBROUTINE RefineCoarse(P4EST, ElemToRC) BIND(C, NAME='RefineCoarse') 
       IMPORT :: C_PTR
       TYPE(C_PTR),VALUE :: P4EST, ElemToRC
-      TYPE(C_PTR) ::RefineCoarse
-    END FUNCTION RefineCoarse
+      ! TYPE(C_PTR) ::RefineCoarse
+    END SUBROUTINE RefineCoarse
 
     FUNCTION SaveMeshP4(P4EST) BIND(C, NAME='save_mesh') !
       IMPORT :: C_PTR
