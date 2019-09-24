@@ -1452,10 +1452,10 @@ ElementNumberChanges(p4est_iter_volume_info_t *info, void *user_data)
         return;
 }
 
-p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est)
+p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void* FortranData)
 {
-    p4est_fortran_data_t *p4est_fortran_data = NULL;
-    p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
+    p4est_fortran_data_t *p4est_fortran_data = (p4est_fortran_data_t *) FortranData;
+    // p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
     p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr = p8est_ghost_new(p4est, P8EST_CONNECT_FACE);
     p4est_fortran_data->ghost_data_ptr = (p4est_inner_data_t *)malloc(ghost->ghosts.elem_count * sizeof(p4est_inner_data_t));
     int rank = 0;

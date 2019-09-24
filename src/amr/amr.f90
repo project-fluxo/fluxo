@@ -110,13 +110,13 @@ SUBROUTINE InitAMR()
     UseAMR = GETLOGICAL('UseAMR','.FALSE.')
     IF (UseAMR) THEN
       p4estFile = GETSTR('p4estFile')
-      ! PRINT *, "!!!!!!!!!!!!!!!!!!!!!!!!USE  AMR = ", UseAMR
-      ! PRINT *, "!!!!!!!!!!!!!!!!!!!!!!!!p4estFile  AMR = ", p4estFile
     ELSE
-      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR is FALSE!'
+      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
       RETURN;
     ENDIF
-    RET=P4EST_INIT(MPI_COMM_WORLD);
+    ! ALLOCATE(p4estfortrandata)
+    RET=P4EST_INIT(MPI_COMM_WORLD); 
+
 
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
@@ -177,7 +177,7 @@ END SUBROUTINE InitAMR_Connectivity
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
   USE MOD_Analyze_Vars,        ONLY: ElemVol
-  USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR
+  USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
   USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
@@ -203,7 +203,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: PP, Ie, nVar;
   TYPE(C_PTR) :: DataPtr;
-  TYPE(p4est_fortran_data), POINTER :: DataF
+  ! TYPE(p4est_fortran_data), POINTER :: FortranData
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
@@ -226,45 +226,46 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ENDIF 
 
-  DATAPtr = GetnNBProcs(p4est_ptr)
-  CALL C_F_POINTER(DataPtr, DataF)
+  DATAPtr = C_LOC(FortranData)
+  CALL GetnNBProcs(p4est_ptr, DATAPtr)
+  ! CALL C_F_POINTER(DataPtr, FortranData)
 
   
   IF (nProcessors .GT. 1) THEN
-    nNbProcs=DataF%nNBProcs
+    nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
       DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
     ENDIF
-    DataF%nNbProc = C_LOC(NbProc)
-    ! CALL C_F_POINTER(DataF%nNbProc, nNbProcF,[nNbProcs])
-    !CALL C_F_POINTER(DataF%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
+    FortranData%nNbProc = C_LOC(NbProc)
+    ! CALL C_F_POINTER(FortranData%nNbProc, nNbProcF,[nNbProcs])
+    !CALL C_F_POINTER(FortranData%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
     SDEALLOCATE(nMPISides_Proc)
     ALLOCATE(nMPISides_Proc(1:nNbProcs))
-    DataF%nMPISides_Proc = C_LOC(nMPISides_Proc)
+    FortranData%nMPISides_Proc = C_LOC(nMPISides_Proc)
    
-    ! CALL C_F_POINTER(DataF%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
+    ! CALL C_F_POINTER(FortranData%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
     SDEALLOCATE(nMPISides_MINE_Proc)
     ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs))
-    DataF%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
+    FortranData%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
   
-    ! CALL C_F_POINTER(DataF%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
+    ! CALL C_F_POINTER(FortranData%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
     SDEALLOCATE(nMPISides_YOUR_Proc)
     ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs))
-    DataF%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
+    FortranData%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
 
     ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
   
   ! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
-    ! CALL C_F_POINTER(DataF%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
+    ! CALL C_F_POINTER(FortranData%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
     SDEALLOCATE(offsetMPISides_YOUR)
     ALLOCATE(offsetMPISides_YOUR(0:nNbProcs))
-    DataF%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
+    FortranData%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
 
   ! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
-    ! CALL C_F_POINTER(DataF%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
+    ! CALL C_F_POINTER(FortranData%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
     SDEALLOCATE(offsetMPISides_MINE)
     ALLOCATE(offsetMPISides_MINE(0:nNbProcs))
-    DataF%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
+    FortranData%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
     
   ENDIF
 
@@ -273,7 +274,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! PRINT *, " NbProc = ", NbProc
   ! CALL EXIT()
   IF (nProcessors .GT. 1) THEN
-    nNbProcs=DataF%nNBProcs
+    nNbProcs=FortranData%nNBProcs
 
  
 
@@ -321,47 +322,47 @@ ENDIF
 
 
 CALL p4estSetMPIData()
-nElems=DataF%nElems
-nSides=DataF%nSides
+nElems=FortranData%nElems
+nSides=FortranData%nSides
 
 IF (nElemsOld .NE. nElems) THEN
   deallocate(ElemToSide)
-  ALLOCATE(ElemToSide(2,6,DataF%nElems))
+  ALLOCATE(ElemToSide(2,6,FortranData%nElems))
 
 
 ENDIF
 
 IF (nSidesOld .NE. nSides) THEN
-  ! CALL C_F_POINTER(DataF%StEPtr, StEF,[5,DataF%nSides])
+  ! CALL C_F_POINTER(FortranData%StEPtr, StEF,[5,FortranData%nSides])
   deallocate(SideToElem)
   ALLOCATE(SideToElem(5,nSides))
 
 
-  ! CALL C_F_POINTER(DataF%MTPtr, MType,[2,DataF%nSides])
+  ! CALL C_F_POINTER(FortranData%MTPtr, MType,[2,FortranData%nSides])
   deallocate(MortarType)
   ALLOCATE(MortarType(2,nSides))
 ENDIF
-DataF%EtSPtr = C_LOC(ElemToSide)
-DataF%StEPtr = C_LOC(SideToElem)
-DataF%MTPtr = C_LOC(MortarType)
-! CALL C_F_POINTER(DataF%ChngElmPtr, ChangeElem,[8,DataF%nElems])
-ALLOCATE(ChangeElem(8,DataF%nElems))
-DataF%ChngElmPtr = C_LOC(ChangeElem)
+FortranData%EtSPtr = C_LOC(ElemToSide)
+FortranData%StEPtr = C_LOC(SideToElem)
+FortranData%MTPtr = C_LOC(MortarType)
+! CALL C_F_POINTER(FortranData%ChngElmPtr, ChangeElem,[8,FortranData%nElems])
+ALLOCATE(ChangeElem(8,FortranData%nElems))
+FortranData%ChngElmPtr = C_LOC(ChangeElem)
 
 CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
 
   
  
-  ! CALL C_F_POINTER(DataF%EtSPtr, EtSF,[2,6,DataF%nElems])
-  ! ALLOCATE(ElemToSide(2,6,DataF%nElems),SOURCE=EtSF)
+  ! CALL C_F_POINTER(FortranData%EtSPtr, EtSF,[2,6,FortranData%nElems])
+  ! ALLOCATE(ElemToSide(2,6,FortranData%nElems),SOURCE=EtSF)
 
 
-  ! i=DataF%nBCSides;
+  ! i=FortranData%nBCSides;
  
-  CALL C_F_POINTER(DataF%BCs, nBCsF,[DataF%nBCSides])
+  CALL C_F_POINTER(FortranData%BCs, nBCsF,[FortranData%nBCSides])
   SDEALLOCATE(BC)
-  ALLOCATE(BC(DataF%nBCSides),SOURCE = nBCsF)
+  ALLOCATE(BC(FortranData%nBCSides),SOURCE = nBCsF)
 
 
  
@@ -371,9 +372,9 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 !   ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
 
 
-    nMortarSides    = DataF%nMortarInnerSides +  DataF%nMortarMPISides
+    nMortarSides    = FortranData%nMortarInnerSides +  FortranData%nMortarMPISides
 
-  CALL C_F_POINTER(DataF%MIPtr, MInfo,[2,4,nMortarSides])
+  CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,4,nMortarSides])
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
@@ -484,7 +485,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
   ENDIF !  IF (nSidesOld .NE. nSides) THEN
 
-  CALL RecalculateParameters(DataF)
+  CALL RecalculateParameters(FortranData)
     !From DG Vars 
    nDOFElem=(PP_N+1)**3
    nTotalU=PP_nVar*nDOFElem*nElems
@@ -517,19 +518,19 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
       ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
     ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
   
-    ! ALLOCATE(ElementToCalc(DataF%nElems))
-  ! do j=1,DataF%nElems
+    ! ALLOCATE(ElementToCalc(FortranData%nElems))
+  ! do j=1,FortranData%nElems
   !   ElementToCalc(j)=j;
   ! enddo
 
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,DataF%nElems))
-   ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,DataF%nElems))
+   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
+   ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
    iElem=0;
-   !  DO iElem=1,DataF%nElems
+   !  DO iElem=1,FortranData%nElems
     DO 
     iElem=iElem+1;
-    IF (iElem .GT. DataF%nElems) EXIT
+    IF (iElem .GT. FortranData%nElems) EXIT
            i=1;
             Ie= ChangeElem(i,iElem);
          !    print *, "iElem = ", iElem
@@ -620,12 +621,12 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   NULLIFY(MInfo)
   NULLIFY(nBCsF)
   
-  NULLIFY(DataF)
+  ! NULLIFY(FortranData)
 
 END SUBROUTINE RunAMR
 
 
-  SUBROUTINE RecalculateParameters(DataF)
+  SUBROUTINE RecalculateParameters(FortranData)
         USE MOD_AMR_Vars,            ONLY: P4EST_FORTRAN_DATA
         USE MOD_Mesh_Vars
         USE MOD_MPI_Vars,             ONLY:  offsetElemMPI
@@ -634,24 +635,24 @@ END SUBROUTINE RunAMR
         USE MOD_P4est,               ONLY: p4estGetMPIData
 
         IMPLICIT NONE
-        TYPE(p4est_fortran_data), POINTER :: DataF
+        TYPE(p4est_fortran_data) :: FortranData
         ! TYPE(C_PTR) :: DataPtr;
         INTEGER     ::firstMasterSide, lastMasterSide, nMortarMPISide
 
         ! DataPtr = p4estGetMPIData(p4est_ptr)
-        ! CALL C_F_POINTER(DataPtr, DATAF)
+        ! CALL C_F_POINTER(DataPtr, FortranData)
   
 
-        nBCSides            =   DataF%nBCSides
-        nElems              =   DataF%nElems
-        nGlobalElems        =   DataF%nGlobalElems
-        nSides              =   DataF%nSides
-        nMortarInnerSides   =   DataF%nMortarInnerSides
-        nInnerSides         =   DataF%nInnerSides
+        nBCSides            =   FortranData%nBCSides
+        nElems              =   FortranData%nElems
+        nGlobalElems        =   FortranData%nGlobalElems
+        nSides              =   FortranData%nSides
+        nMortarInnerSides   =   FortranData%nMortarInnerSides
+        nInnerSides         =   FortranData%nInnerSides
         ! Must be set later, for parallel version
-        nMortarMPISide         = DataF%nMortarMPISides
-        nMPISides_MINE         = DataF%nMPISides_MINE
-        nMPISides_YOUR         = DataF%nMPISides_YOUR
+        nMortarMPISide         = FortranData%nMortarMPISides
+        nMPISides_MINE         = FortranData%nMPISides_MINE
+        nMPISides_YOUR         = FortranData%nMPISides_YOUR
 
 
         firstBCSide          = 1
@@ -1001,7 +1002,7 @@ SUBROUTINE SaveMesh(FileString)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
   TYPE(C_PTR) :: DataPtr;
-  TYPE(p4est_save_data), POINTER :: DataF
+  TYPE(p4est_save_data), POINTER :: FortranDataSave
   INTEGER, POINTER :: ElInfoF(:,:), SiInfoF(:,:)  ! ElemInfo and SideInfo to pass the data
   INTEGER, POINTER :: OffSideMPIF(:), OffSideArrIndMPIF(:)  ! OffsetSideMPI and OffsetSideArrIndexMPI to pass the data
   INTEGER, ALLOCATABLE :: OffsetSideMPI(:), OffsetSideArrIndexMPI(:), ElemInfoW(:,:)
@@ -1029,9 +1030,9 @@ SUBROUTINE SaveMesh(FileString)
 
   mpisize = nProcessors
   DATAPtr=SaveMeshP4(p4est_ptr)
-  CALL C_F_POINTER(DataPtr, DataF)
+  CALL C_F_POINTER(DataPtr, FortranDataSave)
 
-  CALL C_F_POINTER(DataF%ElemInfo, ElInfoF,[6,nElems])
+  CALL C_F_POINTER(FortranDataSave%ElemInfo, ElInfoF,[6,nElems])
   !read local ElemInfo from data file
 FirstElemInd=offsetElem+1
 LastElemInd=offsetElem+nElems
@@ -1040,12 +1041,12 @@ ElemInfoW = ElInfoF
   ! ALLOCATE(ElemInfo1(6,nElems))
   nIndexSide = ElInfoF(4,nElems)
   
-  CALL C_F_POINTER(DataF%SideInfo, SiInfoF,[5,nIndexSide])
+  CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
   
-  CALL C_F_POINTER(DataF%OffsetSideMPI, OffSideMPIF,[mpisize+1])
+  CALL C_F_POINTER(FortranDataSave%OffsetSideMPI, OffSideMPIF,[mpisize+1])
   ALLOCATE(OffsetSideMPI(0:mpisize), SOURCE  = OffSideMPIF)
 
-  CALL C_F_POINTER(DataF%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
+  CALL C_F_POINTER(FortranDataSave%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
   ALLOCATE(OffsetSideArrIndexMPI(0:mpisize), SOURCE  = OffSideArrIndMPIF)
   
 
@@ -1173,7 +1174,7 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
     CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
 
-nLocalIndSides = DataF%nSidesArrIndex
+nLocalIndSides = FortranDataSave%nSidesArrIndex
 nGlobalIndSides = OffsetSideArrIndexMPI(mpisize)
 OffsetIndSides = OffsetSideArrIndexMPI(myrank)
 

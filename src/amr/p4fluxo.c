@@ -31,7 +31,7 @@ void free_data_memory(void *N)
 
     pfree(data->BCs);
     // p4est_fortran_data_t *p4est_fortran_data;
-    pfree(data);
+    // pfree(data);
     return;
 }
 
