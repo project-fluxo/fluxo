@@ -114,7 +114,7 @@ SUBROUTINE InitAMR()
       SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
       RETURN;
     ENDIF
-    ! ALLOCATE(p4estfortrandata)
+  
     RET=P4EST_INIT(MPI_COMM_WORLD); 
 
 
@@ -123,52 +123,44 @@ SUBROUTINE InitAMR()
     SWRITE(UNIT_StdOut,'(132("-"))')
     CALL InitAMR_Connectivity()
     CALL InitAMR_P4est()
-    ! CALL EXIT()
-    ! CALL EXIT()
+  
 END SUBROUTINE InitAMR
 
 !==================================================================================================================================
 !> Routine creating and 
 !==================================================================================================================================
 SUBROUTINE InitAMR_Connectivity()
-    ! MODULES
-    USE MOD_Globals
-    USE MOD_Mesh_Vars,             ONLY: MeshFile
-    ! USE MOD_P4Mesh_ReadIn,         ONLY: P4ReadMesh,ReadMeshHeader
-    USE MOD_P4EST
-    USE MOD_AMR_Vars,              ONLY: connectivity_ptr
-    USE MODH_Mesh,                 ONLY: InitMesh, FinalizeMesh
-    USE MODH_Mesh_ReadIn,        ONLY: ReadMeshHeader,ReadMeshFromHDF5
-    ! USE MOD_IO_HDF5,              ONLY: nDims
-    ! USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
-    !  USE MOD_P4EST_Binding, ONLY: p4_initvars
-    USE, INTRINSIC :: ISO_C_BINDING
-    IMPLICIT NONE
-    INTEGER CONN_OWNER
-    !----------------------------------------------------------------------------------------------------------------------------------
-    ! INPUT/OUTPUT VARIABLES
-    !----------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES
-    !==================================================================================================================================
-
-    ! MeshFile = GETSTR('MeshFile')
-        ! print *, "~~~~~~~~~~~~~~~~~~~~~~ n Dims ~~~~~~~~~~~~~~~~~~:",nDims
-        CONN_OWNER=0;
-    ! IF(MPIroot)THEN
-    !   CONN_OWNER=myrank
-    ! ENDIF
-        CALL InitMesh()
-    ! ! Create Connectivity
-        CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
-    !  print *, " myrank = ", myrank
-        CALL ReadMeshFromHDF5(MeshFile)
-        ! The result is connectivity PTR
-
-
-    connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
-
-    CALL FinalizeMesh()
+   ! MODULES
+   USE MOD_Globals
+   USE MOD_Mesh_Vars,             ONLY: MeshFile
+   ! USE MOD_P4Mesh_ReadIn,         ONLY: P4ReadMesh,ReadMeshHeader
+   USE MOD_P4EST
+   USE MOD_AMR_Vars,              ONLY: connectivity_ptr
+   USE MODH_Mesh,                 ONLY: InitMesh, FinalizeMesh
+   USE MODH_Mesh_ReadIn,        ONLY: ReadMeshHeader,ReadMeshFromHDF5
+   ! USE MOD_IO_HDF5,              ONLY: nDims
+   ! USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
+   !  USE MOD_P4EST_Binding, ONLY: p4_initvars
+   USE, INTRINSIC :: ISO_C_BINDING
+   IMPLICIT NONE
+   INTEGER CONN_OWNER
+   !----------------------------------------------------------------------------------------------------------------------------------
+   ! INPUT/OUTPUT VARIABLES
+   !----------------------------------------------------------------------------------------------------------------------------------
+   ! LOCAL VARIABLES
+   !==================================================================================================================================
+   ! MeshFile = GETSTR('MeshFile')
    
+   CONN_OWNER=0;
+     CALL InitMesh()
+   ! Create Connectivity
+   CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
+   CALL ReadMeshFromHDF5(MeshFile)
+  
+   ! The result is connectivity PTR
+   connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
+   CALL FinalizeMesh()
+  
 END SUBROUTINE InitAMR_Connectivity
 
 
@@ -621,7 +613,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   NULLIFY(MInfo)
   NULLIFY(nBCsF)
   
-  ! NULLIFY(FortranData)
+
 
 END SUBROUTINE RunAMR
 
