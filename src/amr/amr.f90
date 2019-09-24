@@ -165,6 +165,12 @@ END SUBROUTINE InitAMR_Connectivity
 
 
 
+!==================================================================================================================================
+!>  The main SUBROUTINE used for Coarse/Refine Mesh.
+!> IF Array ElemToRefineAndCoarse is not Present, then the SUBROUTINE just rebuild the FLUXO Nesh 
+!>  according to the p4est Data
+!>
+!==================================================================================================================================
 
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
@@ -188,19 +194,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
 #endif /* PARABOLIC */
   USE, INTRINSIC :: ISO_C_BINDING
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-
  
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: PP, Ie, nVar;
   TYPE(C_PTR) :: DataPtr;
-  ! TYPE(p4est_fortran_data), POINTER :: FortranData
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
-
+!==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
@@ -229,32 +233,26 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
       DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
     ENDIF
     FortranData%nNbProc = C_LOC(NbProc)
-    ! CALL C_F_POINTER(FortranData%nNbProc, nNbProcF,[nNbProcs])
-    !CALL C_F_POINTER(FortranData%nMPISides_Proc, nMPISides_ProcF,[nNbProcs])
+  
     SDEALLOCATE(nMPISides_Proc)
     ALLOCATE(nMPISides_Proc(1:nNbProcs))
     FortranData%nMPISides_Proc = C_LOC(nMPISides_Proc)
    
-    ! CALL C_F_POINTER(FortranData%nMPISides_MINE_Proc, nMPISides_MINE_ProcF,[nNbProcs])
+    
     SDEALLOCATE(nMPISides_MINE_Proc)
     ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs))
     FortranData%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
   
-    ! CALL C_F_POINTER(FortranData%nMPISides_YOUR_Proc, nMPISides_YOUR_ProcF,[nNbProcs])
+   
     SDEALLOCATE(nMPISides_YOUR_Proc)
     ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs))
     FortranData%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
 
-    ! ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs),nMPISides_YOUR_Proc(1:nNbProcs))
-  
-  ! ALLOCATE(offsetMPISides_YOUR(0:nNbProcs),offsetMPISides_MINE(0:nNbProcs))
-    ! CALL C_F_POINTER(FortranData%offsetMPISides_YOUR, offsetMPISides_YOURF,[nNbProcs+1])
+   
     SDEALLOCATE(offsetMPISides_YOUR)
     ALLOCATE(offsetMPISides_YOUR(0:nNbProcs))
     FortranData%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
 
-  ! print *,  "shape(offsetMPISides_MINE) =",shape(offsetMPISides_MINE)
-    ! CALL C_F_POINTER(FortranData%offsetMPISides_MINE, offsetMPISides_MINEF,[nNbProcs+1])
     SDEALLOCATE(offsetMPISides_MINE)
     ALLOCATE(offsetMPISides_MINE(0:nNbProcs))
     FortranData%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
@@ -263,19 +261,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   CALL GetData(p4est_ptr,DATAPtr)
 
-  ! PRINT *, " NbProc = ", NbProc
-  ! CALL EXIT()
+  
   IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
-
- 
-
   ! Here reallocate all arrays and redefine  all parameters
-
-
-
-
-
 
   SDEALLOCATE(nMPISides_send)
   ALLOCATE(nMPISides_send(       nNbProcs,2))
@@ -325,19 +314,17 @@ IF (nElemsOld .NE. nElems) THEN
 ENDIF
 
 IF (nSidesOld .NE. nSides) THEN
-  ! CALL C_F_POINTER(FortranData%StEPtr, StEF,[5,FortranData%nSides])
+  
   deallocate(SideToElem)
   ALLOCATE(SideToElem(5,nSides))
 
-
-  ! CALL C_F_POINTER(FortranData%MTPtr, MType,[2,FortranData%nSides])
   deallocate(MortarType)
   ALLOCATE(MortarType(2,nSides))
 ENDIF
 FortranData%EtSPtr = C_LOC(ElemToSide)
 FortranData%StEPtr = C_LOC(SideToElem)
 FortranData%MTPtr = C_LOC(MortarType)
-! CALL C_F_POINTER(FortranData%ChngElmPtr, ChangeElem,[8,FortranData%nElems])
+
 ALLOCATE(ChangeElem(8,FortranData%nElems))
 FortranData%ChngElmPtr = C_LOC(ChangeElem)
 
@@ -346,43 +333,18 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
   
  
-  ! CALL C_F_POINTER(FortranData%EtSPtr, EtSF,[2,6,FortranData%nElems])
-  ! ALLOCATE(ElemToSide(2,6,FortranData%nElems),SOURCE=EtSF)
-
-
-  ! i=FortranData%nBCSides;
  
   CALL C_F_POINTER(FortranData%BCs, nBCsF,[FortranData%nBCSides])
   SDEALLOCATE(BC)
   ALLOCATE(BC(FortranData%nBCSides),SOURCE = nBCsF)
 
-
- 
-
-
- 
-!   ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
-
-
-    nMortarSides    = FortranData%nMortarInnerSides +  FortranData%nMortarMPISides
+  nMortarSides    = FortranData%nMortarInnerSides +  FortranData%nMortarMPISides
 
   CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,4,nMortarSides])
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
-  
-
-
-
-
-
-
-
-
-  
-    PP_N=PP
-
-
+  PP_N=PP
 
   ! Reallocate Arrays if the nElems was changed
   IF (nElemsOld .NE. nElems) THEN
@@ -523,98 +485,45 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
     DO 
     iElem=iElem+1;
     IF (iElem .GT. FortranData%nElems) EXIT
-           i=1;
-            Ie= ChangeElem(i,iElem);
-         !    print *, "iElem = ", iElem
-            IF (Ie .LT. 0) THEN
-             !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-             ! contains the number of child element 
-             ! print *, "Ie = ", Ie
-         !   IF ((Elem_xGP(1,PP,0,0,-iE) - Elem_xGP(1,0,0,0,-iE)) .LT. 0.015*2.) THEN
-
-          !  Print *, "Error!!!", "COUNT =",COUNT
-          !  Print *, "ElemToRefineAndCoarse =" ,ElemToRefineAndCoarse(-iE)
-          !  Print *, "ChangeElem(:,iElem);=", ChangeElem(:,iElem);
-          !  CALL EXIT()
-          !  ENDIF
-             CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
-                                         U(:,:,:,:,-Ie:-Ie),&
-                                         Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                         Elem_xGP(:,:,:,:,-Ie:-Ie))
-             !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
-             iElem=iElem+7;
-            ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-            !This is COARSE. Array ChangeElem(:,iElem) Contains 
-            ! 8 Element which must be COARSED to the new number iElem
-             CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
-                                         U(:,:,:,:,ChangeElem(:,iElem)),&
-                                         Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                         Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
-
-          ! else IF (ChangeElem(2,iElem) .EQ. -1) THEN
-           !     ! Reserve for creating the array for calculating Sides 
-           !     ! Neighbours of refined Elements
-           !     Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-           !     U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-
-           !     Ut_new(:,:,:,:,iElem) = Ut(:,:,:,:,Ie)
-           !     Metrics_fTilde_new(:,:,:,:,iElem) = Metrics_fTilde(:,:,:,:,Ie)
-           !     Metrics_gTilde_new(:,:,:,:,iElem) = Metrics_gTilde(:,:,:,:,Ie)
-           !     Metrics_hTilde_new(:,:,:,:,iElem) = Metrics_hTilde(:,:,:,:,Ie)
-           !     dXGL_N_new(:,:,:,:,:,iElem)=dXGL_N(:,:,:,:,:,Ie)
-
-           !     sJ_new(:,:,:,iElem) = sJ(:,:,:,Ie)
-           !     DetJac_Ref_new(:,:,:,:,iElem) = DetJac_Ref(:,:,:,:,Ie)
-           !     ! ElemToSide(1,:, iElem) - Sides
-            
-           !     DO i=1,6
-           !       IF (ChangeElem(i+2,iElem) .GT. nSides) THEN 
-           !         PRINT *, "ERROR: Side number > nSides"
-           !         CALL EXIT()
-           !       ENDIF
-           !       Face_xGP_new(:,:,:,ElemToSide(1,i,iElem)) = Face_xGP(:,:,:,ChangeElem(i+2,iElem))
-           !       NormVec_new(:,:,:,ElemToSide(1,i,iElem)) = NormVec(:,:,:,ChangeElem(i+2,iElem))
-           !       TangVec1_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec1(:,:,:,ChangeElem(i+2,iElem))
-           !       TangVec2_new(:,:,:,ElemToSide(1,i,iElem)) = TangVec2(:,:,:,ChangeElem(i+2,iElem))
-           !       SurfElem_new(:,:,ElemToSide(1,i,iElem)) = SurfElem(:,:,ChangeElem(i+2,iElem))
-
-           !       ! Print *, ",ElemToSide(1,i,iElem) = ", ElemToSide(1,i,iElem), "ChangeElem(i+2,iElem) = ",ChangeElem(i+2,iElem)
-           !     ENDDO
-           !     ! ElementToCalc(iElem)=0;
-             ELSE
-               IF (iE .LE. 0) THEN
-                 print *, "Error, iE = 0!, iElem = ", ielem
-                 ! print *, Count
-                 CALL EXIT()
-               ENDIF
-             ! This is simple case of renumeration of Elements
-               ! IF (myrank .EQ. 1) THEN
-               !   PRINT *, "Renumeration new iElem = ", iElem, "Old iElem = ", iE
-               ! ENDIF
-                Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-                U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-             ENDIF
+      i=1;
+      Ie= ChangeElem(i,iElem);
+      IF (Ie .LT. 0) THEN
+        !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+        ! contains the number of child element 
+        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
+                                     U(:,:,:,:,-Ie:-Ie),&
+                                     Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
+                                     Elem_xGP(:,:,:,:,-Ie:-Ie))
+        !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
+        iElem=iElem+7;
+      ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+       !  This is COARSE. Array ChangeElem(:,iElem) Contains 
+       !  8 Element which must be COARSED to the new number iElem
+        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
+                                     U(:,:,:,:,ChangeElem(:,iElem)),&
+                                     Elem_xGP_New(:,:,:,:,iElem:iElem),&
+                                     Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
+      ELSE
+        IF (iE .LE. 0) THEN
+        print *, "Error, iE = 0!, iElem = ", ielem
+        CALL EXIT()
+      ENDIF
+      ! This is simple case of renumeration of Elements
+      Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+      U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
+    ENDIF
             
     END DO
      CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
      CALL MOVE_ALLOC(U_New, U)
   ENDIF
 
-    !//  CALL CalcMetrics(ElementToCalc)
-      CALL CalcMetrics((/0/))
-  ! Deallocate(ElementToCalc)
-
-
+  CALL CalcMetrics((/0/))
 
   call free_data_memory(DataPtr)
-
-
   DEALLOCATE(ChangeElem)
   NULLIFY(MInfo)
   NULLIFY(nBCsF)
-  
-
-
 END SUBROUTINE RunAMR
 
 
@@ -630,10 +539,6 @@ END SUBROUTINE RunAMR
         TYPE(p4est_fortran_data) :: FortranData
         ! TYPE(C_PTR) :: DataPtr;
         INTEGER     ::firstMasterSide, lastMasterSide, nMortarMPISide
-
-        ! DataPtr = p4estGetMPIData(p4est_ptr)
-        ! CALL C_F_POINTER(DataPtr, FortranData)
-  
 
         nBCSides            =   FortranData%nBCSides
         nElems              =   FortranData%nElems
@@ -827,15 +732,11 @@ SUBROUTINE LoadBalancingAMR()
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
-  
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  ! REAL,ALLOCATABLE, TARGET :: ExGP_New(:,:), ExGP_old(:,:)
   INTEGER :: PP, nVar
-  ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
-  ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
-  ! REAL, POINTER :: UP(:,:,:,:,:)
   !============================================================================================================================
-  ! Deallocate global variables, needs to go somewhere else later
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
   
   IF (.NOT. UseAMR) THEN
@@ -847,64 +748,35 @@ SUBROUTINE LoadBalancingAMR()
   BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
   PP = size(U(1,:,0,0,1))-1
   nVar = size(U(:,0,0,0,1))
-  ! PRINT *, "BalanceData%DataSize =", BalanceData%DataSize
-  ! PRINT *, "BalanceData%GPSize =", BalanceData%GPSize
-  ! PRINT *, "PP =", PP
-  ! PRINT *, "nVar =", nVar
+  
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
   
-  ! BalanceData%ElemxGPold_Ptr = C_LOC(ExGP_old)
+  
   
   
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
-  ! PRINT *, "BalanceData%nElems =", BalanceData%nElems
-
-  ! CALL p4est_loadbalancing(P4EST_PTR, C_LOC(BalanceData))
+ 
   ALLOCATE(U_New(PP_nVar,0:PP,0:PP,0:PP,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,BalanceData%nElems))
-  ! Elem_xGP_New = 0.
-  ! U_new = 0.
+ 
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
-  ! ALLOCATE(ExGP_New(1000,1:BalanceData%nElems))
-  ! BalanceData%ElemxGPnew_Ptr = C_LOC(ExGP_New)
+ 
   CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
 
-  IF (Myrank .EQ. 1) THEN
-    ! PRINT *, "1-177", Elem_xGP_New(:,:,1,1,177)
-  ENDIF
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
   CALL p4est_ResetElementNumber(P4EST_PTR)
-  !-- 
-  ! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
-  ! nElemsNew=BalanceData%nElems;
-  ! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
-  ! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
-  ! SDEALLOCATE(Elem_xGP)
-  ! SDEALLOCATE(U)
-  ! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
-  ! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
   
-  ! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
-  ! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
-  
-  ! CALL free_balance_memory(C_LOC(BalanceData))
-  
-  ! DEALLOCATE(U_new)
-  ! NULLIFY(U_New)
-  ! NULLIFY(Elem_xGP_New)
   CALL RunAMR()
-  ! PRINT *,"YAHOOOO!!!! "
-  ! CALL EXIT()
- 
+  
 END SUBROUTINE LoadBalancingAMR
       
 
 !============================================================================================================================
-!> Deallocate mesh data.
+!> Old LoadBalancing SUBROUTINE, is used for testing
 !============================================================================================================================
 SUBROUTINE LoadBalancingAMRold()
 ! MODULES
