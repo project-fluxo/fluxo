@@ -53,7 +53,7 @@ PRIVATE
 
 INTERFACE CalcMetrics
   MODULE PROCEDURE CalcMetrics
-  MODULE PROCEDURE CalcMetricsAMR
+  ! MODULE PROCEDURE CalcMetricsAMR
 END INTERFACE
 
 INTERFACE CalcSurfMetrics
@@ -74,7 +74,8 @@ CONTAINS
 !==================================================================================================================================
 !> This routine computes the geometries volume metric terms.
 !==================================================================================================================================
-SUBROUTINE CalcMetrics()
+SUBROUTINE CalcMetrics(iElemIn)
+! SUBROUTINE CalcMetrics()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -92,9 +93,14 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
+INTEGER, INTENT (IN), OPTIONAL :: iElemIn(1:)
+
+!----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
 INTEGER :: i,j,k,q,iElem
 INTEGER :: ll
+LOGICAL :: ForAMR = .FALSE.
 ! Jacobian on GL N and NGeoRef
 REAL    :: DetJac_N( 1,0:PP_N,   0:PP_N,   0:PP_N)
 ! interpolation points and derivatives on GL N
@@ -110,27 +116,38 @@ REAL    :: scaledJac(2)
 ! Polynomial derivativion matrices
 REAL    :: DGL_NGeo(0:Ngeo,0:Ngeo)
 REAL    :: DGL_N(   0:PP_N,0:PP_N)
+REAL    :: Vdm_GLN_N1(   0:PP_N,0:PP_N)
+ REAL    :: Vdm_N_GLN1(   0:PP_N,0:PP_N)
 
 ! Vandermonde matrices (N_OUT,N_IN)
 REAL    :: Vdm_EQNgeo_GLNgeo( 0:Ngeo   ,0:Ngeo)
 REAL    :: Vdm_GLNGeo_NgeoRef(0:NgeoRef,0:Ngeo)
 REAL    :: Vdm_NgeoRef_N(     0:PP_N   ,0:NgeoRef)
 REAL    :: Vdm_GLNGeo_GLN(    0:PP_N   ,0:Ngeo)
+REAL    :: Vdm_GLN_GLNGeo(    0:Ngeo   ,0:PP_N)
 
 ! 3D Vandermonde matrices and lengths,nodes,weights
 REAL    :: xiRef( 0:NgeoRef),wBaryRef( 0:NgeoRef)
 REAL    :: xiGL_N(0:PP_N)   ,wBaryGL_N(0:PP_N)
 !==================================================================================================================================
 ! Prerequisites
-Metrics_fTilde=0.
-Metrics_gTilde=0.
-Metrics_hTilde=0.
+IF (PRESENT(iElemIn)) THEN
+  ForAMR = .TRUE.
+ENDIF
 
+IF (.NOT. ForAMR) THEN
+  Metrics_fTilde=0.
+  Metrics_gTilde=0.
+  Metrics_hTilde=0.
+ELSE
+  scaledJac=0.
+ENDIF
 ! Initialize Vandermonde and D matrices
 ! Only use modal Vandermonde for terms that need to be conserved as Jacobian if N_out>N_in
 ! Always use interpolation for the rest!
 
 ! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
+IF (.NOT. ForAMR) &
 CALL GetVandermonde(    Ngeo   , NodeTypeVISU, Ngeo    , NodeTypeGL, Vdm_EQNgeo_GLNgeo , modal=.FALSE.)
 
 ! 1.b) dXGL_Ngeo:
@@ -142,18 +159,33 @@ CALL GetVandermonde(    NgeoRef, NodeType    , PP_N    , NodeType  , Vdm_NgeoRef
 CALL GetNodesAndWeights(NgeoRef, NodeType    , xiRef   , wIPBary=wBaryRef)
 
 ! 1.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
-CALL GetVandermonde(    Ngeo   , NodeTypeGL  , PP_N    , NodeTypeGL, Vdm_GLNgeo_GLN    , modal=.FALSE.)
+
+
+CALL GetVandermonde(    Ngeo   , NodeTypeGL  , PP_N    , NodeTypeGL, Vdm_GLNgeo_GLN,Vdm_GLN_GLNGeo    , modal=.FALSE.)
+
+! 
 CALL GetDerivativeMatrix(PP_N  , NodeTypeGL  , DGL_N)
 
+IF (ForAMR) THEN
+  CALL GetVandermonde(    PP_N, NodeTypeGL , PP_N, NodeType, Vdm_GLN_N1 , Vdm_N_GLN1 , modal=.FALSE. )
+ENDIF
 ! 2.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
 CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 
 ! Outer loop over all elements
 DO iElem=1,nElems
-  !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
-  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_GLNGeo,NodeCoords(:,:,:,:,iElem) ,XGL_Ngeo               )
-  CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN   ,XGL_Ngeo                  ,XGL_N                  )
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N        ,XGL_N                     ,Elem_xGP(:,:,:,:,iElem))
+  IF (ForAMR) THEN
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N )
+    !~ CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N1 )
+    CALL ChangeBasis3D(3,PP_N,NGeo,Vdm_GLN_GLNGeo ,XGL_N   ,XGL_Ngeo)
+  ELSE
+    !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
+    CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_GLNGeo,NodeCoords(:,:,:,:,iElem) ,XGL_Ngeo               )
+    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN   ,XGL_Ngeo                  ,XGL_N                  )
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N        ,XGL_N                     ,Elem_xGP(:,:,:,:,iElem))
+  ENDIF
+
+  
 
   !1.b) Jacobi Matrix of d/dxi_dd(X_nn): dXGL_NGeo(dd,nn,i,j,k))
   dXGL_NGeo=0.
@@ -174,6 +206,8 @@ DO iElem=1,nElems
   CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,3,:,:,:),dX_NgeoRef(:,3,:,:,:))
   !detJac_Ref(:,:,:,:,iElem)=0. !set above
   detJac_Ref(1,:,:,:,iElem)=0.
+  
+  
   DO k=0,NgeoRef; DO j=0,NgeoRef; DO i=0,NgeoRef
     ASSOCIATE(dX_Ngeo_R => dX_NgeoRef(:,:,i,j,k))
     detJac_Ref(1,i,j,k,iElem)=detJac_Ref(1,i,j,k,iElem) & 
@@ -185,6 +219,7 @@ DO iElem=1,nElems
 !
   ! projection detJacref from NgeoRef to N (mean value=Volume independant of the polynomial degree)
   CALL ChangeBasis3D(1,NgeoRef,PP_N,Vdm_NgeoRef_N,DetJac_Ref(:,:,:,:,iElem),DetJac_N)
+  
 
   ! assign to global Variable sJ
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -196,14 +231,18 @@ DO iElem=1,nElems
     IF(detJac_N(1,i,j,k).LE.0.)&
       WRITE(Unit_StdOut,*) 'Negative Jacobian found on Gauss point. Coords:', Elem_xGP(:,i,j,k,iElem)
   END DO; END DO; END DO !i,j,k=0,N
+
+    scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
   ! check scaled Jacobians
   scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
-  IF(scaledJac(2).LT.0.01) THEN
+  IF(scaledJac(2).LT.0.001) THEN
     WRITE(Unit_StdOut,*) 'Too small scaled Jacobians found (GL/Gauss):', scaledJac
     CALL abort(__STAMP__,&
       'Scaled Jacobian lower then tolerance in global element:',iElem+offsetElem)
   END IF
 
+
+  
   !2.a) Jacobi Matrix of d/dxi_dd(X_nn): dXGL_N(dd,nn,i,j,k))
   ! N>=Ngeo: interpolate from dXGL_Ngeo (default)
   ! N< Ngeo: directly derive XGL_N
@@ -222,6 +261,8 @@ DO iElem=1,nElems
       END DO !l=0,N
     END DO; END DO; END DO !i,j,k=0,N
   END IF !N>=Ngeo
+
+  
   !save to covar array
 
   IF(crossProductMetrics)THEN
@@ -244,6 +285,7 @@ DO iElem=1,nElems
       END ASSOCIATE !dXGL => dXGL_N
     END DO; END DO; END DO !i,j,k=0,N
   ELSE ! curl metrics
+    
     ! invariant curl form, as cross product: R^dd = 1/2( XGL_N(:) x (d/dxi_dd XGL_N(:)))
     !
     !R_GL_N(dd,nn)=1/2*( XGL_N(nn+2)* d/dxi_dd XGL_N(nn+1) - XGL_N(nn+1)* d/dxi_dd XGL_N(nn+2))
@@ -280,10 +322,19 @@ DO iElem=1,nElems
 
 
   ! interpolate Metrics from Gauss-Lobatto N onto GaussPoints N
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-  CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N,iElem)
+  IF (ForAMR) THEN
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
+    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N1,iElem)
+  ELSE 
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
+    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N1,iElem)
+  ENDIF
+   
+
 END DO !iElem=1,nElems
 
 END SUBROUTINE CalcMetrics
@@ -430,245 +481,5 @@ DO q=0,Nloc; DO p=0,Nloc
   TangVec2(:,p,q) = CROSS(NormVec(:,p,q),TangVec1(:,p,q))
 END DO; END DO ! p,q
 END SUBROUTINE SurfMetricsFromJa
-
-SUBROUTINE CalcMetricsAMR(iElemIn)
-! MODULES
-USE MOD_Globals
-USE MOD_PreProc
-USE MOD_Mesh_Vars,     ONLY:Ngeo, NgeoRef,offsetElem,crossProductMetrics
-USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
-USE MOD_Mesh_Vars,     ONLY:dXGL_N,Vdm_GLN_N,Vdm_N_GLN
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP, nElems
-USE MOD_Interpolation_Vars
-USE MOD_Interpolation, ONLY:GetVandermonde,GetNodesAndWeights,GetDerivativeMatrix
-USE MOD_ChangeBasis,   ONLY:changeBasis3D
-USE MOD_Basis,         ONLY:LagrangeInterpolationPolys
-!----------------------------------------------------------------------------------------------------------------------------------
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT/OUTPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER, INTENT (IN) :: iElemIn(1:)
-INTEGER :: i,j,k,q,iElem, nElems_local
-INTEGER :: ll,IEl
-! Jacobian on GL N and NGeoRef
-REAL    :: DetJac_N( 1,0:PP_N,   0:PP_N,   0:PP_N)
-! interpolation points and derivatives on GL N
-REAL    :: XGL_N(      3,  0:PP_N,0:PP_N,0:PP_N)    
-!~ REAL    :: XGL_N1(      3,  0:PP_N,0:PP_N,0:PP_N)        ! mapping X(xi) P\in N
-REAL    :: XGL_Ngeo(   3,  0:Ngeo,0:Ngeo,0:Ngeo)          ! mapping X(xi) P\in Ngeo
-REAL    :: dXGL_Ngeo(  3,3,0:Ngeo,0:Ngeo,0:Ngeo)          ! jacobi matrix on GL Ngeo
-REAL    :: dX_NgeoRef( 3,3,0:NgeoRef,0:NgeoRef,0:NgeoRef) ! jacobi matrix on SOL NgeoRef
-
-REAL    :: R_GL_N(     3,3,0:PP_N,0:PP_N,0:PP_N)    ! buffer for metric terms, uses XGL_N,dXGL_N
-REAL    :: JaGL_N(     3,3,0:PP_N,0:PP_N,0:PP_N)    ! metric terms P\in N
-REAL    :: scaledJac(2)
-
-! Polynomial derivativion matrices
-REAL    :: DGL_NGeo(0:Ngeo,0:Ngeo)
-REAL    :: DGL_N(   0:PP_N,0:PP_N)
-REAL    :: Vdm_GLN_N1(   0:PP_N,0:PP_N)
-REAL    :: Vdm_N_GLN1(   0:PP_N,0:PP_N)
-! Vandermonde matrices (N_OUT,N_IN)
-REAL    :: Vdm_EQNgeo_GLNgeo( 0:Ngeo   ,0:Ngeo)
-REAL    :: Vdm_GLNGeo_NgeoRef(0:NgeoRef,0:Ngeo)
-REAL    :: Vdm_NgeoRef_N(     0:PP_N   ,0:NgeoRef)
-REAL    :: Vdm_GLNGeo_GLN(    0:PP_N   ,0:Ngeo)
-REAL    :: Vdm_GLN_GLNGeo(    0:Ngeo   ,0:PP_N)
-
-! 3D Vandermonde matrices and lengths,nodes,weights
-REAL    :: xiRef( 0:NgeoRef),wBaryRef( 0:NgeoRef)
-REAL    :: xiGL_N(0:PP_N)   ,wBaryGL_N(0:PP_N)
-!==================================================================================================================================
-! Prerequisites
-!Metrics_fTilde=0.
-!Metrics_gTilde=0.
-!Metrics_hTilde=0.
-scaledJac=0
-! Initialize Vandermonde and D matrices
-! Only use modal Vandermonde for terms that need to be conserved as Jacobian if N_out>N_in
-! Always use interpolation for the rest!
-   
-! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
-CALL GetVandermonde(    Ngeo   , NodeTypeVISU, Ngeo    , NodeTypeGL, Vdm_EQNgeo_GLNgeo , modal=.FALSE.)
-
-! 1.b) dXGL_Ngeo:
-CALL GetDerivativeMatrix(Ngeo  , NodeTypeGL  , DGL_Ngeo)
-
-! 1.c) Jacobian: GLNgeo to NgeoRef, GLNgeoRef to N
-CALL GetVandermonde(    Ngeo   , NodeTypeGL  , NgeoRef , NodeType  , Vdm_GLNgeo_NgeoRef, modal=.FALSE.)
-CALL GetVandermonde(    NgeoRef, NodeType    , PP_N    , NodeType  , Vdm_NgeoRef_N     , modal=.TRUE.)
-CALL GetNodesAndWeights(NgeoRef, NodeType    , xiRef   , wIPBary=wBaryRef)
-
-! 1.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
-CALL GetVandermonde(    Ngeo   , NodeTypeGL  , PP_N    , NodeTypeGL, Vdm_GLNgeo_GLN,Vdm_GLN_GLNGeo    , modal=.FALSE.)
-CALL GetDerivativeMatrix(PP_N  , NodeTypeGL  , DGL_N)
-
-CALL GetVandermonde(    PP_N, NodeTypeGL , PP_N, NodeType, Vdm_GLN_N1 , Vdm_N_GLN1 , modal=.FALSE. )
-! 2.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
-CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
-
-! Outer loop over all elements
-
-! IF (iElemIn(1) .EQ. 0)
-DO iElem=1,nElems
-! DO iEl=1, size(iElemIn)
-! iElem=iElemIn(iEl)
-IF (iElem.EQ. 0) THEN; CYCLE; ENDIF;
-  !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
-!~  CALL ChangeBasis3D(3,NGeo,NGeo,Vdm_EQNGeo_GLNGeo,NodeCoords(:,:,:,:,iElem) ,XGL_Ngeo               )
-!~   CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN   ,XGL_Ngeo                  ,XGL_N                  )
-!~   CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N        ,XGL_N                     ,Elem_xGP(:,:,:,:,iElem))
-
-
-CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N )
-!~ CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N1 )
-
-CALL ChangeBasis3D(3,PP_N,NGeo,Vdm_GLN_GLNGeo ,XGL_N   ,XGL_Ngeo)
-  
-  
-  !1.b) Jacobi Matrix of d/dxi_dd(X_nn): dXGL_NGeo(dd,nn,i,j,k))
-  dXGL_NGeo=0.
-  DO k=0,Ngeo; DO j=0,Ngeo; DO i=0,Ngeo
-    ! Matrix-vector multiplication
-    DO ll=0,Ngeo
-      dXGL_Ngeo(1,:,i,j,k)=dXGL_Ngeo(1,:,i,j,k) + DGL_Ngeo(i,ll)*XGL_Ngeo(:,ll,j,k)
-      dXGL_Ngeo(2,:,i,j,k)=dXGL_Ngeo(2,:,i,j,k) + DGL_Ngeo(j,ll)*XGL_Ngeo(:,i,ll,k)
-      dXGL_Ngeo(3,:,i,j,k)=dXGL_Ngeo(3,:,i,j,k) + DGL_Ngeo(k,ll)*XGL_Ngeo(:,i,j,ll)
-    END DO !l=0,N
-  END DO; END DO; END DO !i,j,k=0,Ngeo
- 
-  ! 1.c)Jacobians! grad(X_1) (grad(X_2) x grad(X_3))
-!~   ! Compute Jacobian on NGeo and then interpolate:
-!~   ! required to guarantee conservativity when restarting with N<NGeo
-  CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,1,:,:,:),dX_NgeoRef(:,1,:,:,:))
-  CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,2,:,:,:),dX_NgeoRef(:,2,:,:,:))
-  CALL ChangeBasis3D(3,Ngeo,NgeoRef,Vdm_GLNGeo_NgeoRef,dXGL_NGeo(:,3,:,:,:),dX_NgeoRef(:,3,:,:,:))
-  !detJac_Ref(:,:,:,:,iElem)=0. !set above
-  detJac_Ref(1,:,:,:,iElem)=0.
-
-  DO k=0,NgeoRef; DO j=0,NgeoRef; DO i=0,NgeoRef
-    ASSOCIATE(dX_Ngeo_R => dX_NgeoRef(:,:,i,j,k))
-    detJac_Ref(1,i,j,k,iElem)=detJac_Ref(1,i,j,k,iElem) & 
-                              + dX_Ngeo_R(1,1)*(dX_Ngeo_R(2,2)*dX_Ngeo_R(3,3) - dX_Ngeo_R(3,2)*dX_Ngeo_R(2,3))  &
-                              + dX_Ngeo_R(2,1)*(dX_Ngeo_R(3,2)*dX_Ngeo_R(1,3) - dX_Ngeo_R(1,2)*dX_Ngeo_R(3,3))  &
-                              + dX_Ngeo_R(3,1)*(dX_Ngeo_R(1,2)*dX_Ngeo_R(2,3) - dX_Ngeo_R(2,2)*dX_Ngeo_R(1,3))  
-    END ASSOCIATE !dX_Ngeo_R => dX_NgeoRef
-  END DO; END DO; END DO !i,j,k=0,NgeoRef
-
-  
-  
-  ! projection detJacref from NgeoRef to N (mean value=Volume independant of the polynomial degree)
-  CALL ChangeBasis3D(1,NgeoRef,PP_N,Vdm_NgeoRef_N,DetJac_Ref(:,:,:,:,iElem),DetJac_N)
-
-  ! assign to global Variable sJ
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    sJ(i,j,k,iElem)=1./DetJac_N(1,i,j,k)
-  END DO; END DO; END DO !i,j,k=0,PP_N
-
-!~   ! check for negative Jacobians
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    IF(detJac_N(1,i,j,k).LE.0.)&
-      WRITE(Unit_StdOut,*) 'Negative Jacobian found on Gauss point. Coords:', Elem_xGP(:,i,j,k,iElem), iElem , myrank
-  END DO; END DO; END DO !i,j,k=0,N
-
-
-!~   ! check scaled Jacobians
-  scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
-  
-!~      !      print *,"Here is Problem!! ! Outer loop over all elements" , scaledJac
-  IF(scaledJac(2).LT.0.001) THEN
-    WRITE(Unit_StdOut,*) 'Too small scaled Jacobians found (GL/Gauss):', scaledJac
-    CALL abort(__STAMP__,&
-      'Scaled Jacobian lower then tolerance in global element:',iElem+offsetElem)
-  END IF
-
-  !2.a) Jacobi Matrix of d/dxi_dd(X_nn): dXGL_N(dd,nn,i,j,k))
-  ! N>=Ngeo: interpolate from dXGL_Ngeo (default)
-  ! N< Ngeo: directly derive XGL_N
-  IF(PP_N.GE.NGeo)THEN !compute first derivative on Ngeo and then interpolate
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,1,:,:,:),dXGL_N(:,1,:,:,:,iElem))
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,2,:,:,:),dXGL_N(:,2,:,:,:,iElem))
-    CALL ChangeBasis3D(3,NGeo,PP_N,Vdm_GLNGeo_GLN,dXGL_NGeo(:,3,:,:,:),dXGL_N(:,3,:,:,:,iElem))
-  ELSE  !N<Ngeo: first interpolate and then compute derivative (important if curved&periodic)
-    dXGL_N(:,:,:,:,:,iElem)=0.
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ! Matrix-vector multiplication
-      DO ll=0,PP_N
-        dXGL_N(1,:,i,j,k,iElem)=dXGL_N(1,:,i,j,k,iElem) + DGL_N(i,ll)*XGL_N(:,ll,j,k)
-        dXGL_N(2,:,i,j,k,iElem)=dXGL_N(2,:,i,j,k,iElem) + DGL_N(j,ll)*XGL_N(:,i,ll,k)
-        dXGL_N(3,:,i,j,k,iElem)=dXGL_N(3,:,i,j,k,iElem) + DGL_N(k,ll)*XGL_N(:,i,j,ll)
-      END DO !l=0,N
-    END DO; END DO; END DO !i,j,k=0,N
-  END IF !N>=Ngeo
-
-  !save to covar array
-  IF(crossProductMetrics)THEN
-    ! exact (cross-product) form
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k,iElem))
-      ! exact (cross-product) form
-      ! Ja(:)^nn = ( d/dxi_(nn+1) XGL_N(:) ) x (d/xi_(nn+2) XGL_N(:))
-      !
-      ! JaGL_N(dd,nn) = dXGL_N(dd+1,nn+1)*dXGL_N(dd+2,nn+2) -dXGL_N(dd+1,nn+2)*dXGL_N(dd+2,nn+1)
-      JaGL_N(1,1,i,j,k)=dXGL(2,2)*dXGL(3,3) - dXGL(2,3)*dXGL(3,2)  
-      JaGL_N(2,1,i,j,k)=dXGL(3,2)*dXGL(1,3) - dXGL(3,3)*dXGL(1,2)  
-      JaGL_N(3,1,i,j,k)=dXGL(1,2)*dXGL(2,3) - dXGL(1,3)*dXGL(2,2)  
-      JaGL_N(1,2,i,j,k)=dXGL(2,3)*dXGL(3,1) - dXGL(2,1)*dXGL(3,3)  
-      JaGL_N(2,2,i,j,k)=dXGL(3,3)*dXGL(1,1) - dXGL(3,1)*dXGL(1,3)  
-      JaGL_N(3,2,i,j,k)=dXGL(1,3)*dXGL(2,1) - dXGL(1,1)*dXGL(2,3)  
-      JaGL_N(1,3,i,j,k)=dXGL(2,1)*dXGL(3,2) - dXGL(2,2)*dXGL(3,1)  
-      JaGL_N(2,3,i,j,k)=dXGL(3,1)*dXGL(1,2) - dXGL(3,2)*dXGL(1,1)  
-      JaGL_N(3,3,i,j,k)=dXGL(1,1)*dXGL(2,2) - dXGL(1,2)*dXGL(2,1)  
-      END ASSOCIATE !dXGL => dXGL_N
-    END DO; END DO; END DO !i,j,k=0,N
-  ELSE ! curl metrics
-    ! invariant curl form, as cross product: R^dd = 1/2( XGL_N(:) x (d/dxi_dd XGL_N(:)))
-    !
-    !R_GL_N(dd,nn)=1/2*( XGL_N(nn+2)* d/dxi_dd XGL_N(nn+1) - XGL_N(nn+1)* d/dxi_dd XGL_N(nn+2))
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      ASSOCIATE(dXGL => dXGL_N(:,:,i,j,k,iElem))
-      R_GL_N(:,1,i,j,k)=0.5*(XGL_N(3,i,j,k)*dXGL(:,2) - XGL_N(2,i,j,k)*dXGL(:,3) )
-      R_GL_N(:,2,i,j,k)=0.5*(XGL_N(1,i,j,k)*dXGL(:,3) - XGL_N(3,i,j,k)*dXGL(:,1) )
-      R_GL_N(:,3,i,j,k)=0.5*(XGL_N(2,i,j,k)*dXGL(:,1) - XGL_N(1,i,j,k)*dXGL(:,2) ) 
-      END ASSOCIATE !dXGL => dXGL_N
-    END DO; END DO; END DO !i,j,k=0,N
-    ! Metrics are the curl of R:  Ja(:)^nn = -(curl R_GL(:,nn))
-    ! JaGL_N(dd,nn)= -[d/dxi_(dd+1) RGL(dd+2,nn) - d/dxi_(dd+2) RGL(dd+1,nn) ]
-    !              =   d/dxi_(dd+2) RGL(dd+1,nn) - d/dxi_(dd+1) RGL(dd+2,nn) 
-    JaGL_N=0.
-    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      DO q=0,PP_N
-        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) - DGL_N(j,q)*R_GL_N(3,:,i,q,k)
-        JaGL_N(2,:,i,j,k)=JaGL_N(2,:,i,j,k) - DGL_N(k,q)*R_GL_N(1,:,i,j,q)
-        JaGL_N(3,:,i,j,k)=JaGL_N(3,:,i,j,k) - DGL_N(i,q)*R_GL_N(2,:,q,j,k)
-      END DO!q=0,PP_N
-      DO q=0,PP_N
-        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) + DGL_N(k,q)*R_GL_N(2,:,i,j,q) 
-        JaGL_N(2,:,i,j,k)=JaGL_N(2,:,i,j,k) + DGL_N(i,q)*R_GL_N(3,:,q,j,k) 
-        JaGL_N(3,:,i,j,k)=JaGL_N(3,:,i,j,k) + DGL_N(j,q)*R_GL_N(1,:,i,q,k) 
-      END DO!q=0,PP_N
-! same with only one loop, gives different roundoff ...
-!      DO q=0,PP_N
-!        JaGL_N(1,:,i,j,k)=JaGL_N(1,:,i,j,k) - DGL_N(j,q)*R_GL_N(3,:,i,q,k) + DGL_N(k,q)*R_GL_N(2,:,i,j,q)
-!        JaGL_N(2,:,i,j,k)=JaGL_N(2,:,i,j,k) - DGL_N(k,q)*R_GL_N(1,:,i,j,q) + DGL_N(i,q)*R_GL_N(3,:,q,j,k)
-!        JaGL_N(3,:,i,j,k)=JaGL_N(3,:,i,j,k) - DGL_N(i,q)*R_GL_N(2,:,q,j,k) + DGL_N(j,q)*R_GL_N(1,:,i,q,k)
-!      END DO!q=0,PP_N
-    END DO; END DO; END DO !i,j,k=0,N
-  END IF !crossProductMetrics
-
-!     Print *,"JaGL_N(1,1,i,j,k) = ", JaGL_N(1,1,:,:,:)
-!~   ! interpolate Metrics from Gauss-Lobatto N onto GaussPoints N
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-   
-  CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N,iElem)
-    !        print *, "!Finalize!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1"
-END DO !iElem=1,nElems
-
-END SUBROUTINE CalcMetricsAMR
 
 END MODULE MOD_Metrics
