@@ -27,9 +27,9 @@ INTERFACE EvalEulerFluxAverage3D_eqn
   MODULE PROCEDURE EvalEulerFluxAverage3D_eqn
 END INTERFACE
 
-INTERFACE EvalUaux
-  MODULE PROCEDURE EvalUaux
-END INTERFACE
+!INTERFACE EvalUaux
+!  MODULE PROCEDURE EvalUaux
+!END INTERFACE
 
 INTERFACE StandardDGFlux
   MODULE PROCEDURE StandardDGFlux
@@ -387,14 +387,17 @@ INTEGER             :: i,j,k,l
 
 
 !opt_v1
-CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
-                              ,Metrics_fTilde(:,:,:,:,iElem) &
-                              ,Metrics_gTilde(:,:,:,:,iElem) &
-                              ,Metrics_hTilde(:,:,:,:,iElem) &
-                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
+! not needed since diagonal of DvolSurfMat is zero!
+!!! CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+!!!                               ,Metrics_fTilde(:,:,:,:,iElem) &
+!!!                               ,Metrics_gTilde(:,:,:,:,iElem) &
+!!!                               ,Metrics_hTilde(:,:,:,:,iElem) &
+!!!                               ,ftilde_c,gtilde_c,htilde_c, Uaux)
+CALL EvalUaux(U(:,:,:,:,iElem),Uaux)
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
   DO l=i+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
@@ -404,8 +407,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=i+1,N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
   DO l=j+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
@@ -415,8 +419,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=j+1,N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
   DO l=k+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
@@ -458,7 +463,7 @@ END DO; END DO; END DO ! i,j,k
 !
 
 !full loop
-!CALL EvalUaux(iElem,Uaux)
+!CALL EvalUaux(U(:,:,:,:,iElem),Uaux)
 !DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 !  DO l=0,PP_N
 !    CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
@@ -555,43 +560,33 @@ END SUBROUTINE EvalEulerFluxTilde3D_eqn
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2) from state U
 !==================================================================================================================================
-PURE SUBROUTINE EvalUaux(iElem,Uaux)
+PURE SUBROUTINE EvalUaux(Uin,Uaux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
-#ifdef OPTIMIZED
-USE MOD_DG_Vars,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)  :: iElem                               !<current element in volint
+REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: Uin
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
+REAL,INTENT(OUT)    :: Uaux(nAuxVar,1:nTotal_vol)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
+REAL                :: srho,vel(1:3),v2
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
+DO i=1,nTotal_vol
   ! auxiliary variables
-  Uaux(1  ,PP_IJK) = 1./U(1,PP_IJK,iElem)
-  Uaux(2:4,PP_IJK) = Uaux(1,PP_IJK)*U(2:4,PP_IJK,iElem) 
-  Uaux(6  ,PP_IJK) = Uaux(2,PP_IJK)*Uaux(2,PP_IJK)+Uaux(3,PP_IJK)*Uaux(3,PP_IJK)+Uaux(4,PP_IJK)*Uaux(4,PP_IJK)
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem)-0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK))
-#ifdef OPTIMIZED
+  srho = 1./Uin(1,i) 
+  vel  = Uin(2:4,i)*srho
+  v2   = SUM(vel*vel)
+  Uaux(1  ,i) = srho
+  Uaux(2:4,i) = vel
+  Uaux(6  ,i) = v2
+  Uaux(5  ,i) = kappaM1*(Uin(5,i)-0.5*Uin(1,i)*v2)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
 END SUBROUTINE EvalUaux
 
 
@@ -631,11 +626,12 @@ qHat     = velU(:)*metric_in(1,:)+velV(:)*metric_in(2,:)+velW(:)*metric_in(3,:)
 flux1(:) = U_in(1,:)*qHat(:)
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = flux1(i)
-  Fstar(2,i,i) = flux1(i)*velU(i) + metric_in(1,i)*pres(i)
-  Fstar(3,i,i) = flux1(i)*velV(i) + metric_in(2,i)*pres(i)
-  Fstar(4,i,i) = flux1(i)*velW(i) + metric_in(3,i)*pres(i)
-  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat(i)
+!!!  Fstar(1,i,i) = flux1(i)
+!!!  Fstar(2,i,i) = flux1(i)*velU(i) + metric_in(1,i)*pres(i)
+!!!  Fstar(3,i,i) = flux1(i)*velV(i) + metric_in(2,i)*pres(i)
+!!!  Fstar(4,i,i) = flux1(i)*velW(i) + metric_in(3,i)*pres(i)
+!!!  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat(i)
+  Fstar(:,i,i) = 0. !not needed since diagonal of Dvolsurf is zero! 
   DO l=i+1,PP_N
     ! call fluxvec (general but not the fastest) 
     CALL PP_VolumeFluxAverageVec(  U_in(:,i)   ,      U_in(:,l), &
@@ -793,11 +789,12 @@ flux4(:) = flux1(:)*velW(:) + metric_in(3,:)*pres(:)
 flux5(:) = (U_in(5,:)+pres(:))*qHat(:)
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = flux1(i)
-  Fstar(2,i,i) = flux2(i)
-  Fstar(3,i,i) = flux3(i)
-  Fstar(4,i,i) = flux4(i)
-  Fstar(5,i,i) = flux5(i)
+!!!  Fstar(1,i,i) = flux1(i)
+!!!  Fstar(2,i,i) = flux2(i)
+!!!  Fstar(3,i,i) = flux3(i)
+!!!  Fstar(4,i,i) = flux4(i)
+!!!  Fstar(5,i,i) = flux5(i)
+  Fstar(:,i,i) = 0. !not needed since diagonal of Dvolsurf is zero! 
   DO l=i+1,PP_N
     ! 
     Fstar(1,l,i) = 0.5*(flux1(l)+flux1(i))
@@ -1086,12 +1083,13 @@ z4(:)   = z1(:)*velW(:)
 z5(:)   = z1(:)*pres(:)
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  qHat =velU(i)*metric_in(1,i)+velV(i)*metric_in(2,i)+velW(i)*metric_in(3,i) 
-  Fstar(1,i,i) = U_in(1,i)*qHat
-  Fstar(2,i,i) = Fstar(1,i,i)*velU(i) + metric_in(1,i)*pres(i)
-  Fstar(3,i,i) = Fstar(1,i,i)*velV(i) + metric_in(2,i)*pres(i)
-  Fstar(4,i,i) = Fstar(1,i,i)*velW(i) + metric_in(3,i)*pres(i)
-  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat
+!!!  qHat =velU(i)*metric_in(1,i)+velV(i)*metric_in(2,i)+velW(i)*metric_in(3,i) 
+!!!  Fstar(1,i,i) = U_in(1,i)*qHat
+!!!  Fstar(2,i,i) = Fstar(1,i,i)*velU(i) + metric_in(1,i)*pres(i)
+!!!  Fstar(3,i,i) = Fstar(1,i,i)*velV(i) + metric_in(2,i)*pres(i)
+!!!  Fstar(4,i,i) = Fstar(1,i,i)*velW(i) + metric_in(3,i)*pres(i)
+!!!  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat
+  Fstar(:,i,i) = 0. !not needed since diagonal of Dvolsurf is zero! 
   DO l=i+1,PP_N
     ! z1 = √(rho/pressure) values on left and right, arithmatic and logorithmic means
     z1Mean = 0.5*(   z1(l)+z1(i))
@@ -1298,12 +1296,13 @@ pres(:) = kappaM1*(U_in(5,:)-0.5*(U_in(2,:)*velU(:)+U_in(3,:)*velV(:)+U_in(4,:)*
 ! Get the inverse density, velocity, and pressure on left and right
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  qHat =velU(i)*metric_in(1,i)+velV(i)*metric_in(2,i)+velW(i)*metric_in(3,i) 
-  Fstar(1,i,i) = U_in(1,i)*qHat
-  Fstar(2,i,i) = Fstar(1,i,i)*velU(i) + metric_in(1,i)*pres(i)
-  Fstar(3,i,i) = Fstar(1,i,i)*velV(i) + metric_in(2,i)*pres(i)
-  Fstar(4,i,i) = Fstar(1,i,i)*velW(i) + metric_in(3,i)*pres(i)
-  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat
+!!!  qHat =velU(i)*metric_in(1,i)+velV(i)*metric_in(2,i)+velW(i)*metric_in(3,i) 
+!!!  Fstar(1,i,i) = U_in(1,i)*qHat
+!!!  Fstar(2,i,i) = Fstar(1,i,i)*velU(i) + metric_in(1,i)*pres(i)
+!!!  Fstar(3,i,i) = Fstar(1,i,i)*velV(i) + metric_in(2,i)*pres(i)
+!!!  Fstar(4,i,i) = Fstar(1,i,i)*velW(i) + metric_in(3,i)*pres(i)
+!!!  Fstar(5,i,i) = (U_in(5,i)+pres(i))*qHat
+  Fstar(:,i,i) = 0. !not needed since diagonal of Dvolsurf is zero! 
   DO l=i+1,PP_N
     ! Convenience variables for the velocity, density, pressure as well as sound speed and enthalpy
     rhoHat = 0.5*(U_in(1,l) +U_in(1,i))

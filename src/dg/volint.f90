@@ -122,11 +122,7 @@ SUBROUTINE VolInt_Adv_SplitForm(Ut)
 USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:DvolSurf_T
 USE MOD_Mesh_Vars ,ONLY:nElems
-USE MOD_Flux_Average   ,ONLY:EvalEulerFluxAverage3D_eqn
-#if PARABOLIC
-USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
-USE MOD_DG_Vars   ,ONLY:D_Hat_T
-#endif /*PARABOLIC*/
+!!USE MOD_Flux_Average   ,ONLY:EvalEulerFluxAverage3D_eqn
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -144,7 +140,8 @@ INTEGER                                           :: i,j,k,l,iElem
 
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
-  CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
+  !!CALL EvalEulerFluxAverage3D_eqn(iElem,ftilde,gtilde,htilde)
+  CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
   !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -211,7 +208,7 @@ USE MOD_DG_Vars        ,ONLY:U
 USE MOD_Mesh_Vars      ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 USE MOD_Equation_Vars  ,ONLY:nAuxVar
-USE MOD_Flux_Average   ,ONLY:EvalEulerFluxTilde3D_eqn
+USE MOD_Flux_Average   ,ONLY:EvalUaux
 #if NONCONS
 USE MOD_Flux_Average   ,ONLY:AddNonConsFluxTilde3D
 #endif /*NONCONS*/
@@ -228,15 +225,18 @@ REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  :: Uaux                       !aux
 INTEGER             :: i,j,k,l
 !==================================================================================================================================
 ! due to consisteny, if left and right are the same, its just the transformed eulerflux
-CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
-                              ,Metrics_fTilde(:,:,:,:,iElem) &
-                              ,Metrics_gTilde(:,:,:,:,iElem) &
-                              ,Metrics_hTilde(:,:,:,:,iElem) &
-                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
+! not needed since diagonal of DvolSurfmat is zero  !
+!!! CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+!!!                               ,Metrics_fTilde(:,:,:,:,iElem) &
+!!!                               ,Metrics_gTilde(:,:,:,:,iElem) &
+!!!                               ,Metrics_hTilde(:,:,:,:,iElem) &
+!!!                               ,ftilde_c,gtilde_c,htilde_c, Uaux)
 
+CALL EvalUaux(U(:,:,:,:,iElem),Uaux)
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
   DO l=i+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
@@ -244,8 +244,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                        ftilde(:,l,i,j,k)                                       )
     ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
   END DO!l=i+1,N
-  !diagonal (consistent) part
-  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
   DO l=j+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
@@ -253,8 +254,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                        gtilde(:,l,i,j,k)                                       )
     gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
   END DO!l=j+1,N
-  !diagonal (consistent) part
-  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
   DO l=k+1,PP_N
     CALL VolumeFluxAverageVec(                U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &

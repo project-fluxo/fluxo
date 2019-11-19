@@ -181,7 +181,7 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 ! LOCAL VARIABLES 
 REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
 REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
-INTEGER                            :: iMass         
+INTEGER                            :: i
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
@@ -193,14 +193,15 @@ D_T=TRANSPOSE(D)
 ! Build D_Hat matrix. (D^ = M^(-1) * D^T * M
 M(:,:)=0.
 Minv(:,:)=0.
-DO iMass=0,N_in
-  M(iMass,iMass)=wGP(iMass)
-  Minv(iMass,iMass)=1./wGP(iMass)
+DO i=0,N_in
+  M(i,i)=wGP(i)
+  Minv(i,i)=1./wGP(i)
 END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
 #if PP_DiscType==2
+!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! DvolSurf^T = -DvolSurf
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint

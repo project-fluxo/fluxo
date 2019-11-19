@@ -41,9 +41,9 @@ INTERFACE AddNonConsFluxVec
 END INTERFACE
 #endif /*NONCONS*/
 
-INTERFACE EvalUaux
-  MODULE PROCEDURE EvalUaux
-END INTERFACE
+!INTERFACE EvalUaux
+!  MODULE PROCEDURE EvalUaux
+!END INTERFACE
 
 INTERFACE StandardDGFlux
   MODULE PROCEDURE StandardDGFlux
@@ -253,14 +253,18 @@ INTEGER             :: i,j,k,l
 !==================================================================================================================================
 
 !opt_v1
-CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
-                              ,Metrics_fTilde(:,:,:,:,iElem) &
-                              ,Metrics_gTilde(:,:,:,:,iElem) &
-                              ,Metrics_hTilde(:,:,:,:,iElem) &
-                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
+! diagonal not needed, since Dvolsurf has zero diagonal!!
+!!!CALL EvalEulerFluxTilde3D_eqn(              U(:,:,:,:,iElem) &
+!!!                              ,Metrics_fTilde(:,:,:,:,iElem) &
+!!!                              ,Metrics_gTilde(:,:,:,:,iElem) &
+!!!                              ,Metrics_hTilde(:,:,:,:,iElem) &
+!!!                              ,ftilde_c,gtilde_c,htilde_c, Uaux)
+CALL EvalUaux(U(:,:,:,:,iElem),Uaux)
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
+
   DO l=i+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,l,j,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,l,j,k)      , &
@@ -270,8 +274,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=i+1,N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
   DO l=j+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,l,k,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,l,k)      , &
@@ -281,8 +286,9 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=j+1,N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  !diagonal (consistent) part
-  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+!!!  !diagonal (consistent) part
+!!!  htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
   DO l=k+1,PP_N
     CALL PP_VolumeFluxAverageVec(             U(:,i,j,k,iElem),              U(:,i,j,l,iElem), &
                                            Uaux(:,i,j,k)      ,           Uaux(:,i,j,l)      , &
@@ -596,51 +602,42 @@ END SUBROUTINE AddNonConsFluxMat
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
 !==================================================================================================================================
-PURE SUBROUTINE EvalUaux(iElem,Uaux)
+PURE SUBROUTINE EvalUaux(Uin,Uaux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Equation_Vars ,ONLY:nAuxVar
 USE MOD_Equation_Vars ,ONLY:kappaM1,KappaM2,s2mu_0
-#ifdef OPTIMIZED
-USE MOD_DG_Vars,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                        :: iElem !< current element index in volint
+REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: Uin
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
+REAL,DIMENSION(nAuxVar,1:nTotal_vol),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
+REAL                :: srho,vel(1:3),v2,B2
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
+DO i=1,nTotal_vol
   ! auxiliary variables
-  Uaux(1  ,PP_IJK) = 1./U(1,PP_IJK,iElem)                      ! 1/rho
-  Uaux(2:4,PP_IJK) = Uaux(1,PP_IJK)*U(2:4,PP_IJK,iElem)        ! vec{rho*v}/rho
-  Uaux(6  ,PP_IJK) = SUM(Uaux(2:4,PP_IJK)*Uaux(2:4,PP_IJK))                  ! |v|^2
-  Uaux(7  ,PP_IJK)  =SUM(U(6:8,PP_IJK,iElem)**2)               ! |B|^2
-  Uaux(8  ,PP_IJK)  =SUM(Uaux(2:4,PP_IJK)*U(6:8,PP_IJK,iElem)) ! v*B
+  srho = 1./Uin(1,i) 
+  vel  = Uin(2:4,i)*srho
+  v2   = SUM(vel*vel)
+  B2   = SUM(Uin(6:8,i)*Uin(6:8,i))
+  Uaux(1  ,i) = srho
+  Uaux(2:4,i) = vel
+  Uaux(6  ,i) = v2
+  Uaux(7  ,i)  =B2
+  Uaux(8  ,i)  =SUM(vel(:)*Uin(6:8,i)) ! v*B
   !total pressure=gas pressure + magnetic pressure
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem) -0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK) &
+  Uaux(5  ,i)=kappaM1*(Uin(5,i) -0.5*Uin(1,i)*v2 &
 #ifdef PP_GLM
-                                              -s2mu_0*U(9,PP_IJK,iElem)**2 &
+                                   -s2mu_0*Uin(9,i)**2 &
 #endif /*PP_GLM*/
-                                                    )-kappaM2*s2mu_0*Uaux(7,PP_IJK) !p_t 
-#ifdef OPTIMIZED
+                                   )-kappaM2*s2mu_0*B2 !p_t 
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
 END SUBROUTINE EvalUaux
 
 
@@ -701,23 +698,24 @@ qbHat(:) =   b1(:)*metric_in(1,:) +   b2(:)*metric_in(2,:) +   b3(:)*metric_in(3
 
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
-  Fstar(2,i,i) = ( rhov1(i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat(i)*b1(i)) )
-  Fstar(3,i,i) = ( rhov2(i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat(i)*b2(i)) )
-  Fstar(4,i,i) = ( rhov3(i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat(i)*b3(i)) )
-
-#ifdef PP_GLM
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) + GLM_ch*U_in(9,i)*qbHat(i)             
-  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
-  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
-  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
-  Fstar(9,i,i) =                                                        GLM_ch* qbHat(i)                   
-#else
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) 
-  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))
-  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))
-  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))
-#endif /* PP_GLM */
+!!!   Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
+!!!   Fstar(2,i,i) = ( rhov1(i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat(i)*b1(i)) )
+!!!   Fstar(3,i,i) = ( rhov2(i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat(i)*b2(i)) )
+!!!   Fstar(4,i,i) = ( rhov3(i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat(i)*b3(i)) )
+!!! 
+!!! #ifdef PP_GLM
+!!!   Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) + GLM_ch*U_in(9,i)*qbHat(i)             
+!!!   Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
+!!!   Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
+!!!   Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
+!!!   Fstar(9,i,i) =                                                        GLM_ch* qbHat(i)                   
+!!! #else
+!!!   Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat(i)*vb(i)) 
+!!!   Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat(i)*v1(i))
+!!!   Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat(i)*v2(i))
+!!!   Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat(i)*v3(i))
+!!! #endif /* PP_GLM */
+  Fstar(:,i,i) = 0. !not needed because diagonal of DvolSurfMat is zero! 
 
   DO l=i+1,PP_N
     ! call fluxvec (general but not the fastest) 
@@ -962,17 +960,18 @@ Flux8(:) = (qvHat(:)*b3(:)-qbHat(:)*v3(:))
 
 DO i=0,PP_N
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = flux1(i)
-  Fstar(2,i,i) = flux2(i)
-  Fstar(3,i,i) = flux3(i)
-  Fstar(4,i,i) = flux4(i)
-  Fstar(5,i,i) = flux5(i)
-  Fstar(6,i,i) = flux6(i)
-  Fstar(7,i,i) = flux7(i)
-  Fstar(8,i,i) = flux8(i)
-#ifdef PP_GLM
-  Fstar(9,i,i) = flux9(i)
-#endif
+!!!   Fstar(1,i,i) = flux1(i)
+!!!   Fstar(2,i,i) = flux2(i)
+!!!   Fstar(3,i,i) = flux3(i)
+!!!   Fstar(4,i,i) = flux4(i)
+!!!   Fstar(5,i,i) = flux5(i)
+!!!   Fstar(6,i,i) = flux6(i)
+!!!   Fstar(7,i,i) = flux7(i)
+!!!   Fstar(8,i,i) = flux8(i)
+!!! #ifdef PP_GLM
+!!!   Fstar(9,i,i) = flux9(i)
+!!! #endif
+  Fstar(:,i,i) = 0. !not needed, since diagonal of DvolSurfMat is zero! 
   DO l=i+1,PP_N
     ! 
     Fstar(1,l,i) = 0.5*(flux1(l)+flux1(i))
@@ -1338,24 +1337,25 @@ beta(:) = 0.5*U_in(1,:)/(pt-s2mu_0*bb(:)) !0.5*rho/p
 DO i=0,PP_N
   qbHat    =   b1(i)*metric_in(1,i) +   b2(i)*metric_in(2,i) +   b3(i)*metric_in(3,i) 
   !consistency euler flux f(Ui,Ui)=f(Ui)
-  Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
-  Fstar(2,i,i) = ( rhov1(i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat*b1(i)) )
-  Fstar(3,i,i) = ( rhov2(i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat*b2(i)) )
-  Fstar(4,i,i) = ( rhov3(i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat*b3(i)) )
-
-#ifdef PP_GLM
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) + GLM_ch*U_in(9,i)*qbHat             
-  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
-  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
-  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
-  Fstar(9,i,i) =                                                  GLM_ch*qbHat                   
-#else
-  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) 
-  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))
-  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))
-  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))
-
-#endif /* PP_GLM */
+!!!  Fstar(1,i,i) = (U_in(1,i)*qvHat(i)  )
+!!!  Fstar(2,i,i) = ( rhov1(i)*qvHat(i)  + metric_in(1,i)*pt(i) -smu_0*(qbHat*b1(i)) )
+!!!  Fstar(3,i,i) = ( rhov2(i)*qvHat(i)  + metric_in(2,i)*pt(i) -smu_0*(qbHat*b2(i)) )
+!!!  Fstar(4,i,i) = ( rhov3(i)*qvHat(i)  + metric_in(3,i)*pt(i) -smu_0*(qbHat*b3(i)) )
+!!!
+!!!#ifdef PP_GLM
+!!!  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) + GLM_ch*U_in(9,i)*qbHat             
+!!!  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))                      + GLM_ch*U_in(9,i)*metric_in(1,i) 
+!!!  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))                      + GLM_ch*U_in(9,i)*metric_in(2,i) 
+!!!  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))                      + GLM_ch*U_in(9,i)*metric_in(3,i) 
+!!!  Fstar(9,i,i) =                                                  GLM_ch*qbHat                   
+!!!#else
+!!!  Fstar(5,i,i) = (Etotal(i) + pt(i))*qvHat(i) -smu_0*(qbHat*vb(i)) 
+!!!  Fstar(6,i,i) = (qvHat(i)*b1(i)-qbHat*v1(i))
+!!!  Fstar(7,i,i) = (qvHat(i)*b2(i)-qbHat*v2(i))
+!!!  Fstar(8,i,i) = (qvHat(i)*b3(i)-qbHat*v3(i))
+!!!
+!!!#endif /* PP_GLM */
+  Fstar(:,i,i) = 0. !not needed, since diagonal of DvolSurfMat is zero! 
   DO l=i+1,PP_N
     rhoLN     = LN_MEAN( U_in(1,i), U_in(1,l))
     betaLN    = LN_MEAN(beta(i),beta(l))
