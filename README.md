@@ -13,7 +13,7 @@ to hundreds of thousand cores.
 The main contributers are
 * from Mathematical Institute, University of Cologne: Gregor Gassner
 * from Max Planck Institute for Plasma Physics, Garching: Florian Hindenlang
-* form Department of Mathematics, Linköping University: Andrew Winters
+* from Department of Mathematics, Linköping University: Andrew Winters
 
 FLUXO is a spin-off of the FLEXI code (https://github.com/flexi-framework/flexi) 
 that is developed at the Institute for Aero- and Gasdynamics at University Stuttgart 
@@ -26,6 +26,7 @@ If you use FLUXO, please cite one of the articles mentioned in [REFERENCES.md](R
 For installation instructions see [INSTALL.md](INSTALL.md)
 
 ## License 
+
 FLUXO is released under the terms of the GNU General Public License v3.0. 
 For the full license terms see the included license file [LICENSE.md](LICENSE.md).
 
