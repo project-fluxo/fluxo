@@ -3,55 +3,22 @@
 # =================================================================================================================================
 
 stages:
-  - build
-  - short_runs
+  - startup
+  - gnu_build
+  - intel_build
+  - gnu_short_runs
+  - intel_short_runs
   - cleanup
+
+# =================================================================================================================================
+# GLOBALS
+# =================================================================================================================================
 
 variables:
   GIT_STRATEGY: none
   GLOBAL_CACHE_PATH: "/home/gitlab-runner/globalcache/${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}"
-  SSH_GITLAB: "git@gitlab.com:${CI_PROJECT_PATH}.git"
 
 # =================================================================================================================================
-# yaml variables
-# hidden key that defines an anchor named 'job_def_build_intel'
-# =================================================================================================================================
-
-.job_template: &job_def_build_intel
-  stage: build 
-  tags:
-    - vm_linux
-  before_script:
-    - pwd
-    - echo ${SSH_GITLAB} ${GLOBAL_CACHE_PATH} ${NIGHTLY_RUNNER}
-    - if [ ! -f .gitlab-ci.yml ] ; then  # git repo does not exist 
-    - cd .. ; rm -rf ${CI_PROJECT_NAME} ; git clone ${SSH_GITLAB} ${CI_PROJECT_NAME} ; fi # use ssh
-    - cd ${CI_PROJECT_DIR}
-    - git remote set-url origin ${SSH_GITLAB}
-    - git fetch origin
-    - git stash; git stash clear       # be sure that its clean before checkout and pull
-    - git checkout ${CI_COMMIT_REF_NAME} ; git pull origin ${CI_COMMIT_REF_NAME} 
-    - mkdir -p ${GLOBAL_CACHE_PATH}  
-    - . ~/environments/modules_for_fluxo_intel ; pwd
-
-#--------------------------------------------------------------------------------------------------------------------------------
-.job_template: &job_def_short_runs_intel
-  stage: short_runs 
-  tags:
-    - vm_linux
-  before_script:
-    - . ~/environments/modules_for_fluxo_intel ; pwd
-
-#--------------------------------------------------------------------------------------------------------------------------------
-.job_template: &job_def_cleanup
-  stage: cleanup 
-  tags:
-    - vm_linux
-
-# =================================================================================================================================
-# Stage "build"
-# artifacts: name: "${CI_PIPELINE_ID}_${CI_JOB_NAME}_${CI_COMMIT_REF_NAME}"
-#
 # SHORT SYNTAX EXPLANATIONS FOR THE JOB, FOR DETAILS VISIT:    ===> https://docs.gitlab.com/ce/ci/yaml/   <===
 # "stage:"         makes the job part of a stage defined above
 # "tags:"          selects the runner
@@ -63,143 +30,407 @@ variables:
 # "artifacts:"     keep data from the job which is uploaded to gitlab.com. You really should set a duration to expiration.
 #                  "when:" can be either on_failure, on_success or always
 # =================================================================================================================================
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "startup"
+# =================================================================================================================================
 
-build_mhd:
-  <<: *job_def_build_intel
-  script: 
-    - cd tests; pwd; echo ${NIGHTLY_RUNNER}
-    - rm -rf dirx_3* log_3*
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 300-399 
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 301,304 ;  fi
-    - ls -l; mv dirx_3* ${GLOBAL_CACHE_PATH}/.
+.job_template: &IPP_job_startup
+  stage: startup 
+  tags:
+    - ipp_vm_linux_fluxo
+  script:
+    - echo "IPP RUNNER WARM-UP"
+
+.job_template: &PCM_job_startup
+  stage: startup 
+  tags:
+    - pcm_linux_fluxo
+  script:
+    - echo "PCM RUNNER WARM-UP"
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "build"
+# =================================================================================================================================
+
+# NOTE: _ipp is the runner testimony_fluxo , with tag: IPP_vm_linux_fluxo
+#       _pcm is the runner fluxo@gitlab.mi.uni-koeln.de with tag: PCM_linux_fluxo
+
+.job_template: &IPP_setup_intel_build
+  stage: intel_build 
+  variables:
+    GIT_STRATEGY: clone
+    CURR_CMP: intel
+  tags:
+    - ipp_vm_linux_fluxo
+  before_script:
+    - pwd
+    - echo "create" ${GLOBAL_CACHE_PATH}_${CURR_CMP} 
+    - mkdir -p ${GLOBAL_CACHE_PATH}_${CURR_CMP}  
+    - . ~/environments/modules_for_fluxo_intel ; pwd
   after_script:
     - pwd 
-  artifacts:
-    name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
-    when: on_failure
-    paths:
-    - tests/log_3*.txt
+
+.job_template: &IPP_setup_gnu_build
+  stage: gnu_build 
+  variables:
+    GIT_STRATEGY: clone
+    CURR_CMP: gnu
+  tags:
+    - ipp_vm_linux_fluxo
+  before_script:
+    - pwd
+    - echo "create" ${GLOBAL_CACHE_PATH}_${CURR_CMP} 
+    - mkdir -p ${GLOBAL_CACHE_PATH}_${CURR_CMP} 
+    - . ~/environments/modules_for_fluxo_gnu ; pwd
+  after_script:
+    - pwd 
+
+.job_template: &PCM_setup_gnu_build
+  stage: gnu_build 
+  variables:
+    GIT_STRATEGY: clone
+    CURR_CMP: gnu
+  tags:
+    - pcm_linux_fluxo
+  before_script:
+    - pwd
+    - echo "create" ${GLOBAL_CACHE_PATH}_${CURR_CMP} 
+    - mkdir -p ${GLOBAL_CACHE_PATH}_${CURR_CMP}  
+  after_script:
+    - pwd 
 
 #--------------------------------------------------------------------------------------------------------------------------------
-build_linadv:
-  <<: *job_def_build_intel # Merge the contents of the 'job_def_build_intel' alias
+
+.job_template: &job_script_build_linadv
   script: 
-    - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - cd tests; pwd
     - rm -rf dirx_1* log_1*.txt
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 101,103 ;  fi
-    - ls ; mv dirx_1* ${GLOBAL_CACHE_PATH}/.
-  after_script:
-    - pwd 
+    - mv dirx_1* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
+    expire_in: 2 days
     when: on_failure
     paths:
     - tests/log_1*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
-build_maxwell:
-  <<: *job_def_build_intel
+.job_template: &job_script_build_maxwell
   script: 
-    - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - cd tests; pwd
     - rm -rf dirx_2* log_2*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 200-299 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 201 ;  fi
-    - ls ; mv dirx_2* ${GLOBAL_CACHE_PATH}/.
-  after_script:
-    - pwd 
+    - mv dirx_2* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
+    expire_in: 2 days
     when: on_failure
     paths:
     - tests/log_2*.txt
 
+#--------------------------------------------------------------------------------------------------------------------------------
+.job_template: &job_script_build_mhd
+  script: 
+    - cd tests; pwd
+    - rm -rf dirx_3* log_3*
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 300-399 
+    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 301,304 ;  fi
+    - mv dirx_3* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
+    expire_in: 2 days
+    when: on_failure
+    paths:
+    - tests/log_3*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
-build_nav-st:
-  <<: *job_def_build_intel
+.job_template: &job_script_build_nav-st
   script: 
-    - cd tests; pwd; echo ${NIGHTLY_RUNNER}
+    - cd tests; pwd
     - rm -rf dirx_4* log_4*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 400-499 
     - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401,403 ;  fi
-    - ls ; mv dirx_4* ${GLOBAL_CACHE_PATH}/.
-  after_script:
-    - pwd 
+    - mv dirx_4* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
+    expire_in: 2 days
     when: on_failure
     paths:
     - tests/log_4*.txt
 
 # =================================================================================================================================
-# Stage "short_runs"
+# TEMPLATES FOR STAGE "short_runs"
 # =================================================================================================================================
-short_runs_mhd:
-  <<: *job_def_short_runs_intel
-  script: 
-    - cd tests; pwd
-    - rm -f freestream/log_3*.txt
-    - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}/dirx_3* . 
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 300-399 
-    - else python build_tests.py -p 2 -stage 2 -case 301,304 ;  fi
+
+.job_template: &IPP_setup_intel_short_runs
+  stage: intel_short_runs 
+  variables:
+    CURR_CMP: intel
+  tags:
+    - ipp_vm_linux_fluxo
+  before_script:
+    - . ~/environments/modules_for_fluxo_intel ; pwd
   after_script:
     - pwd 
-  artifacts:
-    name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
-    when: on_failure
-    paths:
-    - tests/freestream/log_3*.txt
+
+.job_template: &IPP_setup_gnu_short_runs
+  stage: gnu_short_runs 
+  variables:
+    CURR_CMP: gnu
+  tags:
+    - ipp_vm_linux_fluxo
+  before_script:
+    - . ~/environments/modules_for_fluxo_gnu ; pwd
+  after_script:
+    - pwd 
+
+.job_template: &PCM_setup_gnu_short_runs
+  stage: gnu_short_runs 
+  variables:
+    CURR_CMP: gnu
+  tags:
+    - pcm_linux_fluxo
+  before_script:
+    - pwd
+  after_script:
+    - pwd 
 
 #--------------------------------------------------------------------------------------------------------------------------------
-
-short_runs_linadv:
-  <<: *job_def_short_runs_intel
+.job_template: &job_script_short_runs_linadv
   script: 
     - cd tests; pwd
     - rm -f freestream/log_1*.txt
-    - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}/dirx_1* . 
+    - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_1* . 
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 100-199 
     - else python build_tests.py -p 2 -stage 2 -case 101,103 ;  fi
-  after_script:
-    - pwd 
   artifacts:
     name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
+    expire_in: 2 days
     when: on_failure
     paths:
-    - tests/freestream/log_1*.txt
+    - tests/freestream/log_LINADV*.txt
 
 #--------------------------------------------------------------------------------------------------------------------------------
-short_runs_nav-st:
-  <<: *job_def_short_runs_intel
+.job_template: &job_script_short_runs_mhd
+  script: 
+    - cd tests; pwd
+    - rm -f freestream/log_3*.txt
+    - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_3* . 
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 300-399 
+    - else python build_tests.py -p 2 -stage 2 -case 301,304 ;  fi
+  artifacts:
+    name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
+    expire_in: 2 days
+    when: on_failure
+    paths:
+    - tests/freestream/log_MHD*.txt
+
+#--------------------------------------------------------------------------------------------------------------------------------
+.job_template: &job_script_short_runs_nav-st
   script: 
     - cd tests; pwd
     - rm -f freestream/log_4*.txt
-    - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}/dirx_4* . 
+    - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* . 
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 400-499 
     - else python build_tests.py -p 2 -stage 2 -case 401,403 ;  fi
-  after_script:
-    - pwd 
   artifacts:
     name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
-    expire_in: 1 hour
+    expire_in: 2 days
     when: on_failure
     paths:
-    - tests/freestream/log_4*.txt
+    - tests/freestream/log_NAVIERSTOKES*.txt
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "cleanup"
+# =================================================================================================================================
+
+.job_template: &IPP_setup_intel_cleanup
+  stage: cleanup 
+  variables:
+    CURR_CMP: intel
+  tags:
+    - ipp_vm_linux_fluxo
+
+.job_template: &IPP_setup_gnu_cleanup
+  stage: cleanup 
+  variables:
+    CURR_CMP: gnu
+  tags:
+    - ipp_vm_linux_fluxo
+
+.job_template: &PCM_setup_gnu_cleanup
+  stage: cleanup 
+  variables:
+    CURR_CMP: gnu
+  tags:
+    - pcm_linux_fluxo
+
+#--------------------------------------------------------------------------------------------------------------------------------
+.job_template: &job_script_cleanup
+  when: always
+  script:
+    - pwd
+    - echo "remove:" ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+    - rm -rf ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+
+
+###################################################################################################################################
+# JOB DEFINITIONS
+# HERE, the "needs:" command is used to generate a dependency for each job. 
+#                    - the startup job does nothing except checking if the gitlab runner is listening.
+#                    - this way, all the remainingjobs can be executed only in their dependency order,
+#                      and thus before the whole stage is ready (even jump over stages)
+###################################################################################################################################
+
+# =================================================================================================================================
+# Stage "startup"
+# =================================================================================================================================
+IPP_startup:
+  <<: *IPP_job_startup
+
+PCM_startup:
+  <<: *PCM_job_startup
+
+# =================================================================================================================================
+# Stage "build"
+# =================================================================================================================================
+
+IPP_gnu_build_mhd:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_gnu_build
+  <<: *job_script_build_mhd
+
+IPP_intel_build_mhd:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_intel_build
+  <<: *job_script_build_mhd
+
+PCM_gnu_build_mhd:
+  needs: ["PCM_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *job_script_build_mhd
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+IPP_gnu_build_linadv:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_gnu_build 
+  <<: *job_script_build_linadv
+
+IPP_intel_build_linadv:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_intel_build 
+  <<: *job_script_build_linadv
+
+PCM_gnu_build_linadv:
+  needs: ["PCM_startup"]
+  <<: *PCM_setup_gnu_build 
+  <<: *job_script_build_linadv
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+IPP_gnu_build_maxwell:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_gnu_build
+  <<: *job_script_build_maxwell
+
+IPP_intel_build_maxwell:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_intel_build
+  <<: *job_script_build_maxwell
+
+PCM_gnu_build_maxwell:
+  needs: ["PCM_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *job_script_build_maxwell
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+IPP_gnu_build_nav-st:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_gnu_build
+  <<: *job_script_build_nav-st
+
+IPP_intel_build_nav-st:
+  needs: ["IPP_startup"]
+  <<: *IPP_setup_intel_build
+  <<: *job_script_build_nav-st
+
+PCM_gnu_build_nav-st:
+  needs: ["PCM_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *job_script_build_nav-st
+
+# =================================================================================================================================
+# Stage "short_runs"
+# =================================================================================================================================
+
+IPP_gnu_short_runs_mhd:
+  needs: ["IPP_gnu_build_mhd"]
+  <<: *IPP_setup_gnu_short_runs
+  <<: *job_script_short_runs_mhd
+
+IPP_intel_short_runs_mhd:
+  needs: ["IPP_intel_build_mhd"]
+  <<: *IPP_setup_intel_short_runs
+  <<: *job_script_short_runs_mhd
+
+PCM_gnu_short_runs_mhd:
+  needs: ["PCM_gnu_build_mhd"]
+  <<: *PCM_setup_gnu_short_runs
+  <<: *job_script_short_runs_mhd
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+IPP_gnu_short_runs_linadv:
+  needs: ["IPP_gnu_build_linadv"]
+  <<: *IPP_setup_gnu_short_runs
+  <<: *job_script_short_runs_linadv
+
+IPP_intel_short_runs_linadv:
+  needs: ["IPP_intel_build_linadv"]
+  <<: *IPP_setup_intel_short_runs
+  <<: *job_script_short_runs_linadv
+
+PCM_gnu_short_runs_linadv:
+  needs: ["PCM_gnu_build_linadv"]
+  <<: *PCM_setup_gnu_short_runs
+  <<: *job_script_short_runs_linadv
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+IPP_gnu_short_runs_nav-st:
+  needs: ["IPP_gnu_build_nav-st"]
+  <<: *IPP_setup_gnu_short_runs
+  <<: *job_script_short_runs_nav-st
+
+IPP_intel_short_runs_nav-st:
+  needs: ["IPP_intel_build_nav-st"]
+  <<: *IPP_setup_intel_short_runs
+  <<: *job_script_short_runs_nav-st
+
+PCM_gnu_short_runs_nav-st:
+  needs: ["PCM_gnu_build_nav-st"]
+  <<: *PCM_setup_gnu_short_runs
+  <<: *job_script_short_runs_nav-st
 
 # =================================================================================================================================
 # Stage "cleanup"
 # =================================================================================================================================
-cleanup_cache:
-  <<: *job_def_cleanup
-  when: always
-  script:
-    - pwd
-    - echo "remove:" ${GLOBAL_CACHE_PATH}
-    - rm -rf ${GLOBAL_CACHE_PATH}
+
+IPP_gnu_cleanup_cache:
+  needs: ["IPP_gnu_short_runs_linadv","IPP_gnu_short_runs_mhd","IPP_gnu_short_runs_nav-st"]
+  <<: *IPP_setup_gnu_cleanup
+  <<: *job_script_cleanup
+
+IPP_intel_cleanup_cache:
+  needs: ["IPP_intel_short_runs_linadv","IPP_intel_short_runs_mhd","IPP_intel_short_runs_nav-st"]
+  <<: *IPP_setup_intel_cleanup
+  <<: *job_script_cleanup
+
+PCM_gnu_cleanup_cache:
+  needs: ["PCM_gnu_short_runs_linadv","PCM_gnu_short_runs_mhd","PCM_gnu_short_runs_nav-st"]
+  <<: *PCM_setup_gnu_cleanup
+  <<: *job_script_cleanup
