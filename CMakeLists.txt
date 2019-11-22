@@ -25,6 +25,7 @@ INCLUDE(CMakeDependentOption)
 SITE_NAME(CMAKE_HOSTNAME)
 STRING(FIND "${CMAKE_HOSTNAME}" "eslogin" ONHORNET)
 STRING(FIND "${CMAKE_HOSTNAME}" "marconi" ON_MARCONI)
+STRING(FIND "${CMAKE_HOSTNAME}" "cobra" ON_COBRA)
 # Set options that need to be enabled BEFORE ANY PROJECT OR LANGUAGE COMMAND
 IF (ONHORNET GREATER -1)
   SET(CMAKE_C_COMPILER       cc)
@@ -96,7 +97,7 @@ SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
-MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
+#MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
 SET(_BUILD_FLUXO_POST  OFF  CACHE BOOL "switch to also build the fluxo_post executable (reads a collection of states and calls analyze).")
 
@@ -107,14 +108,6 @@ SET(FLUXO_DISCTYPE "2" CACHE STRING "disc type for volint. 1: standard form, 2: 
 SET_PROPERTY(CACHE FLUXO_DISCTYPE  PROPERTY STRINGS "1" "2")
 ADD_DEFINITIONS(-DPP_DiscType=${FLUXO_DISCTYPE})
 
-IF (CMAKE_BUILD_TYPE MATCHES "Debug")
-  UNSET(FLUXO_OPTIMIZED CACHE) # unset if debug
-ELSE()
-  SET(FLUXO_OPTIMIZED  ON  CACHE BOOL "switch on/off some optimized implementations.")
-ENDIF()
-IF(FLUXO_OPTIMIZED)
-  ADD_DEFINITIONS(-DOPTIMIZED)
-ENDIF()
 
 SET(FLUXO_DISC_NODETYPE "GAUSS-LOBATTO" CACHE STRING "Set of nodes used for representing the solution (GAUSS/GAUSS-LOBATTO).")
 SET_PROPERTY(CACHE FLUXO_DISC_NODETYPE PROPERTY STRINGS GAUSS GAUSS-LOBATTO)
@@ -166,10 +159,31 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   IF(FLUXO_DISCTYPE EQUAL 2)
     SET(FLUXO_EQN_NONCONS  ON  CACHE BOOL "switch on/off non-conservative source term for mhd.")
     IF(FLUXO_EQN_NONCONS)
-      ADD_DEFINITIONS(-DNONCONS=1)
+      SET(FLUXO_EQN_NONCONS_TYPE "Powell" CACHE STRING "type of non-conservative source term for mhd: Powell/Brackbill/Janhunen")
+      SET_PROPERTY(CACHE FLUXO_EQN_NONCONS_TYPE PROPERTY STRINGS Powell Brackbill Janhunen )
+      IF(FLUXO_EQN_NONCONS_TYPE STREQUAL "Powell")
+        ADD_DEFINITIONS(-DNONCONS=1)
+      ELSEIF(FLUXO_EQN_NONCONS_TYPE STREQUAL "Brackbill")
+        ADD_DEFINITIONS(-DNONCONS=2)
+      ELSEIF(FLUXO_EQN_NONCONS_TYPE STREQUAL "Janhunen")
+        ADD_DEFINITIONS(-DNONCONS=3)
+      ENDIF()
+      IF(FLUXO_EQN_GLM)
+        SET(FLUXO_EQN_NONCONS_GLM  OFF  CACHE BOOL "switch on/off non-conservative GLM variable dependent source terms for mhd.")
+        IF(FLUXO_EQN_NONCONS_GLM)
+          ADD_DEFINITIONS(-DPP_NC_GLM=1)
+        ENDIF()
+      ELSE()
+        UNSET(FLUXO_EQN_NONCONS_GLM  CACHE ) #if GLM=OFF
+      ENDIF()
+    ELSE()
+      UNSET(FLUXO_EQN_NONCONS_TYPE  CACHE ) #if  NONCONS=OFF
+      UNSET(FLUXO_EQN_NONCONS_GLM  CACHE ) #if  NONCONS=OFF
     ENDIF()
   ELSE()
-    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
+    UNSET(FLUXO_EQN_NONCONS CACHE ) #if not DISCTYPE=2
+    UNSET(FLUXO_EQN_NONCONS_TYPE  CACHE ) #if not DISCTYPE=2
+    UNSET(FLUXO_EQN_NONCONS_GLM  CACHE ) #if not DISCTYPE=2
   ENDIF()
   SET(FLUXO_EQN_ANISO_HEAT  OFF  CACHE BOOL "switch on anisotropic heat diffusion in mhd equation.")
   IF(FLUXO_EQN_ANISO_HEAT)
@@ -179,6 +193,8 @@ ELSE()
   UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd
   UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
   UNSET(FLUXO_EQN_NONCONS CACHE ) #if not mhd
+  UNSET(FLUXO_EQN_NONCONS_TYPE  CACHE ) #if not mhd
+  UNSET(FLUXO_EQN_NONCONS_GLM  CACHE ) #if not mhd
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
@@ -192,6 +208,14 @@ ENDIF()
 IF(NOT EQNSYSNAME_FOUND ) 
   # no given equation system
   MESSAGE(SEND_ERROR " This equation system does not appear in CMakeLists.txt!")
+ENDIF()
+
+IF(FLUXO_DISCTYPE EQUAL 2)
+  SET(FLUXO_EQN_VOLFLUX "-1" CACHE STRING 
+          "Default: -1 (procedure pointer set in init). Specify two-point flux for compilation (eqn/flux_average module), for optimization!")
+  ADD_DEFINITIONS(-DPP_VolFlux=${FLUXO_EQN_VOLFLUX}  )
+ELSE() #if not disctype=2
+  UNSET(FLUXO_EQN_VOLFLUX CACHE )
 ENDIF()
 
 
@@ -282,6 +306,7 @@ GET_FILENAME_COMPONENT (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
 
 
 IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+  SET(COMPILER_ADD_FLAGS " -finline-limit=1500 " CACHE STRING "additional user defined compiler flags") 
   #environment specific variables
   IF(ONHORNET GREATER -1)
     SET(FLUXO_INSTRUCTION "-march=core-avx2")
@@ -290,26 +315,32 @@ IF (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   ENDIF()
   # set Flags
   SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -fdefault-real-8 -fdefault-double-8 -fbackslash -ffree-line-length-0 -DGNU")
-  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} -finline-functions ") #gives segfault: -fstack-arrays
-  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -finline-functions ") #gives segfault: -fstack-arrays
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} ${COMPILER_ADD_FLAGS} -finline-functions ") #gives segfault: -fstack-arrays
+  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} ${COMPILER_ADD_FLAGS} -finline-functions ") #gives segfault: -fstack-arrays
   SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -ggdb3 -ffpe-trap=invalid -fbounds-check -finit-real=snan -fbacktrace -Wall -Wextra")
   # add flags only for compiling not linking!
   SET (FLUXO_COMPILE_FLAGS "-xf95-cpp-input")
 
 ELSEIF (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+   SET(COMPILER_ADD_FLAGS "-inline-max-size=1500 -no-inline-max-total-size" CACHE STRING "additional user defined compiler flags") 
    #environment specific variables
    IF(ONHORNET GREATER -1)
       SET(FLUXO_INSTRUCTION "-xCORE-AVX2")
    ELSEIF(ON_MARCONI GREATER -1)
-      SET(FLUXO_INSTRUCTION "-axMIC-AVX512 ") #for BW and KNL
+      #SET(FLUXO_INSTRUCTION "-axMIC-AVX512 ") #for BW and KNL
+      SET(FLUXO_INSTRUCTION "-xCore-AVX512 ") #for SKL
+      #SET(FLUXO_INSTRUCTION "-xCommon-AVX512 ") #for SKL
+   ELSEIF(ON_COBRA GREATER -1)
+      SET(FLUXO_INSTRUCTION "-xCore-AVX512")
    ELSE()
       SET(FLUXO_INSTRUCTION "-xHost")
    ENDIF()
    # set Flags
+  SET(FLUXO_OPT_REPORT "-qopt-report=5 -qopt-report-phase=all")
   SET (CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} -r8 -i4 -traceback -warn all -shared-intel -DINTEL")
-  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
-  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3 ${FLUXO_INSTRUCTION} -qopt-report0 -qopt-report-phase=vec -no-prec-div")
-  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
+  SET (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS}     -O3  ${FLUXO_INSTRUCTION} ${COMPILER_ADD_FLAGS} ${FLUXO_OPT_REPORT} -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_PROFILE "${CMAKE_Fortran_FLAGS} -pg -O3  ${FLUXO_INSTRUCTION} ${COMPILER_ADD_FLAGS} ${FLUXO_OPT_REPORT} -no-prec-div")
+  SET (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS} -g  -O0 -fpe0 -traceback -check all,noarg_temp_created,noformat,nooutput_conversion,pointer,uninit -init=snan -init=arrays")
    # add flags only for compiling not linking!
    SET (FLUXO_COMPILE_FLAGS "-fpp -assume bscc")
 
