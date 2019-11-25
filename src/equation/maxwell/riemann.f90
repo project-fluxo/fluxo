@@ -38,7 +38,8 @@ CONTAINS
 SUBROUTINE Riemann(F,U_L,U_R,nv,t1,t2)
 ! MODULES
 USE MOD_PreProc ! PP_N
-USE MOD_Equation_Vars,ONLY:eta_c,c,c2,c_corr,c_corr_c,c_corr_c2
+USE MOD_Equation_Vars,ONLY:eta_c,c,c2,c_corr,c_corr_c,c_corr_c2,centralFlux
+USE MOD_Flux_Average, ONLY: standardDGflux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -55,14 +56,15 @@ REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 REAL                                             :: n_loc(3),A_p(8,8),A_n(8,8)
-INTEGER                                          :: Count_1,Count_2
+INTEGER                                          :: p,q
 REAL                                             :: D(3,3)                  ! auxiliary matrices used 
 REAL                                             :: E(3,3), E_trans(3,3)    ! auxiliary matrices used
+REAL                                             :: Fcent(PP_nVar) 
 !==================================================================================================================================
 ! Gauss point i,j
-DO Count_2=0,PP_N
-  DO Count_1=0,PP_N
-    n_loc(:)=nv(:,Count_1,Count_2)
+DO q=0,PP_N
+  DO p=0,PP_N
+    n_loc(:)=nv(:,p,q)
 
     A_p=0.
     A_n=0.
@@ -130,9 +132,11 @@ DO Count_2=0,PP_N
     A_n(8,8)  =-A_p(8,8)
     ! Warum 0.5 -> Antwort im Taube/Dumbser-Paper. Im Munz/Schneider Paper fehlt das 0.5 lustigerweise.
     
-    F(:,Count_1,Count_2)=0.5*(MATMUL(A_n,U_R(:,Count_1,Count_2))+MATMUL(A_p,U_L(:,Count_1,Count_2)))
-  END DO ! Count_1
-END DO ! Count_2
+    F(:,p,q)=0.5*(MATMUL(A_n,U_R(:,p,q))+MATMUL(A_p,U_L(:,p,q)))
+    CALL standardDGflux(Fcent(:),U_L(:,p,q),U_R(:,p,q),n_loc)
+    F(:,p,q)=(1.-centralflux)*F(:,p,q) + centralFlux*Fcent(:)
+  END DO !p
+END DO !q
 END SUBROUTINE Riemann
 
 

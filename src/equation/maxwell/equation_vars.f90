@@ -31,13 +31,13 @@ REAL                :: c_corr
 REAL                :: c_corr2    !< c_corr^2
 REAL                :: c_corr_c   !< c_corr*c
 REAL                :: c_corr_c2  !< c_corr*c^2
+REAL                :: centralflux !=1. purely central flux, =0. purely upwind flux
 REAL                :: fDamping
 REAL                :: eta_c      !< (c_corr -1 )*c
 REAL                :: scr        !< constant for damping in divcorr
 INTEGER             :: IniExactFunc
 INTEGER             :: BCType(6)=-999
 INTEGER             :: BoundaryCondition(6,2)
-INTEGER,PARAMETER   :: nAuxVar=1
 ! Boundary condition arrays
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)
 INTEGER,ALLOCATABLE :: nBCByType(:)
@@ -55,9 +55,13 @@ CHARACTER(LEN=255),DIMENSION(4),PARAMETER ::  StrVarNames(8)=&
 
 !REAL,PARAMETER      :: c=299792458.
 !REAL,PARAMETER      :: eps0=8.8541878176E-12
-REAL,PARAMETER      :: c=1.  !normalized
-REAL,PARAMETER      :: c2=1.  !normalized c^2
-REAL,PARAMETER      :: eps0=1.  !normalized
+REAL                :: c  
+REAL                :: c_inv
+REAL                :: c2  ! c^2
+REAL                :: c2_inv
+REAL                :: eps0
+REAL                :: mu0 
+REAL                :: smu0
 INTEGER             :: alpha_shape
 REAL                :: shapeFuncPrefix
 REAL                :: rCutoff
@@ -65,7 +69,16 @@ REAL                :: rCutoff
 LOGICAL             :: EquationInitIsDone=.FALSE.
 #if (PP_DiscType==2)
 INTEGER             :: WhichVolumeFlux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec
+ABSTRACT INTERFACE
+  PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,metric_L,metric_R,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+    REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+    REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+  END SUBROUTINE i_sub_VolumeFluxAverageVec
+END INTERFACE
 #endif /*PP_DiscType==2*/
 
 END MODULE MOD_Equation_Vars

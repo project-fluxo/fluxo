@@ -82,15 +82,15 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< solution state (conservative vars)
-REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
-REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
-REAL,INTENT(IN )   :: M_h(       3,1:nTotal_vol) !< metrics for htilde                 
+REAL,INTENT(IN )   :: U_in(5,1:nTotal_vol) !< solution state (conservative vars)
+REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
-REAL,INTENT(OUT)   :: gtilde(PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
-REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(5,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(5,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(5,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                :: f(5),g(5),h(5)                    !cartesi an fluxes 
@@ -158,20 +158,20 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
-REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
-REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
-REAL,INTENT(IN )   :: M_h(       3,1:nTotal_vol) !< metrics for htilde                 
+REAL,INTENT(IN )   :: U_in(5,1:nTotal_vol) !< state in conservative variables
+REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
 #if PARABOLIC
-REAL,INTENT(IN )   :: gradPx_in(PP_nVar,1:nTotal_vol) !< gradient x in primitive variables 
-REAL,INTENT(IN )   :: gradPy_in(PP_nVar,1:nTotal_vol) !< gradient y in primitive variables 
-REAL,INTENT(IN )   :: gradPz_in(PP_nVar,1:nTotal_vol) !< gradient z in primitive variables 
+REAL,INTENT(IN )   :: gradPx_in(5,1:nTotal_vol) !< gradient x in primitive variables 
+REAL,INTENT(IN )   :: gradPy_in(5,1:nTotal_vol) !< gradient y in primitive variables 
+REAL,INTENT(IN )   :: gradPz_in(5,1:nTotal_vol) !< gradient z in primitive variables 
 #endif /*PARABOLIC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
-REAL,INTENT(OUT)   :: gtilde(PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
-REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(5,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(5,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(5,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                :: f(5),g(5),h(5)                 ! Cartesian fluxes (iVar)
@@ -417,10 +417,10 @@ USE MOD_DG_Vars       ,ONLY:nTotal_face
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)     :: U_Face(     PP_nVar,nTotal_face)    !< state in conservative variables on surface points 
-REAL,INTENT(IN)     :: gradPx_Face(PP_nVar,nTotal_face)    !< x gradient of state 
-REAL,INTENT(IN)     :: gradPy_Face(PP_nVar,nTotal_face)    !< y gradient of state 
-REAL,INTENT(IN)     :: gradPz_Face(PP_nVar,nTotal_face)    !< z gradient of state 
+REAL,INTENT(IN)     :: U_Face(     5,nTotal_face)    !< state in conservative variables on surface points 
+REAL,INTENT(IN)     :: gradPx_Face(5,nTotal_face)    !< x gradient of state 
+REAL,INTENT(IN)     :: gradPy_Face(5,nTotal_face)    !< y gradient of state 
+REAL,INTENT(IN)     :: gradPz_Face(5,nTotal_face)    !< z gradient of state 
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES

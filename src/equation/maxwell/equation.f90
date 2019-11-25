@@ -1,4 +1,5 @@
 !==================================================================================================================================
+! Copyright (c) 2016 - 2017 Philip Ortwein
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
@@ -64,13 +65,15 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("Equation")
-CALL prms%CreateRealArrayOption('WaveSpeed',    "Wave speeds for the Maxwell equations.")
-CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in Maxwell's.")
-CALL prms%CreateRealArrayOption('c_r'," Damping constant for the GLM divergence cleaning.","0.18")
-CALL prms%CreateRealArrayOption('c_corr'," Wave speed for GLM divergence cleaning.","1.0")
+CALL prms%CreateRealOption('c_r'," Damping constant for the GLM divergence cleaning.","0.18")
+CALL prms%CreateRealOption('c_corr'," Wave speed for GLM divergence cleaning.","1.0")
 CALL prms%CreateIntOption(     'AlphaShape',  " Constant for the shape function.","2")
-CALL prms%CreateRealArrayOption('r_cutoff'," Constant for cutoff of shape function.","1.")
+CALL prms%CreateRealOption('r_cutoff'," Constant for cutoff of shape function.","1.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization.")
+CALL prms%CreateRealOption('c0','light speed','1.')
+CALL prms%CreateRealOption('eps','permetivitty in free vacuum','1.')
+CALL prms%CreateRealOption('mu','permability', '1.')
+CALL prms%CreateRealOption('centralflux','0.: upwind, 1.: central','0.')  
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
@@ -110,12 +113,21 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MAXWELL ...'
 doCalcSource=.TRUE.
 ! Read correction velocity
-scr            = 1./ GETREAL('c_r','0.18')  !constant for damping
-c_corr             = GETREAL('c_corr','1.')
+scr       = 1./ GETREAL('c_r','0.18')  !constant for damping
+c         = GETREAL('c0','1.')
+eps0      = GETREAL('eps','1.')
+mu0       = GETREAL('mu','1.')
+smu0      = 1./mu0
+c2        = c*c 
+c_inv     = 1./c
+c2_inv    = 1./c2
+c_corr    = GETREAL('c_corr','1.')
 c_corr2   = c_corr*c_corr
 c_corr_c  = c_corr*c 
 c_corr_c2 = c_corr*c2
 eta_c     = (c_corr-1.)*c
+
+centralFlux = GETREAL('centralFlux','0.')
 
 ! Read in boundary parameters
 IniExactFunc = GETINT('IniExactFunc')
@@ -142,10 +154,10 @@ ShapeFuncPrefix = 1/(2 * beta(1.5, alpha_shape + 1.) * alpha_shape + 2 * beta(1.
 WhichVolumeFlux = GETINT('VolumeFlux','0')
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: central flux 0.5(m_l*F_l+m_r*F_r) ==> standard GL-DGSEM'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: central flux with metric dealiasing: 0.5(m_l+m_r)*(0.5(F_l+F_r)'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
@@ -541,15 +553,15 @@ CASE(10) !issautier 3D test case with source (Stock et al., divcorr paper), doma
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N  
       x(:)=Elem_xGP(:,i,j,k,iElem)
-      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(1)*SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3))
-      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(2)*SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1))
-      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(3)*SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2))
-      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(1))*(SIN(PP_Pi*x(2))+SIN(PP_Pi*x(3)))
-      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(2))*(SIN(PP_Pi*x(3))+SIN(PP_Pi*x(1)))
-      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem) - (COS(tIn)-1.)*PP_Pi*COS(PP_Pi*x(3))*(SIN(PP_Pi*x(1))+SIN(PP_Pi*x(2)))
-      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem) + c_corr*SIN(tIn)*( SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3)) &
-                                                              +SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1)) &
-                                                              +SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2)) )
+      Ut(1,i,j,k,iElem) =Ut(1,i,j,k,iElem)  + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(1)*SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3)) &
+                                            - (COS(tIn)-1.)        *PP_Pi*COS(PP_Pi*x(1))*(SIN(PP_Pi*x(2))+SIN(PP_Pi*x(3)))
+      Ut(2,i,j,k,iElem) =Ut(2,i,j,k,iElem)  + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(2)*SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1)) &
+                                            - (COS(tIn)-1.)        *PP_Pi*COS(PP_Pi*x(2))*(SIN(PP_Pi*x(3))+SIN(PP_Pi*x(1)))
+      Ut(3,i,j,k,iElem) =Ut(3,i,j,k,iElem)  + (COS(tIn)- (COS(tIn)-1.)*2*PP_Pi*PP_Pi)*x(3)*SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2)) &
+                                            - (COS(tIn)-1.)        *PP_Pi*COS(PP_Pi*x(3))*(SIN(PP_Pi*x(1))+SIN(PP_Pi*x(2)))
+      Ut(8,i,j,k,iElem) =Ut(8,i,j,k,iElem)  + c_corr*SIN(tIn)*( SIN(PP_Pi*x(2))*SIN(PP_Pi*x(3)) &
+                                                               +SIN(PP_Pi*x(3))*SIN(PP_Pi*x(1)) &
+                                                               +SIN(PP_Pi*x(1))*SIN(PP_Pi*x(2)) )
     END DO; END DO; END DO ! i,j,k
   END DO! iElem
 
@@ -589,8 +601,7 @@ FUNCTION beta(z,w)
 !   USE nr
    IMPLICIT NONE
    REAL beta, w, z
-!   beta = exp(gammln(z)+gammln(w)-gammln(z+w)) nr not used!! 
-   beta = 0.*z*w
+   beta = GAMMA(z)*GAMMA(w)/GAMMA(z+w)                                                                    
 END FUNCTION beta 
 
 

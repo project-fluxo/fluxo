@@ -84,11 +84,16 @@ OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
-OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
+
+IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
+  UNSET(FLUXO_PARABOLIC CACHE ) 
+ELSE()
+  OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
+ENDIF()
 
 SET(   FLUXO_TESTCASE   "default"      CACHE STRING
                         "Name of testcase which is used. Must be identical to directory name in testcase folder.")
@@ -228,8 +233,22 @@ IF (FLUXO_PARABOLIC)
   SET(FLUXO_PARABOLIC_LIFTING "br1" CACHE STRING "Lifting method used for PARABOLIC")
   SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING PROPERTY STRINGS ${LIFTINGS})
 
+  IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
+    LIST(APPEND LIFTING_VARS "cons_var")
+    LIST(APPEND LIFTING_VARS "prim_var")
+    LIST(APPEND LIFTING_VARS "entropy_var")
+  ENDIF()
+  IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
+    LIST(APPEND LIFTING_VARS "cons_var")
+  ENDIF()
+  IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
+    LIST(APPEND LIFTING_VARS "cons_var")
+    LIST(APPEND LIFTING_VARS "prim_var")
+    LIST(APPEND LIFTING_VARS "entropy_var")
+  ENDIF()
+
   SET(FLUXO_PARABOLIC_LIFTING_VAR "cons_var" CACHE STRING "variable used for BR1 lifting, cons/prim/entropy_var: conservative/primitive/entropy variables.")
-  SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING_VAR PROPERTY STRINGS cons_var prim_var entropy_var)
+  SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING_VAR PROPERTY STRINGS ${LIFTING_VARS} )
   IF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "cons_var")
     ADD_DEFINITIONS(-DPP_Lifting_Var=1)
   ELSEIF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "prim_var")
@@ -262,6 +281,7 @@ IF (FLUXO_PARABOLIC)
   ELSE()
     UNSET(FLUXO_EQN_VISCOSITY CACHE ) #if parabolic & not navierstokes
   ENDIF()
+
 ELSE()
   #if not parabolic
   UNSET(FLUXO_PARABOLIC_LIFTING_VAR CACHE )
