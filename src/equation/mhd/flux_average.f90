@@ -27,13 +27,13 @@ PRIVATE
 INTERFACE EvalAdvFluxAverage3D
   MODULE PROCEDURE EvalAdvFluxAverage3D
 END INTERFACE
+#endif /*PP_DiscType==2*/
 
 #if NONCONS
 INTERFACE AddNonConsFluxVec
   MODULE PROCEDURE AddNonConsFluxVec
 END INTERFACE
 #endif /*NONCONS*/
-#endif /*PP_DiscType==2*/
 
 INTERFACE StandardDGFlux
   MODULE PROCEDURE StandardDGFlux
@@ -173,6 +173,47 @@ CALL AddNonConsFluxTilde3D(U_in,Uaux,M_f,M_g,M_h,ftilde,gtilde,htilde)
 #endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage3D
+
+!==================================================================================================================================
+!> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
+!==================================================================================================================================
+PURE SUBROUTINE EvalUaux(Uin,Uaux)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars ,ONLY:nAuxVar
+USE MOD_Equation_Vars ,ONLY:kappaM1,KappaM2,s2mu_0
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: Uin
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(nAuxVar,1:nTotal_vol),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i 
+REAL                :: srho,vel(1:3),v2,B2
+!==================================================================================================================================
+DO i=1,nTotal_vol
+  ! auxiliary variables
+  srho = 1./Uin(1,i) 
+  vel  = Uin(2:4,i)*srho
+  v2   = SUM(vel*vel)
+  B2   = SUM(Uin(6:8,i)*Uin(6:8,i))
+  Uaux(1  ,i) = srho
+  Uaux(2:4,i) = vel
+  Uaux(6  ,i) = v2
+  Uaux(7  ,i)  =B2
+  Uaux(8  ,i)  =SUM(vel(:)*Uin(6:8,i)) ! v*B
+  !total pressure=gas pressure + magnetic pressure
+  Uaux(5  ,i)=kappaM1*(Uin(5,i) -0.5*Uin(1,i)*v2 &
+#ifdef PP_GLM
+                                   -s2mu_0*Uin(9,i)**2 &
+#endif /*PP_GLM*/
+                                   )-kappaM2*s2mu_0*B2 !p_t 
+END DO ! i
+END SUBROUTINE EvalUaux
 #endif /*PP_DiscType==2*/
 
 
@@ -300,48 +341,6 @@ REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: Fstar   !< added to flux
 
 END SUBROUTINE AddNonConsFluxVec
 #endif /*NONCONS*/
-
-!==================================================================================================================================
-!> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
-!==================================================================================================================================
-PURE SUBROUTINE EvalUaux(Uin,Uaux)
-! MODULES
-USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:nAuxVar
-USE MOD_Equation_Vars ,ONLY:kappaM1,KappaM2,s2mu_0
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: Uin
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,DIMENSION(nAuxVar,1:nTotal_vol),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER             :: i 
-REAL                :: srho,vel(1:3),v2,B2
-!==================================================================================================================================
-DO i=1,nTotal_vol
-  ! auxiliary variables
-  srho = 1./Uin(1,i) 
-  vel  = Uin(2:4,i)*srho
-  v2   = SUM(vel*vel)
-  B2   = SUM(Uin(6:8,i)*Uin(6:8,i))
-  Uaux(1  ,i) = srho
-  Uaux(2:4,i) = vel
-  Uaux(6  ,i) = v2
-  Uaux(7  ,i)  =B2
-  Uaux(8  ,i)  =SUM(vel(:)*Uin(6:8,i)) ! v*B
-  !total pressure=gas pressure + magnetic pressure
-  Uaux(5  ,i)=kappaM1*(Uin(5,i) -0.5*Uin(1,i)*v2 &
-#ifdef PP_GLM
-                                   -s2mu_0*Uin(9,i)**2 &
-#endif /*PP_GLM*/
-                                   )-kappaM2*s2mu_0*B2 !p_t 
-END DO ! i
-END SUBROUTINE EvalUaux
-
 
 !==================================================================================================================================
 !> Computes the standard flux in x-direction for the hyperbolic part ( normally used with a rotated state)
