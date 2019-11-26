@@ -23,13 +23,11 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 
-INTERFACE EvalEulerFluxTilde3D
-  MODULE PROCEDURE EvalEulerFluxTilde3D
+#if (PP_DiscType==2)
+INTERFACE EvalAdvFluxAverage3D
+  MODULE PROCEDURE EvalAdvFluxAverage3D
 END INTERFACE
-
-INTERFACE EvalUaux
-  MODULE PROCEDURE EvalUaux
-END INTERFACE
+#endif /*PP_DiscType==2*/
 
 INTERFACE StandardDGFlux
   MODULE PROCEDURE StandardDGFlux
@@ -120,8 +118,9 @@ INTERFACE LN_MEAN
 END INTERFACE
 
 
-PUBLIC:: EvalEulerFluxTilde3D
-PUBLIC:: EvalUaux
+#if (PP_DiscType==2)
+PUBLIC:: EvalAdvFluxAverage3D
+#endif /*PP_DiscType==2*/
 PUBLIC:: StandardDGFlux
 PUBLIC:: StandardDGFluxVec
 PUBLIC:: StandardDGFluxDealiasedMetricVec
@@ -146,146 +145,142 @@ PUBLIC:: GassnerWintersWalchFluxVec
 PUBLIC:: LN_MEAN
 
 !==================================================================================================================================
+! local definitions for inlining / optimizing routines, DEFAULT=-1: USE POINTER defined at runtime!
+#if PP_VolFlux==-1
+#  define PP_VolumeFluxAverageVec VolumeFluxAverageVec
+#elif PP_VolFlux==0
+#  define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#elif PP_VolFlux==1
+#  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
+#elif PP_VolFlux==2
+#  define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec1
+#elif PP_VolFlux==3
+#  define PP_VolumeFluxAverageVec DucrosFluxVec
+#elif PP_VolFlux==4
+#  define PP_VolumeFluxAverageVec MorinishiFluxVec
+#elif PP_VolFlux==5
+#  define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec
+#elif PP_VolFlux==6
+#  define PP_VolumeFluxAverageVec EntropyAndEnergyConservingFluxVec2
+#elif PP_VolFlux==7
+#  define PP_VolumeFluxAverageVec ggFluxVec
+#elif PP_VolFlux==8
+#  define PP_VolumeFluxAverageVec KennedyAndGruberFluxVec2
+#elif PP_VolFlux==9
+#  define PP_VolumeFluxAverageVec GassnerWintersWalchFluxVec
+#elif PP_VolFlux==10
+#  define PP_VolumeFluxAverageVec TwoPointEntropyConservingFluxVec
+#endif
+!==================================================================================================================================
 
 CONTAINS
 
+
+#if (PP_DiscType==2)
 !==================================================================================================================================
-!> Compute Euler fluxes using the conservative variables and derivatives for every volume Gauss point.
-!> directly apply metrics and output the tranformed flux 
+!> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !==================================================================================================================================
-SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
+SUBROUTINE EvalAdvFluxAverage3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-#ifdef OPTIMIZED
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+USE MOD_Equation_Vars  ,ONLY:nAuxVar
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN) :: iElem                              !< current element index in volint
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: U_in        !< solution
+REAL,DIMENSION(1:3      ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< metrics
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: ftilde(    5,0:PP_N,0:PP_N,0:PP_N) !< transformed flux f(iVar,i,j,k)
-REAL,INTENT(OUT)   :: gtilde(    5,0:PP_N,0:PP_N,0:PP_N) !< transformed flux g(iVar,i,j,k)
-REAL,INTENT(OUT)   :: htilde(    5,0:PP_N,0:PP_N,0:PP_N) !< transformed flux h(iVar,i,j,k)
-REAL,INTENT(OUT)   :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N) !< auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                :: f(5),g(5),h(5)                    !cartesi an fluxes 
-REAL                :: srho                              ! reciprocal values for density and the value of specific energy
-REAL                :: v1,v2,v3,v_2,p                    ! auxiliary variables
-INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
+REAL           :: Uaux(nAuxVar,  0:PP_N,0:PP_N,0:PP_N)  !auxiliary variables
+INTEGER        :: i,j,k,l
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
-  ASSOCIATE(rho   =>U(1,PP_IJK,iElem), &
-            rhov1 =>U(2,PP_IJK,iElem), &
-            rhov2 =>U(3,PP_IJK,iElem), &
-            rhov3 =>U(4,PP_IJK,iElem), &
-            rhoE  =>U(5,PP_IJK,iElem)  )
-  ! auxiliary variables
-  srho = 1./rho
-  v1   = rhov1*srho 
-  v2   = rhov2*srho 
-  v3   = rhov3*srho 
-  v_2  = v1*v1+v2*v2+v3*v3 
-  p    = kappaM1*(rhoE-0.5*rho*v_2)
-  Uaux(:,PP_IJK)=(/srho,v1,v2,v3,p,v_2/)
-  ! Euler part
-  ! Euler fluxes x-direction
-  f(1)=rhov1         
-  f(2)=rhov1*v1+p    
-  f(3)=rhov1*v2      
-  f(4)=rhov1*v3      
-  f(5)=(rhoE+p)*v1         
-  ! Euler fluxes y-direction
-  g(1)=rhov2
-  g(2)=f(3)                      ! rho*u*v
-  g(3)=rhov2*v2+p  
-  g(4)=rhov2*v3
-  g(5)=(rhoE+p)*v2 
-  ! Euler fluxes z-direction
-  h(1)=rhov3
-  h(2)=f(4)               ! rho*v1*v3
-  h(3)=g(4)               ! rho*v2*v3  
-  h(4)=rhov3*v3+p    
-  h(5)=(rhoE+p)*v3  
-  END ASSOCIATE !rho,rhov1,rhov2,rhov3,rhoE
-  !now transform fluxes to reference ftilde,gtilde,htilde
-  ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
-  gtilde(:,PP_IJK) =   f(:)*Metrics_gTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_gTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_gTilde(3,PP_IJK,iElem)
-  htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
 
-#ifdef OPTIMIZED
-END DO ! i
-#else /*OPTIMIZED*/
+
+!opt_v1
+CALL EvalUaux(U_in,Uaux)
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
+  DO l=i+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,l,j,k), &
+                                 Uaux(:,i,j,k),Uaux(:,l,j,k), &
+                                  M_f(:,i,j,k), M_f(:,l,j,k), &
+                             ftilde(:,l,i,j,k)                )
+    ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
+  END DO!l=i+1,N
 END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
-END SUBROUTINE EvalEulerFluxTilde3D
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
+  DO l=j+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,l,k), &
+                                 Uaux(:,i,j,k),Uaux(:,i,l,k), &
+                                  M_g(:,i,j,k), M_g(:,i,l,k), &
+                             gtilde(:,l,i,j,k)                )
+    gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
+  END DO!l=j+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
+  DO l=k+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,j,l), &
+                                 Uaux(:,i,j,k),Uaux(:,i,j,l), &
+                                  M_h(:,i,j,k), M_h(:,i,j,l), &
+                             htilde(:,l,i,j,k)                )
+    htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
+  END DO!l=k+1,N
+END DO; END DO; END DO ! i,j,k
 
+END SUBROUTINE EvalAdvFluxAverage3D
 
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2) from state U
 !==================================================================================================================================
-SUBROUTINE EvalUaux(iElem,Uaux)
+PURE SUBROUTINE EvalUaux(U_in,Uaux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
-#ifdef OPTIMIZED
-USE MOD_DG_Vars,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)  :: iElem                               !<current element in volint
+REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: U_in
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
+REAL,INTENT(OUT)    :: Uaux(nAuxVar,1:nTotal_vol)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
+REAL                :: srho,vel(1:3),v2
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
+DO i=1,nTotal_vol
   ! auxiliary variables
-  Uaux(1  ,PP_IJK) = 1./U(1,PP_IJK,iElem)
-  Uaux(2:4,PP_IJK) = Uaux(1,PP_IJK)*U(2:4,PP_IJK,iElem) 
-  Uaux(6  ,PP_IJK) = Uaux(2,PP_IJK)*Uaux(2,PP_IJK)+Uaux(3,PP_IJK)*Uaux(3,PP_IJK)+Uaux(4,PP_IJK)*Uaux(4,PP_IJK)
-  Uaux(5  ,PP_IJK)=kappaM1*(U(5,PP_IJK,iElem)-0.5*U(1,PP_IJK,iElem)*Uaux(6,PP_IJK))
-#ifdef OPTIMIZED
+  srho = 1./U_in(1,i) 
+  vel  = U_in(2:4,i)*srho
+  v2   = SUM(vel*vel)
+  Uaux(1  ,i) = srho
+  Uaux(2:4,i) = vel
+  Uaux(6  ,i) = v2
+  Uaux(5  ,i) = kappaM1*(U_in(5,i)-0.5*U_in(1,i)*v2)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
 END SUBROUTINE EvalUaux
-
+#endif /*PP_DiscType==2*/
 
 !==================================================================================================================================
 !> Computes the standard flux in x-direction for the Euler equations ( normally used with a rotated state)
 !==================================================================================================================================
-SUBROUTINE StandardDGFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE StandardDGFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -341,7 +336,7 @@ END SUBROUTINE StandardDGFlux
 !> Computes the standard DG euler flux transformed with the metrics 
 !> fstar=1/2((fL*metric1L+gL*metric2L+h*metric3L)+(fR*metric1R+gR*metric2R+h*metric3R)  )
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -393,7 +388,7 @@ END SUBROUTINE StandardDGFluxVec
 !> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 ) 
 !> where for curved metrics, metric=1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R, Fstar)
+PURE SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R, Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -447,7 +442,7 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 !==================================================================================================================================
 !> Computes the entropy conserving numerical 3D flux (in the normal direction) for the Euler equations derived by Ismail and Roe
 !==================================================================================================================================
-SUBROUTINE TwoPointEntropyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE TwoPointEntropyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,kappaP1
@@ -521,7 +516,7 @@ END SUBROUTINE TwoPointEntropyConservingFlux
 !> derived by Ismail and Roe
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE TwoPointEntropyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE TwoPointEntropyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -542,7 +537,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed flux
 ! LOCAL VARIABLES
 REAL                                :: z1L,z1R,z2L,z2R,z3L,z3R,z4L,z4R,z5L,z5R
 REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,z1LN,z2Mean,z5Mean
-REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat,rhoHat_HHat
+REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat
 REAL                                :: qHat
 REAL                                :: metric(3)
 !==================================================================================================================================
@@ -558,7 +553,6 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            VelV_L =>UauxL(3), VelV_R =>UauxR(3), &
            VelW_L =>UauxL(4), VelW_R =>UauxR(4), &
               p_L =>UauxL(5),    p_R =>UauxR(5)  )
-
 ! z1 = √(rho/pressure) values on left and right, arithmatic and logorithmic means
 z1L    = SQRT(rho_L/p_L)
 z1R    = SQRT(rho_R/p_R)
@@ -589,7 +583,7 @@ uHat   = z2Mean*sz1Mean
 vHat   = z3Mean*sz1Mean
 wHat   = z4Mean*sz1Mean
 p1Hat  = z5Mean*sz1Mean
-rhoHat_HHat   = 0.5*(kappaP1*sKappaM1*(z5LN/z1LN)+p1Hat + rhoHat*(uHat*uHat + vHat*vHat + wHat*wHat)) !=rhoHat*HHat
+!rhoHat_HHat   = 0.5*(kappaP1*sKappaM1*(z5LN/z1LN)+p1Hat + rhoHat*(uHat*uHat + vHat*vHat + wHat*wHat)) !=rhoHat*HHat
 
 qHat=uHat*metric(1)+vHat*metric(2)+wHat*metric(3)
 
@@ -598,7 +592,8 @@ Fstar(1) = rhoHat*qHat
 Fstar(2) = Fstar(1)*uHat + metric(1)*p1Hat
 Fstar(3) = Fstar(1)*vHat + metric(2)*p1Hat
 Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat
-Fstar(5) = rhoHat_HHat*qHat
+!Fstar(5) = rhoHat_HHat*qHat
+Fstar(5)  = 0.5*(qHat*kappaP1*sKappaM1*(z5LN/z1LN)+uHat*Fstar(2)+vHat*Fstar(3)+wHat*Fstar(4))
 
 !! Entropy conserving flux
 !Fstar(1) = rhoHat*uHat
@@ -627,7 +622,7 @@ END SUBROUTINE TwoPointEntropyConservingFluxVec
 !> Computes the skew-symmetric 3D flux (in the normal direction) of Kennedy and Gruber for the Euler equations
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !==================================================================================================================================
-SUBROUTINE KennedyAndGruberFlux1(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE KennedyAndGruberFlux1(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -678,7 +673,7 @@ END SUBROUTINE KennedyAndGruberFlux1
 !> derived by Kennedy and Gruber
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE KennedyAndGruberFluxVec1(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE KennedyAndGruberFluxVec1(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -757,7 +752,7 @@ END SUBROUTINE KennedyAndGruberFluxVec1
 !> Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !==================================================================================================================================
-SUBROUTINE KennedyAndGruberFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE KennedyAndGruberFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -804,7 +799,7 @@ END SUBROUTINE KennedyAndGruberFlux2
 !> Computes Pirozzoli's misinterpretation of Kennedy and Gruber flux for the Euler equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE KennedyAndGruberFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE KennedyAndGruberFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -884,7 +879,7 @@ END SUBROUTINE KennedyAndGruberFluxVec2
 !> derived by Ducros
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE DucrosFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE DucrosFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -933,7 +928,7 @@ END SUBROUTINE DucrosFlux
 !> Computes the skew-symmetric 3D flux (in the normal direction) of Ducros' flux for the Euler equations
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !==================================================================================================================================
-SUBROUTINE DucrosFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE DucrosFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1013,7 +1008,7 @@ END SUBROUTINE DucrosFluxVec
 !> Computes the skew-symmetric 3D flux (in the normal direction) of Morinishi flux for the Euler equations
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !==================================================================================================================================
-SUBROUTINE MorinishiFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE MorinishiFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,sKappaM1
@@ -1068,7 +1063,7 @@ END SUBROUTINE MorinishiFlux
 !> derived by Morinishi
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE MorinishiFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE MorinishiFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1161,10 +1156,10 @@ END SUBROUTINE MorinishiFluxVec
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !> TODO: could make it like EvalFlux3D and do every direction simutaneously
 !==================================================================================================================================
-SUBROUTINE EntropyAndEnergyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE EntropyAndEnergyConservingFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1
+USE MOD_Equation_Vars,ONLY:Kappa,kappaM1,skappaM1
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1193,8 +1188,6 @@ p_L    = kappaM1*(UL(5) - UL(1)*Vel2s2_L)
 p_R    = kappaM1*(UR(5) - UR(1)*Vel2s2_R)
 beta_L = 0.5*UL(1)/p_L
 beta_R = 0.5*UR(1)/p_R
-aHat   = 0.
-HHat   = 0.
 
 ! Get the averages for the numerical flux
 
@@ -1205,6 +1198,8 @@ beta_Hat  = LN_MEAN(beta_L,beta_R)
 uHat      = 0.5*(    VelU_L+VelU_R)
 vHat      = 0.5*(    VelV_L+VelV_R)
 wHat      = 0.5*(    VelW_L+VelW_R)
+aHat      = SQRT(Kappa*0.5*(p_L+p_R)/rhoHat)
+HHat      = Kappa/(2.*KappaM1*beta_hat) + 0.5*(velU_L*velU_R+velV_L*velV_R+velW_L*velW_R)
 p1Hat     = 0.5*rho_MEAN/beta_MEAN
 Vel2_M    = Vel2s2_L+Vel2s2_R
 
@@ -1224,7 +1219,7 @@ END SUBROUTINE EntropyAndEnergyConservingFlux
 !> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE EntropyAndEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1312,7 +1307,7 @@ END SUBROUTINE EntropyAndEnergyConservingFluxVec
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !> TODO: could make it like EvalFlux3D and do every direction simutaneously
 !==================================================================================================================================
-SUBROUTINE EntropyAndEnergyConservingFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE EntropyAndEnergyConservingFlux2(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,sKappaM1
@@ -1374,7 +1369,7 @@ END SUBROUTINE EntropyAndEnergyConservingFlux2
 !> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE EntropyAndEnergyConservingFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE EntropyAndEnergyConservingFluxVec2(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1460,7 +1455,7 @@ END SUBROUTINE EntropyAndEnergyConservingFluxVec2
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !> TODO: could make it like EvalFlux3D and do every direction simutaneously
 !==================================================================================================================================
-SUBROUTINE ggflux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE ggflux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1
@@ -1522,7 +1517,7 @@ END SUBROUTINE ggFlux
 !> (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE ggfluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE ggfluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1608,7 +1603,7 @@ END SUBROUTINE ggFluxVec
 !> Attention 1: Note that normal in this instance is always xHat, yHat, or zHat
 !> TODO: could make it like EvalFlux3D and do every direction simutaneously
 !==================================================================================================================================
-SUBROUTINE GassnerWintersWalchFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+PURE SUBROUTINE GassnerWintersWalchFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,sKappa
@@ -1671,7 +1666,7 @@ END SUBROUTINE GassnerWintersWalchFlux
 !> transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Euler equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE GassnerWintersWalchFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE GassnerWintersWalchFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -1762,15 +1757,16 @@ END SUBROUTINE GassnerWintersWalchFluxVec
 !>  (aR-aL)/Log(xi) = (aR+aL)*f/(2*f*(1 + 1/3 f^2 + 1/5 f^4 + 1/7 f^6)) = (aR+aL)/(2 + 2/3 f^2 + 2/5 f^4 + 2/7 f^6)
 !>  (aR-aL)/Log(xi) = 0.5*(aR+aL)*(105/ (105+35 f^2+ 21 f^4 + 15 f^6)
 !==================================================================================================================================
-REAL FUNCTION LN_MEAN(aL,aR)
+PURE FUNCTION LN_MEAN(aL,aR)
 ! MODULES
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL         :: aL  !< left value
-REAL         :: aR  !< right value
+REAL,INTENT(IN) :: aL  !< left value
+REAL,INTENT(IN) :: aR  !< right value
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT / OUTPUT VARIABLES
+REAL            :: LN_MEAN  !< result
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCaR VaLIABLES
 REAL           :: Xi,u
@@ -1782,5 +1778,7 @@ LN_MEAN=MERGE((aL+aR)*52.5d0/(105.d0 + u*(35.d0 + u*(21.d0 +u*15.d0))), & !u <ep
               (aR-aL)/LOG(Xi)                                         , & !u>=eps (test false)
               (u.LT.eps)                                              )   !test
 END FUNCTION LN_MEAN
+
+#undef PP_VolumeFluxAverageVec
 
 END MODULE MOD_Flux_Average

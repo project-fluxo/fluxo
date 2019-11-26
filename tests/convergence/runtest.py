@@ -31,7 +31,7 @@ import re
 sys.path.append('../')
 
 from helpers import copy2temporary, execute, modify_prm, read_prm
-from helpers import get_last_L2_error, get_last_Linf_error, get_cpu_per_dof,write_summarytable
+from helpers import get_last_L2_error, get_last_L2colloc_error, get_cpu_per_dof,write_summarytable
 
 ########################################################################################################
 
@@ -58,13 +58,25 @@ args.prm = copy2temporary(tmp_dir, args.prm)
 
 
 # this generates 3 meshes
-Degree = ['4','5','6']
+Degree    = ['2','3','4','5']
+startmesh = [ 2,  2 , 1 , 1 ]
+endmesh   = [ 6,  6 , 5 , 5 ]
+#Degree    = ['2']
+#startmesh = [ 1 ]
+#endmesh   = [ 2 ]
 nDegree=len(Degree) 
 Meshes = sorted(glob.glob('../meshes/*_mesh.h5'))
-#Meshes = [ '../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
-#          ,'../meshes/CartBoxPeriodic_04_04_04_mesh.h5'
-#          ,'../meshes/CartBoxPeriodic_08_08_08_mesh.h5'
-#          ,'../meshes/CartBoxPeriodic_16_16_16_mesh.h5'
+Meshes = [ '../meshes/CartBoxPeriodic_02_02_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_04_04_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_08_08_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_16_16_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_32_32_01_mesh.h5'
+          ,'../meshes/CartBoxPeriodic_64_64_01_mesh.h5'
+##---
+#         ,'../meshes/CartBoxPeriodic_02_02_02_mesh.h5'
+#         ,'../meshes/CartBoxPeriodic_04_04_04_mesh.h5'
+#         ,'../meshes/CartBoxPeriodic_08_08_08_mesh.h5'
+#         ,'../meshes/CartBoxPeriodic_16_16_16_mesh.h5'
 ##---
 #          ,'../meshes/ConformBoxTrilinear_02_02_02_mesh.h5'
 #          ,'../meshes/ConformBoxTrilinear_04_04_04_mesh.h5'
@@ -95,7 +107,11 @@ Meshes = sorted(glob.glob('../meshes/*_mesh.h5'))
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_02_mesh.h5'
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_04_mesh.h5'
 #          ,'../meshes/DeformedBoxMortarPeriodic_Ngeo_2_Level_08_mesh.h5'
-#         ]
+         ]
+
+# limit number of procs for small meshes, should have same size as Meshes array
+MeshesMaxProcs=[4,16,64,256,1024,4096]
+
 
 nMeshes=len(Meshes) 
 for m in range(0,nMeshes) :
@@ -115,16 +131,18 @@ summaryfilename = '../summary_'+projectname+'.csv'
 header=True
 # loop over meshes
 for i in range(0,nDegree) :
-  for m in range(0,nMeshes) :
+  for m in range(startmesh[i]-1,endmesh[i]) :
     print( "               ")
     print( "Degree: %s , Mesh: %s " % (Degree[i],Meshes[m]))
     print( "               ")
     meshname = re.sub('\_mesh\.h5','',os.path.basename(Meshes[m]))
 
+    nprocs = min([args.procs,MeshesMaxProcs[m]])
+
     projectnameX = projectname+'_Degree_'+Degree[i]+'_Mesh_'+meshname 
     modify_prm(args.prm, {'ProjectName' : projectnameX})
     print( "               ")
-    print( "%3i %3i === > ProjectName: %s" % (i,m,projectnameX))
+    print( "%3i %3i nprocs: %4i === > ProjectName: %s" % (i,m,nprocs,projectnameX))
     print( "               ")
     # modify parameters by replacing string
     #    args.prm = [w.replace('NEX',nElemsX[i] ) for w in args.prm] 
@@ -133,11 +151,14 @@ for i in range(0,nDegree) :
 
     # execute fluxo
     start_time = time.time()
+    if (m > startmesh[i]-1) :
+      L2_coarse=L2 
+      L2colloc_coarse=L2colloc
     try :
-      [L2,Linf,PID] = execute(args.exe, args.prm, projectnameX,\
-                              [get_last_L2_error, get_last_Linf_error, get_cpu_per_dof],\
+      [L2,L2colloc,PID] = execute(args.exe, args.prm, projectnameX,\
+                              [get_last_L2_error, get_last_L2colloc_error, get_cpu_per_dof],\
                               log = True, ntail = args.ntail ,\
-                              mpi_procs = args.procs )
+                              mpi_procs = nprocs )
     except :
       shutil.rmtree(tmp_dir)
       exit(1)
@@ -150,7 +171,11 @@ for i in range(0,nDegree) :
       for ivar in range(0,nVar) :
         summaryheader=summaryheader+( ", %10s%2i%-9s " % ("   L2(",ivar+1,")") )
       for ivar in range(0,nVar) :
-        summaryheader=summaryheader+( ", %10s%2i%-9s " % (" Linf(",ivar+1,")") )
+        summaryheader=summaryheader+( ", %10s%2i%-9s " % ("   EOC(L2(",ivar+1,"))") )
+      for ivar in range(0,nVar) :
+        summaryheader=summaryheader+( ", %10s%2i%-9s " % (" L2colloc(",ivar+1,")") )
+      for ivar in range(0,nVar) :
+        summaryheader=summaryheader+( ", %10s%2i%-9s " % ("EOC(L2colloc(",ivar+1,"))") )
       #summaryheader=summaryheader+( ", %8s   " % "PID" )
       summary=summaryheader
 
@@ -165,8 +190,24 @@ for i in range(0,nDegree) :
     summaryline=summaryline+( ", %45s " % meshname )
     for ivar in range(0,nVar) :
       summaryline=summaryline+(", %21.11e " % (L2[ivar]) )
+    if(m > startmesh[i]-1) :
+      for ivar in range(0,nVar) :
+        eoc = math.log(float(L2_coarse[ivar])/float(L2[ivar]))/math.log(2.0)
+        summaryline=summaryline+(", %21.4f " % (eoc) )
+    else :
+      for ivar in range(0,nVar) :
+        summaryline=summaryline+(", %21s " % ("---") )
     for ivar in range(0,nVar) :
-      summaryline=summaryline+(", %21.11e " % (Linf[ivar]) )
+      summaryline=summaryline+(", %21.11e " % (L2colloc[ivar]) )
+    if(m > startmesh[i]-1) :
+      for ivar in range(0,nVar) :
+        eoc = math.log(float(L2colloc_coarse[ivar])/float(L2colloc[ivar]))/math.log(2.0)
+        summaryline=summaryline+(", %21.4f " % (eoc) )
+    else :
+      for ivar in range(0,nVar) :
+        summaryline=summaryline+(", %21s " % ("---") )
+      
+    print( "...SUMMARY: %s" % summaryline)
 
     summary=summary+( "\n" )+summaryline
 

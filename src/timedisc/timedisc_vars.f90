@@ -47,6 +47,8 @@ REAL,ALLOCATABLE :: dtElem(:)                 !< Timestep for each element
 INTEGER          :: CurrentStage=1            !< Current Runge-Kutta stage within timestep
 INTEGER          :: nCalcTimeStepMax          !< Compute dt at least after every Nth timestep
 INTEGER(KIND=8)  :: maxIter                   !< Maximum permitted number of timesteps
+INTEGER          :: maxWCT                    !< Maximum wall-clock time, only checked after maxIter is reached, then if WCT<maxWCT,
+                                              !! maxIter is set such that wall-clock time will be reached.
 LOGICAL          :: fullBoundaryOrder=.FALSE. !< temporal order degradation, occuring for
                                               !< time-dependant BCs, can easily be fixed when
                                               !< using 3 stage 3rd order RK schemes (no others!)

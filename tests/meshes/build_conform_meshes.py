@@ -55,11 +55,15 @@ args.prm = copy2temporary(tmp_dir, args.prm)
 args.ntail = 20
 args.procs = 1
 
-
-# this generates 3 meshes
+# this generates 4 3D refinements meshes
 nElemsX = ['02','04','08','16' ]
 nElemsY = ['02','04','08','16' ]
 nElemsZ = ['02','04','08','16' ]
+
+#this generates 5 2D refinements
+#nElemsX = ['02','04','08','16' ,'32','64' ]
+#nElemsY = ['02','04','08','16' ,'32','64' ]
+#nElemsZ = ['01','01','01','01' ,'01','01' ]
 
 projectname = read_prm(args.prm,'ProjectName')
 

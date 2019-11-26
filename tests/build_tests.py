@@ -288,7 +288,7 @@ baseopts=[
 
 # relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-10" ])
+TEST.extend(["freestream","parameter_freestream_linadv.ini", "1.0e-12" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -409,21 +409,25 @@ if(cases[0]==0 or (caseID in cases)) :
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-caseID=caseID+1
-if(cases[0]==0 or (caseID in cases)) :
-   pname="build_linadv_type2_nopara"
-   print( "caseID: %d name: %s" % (caseID,pname) )
-
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"2"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
-           ])
-   
-   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+volfluxes=["-1","0","1"]
+for  vvv  in range(0,len(volfluxes)):
+  volflux=volfluxes[vvv]
+  caseID=caseID+1
+  if(cases[0]==0 or (caseID in cases)) :
+     pname="build_linadv_type2_nopara_volflux_"+volflux
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "CMAKE_BUILD_TYPE"       ,"Debug"
+              ,"FLUXO_DISCTYPE"         ,"2"
+              ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+              ,"FLUXO_PARABOLIC"        ,"OFF"
+              ,"FLUXO_EQN_VOLFLUX"      ,volflux
+             ])
+     
+     if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -439,7 +443,37 @@ baseopts=[
          ]
 # relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-# TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-10" ])
+TEST.extend(["freestream","parameter_freestream_maxwell.ini", "1.0e-12" ])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_release_maxwell_type1_GL"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_release_maxwell_type2"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -451,7 +485,6 @@ if(cases[0] ==0 or (caseID in cases)) :
              "CMAKE_BUILD_TYPE"       ,"Debug"
             ,"FLUXO_DISCTYPE"         ,"1"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
@@ -459,19 +492,37 @@ if(cases[0] ==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
-   pname="build_maxwell_type2"
+   pname="build_maxwell_type1_gauss"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"2"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS"
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+volfluxes=["-1","0","1"]
+for  vvv  in range(0,len(volfluxes)):
+  volflux=volfluxes[vvv]
+  caseID=caseID+1
+  if(cases[0] ==0 or (caseID in cases)) :
+     pname="build_maxwell_type2_volflux_"+volflux
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "CMAKE_BUILD_TYPE"       ,"Debug"
+              ,"FLUXO_DISCTYPE"         ,"2"
+              ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+              ,"FLUXO_EQN_VOLFLUX"      ,volflux
+             ])
+     
+     if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -511,6 +562,71 @@ if(cases[0] ==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_mhd_release_type2_noglm_noncons_br1entr_ecvolflux"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_EQN_GLM"          ,"OFF"
+            ,"FLUXO_EQN_NONCONS"      ,"ON"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
+            ,"FLUXO_EQN_VOLFLUX"      ,"10"
+            ,"FLUXO_TESTCASE"         ,"default"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_mhd_release_type2_glm_noncons_br1entr_testcase_mhdeq"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_EQN_GLM"          ,"ON"
+            ,"FLUXO_EQN_NONCONS"      ,"ON"
+            ,"FLUXO_EQN_NONCONS_GLM"  ,"ON"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
+            ,"FLUXO_EQN_VOLFLUX"      ,"12"
+            ,"FLUXO_TESTCASE"         ,"mhd_equilibrium"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_mhd_release_type2_noglm_noncons_ecflux_nopara_testcase_tgv"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"2"
+            ,"FLUXO_EQN_GLM"          ,"OFF"
+            ,"FLUXO_EQN_NONCONS"      ,"ON"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"OFF"
+            ,"FLUXO_EQN_VOLFLUX"      ,"10"
+            ,"FLUXO_TESTCASE"         ,"taylorgreenvortex"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
    pname="build_mhd_release_type1_Gauss_br2"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
@@ -531,7 +647,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
-   pname="build_mhd_release_type2_br2"
+   pname="build_mhd_release_type2_glm_no-noncons_br2cons"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -543,6 +659,7 @@ if(cases[0] ==0 or (caseID in cases)) :
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br2"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","cons_var"
             ,"FLUXO_TESTCASE"         ,"default"
            ])
    
@@ -551,7 +668,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-   pname="build_mhd_type2_br1"
+   pname="build_mhd_type2_glm_nonconsglmbrack_br1prim"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -560,9 +677,12 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_DISCTYPE"         ,"2"
             ,"FLUXO_EQN_GLM"          ,"ON"
             ,"FLUXO_EQN_NONCONS"      ,"ON"
+            ,"FLUXO_EQN_NONCONS_TYPE" ,"Brackbill"
+            ,"FLUXO_EQN_NONCONS_GLM"   ,"ON"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","prim_var"
             ,"FLUXO_TESTCASE"         ,"default"
            ])
    
@@ -571,7 +691,7 @@ if(cases[0]==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-   pname="build_mhd_type1_GL_br2"
+   pname="build_mhd_type1_GL_br2entr"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -583,6 +703,7 @@ if(cases[0]==0 or (caseID in cases)) :
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br2"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
             ,"FLUXO_TESTCASE"         ,"default"
            ])
    
@@ -591,7 +712,7 @@ if(cases[0]==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-   pname="build_mhd_type1_Gauss_br1"
+   pname="build_mhd_type1_Gauss_br1cons"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -633,14 +754,14 @@ if(cases[0]==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-   pname="build_mhd_type1_GL_br1_TCmhd_noGLM_anisodiff"
+   pname="build_mhd_type1_GL_br1_TCmhd_GLM_anisodiff"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
    options.extend([
              "CMAKE_BUILD_TYPE"       ,"Debug"
             ,"FLUXO_DISCTYPE"         ,"1"
-            ,"FLUXO_EQN_GLM"          ,"OFF"
+            ,"FLUXO_EQN_GLM"          ,"ON"
             ,"FLUXO_EQN_NONCONS"      ,"OFF"
             ,"FLUXO_EQN_ANISO_HEAT"   ,"ON"
             ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
@@ -674,24 +795,28 @@ if(cases[0]==0 or (caseID in cases)) :
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-caseID=caseID+1
-if(cases[0]==0 or (caseID in cases)) :
-   pname="build_mhd_type2_NONCONS_noGLM_nopara"
-   print( "caseID: %d name: %s" % (caseID,pname) )
-
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"2"
-            ,"FLUXO_EQN_GLM"          ,"OFF"
-            ,"FLUXO_EQN_NONCONS"      ,"ON"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
-            ,"FLUXO_TESTCASE"         ,"default"
-           ])
-   
-   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+volfluxes=["-1","0","10","12"]
+for  vvv  in range(0,len(volfluxes)):
+  volflux=volfluxes[vvv]
+  caseID=caseID+1
+  if(cases[0]==0 or (caseID in cases)) :
+     pname="build_mhd_type2_NONCONS_noGLM_nopara_volflux_"+volflux
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "CMAKE_BUILD_TYPE"       ,"Debug"
+              ,"FLUXO_DISCTYPE"         ,"2"
+              ,"FLUXO_EQN_GLM"          ,"OFF"
+              ,"FLUXO_EQN_NONCONS"      ,"ON"
+              ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+              ,"FLUXO_PARABOLIC"        ,"OFF"
+              ,"FLUXO_EQN_VOLFLUX"      ,volflux
+              ,"FLUXO_TESTCASE"         ,"default"
+             ])
+     
+     if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -746,7 +871,7 @@ baseopts=[
          ]
 # relative path from tests folder, parameterfile,Linf[0]<crit for success
 TEST=[]
-TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-10" ])
+TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-12" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
@@ -769,7 +894,7 @@ if(cases[0] ==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
-   pname="build_navierstokes_release_type2_br2"
+   pname="build_navierstokes_release_type2_br2_ecvolflux"
    print( "caseID: %d name: %s" % (caseID,pname) )
 
    options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -780,6 +905,7 @@ if(cases[0] ==0 or (caseID in cases)) :
             ,"FLUXO_PARABOLIC"        ,"ON"
             ,"FLUXO_PARABOLIC_LIFTING","br2"
             ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
+            ,"FLUXO_EQN_VOLFLUX"      ,"5"
             ,"FLUXO_TESTCASE"         ,"default"
            ])
    
@@ -876,23 +1002,28 @@ if(cases[0]==0 or (caseID in cases)) :
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-caseID=caseID+1
-if(cases[0]==0 or (caseID in cases)) :
-   pname="build_navierstokes_type2_nopara"
-   print( "caseID: %d name: %s" % (caseID,pname) )
 
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"2"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
-            ,"FLUXO_TESTCASE"         ,"default"
-           ])
-   
-   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+volfluxes=["-1","0","5","8"]
+for  vvv  in range(0,len(volfluxes)):
+  volflux=volfluxes[vvv]
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  caseID=caseID+1
+  if(cases[0]==0 or (caseID in cases)) :
+     pname="build_navierstokes_type2_nopara_volFlux_"+volflux
+     print( "caseID: %d name: %s" % (caseID,pname) )
+  
+     options=[]; options.extend(globopts) ; options.extend(baseopts)
+     options.extend([
+               "CMAKE_BUILD_TYPE"       ,"Debug"
+              ,"FLUXO_DISCTYPE"         ,"2"
+              ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+              ,"FLUXO_PARABOLIC"        ,"OFF"
+              ,"FLUXO_EQN_VOLFLUX"      ,volflux
+              ,"FLUXO_TESTCASE"         ,"default"
+             ])
+     
+     if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                            stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :

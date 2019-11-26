@@ -105,13 +105,37 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
 INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
-PROCEDURE(),POINTER :: SolveRiemannProblem      !< pointer to riemann solver routine (depends on WhichRiemannSolver)
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
 #endif /*PP_DiscType==2*/
+PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
+PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
+ABSTRACT INTERFACE
+  SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
+    REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsL !<  left conservative state  
+    REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsR !< right conservative state
+    REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
+  END SUBROUTINE i_sub_SolveRiemannProblem
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverage(UL,UR,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< central flux in x
+  END SUBROUTINE i_sub_VolumeFluxAverage
+
+  PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+    REAL,DIMENSION(8),INTENT(IN)        :: UauxL          !< left auxiliary variables
+    REAL,DIMENSION(8),INTENT(IN)        :: UauxR          !< right auxiliary variables
+    REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+    REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+  END SUBROUTINE i_sub_VolumeFluxAverageVec
+END INTERFACE
 
 INTERFACE ConsToPrim
   MODULE PROCEDURE ConsToPrim 
@@ -282,19 +306,24 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: p,v(3),v2,rho_sp,s
+REAL                                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
-v(:)   = cons(2:4)/cons(1)
-v2     = SUM(v*v)
-p      = KappaM1*(cons(5)-0.5*cons(1)*v2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))) ! includes psi^2 if PP_nVar=9
-s      = LOG(p) - kappa*LOG(cons(1))
-rho_sp = cons(1)/p
+srho   = 1./cons(1)
+u      = cons(2)*srho
+v      = cons(3)*srho
+w      = cons(4)*srho
+v2s2   = 0.5*(u*u+v*v+w*w)
+rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9
+!s      = LOG(p) - kappa*LOG(cons(1))
+s      = - LOG(rho_sp*(cons(1)**kappaM1))
 
 ! Convert to entropy variables
-entropy(1)         =  (kappa-s)*skappaM1 - 0.5*rho_sp*v2  !(kappa-s)/(kappa-1)-beta*|v|^2
-entropy(2:4)       =  rho_sp*v(:)                  ! 2*beta*v
-entropy(5)         = -rho_sp                       !-2*beta
-entropy(6:PP_nVar) =  rho_sp*cons(6:PP_nVar)       ! 2*beta*B +2*beta*psi
+entropy(1)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(2)         =  rho_sp*u                  ! 2*beta*u
+entropy(3)         =  rho_sp*v                  ! 2*beta*v
+entropy(4)         =  rho_sp*w                  ! 2*beta*w
+entropy(5)         = -rho_sp                    !-2*beta
+entropy(6:PP_nVar) =  rho_sp*cons(6:PP_nVar)    ! 2*beta*B +2*beta*psi
 
 END FUNCTION ConsToEntropy
 
@@ -314,9 +343,25 @@ REAL,INTENT(OUT)    :: Entropy(PP_nVar,dim2) !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
+REAL                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
 DO i=1,dim2
-  Entropy(:,i)=ConsToEntropy(Cons(:,i))
+  srho   = 1./cons(1,i)
+  u      = cons(2,i)*srho
+  v      = cons(3,i)*srho
+  w      = cons(4,i)*srho
+  v2s2   = 0.5*(u*u+v*v+w*w)
+  rho_sp = cons(1,i)/(KappaM1*(cons(5,i)-cons(1,i)*v2s2-s2mu_0*SUM(cons(6:PP_nVar,i)*cons(6:PP_nVar,i)))) ! pressure includes psi^2 if PP_nVar=9
+  !s      = LOG(p) - kappa*LOG(cons(1))
+  s      = - LOG(rho_sp*(cons(1,i)**kappaM1))
+  
+  ! Convert to entropy variables
+  entropy(1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+  entropy(2,i)         =  rho_sp*u                  ! 2*beta*u
+  entropy(3,i)         =  rho_sp*v                  ! 2*beta*v
+  entropy(4,i)         =  rho_sp*w                  ! 2*beta*w
+  entropy(5,i)         = -rho_sp                    !-2*beta
+  entropy(6:PP_nVar,i) =  rho_sp*cons(6:PP_nVar,i)    ! 2*beta*B +2*beta*psi
 END DO!i
 END SUBROUTINE ConsToEntropyVec
 
@@ -338,25 +383,31 @@ REAL                :: gradP(PP_nVar) !<  gradient of primitive variables (rho,v
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 #if (PP_Lifting_Var==1) 
-REAL  :: sRho,v(3),gradv(3)
+REAL  :: sRho,u,v,w,gradu,gradv,gradw
 #elif (PP_Lifting_Var==3) 
-REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
+REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho
 #endif /*PP_Lifting_Var*/
 !==================================================================================================================================
 
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
   sRho      = 1./cons(1)
-      v(:)  = cons(2:4)*sRho
-  gradv(:)  = sRho*(grad_in(2:4)-grad_in(1)*v(:))
+      u     = cons(2)*sRho
+      v     = cons(3)*sRho
+      w     = cons(4)*sRho
+  gradu     = sRho*(grad_in(2)-grad_in(1)*u)
+  gradv     = sRho*(grad_in(3)-grad_in(1)*v)
+  gradw     = sRho*(grad_in(4)-grad_in(1)*w)
   
   !density gradient
   gradP(1)  = grad_in(1)
   !velocity gradient
-  gradP(2:4)= gradv(:)
+  gradP(2)  = gradu
+  gradP(3)  = gradv
+  gradP(4)  = gradw
   !pressure gradient
   gradP(5)  = KappaM1*(grad_in(5)                                        & !gradE
-                       -(0.5*grad_in(1)*SUM(v*v) + SUM(cons(2:4)*gradv)) & !-grad_Ekin
+                       -(0.5*grad_in(1)*(u*u+v*v+w*w) + (cons(2)*gradu+cons(3)*gradv+cons(4)*gradw)) & !-grad_Ekin
                        - smu_0*SUM(cons(6:PP_nVar)*grad_in(6:PP_nVar))   ) !-grad_Emag
   !gradient of B,psi same in primitive
   gradP(6:PP_nVar)=grad_in(6:PP_nVar) 
@@ -370,18 +421,24 @@ REAL  :: sRho,v(3),gradv(3),Ekin,p,rho_sp,p_srho
   !gradient of (p/rho),  (p/rho)_x = -grad_in(5)
 
   sRho   = 1./cons(1)
-  v(:)   = cons(2:4)*sRho
-  Ekin   = 0.5*SUM(cons(2:4)*v)
+  u      = cons(2)*sRho
+  v      = cons(3)*sRho
+  w      = cons(4)*sRho
+  Ekin   = 0.5*(cons(2)*u+cons(3)*v+cons(4)*w)
   p      = KappaM1*(cons(5)-Ekin-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))) ! includes psi^2 if PP_nVar=9
   rho_sp = cons(1)/p
   p_srho = p * sRho
   
-  gradv  = p_sRho * (grad_in(2:4) +v(:)*grad_in(5))
+  gradu  = p_sRho * (grad_in(2) +u*grad_in(5))
+  gradv  = p_sRho * (grad_in(3) +v*grad_in(5))
+  gradw  = p_sRho * (grad_in(4) +w*grad_in(5))
   
   !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
-  gradP(1)  = cons(1)*grad_in(1) - grad_in(5)*(Ekin -p*sKappaM1) + rho_sp*SUM(cons(2:4)*gradv(:))
+  gradP(1)  = cons(1)*grad_in(1) - grad_in(5)*(Ekin -p*sKappaM1) + rho_sp*(cons(2)*gradu+cons(3)*gradv+cons(4)*gradw)
   !velocity gradient
-  gradP(2:4)= gradv(:)
+  gradP(2)  = gradu
+  gradP(3)  = gradv
+  gradP(4)  = gradw
   !pressure gradient, =1/(rho/p)*(rho_x-p*(rho/p)_x)
   gradP(5)  = p_srho * (gradP(1) + p *grad_in(5))
   !gradient of B,psi: 
@@ -406,9 +463,72 @@ REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  on intput: can be gradient of c
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
+#if (PP_Lifting_Var==1) 
+REAL  :: sRho,u,v,w,gradu,gradv,gradw,grad_in1,grad_in5
+#elif (PP_Lifting_Var==3) 
+REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho,grad_in1,grad_in5
+#endif /*PP_Lifting_Var*/
 !==================================================================================================================================
 DO i=1,dim2
-  gradP(:,i)=ConvertToGradPrim(cons(:,i),gradP(:,i))
+#if (PP_Lifting_Var==1) 
+  !grad_in is gradient of conservative variable
+  sRho      = 1./cons(1,i)
+      u     = cons(2,i)*sRho
+      v     = cons(3,i)*sRho
+      w     = cons(4,i)*sRho
+  grad_in1  = gradP(1,i)
+  gradu     = sRho*(gradP(2,i)-gradP(1,i)*u)
+  gradv     = sRho*(gradP(3,i)-gradP(1,i)*v)
+  gradw     = sRho*(gradP(4,i)-gradP(1,i)*w)
+  grad_in5  = gradP(5,i)
+  
+  !density gradient
+  !gradP(1,i)  = gradP(1,i)
+  !velocity gradient
+  gradP(2,i)  = gradu
+  gradP(3,i)  = gradv
+  gradP(4,i)  = gradw
+  !pressure gradient
+  gradP(5,i)  = KappaM1*(grad_in5                                        & !gradE
+                       -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(2,i)*gradu+cons(3,i)*gradv+cons(4,i)*gradw)) & !-grad_Ekin
+                       - smu_0*SUM(cons(6:PP_nVar,i)*gradP(6:PP_nVar,i))   ) !-grad_Emag
+  !gradient of B,psi same in primitive
+  !gradP(6:PP_nVar,i)=grad_P(6:PP_nVar,i) 
+#elif (PP_Lifting_Var==2) 
+  !grad_in is gradient of primitive variable, do nothing
+  gradP(:,i)=gradP(:,i)
+#elif (PP_Lifting_Var==3) 
+  !grad_in is gradient of entropy variable,  entropy variables are:
+  ! w(1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(2:4)=(rho/p)*v, w(5)=-(rho/p), w(6:8)=(rho/p)*B(:) , w(9)=(rho/p)*psi 
+
+  !gradient of (p/rho),  (p/rho)_x = -grad_in(5)
+
+  sRho   = 1./cons(1,i)
+  u      = cons(2,i)*sRho
+  v      = cons(3,i)*sRho
+  w      = cons(4,i)*sRho
+  Ekin   = 0.5*(cons(2,i)*u+cons(3,i)*v+cons(4,i)*w)
+  p      = KappaM1*(cons(5,i)-Ekin-s2mu_0*SUM(cons(6:PP_nVar,i)*cons(6:PP_nVar,i))) ! includes psi^2 if PP_nVar=9
+  rho_sp = cons(1,i)/p
+  p_srho = p * sRho
+  
+  grad_in1=gradP(1,i)
+  gradu  = p_sRho * (gradP(2,i) +u*gradP(5,i))
+  gradv  = p_sRho * (gradP(3,i) +v*gradP(5,i))
+  gradw  = p_sRho * (gradP(4,i) +w*gradP(5,i))
+  grad_in5=gradP(5,i)
+  
+  !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
+  gradP(1,i)  = cons(1,i)*grad_in1 - grad_in5*(Ekin -p*sKappaM1) + rho_sp*(cons(2,i)*gradu+cons(3,i)*gradv+cons(4,i)*gradw)
+  !velocity gradient
+  gradP(2,i)  = gradu
+  gradP(3,i)  = gradv
+  gradP(4,i)  = gradw
+  !pressure gradient, =1/(rho/p)*(rho_x-p*(rho/p)_x)
+  gradP(5,i)  = p_srho * (gradP(1,i) + p *grad_in5)
+  !gradient of B,psi: 
+  gradP(6:PP_nVar,i) = p_sRho * (gradP(6:PP_nVar,i) +cons(6:PP_nVar,i)*grad_in5)
+#endif /*PP_Lifting_Var*/
 END DO!i
 END SUBROUTINE ConvertToGradPrimVec
 #endif /*PARABOLIC*/

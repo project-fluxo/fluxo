@@ -101,6 +101,8 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"maxDivB"'
     A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"maxDivB_t"'
+    A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"max|[Bn]|"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"max|[Bt1]|"'
@@ -161,18 +163,20 @@ REAL,INTENT(IN)                 :: Time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)    :: formatStr
-REAL                 :: maxJumpB(3),maxDivB
+REAL                 :: maxJumpB(3),maxDivB,maxDivB_t
 REAL                 :: tmp(2),dSdU_Ut,CrossHel_t,maxAbs_vB 
 !==================================================================================================================================
 ! Calculate divergence 
 IF(doCalcDivergence)THEN
-  CALL CalcDivergence(maxDivB,maxJumpB)
+  CALL CalcDivergence(maxDivB,maxDivB_t,maxJumpB)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A21,',4,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)'maxdivB,maxJumpB  : ',maxDivB,maxJumpB(:)
+    WRITE(formatStr,'(A5,I1,A7)')'(A31,',5,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'max(divB,divB_t,[B](n,t1,t2)): ',maxDivB,maxDivB_t,maxJumpB(:)
     IF(doAnalyzeToFile)THEN
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=maxDivB
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=maxDivB_t
       A2F_Data(A2F_iVar+1:A2F_iVar+3)=maxJumpB(:)
       A2F_iVar=A2F_iVar+3
     END IF !doAnalyzeToFile
@@ -255,31 +259,50 @@ END SUBROUTINE AnalyzeEquation
 !==================================================================================================================================
 !> Calculates the maximum of the discrete divergence of the magnetic field and the maximum Jumps of B*n
 !==================================================================================================================================
-SUBROUTINE CalcDivergence(maxDivB,maxJumpB)
+SUBROUTINE CalcDivergence(maxDivB,maxDivB_t,maxJumpB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars      ,ONLY: nElems
 USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec,TangVec1,TangVec2
 USE MOD_Mesh_Vars      ,ONLY: ElemToSide,firstInnerSide,LastMPISide_MINE
-USE MOD_DG_Vars        ,ONLY: D,U,U_master,U_slave 
+USE MOD_DG_Vars        ,ONLY: D,U,Ut,U_master,U_slave 
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)                :: maxDivB
+REAL,INTENT(OUT)                :: maxDivB_t
 REAL,INTENT(OUT)                :: maxJumpB(3)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER :: i,j,k,l,iElem,SideID
 REAL    :: divB_loc,Btilde(3,0:PP_N,0:PP_N,0:PP_N)
 #if MPI
-REAL                            :: box(4)
+REAL                            :: box(5)
 #endif
 !==================================================================================================================================
+  maxDivB_t=-1.0e20
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
+      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
+      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
+    END DO; END DO; END DO ! i,j,k
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      divB_loc=0.
+      DO l=0,PP_N
+        divB_loc=divB_loc + D(i,l)*Btilde(1,l,j,k) + &
+                            D(j,l)*Btilde(2,i,l,k) + &
+                            D(k,l)*Btilde(3,i,j,l)
+      END DO ! l
+      divB_loc = sJ(i,j,k,iElem) * divB_loc 
+      maxDivB_t=MAX(maxDivB_t,ABS(divB_loc))
+  
+    END DO; END DO; END DO ! i,j,k
+  END DO ! iElem
   maxDivB=-1.0e20
-  maxJumpB=-1.0e20
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
@@ -298,6 +321,7 @@ REAL                            :: box(4)
   
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
+  maxJumpB=-1.0e20
   DO SideID=firstInnerSide,LastMPISide_MINE
     maxJumpB(1)=MAX(maxJumpB(1),  &
                  MAXVAL(ABS( NormVec(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
@@ -313,11 +337,12 @@ REAL                            :: box(4)
                             +TangVec2(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
   END DO !SideID
 #if MPI
-  Box=(/maxDivB,maxJumpB/)
+  Box=(/maxDivB,maxDivB_t,maxJumpB/)
   IF(MPIRoot)THEN
     CALL MPI_REDUCE(MPI_IN_PLACE,box,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-    maxDivB =Box(1)
-    maxJumpB=Box(2:4)
+    maxDivB   = Box(1)
+    maxDivB_t = Box(2)
+    maxJumpB  = Box(3:5)
   ELSE
     CALL MPI_REDUCE(Box         ,0  ,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   END IF
