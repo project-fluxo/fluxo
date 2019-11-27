@@ -85,7 +85,7 @@ OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
 
-SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
+SET(   FLUXO_EQNSYSNAME "mhd" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
@@ -234,20 +234,15 @@ IF (FLUXO_PARABOLIC)
   SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING PROPERTY STRINGS ${LIFTINGS})
 
   IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
+    LIST(APPEND LIFTING_VARS "entropy_var" "cons_var" "prim_var" )
+  ELSEIF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
     LIST(APPEND LIFTING_VARS "cons_var")
-    LIST(APPEND LIFTING_VARS "prim_var")
-    LIST(APPEND LIFTING_VARS "entropy_var")
+  ELSEIF(FLUXO_EQNSYSNAME STREQUAL "mhd")
+    LIST(APPEND LIFTING_VARS "entropy_var" "cons_var" "prim_var" )
   ENDIF()
-  IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
-    LIST(APPEND LIFTING_VARS "cons_var")
-  ENDIF()
-  IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
-    LIST(APPEND LIFTING_VARS "cons_var")
-    LIST(APPEND LIFTING_VARS "prim_var")
-    LIST(APPEND LIFTING_VARS "entropy_var")
-  ENDIF()
-
-  SET(FLUXO_PARABOLIC_LIFTING_VAR "cons_var" CACHE STRING "variable used for BR1 lifting, cons/prim/entropy_var: conservative/primitive/entropy variables.")
+  
+  LIST(GET LIFTING_VARS 0 LIFTVARDEF )
+  SET(FLUXO_PARABOLIC_LIFTING_VAR ${LIFTVARDEF} CACHE STRING "variable used for BR1 lifting, cons/prim/entropy_var: conservative/primitive/entropy variables.")
   SET_PROPERTY(CACHE FLUXO_PARABOLIC_LIFTING_VAR PROPERTY STRINGS ${LIFTING_VARS} )
   IF(FLUXO_PARABOLIC_LIFTING_VAR STREQUAL "cons_var")
     ADD_DEFINITIONS(-DPP_Lifting_Var=1)
@@ -297,7 +292,7 @@ ENDIF()
 # =========================================================================
 # make sure that the default is a RELEASE
 IF (NOT CMAKE_BUILD_TYPE)
-  SET (CMAKE_BUILD_TYPE Debug CACHE STRING
+  SET (CMAKE_BUILD_TYPE Release CACHE STRING
       "Choose the type of build, options are: Debug / Release / Profile."
       FORCE)
   SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile)

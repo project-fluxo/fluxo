@@ -38,7 +38,7 @@ PUBLIC::VolInt
 #elif (PP_DiscType==2)
 INTERFACE VolInt_Adv_SplitForm
   !optimized VolInt with general 4D flux array from flux_average.f90, only advection part!
-  MODULE PROCEDURE VolInt_Adv_SplitForm
+  MODULE PROCEDURE VolInt_SplitForm
 END INTERFACE
 
 PUBLIC::VolInt_Adv_SplitForm
@@ -116,7 +116,7 @@ END SUBROUTINE VolInt_weakForm
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut=0. and is updated with the volume flux derivatives
 !==================================================================================================================================
-SUBROUTINE VolInt_Adv_SplitForm(Ut)
+SUBROUTINE VolInt_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
@@ -155,7 +155,7 @@ DO iElem=1,nElems
     END DO ! l
   END DO; END DO; END DO ! i,j,k
 END DO ! iElem
-END SUBROUTINE VolInt_Adv_SplitForm
+END SUBROUTINE VolInt_SplitForm
 
 #if PARABOLIC
 !==================================================================================================================================
