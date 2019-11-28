@@ -188,7 +188,7 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
         dataquad = (p4est_inner_data_t *)side[0]->is.full.quad->p.user_data;
         dataquad->SidesID[which_face] = data->CurrentBCSide++;
         dataquad->flips[which_face] = 0;
-        
+        dataquad->weight++;
         return;
     }
 
@@ -218,7 +218,7 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *)quad->p.user_data;
                     dataquad->SidesID[SmallFace]=CurrentSide;
-
+                    dataquad->weight++;
                     if (dataquad->SidesID[SmallFace] <= 0)
                     {
                         printf("******************* ERROR!!! \n");
@@ -262,6 +262,7 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
                     int CurrentSide = data->CurrentMPIMortarSide++;
                     dataquad->SidesID[BigFace] = CurrentSide;
                     dataquad->flips[BigFace] = 0;
+                    dataquad0->weight += 4;
                 }
                 if (dataquad->SidesID[BigFace] <= 0)
                 {
@@ -306,7 +307,8 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
             
             dataquad0 = (p4est_inner_data_t *)side[0]->is.full.quad->p.user_data;
             dataquad1 = (p4est_inner_data_t *)side[1]->is.full.quad->p.user_data;
-            
+            dataquad0->weight++;
+            dataquad1->weight++;
             int opp_face0 = side[0]->face;
             int opp_face1 = side[1]->face;
             int flip = GetHFlip(opp_face0, opp_face1, orientation);
@@ -1388,17 +1390,7 @@ p4est_t *p4est_new_f(p4est_connectivity_t **conn)
                        NULL,                       /* initializes data function*/
                        NULL);                      /* context */
     int nElems = 0;
-    // p4est_fortran_data_t *p4est_fortran_data;
-    // p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
-
-    // p4est_fortran_data->nElems = 0;
-    // p4est_fortran_data->nSides = 0;
-    // p4est_fortran_data->nBCSides = 0;
-    // p4est_fortran_data->nMortarInnerSides = 0;
-    // p4est_fortran_data->nInnerSides = 0;
-    // p4est_fortran_data->nMPISides = 0;
-    // p4est_fortran_data->nMortarMPISides = 0;
-// #ifndef NON_OPTIMIZED
+ // #ifndef NON_OPTIMIZED
     p4est_iterate(p4,                     /* the forest */
                   NULL,                   /* the ghost layer May be LAter!!! */
                   (void *)&nElems,         /* the synchronized ghost data */
@@ -1898,8 +1890,7 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data)
                   (void *)SetSide_data, /* the synchronized ghost data */
                   NULL,                 /* callback to compute each quad's
                                              interior contribution to du/dt */
-                  SetSides_iter,        /* SidesCount_iter,            /* callback to compute each quads'
-                                             faces' contributions to du/du */
+                  SetSides_iter,        
                   NULL,                 /* there is no callback for the
                                              edges between quadrants */
                   NULL);                /* there is no callback for the
@@ -2162,6 +2153,18 @@ void ResetElementNumber(p4est_t *p4est)
     return;
 }
 
+// typedef void(* p4est_init_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
+
+// typedef int(* p4est_weight_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
+static int
+weight_fn(p4est_t *p4est,
+          p4est_topidx_t which_tree,
+          p4est_quadrant_t *quad)
+{
+        p4est_inner_data_t *dataquad = (p4est_inner_data_t *)quad->p.user_data;
+        return (int)dataquad->weight;
+}
+
 void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
 {
     // p4set_gloidx_t  *dest; // before
@@ -2178,7 +2181,8 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
     }
     data->src_gfq = (p4est_gloidx_t *) src;
     const int allow_coarsening=1;
-    p4est_partition(p4est, allow_coarsening, NULL);
+    // p4est_partition(p4est, allow_coarsening, NULL);
+    p4est_partition(p4est, allow_coarsening, weight_fn);
     // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
     data->nElems = p4est->local_num_quadrants;
     // printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);

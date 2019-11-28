@@ -47,7 +47,8 @@ typedef struct p4est_inner_data
     int OldElementID[8];
     int ElementID;
     int SidesID[6];
-    int8_t flips[6];
+    uint8_t flips[6];
+    uint8_t weight;
 #ifndef NON_OPTIMIZED
     int OldSidesID[6];
     int8_t SidesRatio[6];// 0 = Sides the same. -1 = Side is smaller as the NB. +1 = Side is Bigger as NB

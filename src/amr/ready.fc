@@ -21,8 +21,8 @@ ElementCounterSetOldToZero_iter(p4est_iter_volume_info_t *info, void *user_data)
     int i;
     //ElementID must be set in previous function (for example getData444)
 
-
-    for (i = 0; i < 8; i++)
+    dataquad->weight = 0;
+    for (i = 1; i < 8; i++)
     {
         dataquad->OldElementID[i] = 0;
     }
@@ -48,6 +48,7 @@ ElementCounter_iter(p4est_iter_volume_info_t *info, void *user_data)
     int i;
     //ElementID must be set in previous function (for example getData444)
     dataquad->ElementID = ++data->nElems;
+    dataquad->weight = 0;
 #ifndef NON_OPTIMIZED
     dataquad->IsChanged=0;
 #endif
@@ -72,7 +73,7 @@ ElementCounterNew_iter(p4est_iter_volume_info_t *info, void *user_data)
     int *nElems = (int *)user_data;
     int i;
     dataquad->ElementID = ++(*nElems);
-    
+    dataquad->weight = 0;
     for (i = 0; i < 8; i++)
     {
         dataquad->OldElementID[i]=0;
@@ -124,7 +125,7 @@ int p4est_init_f(int mpicomm1)
 
 void p4est_finalize()
 {
-      sc_finalize ();
+      sc_finalize();
 
 }
 
