@@ -2164,23 +2164,62 @@ typedef struct p4est_Weights
 
 } p4est_Weights_t;
 
+
+static void
+WeightsFunctionIter(p4est_iter_volume_info_t *info, void *user_data)
+{
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
+    p4est_Weights_t *WeightStruct = (int8_t *)user_data;
+    WeightStruct->Weights[WeightStruct->index] = dataquad->weight;
+    ++WeightStruct->index;
+    return;
+}
+
+
 static int
 weight_fn(p4est_t *p4est,
           p4est_topidx_t which_tree,
           p4est_quadrant_t *quad)
-{
-        p4est_inner_data_t *dataquad = (p4est_inner_data_t *)quad->p.user_data;
-        return (int)dataquad->weight;
+{   
+ 
+        p4est_Weights_t *WeightStruct = (p4est_Weights_t*)p4est->user_pointer;
+        int8_t Weight = WeightStruct->Weights[WeightStruct->index];
+         ++WeightStruct->index; 
+         return Weight;
 }
 
+// static int
+// weight_fn(p4est_t *p4est,
+//           p4est_topidx_t which_tree,
+//           p4est_quadrant_t *quad)
+// {
+//         p4est_inner_data_t *dataquad = (p4est_inner_data_t *)quad->p.user_data;
+//         return (int)dataquad->weight;
+// }
+
+пш
 void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
 {
     // p4set_gloidx_t  *dest; // before
     // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
     p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
     p4est_gloidx_t * src = nullptr; //(p4set_gloidx_t  *)desptr; // after
-     p4est_reset_data(p4est, 0, NULL, NULL);
+     p4est_Weights_t WeightStruct;
+     WeightStruct.index = 0; 
+    WeightStruct.Weights = (int8_t*)malloc(p4est->local_num_quadrants*sizeof(int8_t));
+    
+    p4est_iterate(p4est, 
+        NULL,                           
+        (void*)&WeightStruct,                             
+        WeightsFunctionIter,
+        // ElementCounterSetOldToZero_iter, 
+        NULL,
+        NULL,                            
+        NULL);
     src = (p4est_gloidx_t *)malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
+    
+    p4est_reset_data(p4est, 0, NULL, NULL);
     int i;
     for (i = 0; i <=p4est->mpisize; ++i)
     { 
@@ -2188,14 +2227,42 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
         
     }
     data->src_gfq = (p4est_gloidx_t *) src;
+    p4est->user_pointer = (void*) &WeightStruct;
+     WeightStruct.index = 0; 
     const int allow_coarsening=1;
-     p4est_partition(p4est, allow_coarsening, NULL);
-    //p4est_partition(p4est, allow_coarsening, weight_fn);
+    // p4est_partition(p4est, allow_coarsening, NULL);
+    p4est_partition(p4est, allow_coarsening, weight_fn);
+   p4est->user_pointer = nullptr;
     // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
     data->nElems = p4est->local_num_quadrants;
+    free(WeightStruct.Weights);
     // printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);
     return;
 }
+
+// void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
+// {
+//     // p4set_gloidx_t  *dest; // before
+//     // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
+//     p4est_balance_datav2_t *data = (p4est_balance_datav2_t *)user_pointer;
+//     p4est_gloidx_t * src = nullptr; //(p4set_gloidx_t  *)desptr; // after
+//      p4est_reset_data(p4est, 0, NULL, NULL);
+//     src = (p4est_gloidx_t *)malloc((p4est->mpisize+1)*sizeof(p4est_gloidx_t));
+//     int i;
+//     for (i = 0; i <=p4est->mpisize; ++i)
+//     { 
+//         src[i] = p4est->global_first_quadrant[i];
+        
+//     }
+//     data->src_gfq = (p4est_gloidx_t *) src;
+//     const int allow_coarsening=1;
+//      p4est_partition(p4est, allow_coarsening, NULL);
+//     //p4est_partition(p4est, allow_coarsening, weight_fn);
+//     // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
+//     data->nElems = p4est->local_num_quadrants;
+//     // printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);
+//     return;
+// }
 
 void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer)
 { 
