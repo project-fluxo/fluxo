@@ -39,8 +39,8 @@ SUBROUTINE ShockCapturingAMR()
   INTEGER               :: iXMax(3), iXMin(3)
   LOGICAL :: doBalance = .TRUE.
 
-MaxLevel = 1;
-MinLevel = 1;
+MaxLevel = 4;
+MinLevel = 2;
 
 !MaxLevel = 3;
 
@@ -109,6 +109,8 @@ DO l=1,nElems
   !for N=5
   !eta_min = -25.5
   !eta_max = -17.7
+  !eta_min = -8.
+  !eta_max = -6.99
   
   !eta_min = 0.0001/250.
   !eta_max = 0.1/100.
@@ -137,10 +139,10 @@ ENDDO
  !   ENDIF
 !ENDDO
 ! PRINT *, "RunAMRs"
-ElemToRefineAndCoarse = 0
-IF (MPIRoot) THEN
-  ElemToRefineAndCoarse(1) = 2
-ENDIF
+!ElemToRefineAndCoarse = 0
+!IF (MPIRoot) THEN
+!  ElemToRefineAndCoarse(1) = 2
+!ENDIF
 CALL RunAMR(ElemToRefineAndCoarse);
 ! CALL RunAMR(ElemToRefineAndCoarse);
 ! IF (MPIRoot) THEN
@@ -148,13 +150,13 @@ CALL RunAMR(ElemToRefineAndCoarse);
 ! ENDIF
 Deallocate(ElemToRefineAndCoarse)
 doLBalance = doLBalance+1
-IF (doLBalance .EQ. 2) THEN
+IF (doLBalance .EQ. 1) THEN
     doLBalance = 0;
     ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
     ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems
     IF (doBalance) CALL LoadBalancingAMR()
     IF (MPIRoot) THEN
-        print *, "LoadBalance: Done!"
+        print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
     ENDIF
 ENDIF
 

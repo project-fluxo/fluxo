@@ -2156,6 +2156,14 @@ void ResetElementNumber(p4est_t *p4est)
 // typedef void(* p4est_init_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
 
 // typedef int(* p4est_weight_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
+
+typedef struct p4est_Weights
+{   
+    int index;
+    int8_t *Weights; // SideInfo in HDF5
+
+} p4est_Weights_t;
+
 static int
 weight_fn(p4est_t *p4est,
           p4est_topidx_t which_tree,
@@ -2181,8 +2189,8 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
     }
     data->src_gfq = (p4est_gloidx_t *) src;
     const int allow_coarsening=1;
-    // p4est_partition(p4est, allow_coarsening, NULL);
-    p4est_partition(p4est, allow_coarsening, weight_fn);
+     p4est_partition(p4est, allow_coarsening, NULL);
+    //p4est_partition(p4est, allow_coarsening, weight_fn);
     // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
     data->nElems = p4est->local_num_quadrants;
     // printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);
