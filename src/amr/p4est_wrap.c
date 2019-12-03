@@ -2170,7 +2170,7 @@ WeightsFunctionIter(p4est_iter_volume_info_t *info, void *user_data)
 {
     p4est_quadrant_t *q = info->quad;
     p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
-    p4est_Weights_t *WeightStruct = (int8_t *)user_data;
+    p4est_Weights_t *WeightStruct = (p4est_Weights_t *)user_data;
     WeightStruct->Weights[WeightStruct->index] = dataquad->weight;
     ++WeightStruct->index;
     return;
