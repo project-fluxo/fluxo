@@ -2198,7 +2198,7 @@ weight_fn(p4est_t *p4est,
 //         return (int)dataquad->weight;
 // }
 
-пш
+
 void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
 {
     // p4set_gloidx_t  *dest; // before
