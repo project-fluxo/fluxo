@@ -104,11 +104,13 @@ DO l=1,nElems
   ! eta_min = -9.0
   !eta_max = -3.0
   ! for N-4
-   eta_min = -13.5
-  eta_max = -12.7
+ ! eta_min = -13.5
+  !eta_max = -12.7
+!  eta_min = -14.5
+!  eta_max = -11.7
   !for N=5
-  !eta_min = -25.5
-  !eta_max = -17.7
+  eta_min = -15.5
+  eta_max = -10.0
   !eta_min = -8.
   !eta_max = -6.99
   

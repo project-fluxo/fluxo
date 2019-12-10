@@ -11,6 +11,7 @@
 
 #define nullptr ((void*)0)
 #define NON_OPTIMIZED
+#define MORTAR_SIDE_WEIGHT 4
 static sc_MPI_Comm mpicomm;
  
 

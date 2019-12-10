@@ -244,6 +244,7 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
                 dataquad = (p4est_inner_data_t *)quad->p.user_data;
                 dataquad->SidesID[BigFace] = CurrentSide;
                 dataquad->flips[BigFace] = 0;
+                dataquad->weight += MORTAR_SIDE_WEIGHT;
                 
                 if (dataquad->SidesID[BigFace] <= 0)
                 {
@@ -262,7 +263,7 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data)
                     int CurrentSide = data->CurrentMPIMortarSide++;
                     dataquad->SidesID[BigFace] = CurrentSide;
                     dataquad->flips[BigFace] = 0;
-                    dataquad0->weight += 4;
+                    //dataquad->weight += MORTAR_SIDE_WEIGHT;
                 }
                 if (dataquad->SidesID[BigFace] <= 0)
                 {
@@ -2186,6 +2187,7 @@ weight_fn(p4est_t *p4est,
         p4est_Weights_t *WeightStruct = (p4est_Weights_t*)p4est->user_pointer;
         int8_t Weight = WeightStruct->Weights[WeightStruct->index];
          ++WeightStruct->index; 
+	return 0;
          return Weight;
 }
 
