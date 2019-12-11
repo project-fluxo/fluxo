@@ -13,13 +13,12 @@
 #define NON_OPTIMIZED
 #define MORTAR_SIDE_WEIGHT 16
 static sc_MPI_Comm mpicomm;
- 
+
 
 void pfree(void *A);
 
 // The Data to save Mesh in HOPR file
-typedef struct p4est_savef_data
-{   
+typedef struct p4est_savef_data {
     int nGlobalSides;
     int nLocalSides;
     int nSidesArrIndex;
@@ -30,8 +29,7 @@ typedef struct p4est_savef_data
 
 } p4est_savef_data_t;
 
-typedef struct savemesh_inner_data
-{
+typedef struct savemesh_inner_data {
 
     // int OldElementID[8];
     int ElementID;
@@ -40,10 +38,9 @@ typedef struct savemesh_inner_data
     int MortarSides[6][4];
     int nbElementID[6][4];
     // int8_t CoarsedRefined;
-}savemesh_inner_data_t;
+} savemesh_inner_data_t;
 
-typedef struct p4est_inner_data
-{
+typedef struct p4est_inner_data {
 
     int OldElementID[8];
     int ElementID;
@@ -54,11 +51,10 @@ typedef struct p4est_inner_data
     int OldSidesID[6];
     int8_t SidesRatio[6];// 0 = Sides the same. -1 = Side is smaller as the NB. +1 = Side is Bigger as NB
     int8_t IsChanged;
-#endif   
+#endif
 } p4est_inner_data_t;
 
-typedef struct p4est_balance_data
-{
+typedef struct p4est_balance_data {
 
     int nVar;
     int PP_N;
@@ -70,8 +66,7 @@ typedef struct p4est_balance_data
 } p4est_balance_data_t;
 
 
-typedef struct p4est_balance_datav2
-{
+typedef struct p4est_balance_datav2 {
     int DataSize; //DataSize of 1 Elem
     int GPSize; //DataSize of 1 ElemxGP
     int nElems;// Number of new elements
@@ -82,20 +77,18 @@ typedef struct p4est_balance_datav2
     void *U_old; // old U 
 } p4est_balance_datav2_t;
 
-typedef struct p4est_mpi_data
-{
+typedef struct p4est_mpi_data {
 
     int mpisize;
     int mpirank;
     p4est_locidx_t local_num_quad;
     p4est_gloidx_t global_num_quad;
     p4est_gloidx_t *offsetMPI; // size [mpisize+1] p4est_gloidx_t     *global_first_quadrant; /**< first global quadrant index
-                                                  //for                                                      each process and 1 beyond * /
+    //for                                                      each process and 1 beyond * /
     // int8_t CoarsedRefined;
 } p4est_mpi_data_t;
 
-typedef struct p4est_fortran_data
-{
+typedef struct p4est_fortran_data {
     int nGlobalElems;
     int nElems;
     int nSides;
@@ -128,8 +121,7 @@ typedef struct p4est_fortran_data
 } p4est_fortran_data_t;
 
 //Auxilary data for Set MPI Sides
-typedef struct p4est_SetMPISide_data
-{   
+typedef struct p4est_SetMPISide_data {
     int nNBProcs;
     int *nNbProc; //ALLOCATE(NbProc(nNbProcs),nMPISides_Proc(1:nNbProcs))
     int *nMPISides_Proc;
@@ -149,14 +141,12 @@ typedef struct p4est_SetMPISide_data
 } p4est_SetMPISide_data_t;
 
 //Auxilary COMMON data 
-typedef struct p4est_aux_data
-{  
-    
+typedef struct p4est_aux_data {
+
     void *tmp[9]; //Only void ptr are used to pass data to the function
 } p4est_aux_data_t;
 
-typedef struct p4est_SetSide_data
-{
+typedef struct p4est_SetSide_data {
     int CurrentBCSide;
     int CurrentMortrarInnerSide;
     int CurrentInnerSide;
@@ -170,6 +160,7 @@ typedef struct p4est_SetSide_data
 } p4est_SetSide_data_t;
 
 void free_data_memory(void *N);
+
 void free_balance_memory(void *N);
 
 #endif /* P4FLUXO_H */

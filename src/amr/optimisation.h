@@ -3,6 +3,7 @@
 
 #include <p8est_extended.h>
 #include <p4est_to_p8est.h>
+
 ///////////////////////////#include <p4est_to_p8est.h>////////////////////////////////////////////////////
 //
 // optimize mortars: search for mortars being fully MPI_MINE and add them to innerMortars
