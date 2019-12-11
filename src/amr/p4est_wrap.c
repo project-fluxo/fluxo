@@ -2187,7 +2187,7 @@ weight_fn(p4est_t *p4est,
         p4est_Weights_t *WeightStruct = (p4est_Weights_t*)p4est->user_pointer;
         int8_t Weight = WeightStruct->Weights[WeightStruct->index];
          ++WeightStruct->index; 
-	return 0;
+//	return 1;
          return Weight;
 }
 
@@ -2232,7 +2232,7 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer)
     p4est->user_pointer = (void*) &WeightStruct;
      WeightStruct.index = 0; 
     const int allow_coarsening=1;
-    // p4est_partition(p4est, allow_coarsening, NULL);
+    //p4est_partition(p4est, allow_coarsening, NULL);
     p4est_partition(p4est, allow_coarsening, weight_fn);
    p4est->user_pointer = nullptr;
     // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
