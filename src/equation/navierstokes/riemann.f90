@@ -51,6 +51,10 @@ INTERFACE RiemannSolver_EC_LLF
   MODULE PROCEDURE RiemannSolver_EC_LLF
 END INTERFACE
 
+INTERFACE RiemannSolver_ESM
+  MODULE PROCEDURE RiemannSolver_ESM
+END INTERFACE
+
 INTERFACE RiemannSolver_VolumeFluxAverage_LLF
   MODULE PROCEDURE RiemannSolver_VolumeFluxAverage_LLF
 END INTERFACE
@@ -66,6 +70,7 @@ PUBLIC:: RiemannSolverByRoe
 PUBLIC:: RiemannSolver_EntropyStable
 PUBLIC:: RiemannSolver_VolumeFluxAverage
 PUBLIC:: RiemannSolver_EC_LLF
+PUBLIC:: RiemannSolver_ESM
 PUBLIC:: RiemannSolver_VolumeFluxAverage_LLF
 PUBLIC:: RiemannSolver_ECKEP_LLF
 !==================================================================================================================================
@@ -397,6 +402,97 @@ DO j=0,PP_N
 END DO ! j
 END SUBROUTINE RiemannSolverByRoe
 
+!==================================================================================================================================
+!> Entropy stable Riemann solver for Mortar Sides, uses TwoPoint Entropy Conserving flux
+!==================================================================================================================================
+
+SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,doMPISides, Flux_master,Flux_slave,)
+  SE MOD_Preproc
+  USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
+  USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
+  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
+  USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
+  USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
+  USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
+  USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+  USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT/OUTPUT VARIABLES
+  REAL,INTENT(INOUT) :: Uface_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
+  REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide) !< (INOUT) can be U or Grad_Ux/y/z_master
+  LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
+  INTEGER      :: p,q,l, m, s,t
+INTEGER      :: iMortar,nMortars
+INTEGER      :: firstMortarSideID,lastMortarSideID
+INTEGER      :: MortarSideID,SideID,locSide,flip
+REAL         :: Flux_l( PP_nVar,0:PP_N,0:PP_N,0:1,0:1) ! For small mortar sides
+REAL         :: Flux_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
+! REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
+! REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
+REAL,POINTER :: M1(:,:),M2(:,:), 
+REAL         ::M12(0:1,0:PP_N,0:PP_N)
+REAL                  :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+!==================================================================================================================================
+IF(doMPISides)THEN
+  firstMortarSideID = firstMortarMPISide
+  lastMortarSideID =  lastMortarMPISide
+ELSE
+  firstMortarSideID = firstMortarInnerSide
+  lastMortarSideID =  lastMortarInnerSide
+END IF !doMPISides
+
+  
+M1=>M_0_1 !interpolation from (-1,1) -> (-1,0) 
+M2=>M_0_2 !interpolation from (-1,1) -> (0,1) 
+! First compute F^{L_st}
+DO MortarSideID=firstMortarSideID,lastMortarSideID
+  nMortars=MERGE(4,2,MortarType(1,MortarSideID).EQ.1)
+  iSide=MortarType(2,MortarSideID)
+  Flux_m = 0;
+  DO iMortar=1,nMortars
+    SideID = MortarInfo(MI_SIDEID,iMortar,iSide)
+    flip   = MortarInfo(MI_FLIP,iMortar,iSide)
+
+    DO S = 0, 1; DO T = 0,1;
+
+      DO l = 0,PP_N; DO m = 0,PP_N;
+        ! CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
+        !               uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+        CALL TwoPointEntropyConservingFlux(F_c,U_LL(S,T)(:,i,j),U_RR(:,l,m),&
+        uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+        ! U_LL is U_slave (S,T)
+        ! U_RR is U_mortar
+
+        Flux_l(:,i,j,S,T) = Flux_l(:,i,j,1) + M1(i,l)*M2(j,m)*F_c(:); !1(a)
+      END DO; END DO
+
+    END DO; END DO
+
+
+
+  ENDDO
+  Flux_R(:,:,:) = 0;
+  M12(0,:,:)=M_1_0(:,:); M12(1,:,:)=M_2_0(1,:,:);
+
+  ! s = 0; t = 0;
+  DO S = 0, 1; DO T = 0,1;
+
+    DO l = 0,PP_N; DO m = 0,PP_N;
+      CALL TwoPointEntropyConservingFlux(F_c,U_LL(s,t)(:,l,m),U_RR(:,i,j),&
+      uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+      ! U_LL is U_slave (S,T)
+        ! U_RR is U_mortar
+      Flux_R(:,i,j) = Flux_R(:,i,j) + M12(s,i,l) * M12(t,j,m) * *F_c(:);
+    END DO; END DO
+  END DO; END DO
+
+
+ENDDO
+
+END SUBROUTINE RiemannSolver_ESM
 
 !==================================================================================================================================
 !> Entropy stable Riemann solver, uses TwoPoint Entropy Conserving flux
