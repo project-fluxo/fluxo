@@ -14,6 +14,7 @@ MODULE MOD_AMR_tracking
 
     ! IMPLICIT NONE
     INTEGER :: doLBalance = 0
+    INTEGER :: Count = 0
 CONTAINS
 
     SUBROUTINE ShockCapturingAMR()
@@ -39,8 +40,8 @@ CONTAINS
         INTEGER :: iXMax(3), iXMin(3)
         LOGICAL :: doBalance = .TRUE.
 
-        MaxLevel = 4;
-        MinLevel = 2;
+        MaxLevel = 1!4;
+        MinLevel = 0!2;
 
         !MaxLevel = 3;
 
@@ -140,10 +141,13 @@ CONTAINS
         !   ENDIF
         !ENDDO
         ! PRINT *, "RunAMRs"
-        !ElemToRefineAndCoarse = 0
-        !IF (MPIRoot) THEN
-        !  ElemToRefineAndCoarse(1) = 2
-        !ENDIF
+        ElemToRefineAndCoarse = 0
+        IF (Count .EQ. 0 ) THEN
+            COUNT = 1; 
+            IF (MPIRoot) THEN
+            ElemToRefineAndCoarse(1) = MaxLevel
+            ENDIF
+        ENDIF
         CALL RunAMR(ElemToRefineAndCoarse);
         ! CALL RunAMR(ElemToRefineAndCoarse);
         ! IF (MPIRoot) THEN

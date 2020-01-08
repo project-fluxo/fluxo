@@ -403,18 +403,18 @@ END DO ! j
 END SUBROUTINE RiemannSolverByRoe
 
 !==================================================================================================================================
-!> Entropy stable Riemann solver for Mortar Sides, uses TwoPoint Entropy Conserving flux
+!> Entropy stable Riemann solver for Mortar Sides, uses TwoPoint Entropy Conserving flux. Ratio 2-to-1 is assumed
 !==================================================================================================================================
 
-SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,doMPISides, Flux_master,Flux_slave)
+SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,Flux_master,Flux_slave,doMPISides, weak)
   USE MOD_Preproc
   USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
   USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
-  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
+  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo, FS2M
   USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
   USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
   USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
-  USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+  USE MOD_Mesh_Vars,   ONLY: NormVec,TangVec1,TangVec2,FS2M,nSides, SurfElem
   USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
@@ -427,6 +427,8 @@ SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,doMPISides, Flux_master,Fl
                                                                       !< set -F_slave in call if surfint is weak (dg.f90)
                                                                       !< set +F_slave in call if surfint is strong (lifting)
   LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
+  LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
+
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   INTEGER      :: p,q,l, m, s,t, i,j, iSide
@@ -435,68 +437,166 @@ INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID(4),locSide,flip(4)
 REAL         :: Flux_l( PP_nVar,0:PP_N,0:PP_N,0:1,0:1) ! For small mortar sides
 REAL         :: Flux_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
-REAL         :: U_LL( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !Big mortar Side
+REAL         :: U_LL( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_RR( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
+REAL         :: U_L( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
+REAL         :: U_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
+
 REAL         :: F_c( PP_nVar) !Returned Value from TwoPointFlux
 ! REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
 ! REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
 REAL,POINTER :: M1(:,:),M2(:,:)
 REAL         ::M12(0:1,0:PP_N,0:PP_N)
 REAL                  :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+REAL         :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL         :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL         :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
   lastMortarSideID =  lastMortarMPISide
+  ! PRINT *, "MPI"
 ELSE
   firstMortarSideID = firstMortarInnerSide
   lastMortarSideID =  lastMortarInnerSide
 END IF !doMPISides
 
-  
 M1=>M_0_1 !interpolation from (-1,1) -> (-1,0) 
 M2=>M_0_2 !interpolation from (-1,1) -> (0,1) 
 ! First compute F^{L_st}
 M12(0,:,:)=M_1_0(:,:); M12(1,:,:)=M_2_0(:,:);
 DO MortarSideID=firstMortarSideID,lastMortarSideID
+  ! PRINT *, "Riemann MortarSideID", MortarSideID
   nMortars=MERGE(4,2,MortarType(1,MortarSideID).EQ.1)
   iSide=MortarType(2,MortarSideID)
   locSide=MortarType(2,MortarSideID)
+  ! PRINT *, "Riemann ", firstMortarSideID,lastMortarSideID
+  ! PRINT *, "Riemann MortarSideID", MortarSideID
+  
   DO iMortar=1,nMortars
     SideID(iMortar)= MortarInfo(MI_SIDEID,iMortar,locSide)
+    ! PRINT *, "Riemann iMortar", iMortar, "SideID(iMortar)" , SideID(iMortar)
     flip(iMortar)  = MortarInfo(MI_FLIP,iMortar,locSide)
   ENDDO   
+  ! CALL EXIT()
   Flux_l = 0;
-  U_LL(:,:,:,0,0) = Uface_slave(:,:,:,SideID(0+1))
-  U_LL(:,:,:,1,0) = Uface_slave(:,:,:,SideID(0+2))
-  U_LL(:,:,:,0,1) = Uface_slave(:,:,:,SideID(0+3))
-  U_LL(:,:,:,1,1) = Uface_slave(:,:,:,SideID(0+4))
+  DO q=0,PP_N; DO p=0,PP_N
+    U_L(:,p,q,0,0) = Uface_slave(:,FS2M(1,p,q,flip(1)),FS2M(2,p,q,flip(1)),SideID(0+1))
+    U_L(:,p,q,1,0) = Uface_slave(:,FS2M(1,p,q,flip(2)),FS2M(2,p,q,flip(2)),SideID(0+2))
+    U_L(:,p,q,0,1) = Uface_slave(:,FS2M(1,p,q,flip(3)),FS2M(2,p,q,flip(3)),SideID(0+3))
+    U_L(:,p,q,1,1) = Uface_slave(:,FS2M(1,p,q,flip(4)),FS2M(2,p,q,flip(4)),SideID(0+4))
+  END DO; END DO ! q, p
   ! DO iMortar=1,nMortars
     ! SideID = MortarInfo(MI_SIDEID,iMortar,iSide)
     ! flip   = MortarInfo(MI_FLIP,iMortar,iSide)
-   U_RR(:,:,:) = Uface_master(:,:,:,MortarSideID)
-       DO i = 0,PP_N; DO j = 0,PP_N;
+   U_R(:,:,:) = Uface_master(:,:,:,MortarSideID)
+
+   DO S = 0, 1; DO T = 0,1;
+    ! PRINT *, "Riemann SideID(S + T*2 + 1)", SideID(S + T*2 + 1), S + T*2 + 1
+  
+  nv = NormVec(:,:,:,SideID(S + T*2 + 1));
+  t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
+  t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
+
+ 
+   DO j=0,PP_N
+    DO i=0,PP_N
+      !LEFT
+      U_LL(1,i,j,S,T)=U_L(1,i,j,S,T)
+      ! rotate momentum
+      U_LL(2,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*nv(:,i,j))
+      U_LL(3,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*t1(:,i,j))
+      U_LL(4,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*t2(:,i,j))
+      U_LL(5,i,j,S,T)=U_L(5,i,j,S,T)
+    ENDDO
+  ENDDO
+ENDDO; ENDDO;
+
+
+nv =  NormVec(:,:,:,  MortarSideID);
+t1 = TangVec1(:,:,:, MortarSideID);
+t2 = TangVec2(:,:,:, MortarSideID);
+  DO j=0,PP_N
+    DO i=0,PP_N
+  
+      !right
+      U_RR(1,i,j)=U_R(1,i,j)
+      ! rotate momentum
+      U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
+      U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
+      U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
+      U_RR(5,i,j)=U_R(5,i,j)
+    END DO ! i 
+  END DO ! j
+  ! PRINT *, "Riemann 1"
+  DO i = 0,PP_N; DO j = 0,PP_N;
     DO S = 0, 1; DO T = 0,1;
 
       DO l = 0,PP_N; DO m = 0,PP_N;
         ! CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
         !               uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+        ! PRINT *, "U_LL(:,i,j,s,t) = ", U_LL(:,i,j,s,t)
+        ! PRINT *, "U_RR(:,l,m) = ", U_RR(:,l,m)
         CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
         uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+        ! PRINT *, "slave F_c =", F_c
+
         ! U_LL is U_slave (S,T)
         ! U_RR is U_mortar
-
+        ! PRINT *, "uHat = ", uHat,"vHat = ",vHat,"wHat=",wHat,"aHat",aHat,"HHAt ",HHat,"p1Hat",p1Hat,"rhoHat",rhoHat
+        ! PRINT *, "F_C = ", F_c
         Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + M1(i,l)*M2(j,m)*F_c(:); !1(a)
+
       END DO; END DO !l,m
-
+      ! PRINT *, " Flux_l(:,i,j,S,T)",  Flux_l(:,i,j,S,T) , i ,j , s ,t
     END DO; END DO !S,T
-        END DO; END DO !i ,j 
-    Flux_slave(:,:,:,SideID(0+1)) = Flux_l(:,:,:,0,0)
+  END DO; END DO !i ,j 
 
-    Flux_slave(:,:,:,SideID(0+2)) = Flux_l(:,:,:,1,0) 
-    Flux_slave(:,:,:,SideID(0+3)) = Flux_l(:,:,:,0,1) 
-    Flux_slave(:,:,:,SideID(0+4)) = Flux_l(:,:,:,1,1) 
-  ! ENDDO
-  
+  ! Back Rotate the normal flux into Cartesian direction
+  DO S = 0, 1; DO T = 0,1;
+    nv = NormVec(:,:,:,SideID(S + T*2 + 1));
+    t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
+    t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
+  DO j=0,PP_N
+    DO i=0,PP_N
+      Flux_l(2:4,i,j,S,T)= nv(:,i,j)*Flux_l(2,i,j,S,T) &
+                 +t1(:,i,j)*Flux_l(3,i,j,S,T) &
+                 +t2(:,i,j)*Flux_l(4,i,j,S,T)
+    END DO ! i
+  END DO ! j
+END DO; END DO !S,T
+
+DO S = 0, 1; DO T = 0,1;
+DO q=0,PP_N
+  DO p=0,PP_N
+
+    Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
+
+    ! Flux_slave(:,:,:,SideID(0+2)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,0) 
+    ! Flux_slave(:,:,:,SideID(0+3)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),0,1) 
+    ! Flux_slave(:,:,:,SideID(0+4)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,1) 
+
+  ENDDO; ENDDO;
+ 
+END DO; END DO !S,T
+
+! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))
+  DO i = 1,4
+    DO q=0,PP_N
+      DO p=0,PP_N
+        IF(weak)THEN
+          Flux_slave(:,p,q,SideID(i))= Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
+        else
+          Flux_slave(:,p,q,SideID(i))= Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
+        ENDIF
+      END DO
+    END DO
+  END DO
+  ! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1)), 4*Flux_slave(:,1,1,SideID(1))
+
+
+  ! PRINT *, "Riemann 2"
+  ! NOw BIG Master Side
   Flux_R(:,:,:) = 0;
   
        DO i = 0,PP_N; DO j = 0,PP_N;
@@ -508,13 +608,37 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
       ! U_LL is U_slave (S,T)
         ! U_RR is U_mortar
+      ! PRINT *, " master F_c =", F_c
       Flux_R(:,i,j) =  Flux_R(:,i,j) + M12(s,i,l) * M12(t,j,m) * F_c(:);
     END DO; END DO ! l, m 
   END DO; END DO !S,T,
   END DO; END DO !i,j
-  Flux_master(:,:,:,MortarSideID) = Flux_R(:,:,:)
 
+
+  nv =  NormVec(:,:,:,  MortarSideID);
+  t1 = TangVec1(:,:,:, MortarSideID);
+  t2 = TangVec2(:,:,:, MortarSideID);
+  DO j=0,PP_N
+    DO i=0,PP_N
+      Flux_R(2:4,i,j)= nv(:,i,j)*Flux_R(2,i,j) &
+                 +t1(:,i,j)*Flux_R(3,i,j) &
+                 +t2(:,i,j)*Flux_R(4,i,j)
+    END DO ! i
+  END DO ! j
+
+  Flux_master(:,:,:,MortarSideID) = Flux_R(:,:,:)
+  
+  ! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
+  DO q=0,PP_N
+    DO p=0,PP_N
+      Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
+    END DO
+  END DO
+    ! PRINT *, "Riemann 3"
+  ! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
+! CALL EXIT()
 ENDDO !DO MortarSideID=firstMortarSideID,lastMortarSideID
+  ! PRINT *, "Riamann ENd"
 
 END SUBROUTINE RiemannSolver_ESM
 
