@@ -513,6 +513,7 @@ Fstar(2) = Fstar(1)*uHat + p1Hat
 Fstar(3) = Fstar(1)*vHat 
 Fstar(4) = Fstar(1)*wHat 
 Fstar(5) = Fstar(1)*HHat
+
 END SUBROUTINE TwoPointEntropyConservingFlux
 
 
