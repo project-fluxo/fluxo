@@ -87,9 +87,9 @@ DO SideID=firstSideID,lastSideID
                                   gradPx_Master(:,:,:,SideID),gradPx_Slave(:,:,:,SideID), &
                                   gradPy_Master(:,:,:,SideID),gradPy_Slave(:,:,:,SideID), &
                                   gradPz_Master(:,:,:,SideID),gradPz_Slave(:,:,:,SideID), &
-#if SHOCKCAPTURE
+#if SHOCKCAPTURE && mhd
 				  nu_Master(SideID),nu_Slave(SideID), &
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCKCAPTURE && mhd*/
 #endif /*PARABOLIC*/
 				  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 

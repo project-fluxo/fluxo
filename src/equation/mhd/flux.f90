@@ -179,7 +179,7 @@ END SUBROUTINE EvalAdvFluxTilde3D
 !==================================================================================================================================
 !> Compute transformed MHD fluxes using the conservative variables and gradients for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
+SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
 #if PARABOLIC
                            gradPx_in,gradPy_in,gradPz_in,&
 #endif /*PARABOLIC*/
@@ -205,6 +205,7 @@ USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
+INTEGER,INTENT(IN ):: iElem                      !< element number
 REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
@@ -697,7 +698,7 @@ END SUBROUTINE EvalDiffFlux3D
 !==================================================================================================================================
 !> Compute only diffusive part of tranformed MHD fluxes, using conservative variables and derivatives for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 #if SHOCKCAPTURE
@@ -713,6 +714,7 @@ USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
+INTEGER,INTENT(IN ):: iElem                           !< element number
 REAL,INTENT(IN )   :: U_in(     PP_nVar,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(            3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g(            3,1:nTotal_vol) !< metrics for gtilde                 

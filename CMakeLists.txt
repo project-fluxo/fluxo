@@ -147,6 +147,9 @@ SET(EQNSYSNAME_FOUND false ) #to be set in each equation system
 IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
   SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes)
+  IF(FLUXO_POSITIVITYPRES)
+	  MESSAGE(ERROR " Do not use positivity preservation with the Navier-Stokes solver!")
+  ENDIF()
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
