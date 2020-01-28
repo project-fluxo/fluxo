@@ -24,13 +24,11 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 
-INTERFACE EvalEulerFluxTilde3D
-  MODULE PROCEDURE EvalEulerFluxTilde3D
+#if (PP_DiscType==2)
+INTERFACE EvalAdvFluxAverage3D
+  MODULE PROCEDURE EvalAdvFluxAverage3D
 END INTERFACE
-
-INTERFACE EvalUaux
-  MODULE PROCEDURE EvalUaux
-END INTERFACE
+#endif /*PP_DiscType==2*/
 
 INTERFACE StandardDGFlux
   MODULE PROCEDURE StandardDGFlux
@@ -45,67 +43,92 @@ INTERFACE StandardDGFluxDealiasedMetricVec
 END INTERFACE
 
 
-PUBLIC::EvalEulerFluxTilde3D
-PUBLIC::EvalUaux
+#if (PP_DiscType==2)
+PUBLIC:: EvalAdvFluxAverage3D
+#endif /*PP_DiscType==2*/
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
 PUBLIC::StandardDGFluxDealiasedMetricVec
 !==================================================================================================================================
+#if PP_VolFlux==-1
+#  define PP_VolumeFluxAverageVec VolumeFluxAverageVec
+#elif PP_VolFlux==0
+#  define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#elif PP_VolFlux==1
+#  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
+#endif
+
 
 CONTAINS
 
+#if (PP_DiscType==2)
 !==================================================================================================================================
-!> Compute Navier-Stokes fluxes using the conservative variables and derivatives for every volume Gauss point.
-!> directly apply metrics and output the tranformed flux
+!> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !==================================================================================================================================
-SUBROUTINE EvalEulerFluxTilde3D(iElem,ftilde,gtilde,htilde,Uaux)
+SUBROUTINE EvalAdvFluxAverage3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:nAuxVar
-USE MOD_Flux ,ONLY:EvalFluxTilde3D
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                        :: iElem
+REAL,DIMENSION(8   ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: U_in        !< solution
+REAL,DIMENSION(1:3 ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< metrics
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N)      ,INTENT(OUT) :: ftilde,gtilde,htilde !< transformed fluxes (iVar,i,j,k)
-REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux                 !< auxiliary variables, not needed here
+REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                :: f(8),g(8),h(8)    ! Cartesian fluxes 
-INTEGER             :: i,j,k 
+INTEGER        :: i,j,k,l
 !==================================================================================================================================
-Uaux=0.
-CALL EvalFluxTilde3D(iElem,ftilde,gtilde,htilde) !no parabolic terms
-END SUBROUTINE EvalEulerFluxTilde3D
 
+!opt_v1
+!Uaux not needed for maxwell 
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
+  DO l=i+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,l,j,k), &
+                                  M_f(:,i,j,k), M_f(:,l,j,k), &
+                             ftilde(:,l,i,j,k)                )
+    ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
+  END DO!l=i+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
+  DO l=j+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,l,k), &
+                                  M_g(:,i,j,k), M_g(:,i,l,k), &
+                             gtilde(:,l,i,j,k)                )
+    gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
+  END DO!l=j+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
+  DO l=k+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,j,l), &
+                                  M_h(:,i,j,k), M_h(:,i,j,l), &
+                             htilde(:,l,i,j,k)                )
+    htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
+  END DO!l=k+1,N
+END DO; END DO; END DO ! i,j,k
 
-!==================================================================================================================================
-!> Computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2)
-!==================================================================================================================================
-SUBROUTINE EvalUaux(iElem,Uaux)
-! MODULES
-USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:nAuxVar
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-INTEGER,INTENT(IN)                                       :: iElem !< element ID
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: Uaux  !< auxiliary variables: (srho,v1,v2,v3,p,|v|^2)
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-!==================================================================================================================================
-Uaux=0.
-END SUBROUTINE EvalUaux
+END SUBROUTINE EvalAdvFluxAverage3D
+#endif /*PP_DiscType==2*/
 
 
 !==================================================================================================================================
 !> Computes the standard flux in normal-direction
 !==================================================================================================================================
-SUBROUTINE StandardDGFlux(Fstar,UL,UR,normal)
+PURE SUBROUTINE StandardDGFlux(Fstar,UL,UR,normal)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
@@ -183,7 +206,7 @@ END SUBROUTINE StandardDGFlux
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
 !> for curved metrics, no dealiasing is done (exactly = standard DG )!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE StandardDGFluxVec(UL,UR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
@@ -192,8 +215,6 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
-REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
 REAL,INTENT(IN)                     :: metric_L(3) !< metric terms from the curvilinear left element
 REAL,INTENT(IN)                     :: metric_R(3) !< metric terms from the curvilinear right element
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -268,7 +289,7 @@ END SUBROUTINE StandardDGFluxVec
 !> Computes the standard DG flux transformed with the metrics (fstar=f*metric1+g*metric2+h*metric3 ) for the Maxwell equations
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
@@ -277,8 +298,6 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL          !< left state
 REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR          !< right state
-REAL,DIMENSION(1),INTENT(IN)        :: UauxL       !< left auxiliary variable, not used here
-REAL,DIMENSION(1),INTENT(IN)        :: UauxR       !< right auxiliary variable, not used here
 REAL,INTENT(IN)                     :: metric_L(3) !< metric terms from the curvilinear left element
 REAL,INTENT(IN)                     :: metric_R(3) !< metric terms from the curvilinear right element
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -349,5 +368,6 @@ Fstar=0.5*(metric(1)*(fL+fR)+metric(2)*(gL+gR)+metric(3)*(hL+hR))
 
 END SUBROUTINE StandardDGFluxDealiasedMetricVec
 
+#undef PP_VolumeFluxAverageVec
 
 END MODULE MOD_Flux_Average

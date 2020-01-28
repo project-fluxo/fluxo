@@ -230,7 +230,10 @@ REAL,INTENT(OUT)                     :: Flux(PP_nVar,0:PP_N,0:PP_N,nSides) !< bo
 INTEGER                              :: iBC,iSide,p,q,SideID
 INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N)
-REAL,DIMENSION(1:PP_nVar)            :: PrimL,U_loc
+REAL                                 :: PrimL(1:PP_nVar),lambda_max
+#ifdef NONCONS
+REAL                                 :: phi_L(2:8) 
+#endif
 !==================================================================================================================================
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
@@ -375,29 +378,62 @@ DO iBC=1,nBCs
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #endif 
     END DO !iSide=1,nBCloc
-  CASE(9) ! Euler Wall, slip wall, perfectly conducting, symmetry BC, vn=0 Bn=0
-          ! pressure and density from inside,no viscous contributions
+  CASE(9) ! inviscid slip wall, perfectly conducting, symmetry BC, vn=0 Bn=0
+          ! WITHOUT VISCOUS CONTRIBUTIONS!!
+          ! pressure and density from inside, but flux is exactly the Lax-Friedrichs flux with a mirrored outer state
+          ! (rho, rho(v-v_n nvec), E, (B- B_n nvec),psi)
+          ! shown to be entropy stable
     DO iSide=1,nBCLoc
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
+          ASSOCIATE(nvec =>NormVec(:,p,q,SideID),t1vec=>TangVec1(:,p,q,SideID),t2vec=>TangVec2(:,p,q,SideID))
           CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
-          PrimL(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
-          PrimL(6:8)=PrimL(6:8) - SUM(PrimL(6:8)*nvec(:))*nvec(:) !only tangential magn. field
-          Flux(1,  p,q,SideID) = 0.
-          Flux(2:4,p,q,SideID) = (PrimL(5)+s2mu_0*SUM(PrimL(6:8)**2))*nvec(:)
-          Flux(5,  p,q,SideID) = 0. !(E+phat)*(v.n)-1/mu_0(B.v)*(B.n)
-          Flux(6:8,p,q,SideID) = 0.   ! (v.n)B - (B.n)v
+          !rotate to normal system
+          PrimL(2:4)=(/SUM(PrimL(2:4)*nvec(:)),SUM(PrimL(2:4)*t1vec(:)),SUM(PrimL(2:4)*t2vec(:))/)
+          PrimL(6:8)=(/SUM(PrimL(6:8)*nvec(:)),SUM(PrimL(6:8)*t1vec(:)),SUM(PrimL(6:8)*t2vec(:))/)
+          CALL FastestWave1D(PrimL(:),lambda_max) !=c_f
+          lambda_max=ABS(PrimL(2))+lambda_max
+          Flux(1,  p,q,SideID) = 0. !no mass flux
+          Flux(5,  p,q,SideID) = 0. ! no energy flux
+                                 !p* = p + rho vn( vn+lambda_max) + 1/(2 mu_0) |B|^2 - 1/mu_0 B_n^2 
+          Flux(2:4,p,q,SideID) = (PrimL(5)+PrimL(1)*PrimL(2)*(PrimL(2)+lambda_max)  &
+                                  + s2mu_0*(PrimL(7)**2+PrimL(8)**2-PrimL(6)**2)    ) *nvec(:)
+          Flux(6:8,p,q,SideID) = lambda_max*PrimL(6)*nvec(:)  ! lambda_max*B_n n
+
+          !! EC TEST: 
+          !! set numerical flux to physical flux, entropy contribution should be zero!
+          !Flux(2:4,p,q,SideID) = (PrimL(5) + s2mu_0*SUM(PrimL(6:8)**2) ) *nvec(:)
+          !Flux(6:8,p,q,SideID) = 0. 
       
 #ifdef PP_GLM
-          Flux(9,p,q,SideID) = 0.5*GLM_ch*PrimL(9) !outflow for psi
+          Flux(6:8,p,q,SideID) = Flux(6:8,p,q,SideID)+ GLM_ch*PrimL(9)*nvec(:)
+          Flux(  9,p,q,SideID) = 0.
 #endif /*PP_GLM*/
-          END ASSOCIATE !nvec
           
 #if NONCONS
-          !NONCONS: Powell term, B*normVec =0, no contribution here
-#endif 
+          !NONCONS: B*nvec=0, should have no contribution here.
+          !CAREFUL! the "weak" implementation of the nonconservative volume term already includes -1/2(phi B_n)^inner
+          ! but since we want the non-conservative flux to be zero, another -1/2(phi B_n)^inner is missing to get full 
+          ! inner surface contribution.
+#if NONCONS==1 /*Powell*/
+          phi_L(2:4)=U_master(6:8,p,q,SideID)
+          phi_L(6:8)=U_master(2:4,p,q,SideID)/U_master(1,p,q,SideID)
+          phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
+          Flux(2:8,p,q,SideID)=Flux(2:8,p,q,SideID)-0.5*phi_L(2:8)*PrimL(6)   !1/2 phi B_n
+#elif NONCONS==2 /*Brackbill*/
+          phi_L(2:4)=U_master(6:8,p,q,SideID)
+          Flux(2:4,p,q,SideID)=Flux(2:4,p,q,SideID)-0.5*phi_L(2:4)*PrimL(6)   !1/2 phi B_n
+#elif NONCONS==3 /*Janhunen*/
+          phi_L(6:8)=U_master(2:4,p,q,SideID)/U_master(1,p,q,SideID)
+          Flux(6:8,p,q,SideID)=Flux(6:8,p,q,SideID)-0.5*phi_L(6:8)*PrimL(6)   !1/2 phi B_n
+#endif /*NONCONSTYPE*/
+#if defined (PP_GLM) && defined (PP_NC_GLM)
+          ! galilean invariance for GLM
+          Flux((/5,PP_nVar/),p,q,SideID)=Flux((/5,PP_nVar/),p,q,SideID)-0.5*PrimL(2)*(/PrimL(9)**2,PrimL(9)/)  !1/2 v_n (psi^2,psi) 
+#endif /*PP_GLM and PP_NC_GLM*/
+#endif /*NONCONS*/
+          END ASSOCIATE !nvec,t1vec,t2vec
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCLoc
@@ -453,6 +489,7 @@ INTEGER                   :: iBC,iSide,p,q,SideID
 INTEGER                   :: BCType,BCState,nBCLoc
 REAL,DIMENSION(1:PP_nVar) :: PrimL,PrimR
 REAL                      :: P_m(PP_nVar,0:PP_N,0:PP_N) !< conservative / primitive /entropy variable
+REAL                      :: Floc(PP_nVar,0:PP_N,0:PP_N) !< conservative / primitive /entropy variable
 !==================================================================================================================================
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
@@ -524,21 +561,17 @@ DO iBC=1,nBCs
       END DO ! q
     END DO !iSide=1,nBCloc
   
-  CASE(9) ! Euler Wall, slip wall, perfectly conducting, symmetry BC, vn=0 Bn=0
-          ! pressure and density from inside,no viscous contributions
+  CASE(9) ! inviscid slip wall, perfectly conducting, symmetry BC, vn=0 Bn=0
+          ! use pressure and density from inside (only consistent with BC, since no viscous contribution)
     DO iSide=1,nBCLoc
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
           ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
           CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
-          PrimR(  1)=PrimL(1)
+          PrimR(  :)=PrimL(:)
           PrimR(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
-          PrimR(  5)=PrimL(5)
           PrimR(6:8)=PrimL(6:8) - SUM(PrimL(6:8)*nvec(:))*nvec(:) !only tangential magn. field
-#ifdef PP_GLM
-          PrimR(9)=0.   
-#endif /* PP_GLM */
           CALL PrimToCons(PrimR(:),Flux(:,p,q,SideID))
           END ASSOCIATE !nvec
         END DO ! p
@@ -553,17 +586,18 @@ DO SideID=1,nBCSides
   !for BR1 and BR2, lifting is in strong form: Flux=Flux-U_master
 #if PP_Lifting_Var==1
   P_m(:,:,:)=U_master(:,:,:,SideID)
+  Floc(:,:,:)=Flux(:,:,:,SideID)
 #elif PP_Lifting_Var==2
   !convert BC lifting flux to primitive variables
   CALL ConsToPrimVec(nTotal_face,P_m,U_master(:,:,:,SideID)) !prim_var
-  CALL ConsToPrimVec(nTotal_face,Flux,Flux(:,:,:,SideID)) !prim_var
+  CALL ConsToPrimVec(nTotal_face,Floc,Flux(:,:,:,SideID)) !prim_var
 #elif PP_Lifting_Var==3
   !convert BC lifting flux to entropy variables, 
   CALL ConsToEntropyVec(nTotal_face,P_m,U_master(:,:,:,SideID)) !entropy_var
-  CALL ConsToEntropyVec(nTotal_face,Flux,Flux(:,:,:,SideID)) !entropy_var
+  CALL ConsToEntropyVec(nTotal_face,Floc,Flux(:,:,:,SideID)) !entropy_var
 #endif /*PP_Lifting_Var**/
   DO q=0,PP_N; DO p=0,PP_N
-    Flux(:,p,q,SideID)=(Flux(:,p,q,SideID)-P_m(:,p,q))*SurfElem(p,q,SideID)
+    Flux(:,p,q,SideID)=(Floc(:,p,q)-P_m(:,p,q))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
 

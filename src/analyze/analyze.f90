@@ -59,6 +59,8 @@ IMPLICIT NONE
 CALL prms%SetSection("Analyze")
 CALL prms%CreateLogicalOption('CalcErrorNorms' , "Set true to compute L2 and LInf error norms at analyze step.",&
                                                  '.TRUE.')
+CALL prms%CreateLogicalOption('CalcBulk',"Set true to compute the integrated mean value of U and Ut over whole domain"&
+           , '.FALSE.')
 CALL prms%CreateLogicalOption('AnalyzeToFile',   "Set true to output result of error norms to a file (CalcErrorNorms=T)",&
                                                  '.FALSE.')
 CALL prms%CreateRealOption(   'Analyze_dt',      "Specifies time intervall at which analysis routines are called.",&
@@ -110,6 +112,7 @@ doCalcErrorNorms    =GETLOGICAL('CalcErrorNorms','.TRUE.')
 IF(doCalcErrorNorms)THEN
   AnalyzeExactFunc =GETINT('AnalyzeExactFunc',INTTOSTR(IniExactFunc)) 
 END IF
+doCalcBulk       =GETLOGICAL('CalcBulk'      ,'.FALSE.')
 doCalcMeanFlux   =GETLOGICAL('CalcMeanFlux','.FALSE.')
 
 Analyze_dt       =GETREAL('Analyze_dt','0.')
@@ -148,6 +151,20 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
       A2F_VarNames(A2F_iVar)='"Linf_'//TRIM(StrVarNames(iVar))//'"'
     END DO
   END IF !doCalcErrorNorms
+  IF(doCalcBulk)THEN
+    DO iVar=1,PP_nVar
+      A2F_iVar=A2F_iVar+1
+      A2F_VarNames(A2F_iVar)='"Bulk_'//TRIM(StrVarNames(iVar))//'"'
+    END DO !iVar 
+    DO iVar=1,PP_nVar
+      A2F_iVar=A2F_iVar+1
+      A2F_VarNames(A2F_iVar)='"Bulk_t_'//TRIM(StrVarNames(iVar))//'"'
+    END DO !iVar 
+    DO iVar=1,PP_nVar
+      A2F_iVar=A2F_iVar+1
+      A2F_VarNames(A2F_iVar)='"maxabs_'//TRIM(StrVarNames(iVar))//'_t"'
+    END DO
+  END IF ! doCalcBulk
   IF(doCalcMeanFlux)THEN
     DO iBC=1,nBCs
       IF(Boundarytype(iBC,BC_TYPE) .EQ. 1) CYCLE
@@ -290,7 +307,7 @@ INTEGER(KIND=8),INTENT(IN)      :: iter
 CHARACTER(LEN=40)               :: formatStr
 INTEGER                         :: iBC
 REAL                            :: CalcTime
-REAL                            :: L_Inf_Error(PP_nVar),L_2_Error(PP_nVar),L_2_colloc(PP_nVar)
+REAL,DIMENSION(PP_nVar)         :: L_Inf_Error,L_2_Error,L_2_colloc,maxabs_Ut,bulk,bulk_t
 REAL                            :: MeanFlux(PP_nVar,nBCs)
 !==================================================================================================================================
 ! Graphical output
@@ -323,6 +340,24 @@ IF(doCalcErrorNorms)THEN
     END IF !doAnalyzeToFile  
   END IF !MPIroot
 END IF  ! ErrorNorms
+IF(doCalcBulk)THEN
+  CALL CalcBulk(bulk,bulk_t,maxabs_Ut)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
+    WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk_t(:)
+    WRITE(UNIT_StdOut,formatStr)' max|Ut|    : ',maxabs_Ut
+    IF(doAnalyzeToFile)THEN
+      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk(:)
+      A2F_iVar=A2F_iVar+PP_nVar
+      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=bulk_t(:)
+      A2F_iVar=A2F_iVar+PP_nVar
+      A2F_Data(A2F_iVar+1:A2F_iVar+PP_nVar)=maxAbs_Ut(:)
+      A2F_iVar=A2F_iVar+PP_nVar
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF
+
 IF(doCalcMeanFlux)THEN
   CALL CalcMeanFlux(Time,MeanFlux)
   IF(MPIroot) THEN
@@ -367,7 +402,7 @@ SUBROUTINE CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars,          ONLY: Elem_xGP,sJ,nElems
-USE MOD_DG_Vars,            ONLY: U
+USE MOD_DG_Vars,            ONLY: U,Ut
 USE MOD_Equation,           ONLY: ExactFunc
 USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
 USE MOD_Analyze_Vars,       ONLY: AnalyzeExactFunc
@@ -405,7 +440,7 @@ DO iElem=1,nElems
   CALL ChangeBasis3D(PP_nVar,PP_N,NAnalyze,Vdm_GaussN_NAnalyze,U(1:PP_nVar,:,:,:,iElem),U_NAnalyze(1:PP_nVar,:,:,:))
   DO m=0,NAnalyze; DO l=0,NAnalyze; DO k=0,NAnalyze
     CALL ExactFunc(AnalyzeExactFunc,time,Coords_NAnalyze(1:3,k,l,m),U_exact)
-    L_Inf_Error = MAX(L_Inf_Error,abs(U_NAnalyze(:,k,l,m) - U_exact))
+    L_Inf_Error = MAX(L_Inf_Error,ABS(U_NAnalyze(:,k,l,m) - U_exact))
     IntegrationWeight = wGPVolAnalyze(k,l,m)*J_NAnalyze(1,k,l,m)
     ! To sum over the elements, We compute here the square of the L_2 error
     L_2_Error = L_2_Error+((U_NAnalyze(:,k,l,m) - U_exact)**2)*IntegrationWeight
@@ -434,6 +469,55 @@ L_2_Error = SQRT(L_2_Error /Vol)
 L_2_colloc= SQRT(L_2_colloc/Vol)
 
 END SUBROUTINE CalcErrorNorms
+
+
+!==================================================================================================================================
+!> Calculates bulk velocities over whole domain
+!==================================================================================================================================
+SUBROUTINE CalcBulk(Bulk,Bulk_t,maxabs_Ut)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U,Ut
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: Bulk(1:PP_nVar)
+REAL,INTENT(OUT)                :: Bulk_t(1:PP_nVar)
+REAL,INTENT(OUT)                :: maxAbs_Ut(PP_nVar)     !< max|Ut|
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                         :: iElem,i,j,k
+!==================================================================================================================================
+Bulk=0.
+Bulk_t=0.
+maxAbs_Ut(:)=-1.E10
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    Bulk      = Bulk  + U(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    Bulk_t    = Bulk_t+Ut(:,i,j,k,iElem)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    maxAbs_Ut = MAX(maxAbs_Ut,ABS(Ut(:,i,j,k,iElem)))
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
+
+#if MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,Bulk     ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,Bulk_t   ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,maxAbs_Ut,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(Bulk        ,0        ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(Bulk_t      ,0        ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(maxAbs_Ut   ,0        ,PP_nVar,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+END IF
+#endif
+
+END SUBROUTINE CalcBulk
+
 
 !==================================================================================================================================
 !> Integrate state variable U over a set of given analyzeSide (meanFlux)
@@ -564,7 +648,7 @@ IF(fileExists .AND. Time .NE. 0.0)THEN ! File exists and append data
     WRITE(ioUnit,'(A)')'VARIABLES ='
     ! Variable names 
     DO iVar=1,A2F_nVars-1
-      WRITE(ioUnit,'(A,1X)',ADVANCE="no")TRIM(A2F_VarNames(iVar))
+      WRITE(ioUnit,'(A,1X,(","))',ADVANCE="no")TRIM(A2F_VarNames(iVar))
     END DO
     WRITE(ioUnit,'(A)')TRIM(A2F_VarNames(A2F_nVars))
     WRITE(ioUnit,'(A,E23.14E5,A1)') 'ZONE T="Analysis,'//TRIM(ProjectName)//' restarttime=',Time,'"'
@@ -584,7 +668,7 @@ ELSE ! No restart create new file
   WRITE(ioUnit,'(A)')'VARIABLES ='
   ! Variable names 
   DO iVar=1,A2F_nVars-1
-    WRITE(ioUnit,'(A,1X)',ADVANCE="no")TRIM(A2F_VarNames(iVar))
+    WRITE(ioUnit,'(A,1X,(","))',ADVANCE="no")TRIM(A2F_VarNames(iVar))
   END DO
   WRITE(ioUnit,'(A)')TRIM(A2F_VarNames(A2F_nVars))
   WRITE(ioUnit,'(A)') 'ZONE T="Analysis,'//TRIM(ProjectName)//'"'
@@ -599,7 +683,7 @@ ELSE
 END IF
 A2F_Data(4)=PID
 ! Create format string for the variable output
-WRITE(formatStr,'(A10,I3,A14)')'(E26.17E4,',A2F_nVars-1,'(1X,E26.17E4))'
+WRITE(formatStr,'(A10,I3,A20)')'(E26.17E4,',A2F_nVars-1,'((","),1X,E26.17E4))'
 WRITE(ioUnit,formatStr) A2F_Data(1:A2F_nVars)
 CLOSE(ioUnit) ! outputfile
 END SUBROUTINE AnalyzeToFile

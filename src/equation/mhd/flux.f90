@@ -25,9 +25,9 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 
-INTERFACE EvalFluxTilde3D
-  MODULE PROCEDURE EvalFluxTilde3D
-END INTERFACE
+!INTERFACE EvalFluxTilde3D
+!  MODULE PROCEDURE EvalFluxTilde3D
+!END INTERFACE
 
 INTERFACE EvalAdvectionFlux1D
   MODULE PROCEDURE EvalAdvectionFlux1D
@@ -39,19 +39,20 @@ END INTERFACE
 !  MODULE PROCEDURE EvalDiffFlux3D
 !END INTERFACE
 
-INTERFACE EvalDiffFluxTilde3D
-  MODULE PROCEDURE EvalDiffFluxTilde3D
-END INTERFACE
+!INTERFACE EvalDiffFluxTilde3D
+!  MODULE PROCEDURE EvalDiffFluxTilde3D
+!END INTERFACE
 
-INTERFACE EvalLiftingVolumeFlux
-  MODULE PROCEDURE EvalLiftingVolumeFlux
-END INTERFACE
+!INTERFACE EvalLiftingVolumeFlux
+!  MODULE PROCEDURE EvalLiftingVolumeFlux
+!END INTERFACE
 
 INTERFACE EvalLiftingSurfFlux
   MODULE PROCEDURE EvalLiftingSurfFlux
 END INTERFACE
 #endif /*PARABOLIC*/
 
+PUBLIC::EvalAdvFluxTilde3D
 PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalAdvectionFlux1D
 #if PARABOLIC
@@ -66,22 +67,133 @@ PUBLIC::EvalLiftingSurfFlux
 CONTAINS
 
 !==================================================================================================================================
-!> Compute transformed MHD fluxes using the conservative variables and gradients for every volume Gauss point.
+!> Compute MHD transformed advection fluxes using conservative variables and derivatives for every volume Gauss point.
+!> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
+PURE SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars            ,ONLY:U
+USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
+#ifdef PP_GLM
+USE MOD_Equation_vars ,ONLY:GLM_ch
+#endif /*PP_GLM*/
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< solution state (conservative vars)
+REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h(       3,1:nTotal_vol) !< metrics for htilde                 
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
+REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
+REAL                :: v1,v2,v3,v_2,pt                         ! velocity and pressure(including magnetic pressure
+REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
+REAL                :: Ep                                      ! E + p
+INTEGER             :: i 
+!==================================================================================================================================
+DO i=1,nTotal_vol
+  ASSOCIATE(rho   =>U_in(1,i), &
+            rhov1 =>U_in(2,i), &
+            rhov2 =>U_in(3,i), &
+            rhov3 =>U_in(4,i), &
+#ifdef PP_GLM
+            Etotal=>U_in(5,i)-0.5*smu_0*U_in(9,i)**2, &
+#else
+            Etotal=>U_in(5,i), &
+#endif /*def PP_GLM*/
+            b1    =>U_in(6,i), &
+            b2    =>U_in(7,i), &
+            b3    =>U_in(8,i)  ) 
+  ! auxiliary variables
+  srho = 1. / rho ! 1/rho
+  v1   = rhov1*srho 
+  v2   = rhov2*srho 
+  v3   = rhov3*srho 
+  v_2  = v1*v1+v2*v2+v3*v3 
+  bb2  = (b1*b1+b2*b2+b3*b3)
+  vb   = (b1*v1+b2*v2+b3*v3)
+  !p = ptilde (includes magnetic pressure)
+  pt   = kappaM1*(Etotal-0.5*rho*(v_2))-KappaM2*s2mu_0*bb2
+  Ep   = (Etotal + pt)
+  
+  ! Advection part
+  ! Advection fluxes x-direction
+  f(1)=rhov1                     ! rho*u
+  f(2)=rhov1*v1+pt -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
+  f(3)=rhov1*v2    -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
+  f(4)=rhov1*v3    -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
+  f(5)=Ep*v1       -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
+  f(6)=0.
+  f(7)=v1*b2-b1*v2
+  f(8)=v1*b3-b1*v3
+  ! Advection fluxes y-direction
+  g(1)=rhov2                     ! rho*v      
+  g(2)=f(3)                      ! rho*u*v      -1/mu_0*b2*b1
+  g(3)=rhov2*v2+pt -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
+  g(4)=rhov2*v3    -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
+  g(5)=Ep*v2       -smu_0*b2*vb  ! (rho*e+p)*v  -1/mu_0*b2*(v dot B)
+  g(6)=-f(7)                     ! (v2*b1-b2*v1)
+  g(7)=0.
+  g(8)=v2*b3-b2*v3
+  ! Advection fluxes z-direction
+  h(1)=rhov3                     ! rho*v
+  h(2)=f(4)                      ! rho*u*w      -1/mu_0*b3*b1
+  h(3)=g(4)                      ! rho*v*w      -1/mu_0*b3*b2
+  h(4)=rhov3*v3+pt -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
+  h(5)=Ep*v3       -smu_0*b3*vb  ! (rho*e+p)*w  -1/mu_0*b3*(v dot B)
+  h(6)=-f(8)                     ! v3*b1-b3*v1 
+  h(7)=-g(8)                     ! v3*b2-b3*v2
+  h(8)=0.
+
+#ifdef PP_GLM
+  f(5) = f(5)+smu_0*GLM_ch*b1*U_in(9,i)
+  f(6) = f(6)+GLM_ch*U_in(9,i)
+  f(9) = GLM_ch*b1
+
+  g(5) = g(5)+smu_0*GLM_ch*b2*U_in(9,i)
+  g(7) = g(7)+GLM_ch*U_in(9,i)
+  g(9) = GLM_ch*b2
+
+  h(5) = h(5)+smu_0*GLM_ch*b3*U_in(9,i)
+  h(8) = h(8)+GLM_ch*U_in(9,i)
+  h(9) = GLM_ch*b3
+#endif /* PP_GLM */
+
+  END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
+
+  !now transform fluxes to reference ftilde,gtilde,htilde
+  ftilde(:,i) =   f(:)*M_f(1,i) + g(:)*M_f(2,i) + h(:)*M_f(3,i)
+  gtilde(:,i) =   f(:)*M_g(1,i) + g(:)*M_g(2,i) + h(:)*M_g(3,i)
+  htilde(:,i) =   f(:)*M_h(1,i) + g(:)*M_h(2,i) + h(:)*M_h(3,i)
+END DO ! i
+END SUBROUTINE EvalAdvFluxTilde3D
+
+!==================================================================================================================================
+!> Compute transformed MHD fluxes using the conservative variables and gradients for every volume Gauss point.
+!==================================================================================================================================
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
+#if PARABOLIC
+                           gradPx_in,gradPy_in,gradPz_in,&
+#endif /*PARABOLIC*/
+                           ftilde,gtilde,htilde)
+! MODULES
+USE MOD_PreProc
 #if SHOCKCAPTURE
 USE MOD_ShockCapturing_Vars,ONLY:nu
 #endif /*SHOCKCAPTURE*/
 USE MOD_Equation_Vars      ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
-USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 #ifdef PP_GLM
 USE MOD_Equation_Vars      ,ONLY: GLM_ch
 #endif /*PP_GLM*/
 #if PARABOLIC
-USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars      ,ONLY:mu,s23,etasmu_0
 #ifdef PP_ANISO_HEAT
 USE MOD_Equation_vars      ,ONLY:kperp,kpar
@@ -89,18 +201,24 @@ USE MOD_Equation_vars      ,ONLY:kperp,kpar
 USE MOD_Equation_vars      ,ONLY:kappasPr
 #endif 
 #endif /*PARABOLIC*/
-#ifdef OPTIMIZED
 USE MOD_DG_Vars            ,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem  !< Determines the actual element
+REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
+REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h(       3,1:nTotal_vol) !< metrics for htilde                 
+#if PARABOLIC
+REAL,INTENT(IN )   :: gradPx_in(PP_nVar,1:nTotal_vol) !< gradient x in primitive variables 
+REAL,INTENT(IN )   :: gradPy_in(PP_nVar,1:nTotal_vol) !< gradient y in primitive variables 
+REAL,INTENT(IN )   :: gradPz_in(PP_nVar,1:nTotal_vol) !< gradient z in primitive variables 
+#endif /*PARABOLIC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
@@ -110,7 +228,7 @@ REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of co
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p,ptilde                       ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
-REAL                :: Ep,mu_eff,etasmu_0eff                                      ! E + p
+REAL                :: Ep,mu_eff,etasmu_0eff                   ! E + p, mu_eff, and etasmu_0eff
 #if PARABOLIC
 REAL                :: divv
 REAL                :: lambda 
@@ -119,27 +237,20 @@ REAL                :: Qx,Qy,Qz
 REAL,DIMENSION(2:PP_nVar) :: f_visc,g_visc,h_visc
 #endif /*PARABOLIC*/
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
-  ASSOCIATE(rho   =>U(1,PP_IJK,iElem), &
-            rhov1 =>U(2,PP_IJK,iElem), &
-            rhov2 =>U(3,PP_IJK,iElem), &
-            rhov3 =>U(4,PP_IJK,iElem), &
-            b1    =>U(6,PP_IJK,iElem), &
-            b2    =>U(7,PP_IJK,iElem), &
-            b3    =>U(8,PP_IJK,iElem), &
+DO i=1,nTotal_vol
+  ASSOCIATE(rho   =>U_in(1,i), &
+            rhov1 =>U_in(2,i), &
+            rhov2 =>U_in(3,i), &
+            rhov3 =>U_in(4,i), &
+            b1    =>U_in(6,i), &
+            b2    =>U_in(7,i), &
+            b3    =>U_in(8,i), &
 #ifdef PP_GLM
-            Etotal=>U(5,PP_IJK,iElem)-s2mu_0*(U(9,PP_IJK,iElem)**2)  &
-           ,Psi   =>U(9,PP_IJK,iElem)  &
+            Etotal=>U_in(5,i)-s2mu_0*(U_in(9,i)**2)  &
+           ,Psi   =>U_in(9,i)  &
 #else
-            Etotal=>U(5,PP_IJK,iElem)  &
+            Etotal=>U_in(5,i)  &
 #endif /*def PP_GLM*/
             )
   ! auxiliary variables
@@ -184,65 +295,65 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
   h(8)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+smu_0*GLM_ch*b1*U(9,PP_IJK,iElem)
-  f(6) = f(6)+      GLM_ch   *U(9,PP_IJK,iElem)
+  f(5) = f(5)+smu_0*GLM_ch*b1*U_in(9,i)
+  f(6) = f(6)+      GLM_ch   *U_in(9,i)
   f(9) =            GLM_ch*b1
 
-  g(5) = g(5)+smu_0*GLM_ch*b2*U(9,PP_IJK,iElem)
-  g(7) = g(7)+      GLM_ch   *U(9,PP_IJK,iElem)
+  g(5) = g(5)+smu_0*GLM_ch*b2*U_in(9,i)
+  g(7) = g(7)+      GLM_ch   *U_in(9,i)
   g(9) =            GLM_ch*b2
 
-  h(5) = h(5)+smu_0*GLM_ch*b3*U(9,PP_IJK,iElem)
-  h(8) = h(8)+      GLM_ch   *U(9,PP_IJK,iElem)
+  h(5) = h(5)+smu_0*GLM_ch*b3*U_in(9,i)
+  h(8) = h(8)+      GLM_ch   *U_in(9,i)
   h(9) =            GLM_ch*b3
 #endif /* PP_GLM */
 
 #if PARABOLIC
   ! Viscous part
-  ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem), & 
-             gradv2x => gradPx(3,PP_IJK,iElem), gradB2x => gradPx(7,PP_IJK,iElem), & 
-             gradv3x => gradPx(4,PP_IJK,iElem), gradB3x => gradPx(8,PP_IJK,iElem), & 
-             gradv1y => gradPy(2,PP_IJK,iElem), gradB1y => gradPy(6,PP_IJK,iElem), & 
-             gradv2y => gradPy(3,PP_IJK,iElem), gradB2y => gradPy(7,PP_IJK,iElem), & 
-             gradv3y => gradPy(4,PP_IJK,iElem), gradB3y => gradPy(8,PP_IJK,iElem), & 
-             gradv1z => gradPz(2,PP_IJK,iElem), gradB1z => gradPz(6,PP_IJK,iElem), & 
-             gradv2z => gradPz(3,PP_IJK,iElem), gradB2z => gradPz(7,PP_IJK,iElem), & 
-             gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem)  )
-           
+  ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), & 
+             gradv2x => gradPx_in(3,i), gradB2x => gradPx_in(7,i), & 
+             gradv3x => gradPx_in(4,i), gradB3x => gradPx_in(8,i), & 
+             gradv1y => gradPy_in(2,i), gradB1y => gradPy_in(6,i), & 
+             gradv2y => gradPy_in(3,i), gradB2y => gradPy_in(7,i), & 
+             gradv3y => gradPy_in(4,i), gradB3y => gradPy_in(8,i), & 
+             gradv1z => gradPz_in(2,i), gradB1z => gradPz_in(6,i), & 
+             gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
+             gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i)  )
+
 #if SHOCKCAPTURE
 
   ! Compute gradient of conservative variables:
-  gradUx(1)=gradPx(1,PP_IJK,iElem)
-  gradUy(1)=gradPy(1,PP_IJK,iElem)
-  gradUz(1)=gradPz(1,PP_IJK,iElem)
+  gradUx(1)=gradPx_in(1,i)
+  gradUy(1)=gradPy_in(1,i)
+  gradUz(1)=gradPz_in(1,i)
 
-  gradUx(2)=gradPx(1,PP_IJK,iElem)*v1+gradv1x*rho
-  gradUy(2)=gradPy(1,PP_IJK,iElem)*v1+gradv1y*rho
-  gradUz(2)=gradPz(1,PP_IJK,iElem)*v1+gradv1z*rho
+  gradUx(2)=gradPx_in(1,i)*v1+gradv1x*rho
+  gradUy(2)=gradPy_in(1,i)*v1+gradv1y*rho
+  gradUz(2)=gradPz_in(1,i)*v1+gradv1z*rho
 
-  gradUx(3)=gradPx(1,PP_IJK,iElem)*v2+gradv2x*rho
-  gradUy(3)=gradPy(1,PP_IJK,iElem)*v2+gradv2y*rho
-  gradUz(3)=gradPz(1,PP_IJK,iElem)*v2+gradv2z*rho
+  gradUx(3)=gradPx_in(1,i)*v2+gradv2x*rho
+  gradUy(3)=gradPy_in(1,i)*v2+gradv2y*rho
+  gradUz(3)=gradPz_in(1,i)*v2+gradv2z*rho
 
-  gradUx(4)=gradPx(1,PP_IJK,iElem)*v3+gradv3x*rho
-  gradUy(4)=gradPy(1,PP_IJK,iElem)*v3+gradv3y*rho
-  gradUz(4)=gradPz(1,PP_IJK,iElem)*v3+gradv3z*rho
+  gradUx(4)=gradPx_in(1,i)*v3+gradv3x*rho
+  gradUy(4)=gradPy_in(1,i)*v3+gradv3y*rho
+  gradUz(4)=gradPz_in(1,i)*v3+gradv3z*rho
 
-  gradUx(5)=sKappaM1*gradPx(5,PP_IJK,iElem)+0.5*gradPx(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUx(5)=sKappaM1*gradPx_in(5,i)+0.5*gradPx_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1x+v2*gradv2x+v3*gradv3x)+B1*gradB1x+B2*gradB2x+B3*gradB3x
-  gradUy(5)=sKappaM1*gradPy(5,PP_IJK,iElem)+0.5*gradPy(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUy(5)=sKappaM1*gradPy_in(5,i)+0.5*gradPy_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1y+v2*gradv2y+v3*gradv3y)+B1*gradB1y+B2*gradB2y+B3*gradB3y
-  gradUz(5)=sKappaM1*gradPz(5,PP_IJK,iElem)+0.5*gradPz(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUz(5)=sKappaM1*gradPz_in(5,i)+0.5*gradPz_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1z+v2*gradv2z+v3*gradv3z)+B1*gradB1z+B2*gradB2z+B3*gradB3z
 #ifdef PP_GLM
-  gradUx(5)=gradUx(5)+gradPx(9,PP_IJK,iElem)*Psi
-  gradUy(5)=gradUy(5)+gradPy(9,PP_IJK,iElem)*Psi
-  gradUz(5)=gradUz(5)+gradPz(9,PP_IJK,iElem)*Psi
+  gradUx(5)=gradUx(5)+gradPx_in(9,i)*Psi
+  gradUy(5)=gradUy(5)+gradPy_in(9,i)*Psi
+  gradUz(5)=gradUz(5)+gradPz_in(9,i)*Psi
 #endif
 
-  gradUx(6:PP_nVar)=gradPx(6:PP_nVar,PP_IJK,iElem)
-  gradUy(6:PP_nVar)=gradPy(6:PP_nVar,PP_IJK,iElem)
-  gradUz(6:PP_nVar)=gradPz(6:PP_nVar,PP_IJK,iElem)
+  gradUx(6:PP_nVar)=gradPx_in(6:PP_nVar,i)
+  gradUy(6:PP_nVar)=gradPy_in(6:PP_nVar,i)
+  gradUz(6:PP_nVar)=gradPz_in(6:PP_nVar,i)
 
   mu_eff = mu!+nu(iElem)
   etasmu_0eff = etasmu_0!+nu(iElem)
@@ -254,10 +365,10 @@ DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
 
 #endif /*SHOCKCAPTURE*/
 
-  divv      = gradv1x+gradv2y+gradv3z
-  cv_gradTx = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem))
-  cv_gradTz = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem))
+  divv    = gradv1x+gradv2y+gradv3z
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
@@ -326,22 +437,11 @@ END ASSOCIATE ! gradB1x => gradPx(6 ...
 END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-  ftilde(:,PP_IJK) =   f(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_fTilde(3,PP_IJK,iElem)
-  gtilde(:,PP_IJK) =   f(:)*Metrics_gTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_gTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_gTilde(3,PP_IJK,iElem)
-  htilde(:,PP_IJK) =   f(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
-                     + g(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
-                     + h(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#ifdef OPTIMIZED
+  ftilde(:,i) =   f(:)*M_f(1,i) + g(:)*M_f(2,i) + h(:)*M_f(3,i)
+  gtilde(:,i) =   f(:)*M_g(1,i) + g(:)*M_g(2,i) + h(:)*M_g(3,i)
+  htilde(:,i) =   f(:)*M_h(1,i) + g(:)*M_h(2,i) + h(:)*M_h(3,i)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
 END SUBROUTINE EvalFluxTilde3D
-
 
 
 !==================================================================================================================================
@@ -356,15 +456,15 @@ USE MOD_Equation_vars,ONLY:GLM_ch
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)     :: U_Face(PP_nVar)                    !< input conservative state
+REAL,INTENT(IN)     :: U_Face(PP_nVar)    !< input conservative state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: F_Face(PP_nVar)                    !< F_Face(iVar), Cartesian flux in "x" direction
+REAL,INTENT(OUT)    :: F_Face(PP_nVar)    !< F_Face(iVar), Cartesian flux in "x" direction
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                :: srho                               ! reciprocal values for density and kappa/Pr
-REAL                :: v1,v2,v3,ptilde                    ! velocity and pressure(including magnetic pressure
-REAL                :: vb                                 ! magnetic field, bb2=|bvec|^2
+REAL                :: srho               ! reciprocal values for density and kappa/Pr
+REAL                :: v1,v2,v3,ptilde    ! velocity and pressure(including magnetic pressure
+REAL                :: vb                 ! magnetic field, bb2=|bvec|^2
 !==================================================================================================================================
 ! auxiliary variables
 srho = 1. / U_Face(1) ! 1/rho
@@ -423,7 +523,7 @@ USE MOD_Equation_vars,ONLY:kappasPr
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,INTENT(IN)     :: U_Face(PP_nVar,nTotal_face)         !< state variable 
+REAL,INTENT(IN)     :: U_Face(     PP_nVar,nTotal_face)    !< state in conservative variables on surface points 
 REAL,INTENT(IN)     :: gradPx_Face(PP_nVar,nTotal_face)    !< x gradient of state 
 REAL,INTENT(IN)     :: gradPy_Face(PP_nVar,nTotal_face)    !< y gradient of state 
 REAL,INTENT(IN)     :: gradPz_Face(PP_nVar,nTotal_face)    !< z gradient of state 
@@ -433,9 +533,9 @@ REAL,INTENT(IN)     :: nu_Face			           ! artificial viscosity at interface
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: f       !< Cartesian diffusiion flux in x
-REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: g       !< Cartesian diffusiion flux in y
-REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: h       !< Cartesian diffusiion flux in z
+REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: f       !< Cartesian diffusion flux in x
+REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: g       !< Cartesian diffusion flux in y
+REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: h       !< Cartesian diffusion flux in z
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if SHOCKCAPTURE
@@ -597,33 +697,34 @@ END SUBROUTINE EvalDiffFlux3D
 !==================================================================================================================================
 !> Compute only diffusive part of tranformed MHD fluxes, using conservative variables and derivatives for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars            ,ONLY:U
 #if SHOCKCAPTURE
 USE MOD_ShockCapturing_Vars,ONLY:nu
 #endif /*SHOCKCAPTURE*/
-USE MOD_Mesh_Vars          ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Lifting_Vars       ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
 #ifdef PP_ANISO_HEAT
 USE MOD_Equation_vars      ,ONLY:kperp,kpar
 #else
 USE MOD_Equation_vars      ,ONLY:kappasPr
 #endif 
-#ifdef OPTIMIZED
 USE MOD_DG_Vars            ,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem  !< Determines the actual element
+REAL,INTENT(IN )   :: U_in(     PP_nVar,1:nTotal_vol) !< state in conservative variables
+REAL,INTENT(IN )   :: M_f(            3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g(            3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h(            3,1:nTotal_vol) !< metrics for htilde                 
+REAL,INTENT(IN )   :: gradPx_in(PP_nVar,1:nTotal_vol) !< gradient x in primitive variables 
+REAL,INTENT(IN )   :: gradPy_in(PP_nVar,1:nTotal_vol) !< gradient y in primitive variables 
+REAL,INTENT(IN )   :: gradPz_in(PP_nVar,1:nTotal_vol) !< gradient z in primitive variables 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(PP_nVar,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f_Visc,g_visc,h_visc              ! Cartesian fluxes (iVar)
@@ -637,75 +738,68 @@ REAL                :: lambda,mu_eff,etasmu_0eff
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
 !==================================================================================================================================
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
+DO i=1,nTotal_vol
   ! auxiliary variables
-ASSOCIATE( rho => U(1,PP_IJK,iElem), &
-           b1  => U(6,PP_IJK,iElem), &
-           b2  => U(7,PP_IJK,iElem), &
-           b3  => U(8,PP_IJK,iElem)  )
+ASSOCIATE( rho => U_in(1,i), &
+           b1  => U_in(6,i), &
+           b2  => U_in(7,i), &
+           b3  => U_in(8,i)  )
   srho = 1. / rho
-  v1   = U(2,PP_IJK,iElem)*srho 
-  v2   = U(3,PP_IJK,iElem)*srho 
-  v3   = U(4,PP_IJK,iElem)*srho 
+  
+  v1   = U_in(2,i)*srho 
+  v2   = U_in(3,i)*srho 
+  v3   = U_in(4,i)*srho 
 #ifdef PP_GLM
-        Psi   =U(9,PP_IJK,iElem) 
+  Psi  = U_in(9,i) 
 #endif
 
-  p    = kappaM1*(U(5,PP_IJK,iElem) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U(6:PP_nVar,PP_IJK,iElem)**2) )
+  p    = kappaM1*(U_in(5,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_in(6:PP_nVar,i)**2) )
   ! Viscous part
-ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem), & 
-           gradv2x => gradPx(3,PP_IJK,iElem), gradB2x => gradPx(7,PP_IJK,iElem), & 
-           gradv3x => gradPx(4,PP_IJK,iElem), gradB3x => gradPx(8,PP_IJK,iElem), & 
-           gradv1y => gradPy(2,PP_IJK,iElem), gradB1y => gradPy(6,PP_IJK,iElem), & 
-           gradv2y => gradPy(3,PP_IJK,iElem), gradB2y => gradPy(7,PP_IJK,iElem), & 
-           gradv3y => gradPy(4,PP_IJK,iElem), gradB3y => gradPy(8,PP_IJK,iElem), & 
-           gradv1z => gradPz(2,PP_IJK,iElem), gradB1z => gradPz(6,PP_IJK,iElem), & 
-           gradv2z => gradPz(3,PP_IJK,iElem), gradB2z => gradPz(7,PP_IJK,iElem), & 
-           gradv3z => gradPz(4,PP_IJK,iElem), gradB3z => gradPz(8,PP_IJK,iElem))
-
+ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), & 
+           gradv2x => gradPx_in(3,i), gradB2x => gradPx_in(7,i), & 
+           gradv3x => gradPx_in(4,i), gradB3x => gradPx_in(8,i), & 
+           gradv1y => gradPy_in(2,i), gradB1y => gradPy_in(6,i), & 
+           gradv2y => gradPy_in(3,i), gradB2y => gradPy_in(7,i), & 
+           gradv3y => gradPy_in(4,i), gradB3y => gradPy_in(8,i), & 
+           gradv1z => gradPz_in(2,i), gradB1z => gradPz_in(6,i), & 
+           gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
+           gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i))
 
 #if SHOCKCAPTURE
 
   ! Compute gradient of conservative variables:
-  gradUx(1)=gradPx(1,PP_IJK,iElem)
-  gradUy(1)=gradPy(1,PP_IJK,iElem)
-  gradUz(1)=gradPz(1,PP_IJK,iElem)
+  gradUx(1)=gradPx_in(1,i)
+  gradUy(1)=gradPy_in(1,i)
+  gradUz(1)=gradPz_in(1,i)
 
-  gradUx(2)=gradPx(1,PP_IJK,iElem)*v1+gradv1x*rho
-  gradUy(2)=gradPy(1,PP_IJK,iElem)*v1+gradv1y*rho
-  gradUz(2)=gradPz(1,PP_IJK,iElem)*v1+gradv1z*rho
+  gradUx(2)=gradPx_in(1,i)*v1+gradv1x*rho
+  gradUy(2)=gradPy_in(1,i)*v1+gradv1y*rho
+  gradUz(2)=gradPz_in(1,i)*v1+gradv1z*rho
 
-  gradUx(3)=gradPx(1,PP_IJK,iElem)*v2+gradv2x*rho
-  gradUy(3)=gradPy(1,PP_IJK,iElem)*v2+gradv2y*rho
-  gradUz(3)=gradPz(1,PP_IJK,iElem)*v2+gradv2z*rho
+  gradUx(3)=gradPx_in(1,i)*v2+gradv2x*rho
+  gradUy(3)=gradPy_in(1,i)*v2+gradv2y*rho
+  gradUz(3)=gradPz_in(1,i)*v2+gradv2z*rho
 
-  gradUx(4)=gradPx(1,PP_IJK,iElem)*v3+gradv3x*rho
-  gradUy(4)=gradPy(1,PP_IJK,iElem)*v3+gradv3y*rho
-  gradUz(4)=gradPz(1,PP_IJK,iElem)*v3+gradv3z*rho
+  gradUx(4)=gradPx_in(1,i)*v3+gradv3x*rho
+  gradUy(4)=gradPy_in(1,i)*v3+gradv3y*rho
+  gradUz(4)=gradPz_in(1,i)*v3+gradv3z*rho
 
-  gradUx(5)=sKappaM1*gradPx(5,PP_IJK,iElem)+0.5*gradPx(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUx(5)=sKappaM1*gradPx_in(5,i)+0.5*gradPx_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1x+v2*gradv2x+v3*gradv3x)+B1*gradB1x+B2*gradB2x+B3*gradB3x
-  gradUy(5)=sKappaM1*gradPy(5,PP_IJK,iElem)+0.5*gradPy(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUy(5)=sKappaM1*gradPy_in(5,i)+0.5*gradPy_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1y+v2*gradv2y+v3*gradv3y)+B1*gradB1y+B2*gradB2y+B3*gradB3y
-  gradUz(5)=sKappaM1*gradPz(5,PP_IJK,iElem)+0.5*gradPz(1,PP_IJK,iElem)*(v1*v1+v2*v2+v3*v3) &
+  gradUz(5)=sKappaM1*gradPz_in(5,i)+0.5*gradPz_in(1,i)*(v1*v1+v2*v2+v3*v3) &
 		+rho*(v1*gradv1z+v2*gradv2z+v3*gradv3z)+B1*gradB1z+B2*gradB2z+B3*gradB3z
 #ifdef PP_GLM
-  gradUx(5)=gradUx(5)+gradPx(9,PP_IJK,iElem)*Psi
-  gradUy(5)=gradUy(5)+gradPy(9,PP_IJK,iElem)*Psi
-  gradUz(5)=gradUz(5)+gradPz(9,PP_IJK,iElem)*Psi
+  gradUx(5)=gradUx(5)+gradPx_in(9,i)*Psi
+  gradUy(5)=gradUy(5)+gradPy_in(9,i)*Psi
+  gradUz(5)=gradUz(5)+gradPz_in(9,i)*Psi
 #endif
 
-  gradUx(6:PP_nVar)=gradPx(6:PP_nVar,PP_IJK,iElem)
-  gradUy(6:PP_nVar)=gradPy(6:PP_nVar,PP_IJK,iElem)
-  gradUz(6:PP_nVar)=gradPz(6:PP_nVar,PP_IJK,iElem)
+  gradUx(6:PP_nVar)=gradPx_in(6:PP_nVar,i)
+  gradUy(6:PP_nVar)=gradPy_in(6:PP_nVar,i)
+  gradUz(6:PP_nVar)=gradPz_in(6:PP_nVar,i)
 
   mu_eff = mu!+nu(iElem)
   etasmu_0eff = etasmu_0!+nu(iElem)
@@ -718,9 +812,9 @@ ASSOCIATE( gradv1x => gradPx(2,PP_IJK,iElem), gradB1x => gradPx(6,PP_IJK,iElem),
 #endif /*SHOCKCAPTURE*/
 
   divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx(5,PP_IJK,iElem)-srho*p*gradPx(1,PP_IJK,iElem))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy(5,PP_IJK,iElem)-srho*p*gradPy(1,PP_IJK,iElem)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz(5,PP_IJK,iElem)-srho*p*gradPz(1,PP_IJK,iElem)) 
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu_eff*KappasPr
@@ -794,30 +888,20 @@ END ASSOCIATE ! gradB1x => gradPx(6 ...
 END ASSOCIATE ! b1 = U(6,....
 
   !now transform fluxes to reference ftilde,gtilde,htilde
-  ftilde(:,PP_IJK) =   f_visc(:)*Metrics_fTilde(1,PP_IJK,iElem)  &
-                     + g_visc(:)*Metrics_fTilde(2,PP_IJK,iElem)  &
-                     + h_visc(:)*Metrics_fTilde(3,PP_IJK,iElem)
-  gtilde(:,PP_IJK) =   f_visc(:)*Metrics_gTilde(1,PP_IJK,iElem)  &
-                     + g_visc(:)*Metrics_gTilde(2,PP_IJK,iElem)  &
-                     + h_visc(:)*Metrics_gTilde(3,PP_IJK,iElem)
-  htilde(:,PP_IJK) =   f_visc(:)*Metrics_hTilde(1,PP_IJK,iElem)  &
-                     + g_visc(:)*Metrics_hTilde(2,PP_IJK,iElem)  &
-                     + h_visc(:)*Metrics_hTilde(3,PP_IJK,iElem)
-#ifdef OPTIMIZED
+  ftilde(:,i) =   f_visc(:)*M_f(1,i) + g_visc(:)*M_f(2,i) + h_visc(:)*M_f(3,i)
+  gtilde(:,i) =   f_visc(:)*M_g(1,i) + g_visc(:)*M_g(2,i) + h_visc(:)*M_g(3,i)
+  htilde(:,i) =   f_visc(:)*M_h(1,i) + g_visc(:)*M_h(2,i) + h_visc(:)*M_h(3,i)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
 END SUBROUTINE EvalDiffFluxTilde3D
 
 
 !==================================================================================================================================
 !> Compute the lifting flux depending on the variable to be used for the gradient: cons_var / prim_var / entropy_var 
 !==================================================================================================================================
-SUBROUTINE EvalLiftingVolumeFlux(iElem,Flux)
+SUBROUTINE EvalLiftingVolumeFlux(U_in,Flux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_vol,U
+USE MOD_DG_Vars,ONLY:nTotal_vol
 #if PP_Lifting_Var==2
 USE MOD_Equation_Vars,ONLY: ConsToPrimVec
 #elif PP_Lifting_Var==3
@@ -826,19 +910,19 @@ USE MOD_Equation_Vars,ONLY: ConsToEntropyVec
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)     :: iElem       !< current element
+REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< lifting flux, depending on lifting_var
+REAL,INTENT(OUT)   :: flux(PP_nVar,1:nTotal_vol) !< lifting flux, depending on lifting_var
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
 #if PP_Lifting_Var==1
-  Flux=U(:,:,:,:,iElem)
+  Flux=U_in
 #elif PP_Lifting_Var==2
-  CALL ConsToPrimVec(nTotal_vol,Flux,U(:,:,:,:,iElem)) !prim_var
+  CALL ConsToPrimVec(nTotal_vol,Flux,U_in) !prim_var
 #elif PP_Lifting_Var==3
-  CALL ConsToEntropyVec(nTotal_vol,Flux,U(:,:,:,:,iElem)) !entropy_var
+  CALL ConsToEntropyVec(nTotal_vol,Flux,U_in) !entropy_var
 #endif /*PP_Lifting_Var**/
 
 END SUBROUTINE EvalLiftingVolumeFlux

@@ -97,6 +97,9 @@ CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None
 CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: 0: CSV, 1: Tecplot." , '0')
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
 CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
+CALL prms%CreateRealArrayOption('VisuBoundingBox'    , "Bounding box to reduce visualization output (multiple are possible!)"//&
+                                                       "input (/xmin,xmax,ymin,ymax,zmin,zmax/)",&
+                                                multiple=.TRUE.)
 END SUBROUTINE DefineParametersOutput
 
 !==================================================================================================================================
@@ -117,7 +120,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                        :: OpenStat
+INTEGER                        :: iBox,OpenStat
 CHARACTER(LEN=8)               :: StrDate
 CHARACTER(LEN=10)              :: StrTime
 CHARACTER(LEN=255)             :: LogFile
@@ -146,6 +149,15 @@ WRITE(ErrorFileName,'(A,A8,I6.6,A4)')TRIM(ProjectName),'_ERRORS_',myRank,'.out'
 
 ! Get output format for state visualization
 OutputFormat = GETINT('OutputFormat','0')
+IF(OutputFormat.NE.0)THEN
+  nBoundingBoxes=COUNTOPTION('VisuBoundingBox')
+  IF(nBoundingBoxes.GT.0)THEN 
+    ALLOCATE(VisuBoundingBox(6,nBoundingBoxes))
+    DO iBox=1,nBoundingBoxes
+      VisuBoundingBox(:,iBox)  = GETREALARRAY('VisuBoundingBox',6)
+    END DO 
+  END IF !nBoundingBoxes>0
+END IF !outputFormat /= 0
 ! Get output format for ASCII data files
 ASCIIOutputFormat = GETINT('ASCIIOutputFormat','0')
 
@@ -216,7 +228,7 @@ END SUBROUTINE PrintStatusLine
 !> Supersample DG dataset at (equidistant) visualization points and output to file.
 !> Currently only Paraview binary format is supported.
 !==================================================================================================================================
-SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt)
+SUBROUTINE Visualize(OutputTime,Uin,FileTypeStrIn,PrimVisuOpt,StrVarNames_opt)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -242,6 +254,7 @@ REAL,INTENT(IN)               :: OutputTime               !< simulation time of 
 REAL,INTENT(IN)               :: Uin(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< solution vector to be visualized
 CHARACTER(LEN=255),OPTIONAL,INTENT(IN) :: FileTypeStrIn
 LOGICAL,OPTIONAL,INTENT(IN) :: PrimVisuOpt
+CHARACTER(LEN=255),OPTIONAL,INTENT(IN) :: StrVarNames_Opt(PP_nVar)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                       :: iElem
@@ -281,13 +294,21 @@ ALLOCATE(strvarnames_tmp(nOutVars))
 IF(PrimVisu)THEN
   strvarnames_tmp=StrVarnamesPrim
 ELSE
-  strvarnames_tmp=StrVarnames
+  IF(PRESENT(StrVarNames_opt))THEN
+    strvarnames_tmp=StrVarnames_opt
+  ELSE
+    strvarnames_tmp=StrVarnames
+  END IF
 END IF
 #else
 !default
 nOutVars=PP_nVar
 ALLOCATE(strvarnames_tmp(nOutVars))
-strvarnames_tmp=StrVarnames
+IF(PRESENT(StrVarNames_opt))THEN
+  strvarnames_tmp=StrVarnames_opt
+ELSE
+  strvarnames_tmp=StrVarnames
+END IF
 #endif
 
 ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))
@@ -329,6 +350,7 @@ SUBROUTINE VisualizeAny(OutputTime,nOutVars,NIn,On_xGP,CoordsIn,Uin,FileTypeStrI
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Output_Vars,ONLY:Projectname,OutputFormat
+USE MOD_Output_Vars,ONLY:nBoundingBoxes,VisuBoundingBox
 USE MOD_Mesh_Vars  ,ONLY:nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
@@ -345,21 +367,58 @@ CHARACTER(LEN=255),INTENT(IN) :: FileTypeStrIn
 CHARACTER(LEN=255),INTENT(IN) :: VarNamesIn(nOutVars)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                       :: iElem
+INTEGER                       :: i,j,k,iElem,jElem,iBox,nVisuElems
+LOGICAL,ALLOCATABLE           :: ElemInBoxes(:)
+INTEGER,ALLOCATABLE           :: VisuElem(:)
 REAL,ALLOCATABLE              :: Coords_NVisu(:,:,:,:,:) 
 REAL,ALLOCATABLE              :: U_NVisu(:,:,:,:,:)
 CHARACTER(LEN=255)            :: FileString
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
-IF(on_xGP)THEN
-  ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
-  ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))
-  U_NVisu = 0.
+IF(nBoundingBoxes.GT.0)THEN
+  ALLOCATE(ElemInBoxes(nElems))
+  ElemInBoxes=.FALSE.
+  jElem=0
+  DO iElem=1,nElems 
+    BBLOOP: DO ibox=1,nBoundingBoxes
+      DO k=0,Nin ; DO j=0,Nin; DO i=0,Nin
+        IF(ElemInBoxes(iElem)) EXIT BBLOOP !exit if element already in a box
+        ElemInBoxes(iElem)=(((CoordsIn(1,i,j,k,iElem)).GT.visuBoundingBox(1,iBox)).AND. &
+                            ((CoordsIn(1,i,j,k,iElem)).LT.visuBoundingBox(2,iBox)).AND. &
+                            ((CoordsIn(2,i,j,k,iElem)).GT.visuBoundingBox(3,iBox)).AND. &
+                            ((CoordsIn(2,i,j,k,iElem)).LT.visuBoundingBox(4,iBox)).AND. &
+                            ((CoordsIn(3,i,j,k,iElem)).GT.visuBoundingBox(5,iBox)).AND. &
+                            ((CoordsIn(3,i,j,k,iElem)).LT.visuBoundingBox(6,iBox)) )
+      END DO; END DO; END DO !i,j,k
+    END DO BBLOOP
+  END DO !iElem
+  nVisuElems=COUNT(ElemInBoxes)
+  ALLOCATE(VisuElem(nVisuElems))
+  jElem=0
   DO iElem=1,nElems
+    IF(ElemInBoxes(iElem))THEN
+      jElem=jElem+1 
+      VisuElem(jElem)=iElem
+    END IF
+  END DO
+  DEALLOCATE(ElemInBoxes)
+ELSE
+  nVisuElems=nElems
+  ALLOCATE(VisuElem(nVisuElems))
+  DO iElem=1,nElems
+    VisuElem(iElem)=iElem
+  END DO
+END IF
+IF(on_xGP)THEN
+  ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
+  ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
+  U_NVisu = 0.
+  jElem=0
+  DO iElem=1,nVisuElems
     ! Create coordinates of visualization points
-    CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,CoordsIn(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
+    CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,CoordsIn(1:3,:,:,:,VisuElem(iElem)),Coords_NVisu(1:3,:,:,:,iElem))
     ! Interpolate solution onto visu grid
-    CALL ChangeBasis3D(nOutVars,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:nOutVars,:,:,:,iElem),U_NVisu(1:nOutVars,:,:,:,iElem))
+    CALL ChangeBasis3D(nOutVars,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:nOutVars,:,:,:,VisuElem(iElem)),U_NVisu(1:nOutVars,:,:,:,iElem))
   END DO !iElem
 !ELSE
 !  !use input
@@ -370,13 +429,15 @@ SELECT CASE(OutputFormat)
 CASE(OUTPUTFORMAT_PARAVIEW)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
   IF(on_xGP)THEN
-    CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
+    CALL WriteDataToVTK3D(        NVisu,nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
                                 U_NVisu,TRIM(FileString))
   ELSE
-    CALL WriteDataToVTK3D(        NVisu,nElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,:), &
-                                Uin,TRIM(FileString))
+    CALL WriteDataToVTK3D(        NVisu,nVisuElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,VisuElem(:)), &
+                                Uin(:,:,:,:,VisuElem(:)),TRIM(FileString))
   END IF!on_xGP
 END SELECT
+
+DEALLOCATE(VisuElem)
 
 IF(on_xGP)THEN
   DEALLOCATE(U_Nvisu)

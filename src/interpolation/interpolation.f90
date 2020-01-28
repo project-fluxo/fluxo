@@ -222,7 +222,7 @@ IF(PRESENT(wIP))THEN
     CALL LegGaussLobNodesAndWeights(N_in,xIP,wIP)
   CASE('CHEBYSHEV-GAUSS-LOBATTO')
     CALL ChebyGaussLobNodesAndWeights(N_in,xIP,wIP)
-  CASE('VISU')
+  CASE('VISU','EQUIDISTANT')
     DO i=0,N_in
       xIP(i) = 2.*REAL(i)/REAL(N_in) - 1.
     END DO
@@ -248,7 +248,7 @@ ELSE
     CALL LegGaussLobNodesAndWeights(N_in,xIP)
   CASE('CHEBYSHEV-GAUSS-LOBATTO')
     CALL ChebyGaussLobNodesAndWeights(N_in,xIP)
-  CASE('VISU')
+  CASE('VISU','EQUIDISTANT')
     DO i=0,N_in
       xIP(i) = 2.*REAL(i)/REAL(N_in) - 1.
     END DO

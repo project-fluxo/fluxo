@@ -178,6 +178,8 @@ USE MOD_Mesh_Vars,          ONLY:BoundaryType
 USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
 USE MOD_Mesh_Vars,          ONLY:Elems
 USE MOD_Mesh_Vars,          ONLY:GETNEWELEM,GETNEWSIDE
+USE MOD_Mesh_Vars,          ONLY:NodeTypeMesh
+USE MOD_Interpolation_Vars, ONLY:NodeTypeEq,NodeTypeGL
 #if MPI
 USE MOD_MPI_Vars,           ONLY:offsetElemMPI,nMPISides_Proc,nNbProcs,NbProc
 #endif
@@ -419,6 +421,17 @@ DEALLOCATE(ElemInfo,SideInfo)
 !                              NODES
 !----------------------------------------------------------------------------------------------------------------------------
 ! get physical coordinates
+CALL DatasetExists(File_ID,'OutputNodeType',dsExists,.TRUE.)
+IF(dsExists)THEN
+  CALL ReadAttribute(File_ID,'OutputNodeType',1,StrScalar=NodeTypeMesh)
+ELSE
+  NodeTypeMesh=NodeTypeEQ  !default if dataset is not there (old HOPR versions)
+END IF
+IF((.NOT.(TRIM(NodeTypeMesh).EQ.TRIM(NodeTypeEQ))).AND. &
+   (.NOT.(TRIM(NodeTypeMesh).EQ.TRIM(NodeTypeGL))))THEN
+  CALL abort(__STAMP__,&
+      'OutputNodeType in meshfile must be either EQUIDISTANT OR GAUSS-LOBATTO, but it is "'//TRIM(NodeTypeMesh)//'"')
+END IF
 
 IF(useCurveds)THEN
   ALLOCATE(NodeCoords(3,0:NGeo,0:NGeo,0:NGeo,nElems))
@@ -595,6 +608,7 @@ IF(MPIRoot)THEN
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','nAnalyzeSides | ',ReduceData(8) !nAnalyzeSides
   WRITE(UNIT_stdOut,'(A,A34,L1)')' |','useCurveds | ',useCurveds
   WRITE(UNIT_stdOut,'(A,A34,I0)')' |','Ngeo | ',Ngeo
+  WRITE(UNIT_stdOut,'(A,A34,A)') ' |','NodeTypeMesh | ',TRIM(NodeTypeMesh)
   WRITE(UNIT_stdOut,'(132("."))')
 END IF
 

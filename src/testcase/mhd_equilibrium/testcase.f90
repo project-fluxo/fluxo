@@ -74,6 +74,10 @@ CALL prms%CreateIntOption('EquilibriumDisturbFunc', &
      "=0: Default: disturbance case number = iniExactFunc"// &
      ">0: specific disturbance function added to initial state." &
      ,"0")
+CALL prms%CreateIntOption('EquilibriumRiemann', &
+     "=-1: Default: do not change the riemann solver for Ut_eq "// &
+     ">0: specify Riemann Solver for Ut_eq computation.","-1")
+CALL prms%CreateRealOption(   "Eq_pressureOffset"   , " add a constant pressure to equilibrium data from file","0.")
 END SUBROUTINE DefineParametersTestcase
 
 !==================================================================================================================================
@@ -84,7 +88,7 @@ SUBROUTINE InitTestcase()
 USE MOD_Globals
 USE MOD_Testcase_Vars
 USE MOD_EquilibriumState   ,ONLY: InitEquilibriumState
-USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR
+USE MOD_ReadInTools        ,ONLY: GETINT,GETLOGICAL,GETSTR,GETREAL
 USE MOD_Restart_Vars       ,ONLY: DoRestart,RestartInitIsDone
 USE MOD_Equation_Vars      ,ONLY: IniExactFunc
 USE MOD_Equation_Vars      ,ONLY: nBCByType
@@ -144,6 +148,9 @@ IF(.NOT.doRestart)THEN
                                                'set to IniExactFunc'    ,' | ',EquilibriumDisturbFunc
   END IF
 END IF
+EquilibriumRiemann=GETINT('EquilibriumRiemann','-1')
+Eq_pressureOffset=GETREAL('Eq_PressureOffset','0.')
+
 CALL InitEquilibriumState()
 
 
