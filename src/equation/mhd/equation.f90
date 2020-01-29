@@ -324,11 +324,12 @@ CASE(13)
   SolveRiemannProblem => EntropyStableByLLF 
 CASE(14)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: 9 wave entropy stable flux!'
-#ifndef PP_GLM
+#ifdef PP_GLM
+  SolveRiemannProblem => EntropyStable9WaveFlux 
+#else
   CALL abort(__STAMP__,&
    'Entropy Stable 9 wave flux can currently only be run with GLM!!!')
 #endif
-  SolveRiemannProblem => EntropyStable9WaveFlux 
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -1563,7 +1564,7 @@ USE MOD_Equation_Vars,ONLY:GLM_ch
 REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
 REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
 REAL  :: check,absdiff
-INTEGER :: icase,i
+INTEGER :: icase,i,nCases
 PROCEDURE(),POINTER :: fluxProc 
 CHARACTER(LEN=255)  :: fluxName
 #if PP_DiscType==2
@@ -1585,6 +1586,9 @@ PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 PL(9)= 0.31999469
 PR(9)= 0.
 GLM_ch = 0.5 !was not set yet
+nCases=8
+#else
+nCases=7
 #endif
 CALL PrimToCons(PL,UL)
 CALL PrimToCons(PR,UR)
@@ -1592,7 +1596,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,8
+DO icase=0,nCases
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1620,9 +1624,11 @@ DO icase=0,8
   CASE(7)
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
+#ifdef PP_GLM
   CASE(8)
     fluxProc => EntropyStable9WaveFlux
     fluxName = "EntropyStable9WaveFlux"
+#endif
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)

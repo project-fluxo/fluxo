@@ -54,11 +54,6 @@ INTERFACE EntropyStableByLLF
   MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
 
-INTERFACE EntropyStable9WaveFlux
-  MODULE PROCEDURE EntropyStable9WaveFlux
-END INTERFACE
-
-
 PUBLIC :: Riemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
@@ -69,7 +64,9 @@ PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
+#ifdef PP_GLM
 PUBLIC :: EntropyStable9WaveFlux
+#endif
 !==================================================================================================================================
 
 
@@ -1178,7 +1175,7 @@ END SUBROUTINE EntropyStableByLLF
 
 
 
-
+#ifdef PP_GLM
 SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
@@ -1534,6 +1531,6 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFlux
-
+#endif
 
 END MODULE MOD_Riemann
