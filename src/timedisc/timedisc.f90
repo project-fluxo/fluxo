@@ -152,9 +152,9 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
@@ -197,9 +197,9 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 CALL CalcArtificialViscosity(U)
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
@@ -378,9 +378,9 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
@@ -406,9 +406,9 @@ CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
 #if POSITIVITYPRES
 CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 CALL CalcArtificialViscosity(U)
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
 ! Following steps
 DO iStage=2,nRKStages
@@ -440,9 +440,9 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
@@ -473,9 +473,9 @@ CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
 #if POSITIVITYPRES
 CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 CALL CalcArtificialViscosity(U)
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
 DO iStage=2,nRKStages
   CurrentStage=iStage

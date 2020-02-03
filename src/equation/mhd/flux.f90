@@ -186,9 +186,9 @@ SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
                            ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 USE MOD_Equation_Vars      ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
 #ifdef PP_GLM
 USE MOD_Equation_Vars      ,ONLY: GLM_ch
@@ -223,9 +223,9 @@ REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxes (iVar)
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
-#endif
+#endif /*SHOCK_ARTVISC*/
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p,ptilde                       ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
@@ -321,7 +321,7 @@ DO i=1,nTotal_vol
              gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
              gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i)  )
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 
   ! Compute gradient of conservative variables:
   gradUx(1)=gradPx_in(1,i)
@@ -364,7 +364,7 @@ DO i=1,nTotal_vol
   mu_eff = mu
   etasmu_0eff = etasmu_0
 
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -425,11 +425,11 @@ DO i=1,nTotal_vol
   g(2:8)=g(2:8)-g_visc(2:8)
   h(2:8)=h(2:8)-h_visc(2:8)
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
   f=f-nu(iElem)*gradUx
   g=g-nu(iElem)*gradUy
   h=h-nu(iElem)*gradUz
-#endif
+#endif /*SHOCK_ARTVISC*/
 
 
 END ASSOCIATE ! gradB1x => gradPx(6 ...
@@ -507,9 +507,9 @@ END SUBROUTINE EvalAdvectionFlux1D
 !> Compute the cartesian diffusion flux of the MHD equations, for all face points (PP_N+1)**2
 !==================================================================================================================================
 SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face, &
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 nu_Face, &
-#endif
+#endif /*SHOCK_ARTVISC*/
 gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc
@@ -528,9 +528,9 @@ REAL,INTENT(IN)     :: U_Face(     PP_nVar,nTotal_face)    !< state in conservat
 REAL,INTENT(IN)     :: gradPx_Face(PP_nVar,nTotal_face)    !< x gradient of state 
 REAL,INTENT(IN)     :: gradPy_Face(PP_nVar,nTotal_face)    !< y gradient of state 
 REAL,INTENT(IN)     :: gradPz_Face(PP_nVar,nTotal_face)    !< z gradient of state 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 REAL,INTENT(IN)     :: nu_Face			           ! artificial viscosity at interface
-#endif
+#endif /*SHOCK_ARTVISC*/
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -539,9 +539,9 @@ REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: g       !< Cartesian diffusio
 REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: h       !< Cartesian diffusion flux in z
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
-#endif
+#endif /*SHOCK_ARTVISC*/
 REAL                :: srho,p
 REAL                :: v1,v2,v3                                  ! auxiliary variables
 REAL                :: bb2
@@ -575,7 +575,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
            gradv2z => gradPz_Face(3,i),  gradB2z => gradPz_Face(7,i), & 
            gradv3z => gradPz_Face(4,i),  gradB3z => gradPz_Face(8,i)  )
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 
   ! Compute gradient of conservative variables:
   gradUx(1)=gradPx_Face(1,i)
@@ -604,7 +604,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   gradUx(5)=gradUx(5)+gradPx_Face(9,i)*U_face(9,i)
   gradUy(5)=gradUy(5)+gradPy_Face(9,i)*U_face(9,i)
   gradUz(5)=gradUz(5)+gradPz_Face(9,i)*U_face(9,i)
-#endif
+#endif /*PP_GLM*/
 
   gradUx(6:PP_nVar)=gradPx_Face(6:PP_nVar,i)
   gradUy(6:PP_nVar)=gradPy_Face(6:PP_nVar,i)
@@ -618,7 +618,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
 !  mu_eff = mu
 !  etasmu_0eff = etasmu_0
 
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
 
   divv    = gradv1x+gradv2y+gradv3z
@@ -683,11 +683,11 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   h(9,i) = 0.
 #endif /*PP_GLM*/
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
   f(:,i)=f(:,i)-nu_Face*gradUx
   g(:,i)=g(:,i)-nu_Face*gradUy
   h(:,i)=h(:,i)-nu_Face*gradUz
-#endif
+#endif /*SHOCK_ARTVISC*/
 
 END ASSOCIATE ! gradv1x => gradPx(2,....
 END ASSOCIATE ! b1 => UFace(6,i) ...
@@ -701,9 +701,9 @@ END SUBROUTINE EvalDiffFlux3D
 SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
 #ifdef PP_ANISO_HEAT
 USE MOD_Equation_vars      ,ONLY:kperp,kpar
@@ -730,9 +730,9 @@ REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f_Visc,g_visc,h_visc              ! Cartesian fluxes (iVar)
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 REAL,DIMENSION(1:PP_nVar) :: gradUx,gradUy,gradUz              ! Gradients of conservative variables
-#endif
+#endif /*SHOCK_ARTVISC*/
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,bb2,p,Psi 
 REAL                :: divv
@@ -768,7 +768,7 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
            gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
            gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i))
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 
   ! Compute gradient of conservative variables:
   gradUx(1)=gradPx_in(1,i)
@@ -811,7 +811,7 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   mu_eff = mu
   etasmu_0eff = etasmu_0
 
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -878,11 +878,11 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   h_visc(9) = 0. 
 #endif /*PP_GLM*/
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
   f_visc=f_visc-nu(iElem)*gradUx
   g_visc=g_visc-nu(iElem)*gradUy
   h_visc=h_visc-nu(iElem)*gradUz
-#endif
+#endif /*SHOCK_ARTVISC*/
 
 
 END ASSOCIATE ! gradB1x => gradPx(6 ...

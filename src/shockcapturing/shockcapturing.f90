@@ -18,8 +18,8 @@
 !==================================================================================================================================
 !> Module for the shock capturing routines
 !==================================================================================================================================
-
 MODULE MOD_ShockCapturing
+#if SHOCKCAPTURE
 ! MODULES
 IMPLICIT NONE
 PRIVATE
@@ -32,11 +32,11 @@ INTERFACE InitShockCapturing
    MODULE PROCEDURE InitShockCapturing
 END INTERFACE
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 INTERFACE CalcArtificialViscosity
    MODULE PROCEDURE CalcArtificialViscosity
 END INTERFACE
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 
 INTERFACE FinalizeShockCapturing
    MODULE PROCEDURE FinalizeShockCapturing
@@ -44,9 +44,9 @@ END INTERFACE
 
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 PUBLIC :: CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 PUBLIC :: FinalizeShockCapturing
 !===================================================================================================================================
 CONTAINS
@@ -104,6 +104,8 @@ SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY AS SHOCK INDICATOR!'
 SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE AS SHOCK INDICATOR!'
 #elif (PP_Indicator_Var==3)
 SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE TIMES DENSITY AS SHOCK INDICATOR!'
+#elif (PP_Indicator_Var==4)
+SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
 #endif
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
@@ -136,23 +138,18 @@ ALLOCATE(sVdm_Leg(0:N_in,0:N_in))
 CALL BuildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
 END SUBROUTINE InitBasisTrans
 
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 SUBROUTINE CalcArtificialViscosity(U)
 !===================================================================================================================================
 !> Use framework of Persson and Peraire to measure shocks with DOF energy indicator and calculate artificial viscosity, if necessary
 !===================================================================================================================================
 ! MODULES
 USE MOD_PreProc
-USE MOD_ShockCapturing_Vars, ONLY: sVdm_Leg,nu,nu_max
-USE MOD_Equation_Vars      , ONLY: KappaM1,kappa
-#ifdef mhd
-USE MOD_Equation_Vars      , ONLY: s2mu_0
-#endif /*mhd*/
+USE MOD_ShockCapturing_Vars, ONLY: nu,nu_max
 USE MOD_TimeDisc_Vars      , ONLY: dt
 USE MOD_Mesh_Vars          , ONLY: nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      , ONLY: ConsToPrim
 USE MOD_Equation_Vars      , ONLY: FastestWave3D
-USE MOD_ChangeBasis        , ONLY: ChangeBasis3D
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -163,68 +160,29 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(IN) :: U
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !===================================================================================================================================
-REAL,DIMENSION(1:1,0:PP_N,0:PP_N,0:PP_N) :: Uind,Umod
-REAL                                     :: LU,LUM1,LUM2,LU_N,LU_NM1,eta_dof,eta_min,eta_max,eps0,p
+REAL                                     :: eta_dof(nElems),eta_min,eta_max,eps0,p
 REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
 INTEGER                                  :: l,ind,i,j,k
 
 nu    =0.
 nu_max=0.
+
+call ShockSensor_PerssonPeraire(U,eta_dof)
+
+eta_dof = log10(eta_dof)
 DO l=1,nElems
-
-  ! Select a shock indicator: density = 1, pressure = 2
-  SELECT CASE(PP_Indicator_Var)
-    CASE(1)
-    Uind(1,:,:,:) = U(1,:,:,:,l)
-    CASE(2)
-    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
-#ifdef mhd
-    Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#ifdef PP_GLM
-    Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
-#endif /*PP_GLM*/
-#endif /*mhd*/
-    CASE(3)
-    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
-#ifdef mhd
-    Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#ifdef PP_GLM
-    Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
-#endif /*PP_GLM*/
-#endif /*mhd*/
-    Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
-    CASE(4)
-    Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)    
-#ifdef mhd
-    Uind(1,:,:,:) = Uind(1,:,:,:)+s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#endif
-
-  END SELECT
   
-  ! Transform Uind into modal Legendre interpolant Umod
-  CALL ChangeBasis3D(1,PP_N,PP_N,sVdm_Leg,Uind,Umod)
-
-  ! Compute (truncated) error norms
-  LU     = SUM(Umod(1,:,:,:)**2)
-  LUM1   = SUM(Umod(1,0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
-  LUM2   = SUM(Umod(1,0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
-  LU_N   = LU-LUM1
-  LU_NM1 = LUM1-LUM2
-
-  ! DOF energy indicator
-  eta_dof = LOG10(MAX(LU_N/LU,LU_NM1/LUM1))
-
   ! Artificial Viscosity
   eta_min = -9.0
   eta_max = -3.0
   eps0 = 0.01
 
-  IF (eta_dof.GE.eta_max) THEN
+  IF (eta_dof(l).GE.eta_max) THEN
     nu(l) = eps0
-  ELSE IF (eta_dof.LE.eta_min) THEN
+  ELSE IF (eta_dof(l).LE.eta_min) THEN
     nu(l) = 0.
   ELSE
-    nu(l) = 0.5*eps0*(1.0+SIN(PP_Pi*(eta_dof-0.5*(eta_max+eta_min))/(eta_max-eta_min)))
+    nu(l) = 0.5*eps0*(1.0+SIN(PP_Pi*(eta_dof(l)-0.5*(eta_max+eta_min))/(eta_max-eta_min)))
   END IF
    
   ! Save max artificial viscosity for DFL timestepping
@@ -269,7 +227,77 @@ DO l=1,nElems
 END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
+
+!============================================================================================================================
+!> Modal shock sensor of Persson and Peraire
+!> Persson, P. O.; Peraire, J. (2006). "Sub-cell shock capturing for discontinuous Galerkin methods". In 44th AIAA Aerospace Sciences Meeting and Exhibit (p. 112).
+!============================================================================================================================
+subroutine ShockSensor_PerssonPeraire(U,eta)
+  USE MOD_PreProc
+  use MOD_ChangeBasis        , only: ChangeBasis3D
+  use MOD_Mesh_Vars          , only: nElems
+  use MOD_Equation_Vars      , only: KappaM1
+  use MOD_ShockCapturing_Vars, only: sVdm_Leg
+#ifdef mhd
+  use MOD_Equation_Vars      , only: s2mu_0
+#endif /*mhd*/
+  implicit none
+  ! Arguments
+  !---------------------------------------------------------------------------------------------------------------------------------
+  real,dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems), intent(in)  :: U
+  real                                               , intent(out) :: eta(nElems)
+  ! Local variables
+  !---------------------------------------------------------------------------------------------------------------------------------
+  real, dimension(1:1,0:PP_N,0:PP_N,0:PP_N) :: Uind,Umod
+  real                                      :: LU,LUM1,LUM2,LU_N,LU_NM1
+  integer                                   :: l
+  !---------------------------------------------------------------------------------------------------------------------------------
+  
+  do l=1, nElems
+    ! Select a shock indicator: density = 1, pressure = 2
+    SELECT CASE(PP_Indicator_Var)
+      CASE(1) ! Density
+      Uind(1,:,:,:) = U(1,:,:,:,l)
+      CASE(2) ! Pressure
+      Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
+#ifdef mhd
+      Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#ifdef PP_GLM
+      Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
+#endif /*PP_GLM*/
+#endif /*mhd*/
+      CASE(3) ! Density * Pressure
+      Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
+#ifdef mhd
+      Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#ifdef PP_GLM
+      Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
+#endif /*PP_GLM*/
+#endif /*mhd*/
+      Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
+      CASE(4) ! Kintetic energy
+      Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)    
+#ifdef mhd
+      Uind(1,:,:,:) = Uind(1,:,:,:)+s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
+#endif
+    end select
+  
+    ! Transform Uind into modal Legendre interpolant Umod
+    CALL ChangeBasis3D(1,PP_N,PP_N,sVdm_Leg,Uind,Umod)
+
+    ! Compute (truncated) error norms
+    LU     = SUM(Umod(1,:,:,:)**2)
+    LUM1   = SUM(Umod(1,0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
+    LUM2   = SUM(Umod(1,0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
+    LU_N   = LU-LUM1
+    LU_NM1 = LUM1-LUM2
+
+    ! DOF energy indicator
+    eta(l) = MAX(LU_N/LU,LU_NM1/LUM1)
+    
+  end do !l
+end subroutine ShockSensor_PerssonPeraire
 
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================
@@ -296,5 +324,5 @@ nu_max = 0.
 SDEALLOCATE(sVdm_Leg)
 SDEALLOCATE(nu)
 END SUBROUTINE FinalizeShockCapturing
-
+#endif
 END MODULE MOD_ShockCapturing

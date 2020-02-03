@@ -110,6 +110,7 @@ SUBROUTINE InitOutput()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Output_Vars
+USE MOD_Equation_Vars     ,ONLY:StrVarNames
 USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
@@ -178,6 +179,36 @@ IF(Logging)THEN
                       StrTime(1:2),':',StrTime(3:4),':',StrTime(5:10)
 END IF  ! Logging
 
+! Set the default number of output variables and allocate
+! -------------------------------------------------------
+#if defined (linearscalaradvection)
+nOutVars=2
+#elif (defined (mhd) | defined (navierstokes))
+nOutVars=PP_nVar
+#else
+!default
+nOutVars=PP_nVar
+#endif
+! If shock-capturing is activated output an extra quantity
+#if SHOCKCAPTURE
+nOutvars = nOutvars + 1
+#endif /*SHOCKCAPTURE*/
+allocate(strvarnames_tmp(nOutVars))
+
+! Set the default names
+! ---------------------
+#if defined (linearscalaradvection)
+strvarnames_tmp(1)=StrVarnames(1)
+strvarnames_tmp(2)='ExactSolution'
+#endif /*linearscalaradvection*/
+#if SHOCK_ARTVISC
+strvarnames_tmp(nOutVars) = 'ArtificialViscosity'
+#endif /*SHOCK_ARTVISC*/
+#if SHOCK_NFVSE
+strvarnames_tmp(nOutVars) = 'BlendingFunction'
+#endif /*SHOCK_ARTVISC/SHOCK_NFVSE*/
+
+
 OutputInitIsDone =.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT OUTPUT DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -240,12 +271,15 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 #elif (defined(mhd) || defined(navierstokes))
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
-#if SHOCKCAPTURE
-USE MOD_ShockCapturing_Vars ,ONLY: nu
-#endif /*SHOCKCAPTURE*/
+#if SHOCK_ARTVISC
+use MOD_ShockCapturing_Vars ,only: nu
+#endif /*SHOCK_ARTVISC*/
+#if SHOCK_NFVSE
+use MOD_ShockCapturing_Vars ,only: alpha
+#endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
-USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
+USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu, strvarnames_tmp, nOutVars
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -267,8 +301,7 @@ REAL                          :: Uex(1,0:PP_N,0:PP_N,0:PP_N)
 #elif (defined (mhd) || defined (navierstokes))
 REAL                          :: cons(PP_nVar)
 #endif
-INTEGER                       :: i,j,k,nOutVars
-CHARACTER(LEN=255),ALLOCATABLE:: strvarnames_tmp(:)
+INTEGER                       :: i,j,k
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
 
@@ -283,31 +316,22 @@ ELSE
   PrimVisu=.FALSE.
 END IF
 ! Specify output names
-#if defined (linearscalaradvection)
-nOutVars=2
-ALLOCATE(strvarnames_tmp(nOutVars))
-strvarnames_tmp(1)=StrVarnames(1)
-strvarnames_tmp(2)='ExactSolution'
-#elif (defined (mhd) | defined (navierstokes))
-nOutVars=PP_nVar
-ALLOCATE(strvarnames_tmp(nOutVars))
+#if (defined (mhd) | defined (navierstokes))
 IF(PrimVisu)THEN
-  strvarnames_tmp=StrVarnamesPrim
+  strvarnames_tmp(1:PP_nVar)=StrVarnamesPrim
 ELSE
   IF(PRESENT(StrVarNames_opt))THEN
-    strvarnames_tmp=StrVarnames_opt
+    strvarnames_tmp(1:PP_nVar)=StrVarnames_opt
   ELSE
-    strvarnames_tmp=StrVarnames
+    strvarnames_tmp(1:PP_nVar)=StrVarnames
   END IF
 END IF
 #else
 !default
-nOutVars=PP_nVar
-ALLOCATE(strvarnames_tmp(nOutVars))
 IF(PRESENT(StrVarNames_opt))THEN
-  strvarnames_tmp=StrVarnames_opt
+  strvarnames_tmp(1:PP_nVar)=StrVarnames_opt
 ELSE
-  strvarnames_tmp=StrVarnames
+  strvarnames_tmp(1:PP_nVar)=StrVarnames
 END IF
 #endif
 
@@ -332,10 +356,13 @@ DO iElem=1,nElems
     END DO ; END DO ; END DO
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 ! Print artificial viscosity instead of divergence error?
-  U_NVisu(PP_nVar,:,:,:,iElem) = nu(iElem)
-#endif /*SHOCKCAPTURE*/
+  U_NVisu(nOutvars,:,:,:,iElem) = nu(iElem)
+#endif /*SHOCK_ARTVISC*/
+#if SHOCK_NFVSE
+  U_NVisu(nOutvars,:,:,:,iElem) = alpha(iElem)
+#endif /*SHOCK_NFVSE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
 DEALLOCATE(U_NVisu)

@@ -25,19 +25,21 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-INTEGER                      :: NVisu                 !< Number of points at which solution is sampled for visualization
-REAL,ALLOCATABLE             :: Vdm_GaussN_NVisu(:,:) !< Vandermonde for direct interpolation from computation grid to visu grid
-REAL,PARAMETER               :: FileVersion=0.1       !< version written into output file
-CHARACTER(LEN=255),PARAMETER :: ProgramName='Fluxo'   !< name of program written into output file
-CHARACTER(LEN=255)           :: ProjectName           !< Name of the current simulation (mandatory).
-INTEGER                      :: outputFormat=0        !< File format for visualization. <=0: no visualization, 1: Tecplot binary,
+INTEGER                         :: NVisu                 !< Number of points at which solution is sampled for visualization
+REAL,ALLOCATABLE                :: Vdm_GaussN_NVisu(:,:) !< Vandermonde for direct interpolation from computation grid to visu grid
+REAL,PARAMETER                  :: FileVersion=0.1       !< version written into output file
+CHARACTER(LEN=255),PARAMETER    :: ProgramName='Fluxo'   !< name of program written into output file
+CHARACTER(LEN=255)              :: ProjectName           !< Name of the current simulation (mandatory).
+INTEGER                         :: outputFormat=0        !< File format for visualization. <=0: no visualization, 1: Tecplot binary,
                                                       !< 2: Tecplot ASCII, 3: Paraview binary. Note: Tecplot output is currently
                                                       !< unavailable due to licensing issues.
-INTEGER                      :: ASCIIOutputFormat=0   !< File format for ASCII output. 0: CSV, 1: Tecplot
-LOGICAL                      :: OutputInitIsDone=.FALSE.  !< marks whether output routines have been initialized
-LOGICAL                      :: doPrintStatusLine     !< flag indicating if status line should be printed
-INTEGER                      :: nBoundingBoxes        !< number of visualization bounding boxes (default=0)
-REAL,ALLOCATABLE             :: VisuBoundingBox(:,:)  !< bounding boxes from input file, size (6,nBoundingBoxes)
+INTEGER                         :: ASCIIOutputFormat=0   !< File format for ASCII output. 0: CSV, 1: Tecplot
+LOGICAL                         :: OutputInitIsDone=.FALSE.  !< marks whether output routines have been initialized
+LOGICAL                         :: doPrintStatusLine     !< flag indicating if status line should be printed
+INTEGER                         :: nBoundingBoxes        !< number of visualization bounding boxes (default=0)
+REAL,ALLOCATABLE                :: VisuBoundingBox(:,:)  !< bounding boxes from input file, size (6,nBoundingBoxes)
                                                       !< with (xmin,xmax,ymin,ymax,zmin,zmax)
+integer                         :: nOutVars              !< Default number of output variables for visualize routine
+character(LEN=255), allocatable :: strvarnames_tmp(:)   !< Default variable names for visualize routine
 !==================================================================================================================================
 END MODULE MOD_Output_Vars

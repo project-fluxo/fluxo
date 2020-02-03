@@ -148,7 +148,7 @@ IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
   SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes)
   IF(FLUXO_POSITIVITYPRES)
-	  MESSAGE(ERROR " Do not use positivity preservation with the Navier-Stokes solver!")
+	  MESSAGE(SEND_ERROR " Do not use positivity preservation with the Navier-Stokes solver!")
   ENDIF()
 ENDIF()
 
@@ -156,10 +156,10 @@ IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
   SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=1 -Dlinearscalaradvection)
   IF(FLUXO_SHOCKCAPTURE)
-    MESSAGE(ERROR " Do not use shock capturing with linear advection equation!")
+	  MESSAGE(SEND_ERROR " Do not use shock capturing with linear advection equation!")
   ENDIF()
   IF(FLUXO_POSITIVITYPRES)
-    MESSAGE(ERROR " Do not use positivity preservation with linear advection equation!")
+    MESSAGE(SEND_ERROR " Do not use positivity preservation with linear advection equation!")
   ENDIF()
 ENDIF()
 
@@ -219,10 +219,10 @@ IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
   IF (FLUXO_PARABOLIC)
     MESSAGE(SEND_ERROR " Do not use parabolic flag with maxwell equation system!")
   ELSEIF(FLUXO_SHOCKCAPTURE)
-    MESSAGE(ERROR " Do not use shock capturing with maxwell equation system!")
+    MESSAGE(SEND_ERROR " Do not use shock capturing with maxwell equation system!")
   ENDIF()
   IF(FLUXO_POSITIVITYPRES)
-    MESSAGE(ERROR " Do not use positivity preservation with maxwell equation system!")
+    MESSAGE(SEND_ERROR " Do not use positivity preservation with maxwell equation system!")
   ENDIF()
 ENDIF()
 
@@ -307,7 +307,22 @@ ENDIF()
 
 IF (FLUXO_SHOCKCAPTURE)
   ADD_DEFINITIONS(-DSHOCKCAPTURE=1)
-
+  
+  #### Set the shock capturing method
+  SET(FLUXO_SHOCKCAP_METHOD "NFVSE" CACHE STRING "Shock capturing method: ArtificialVisc/NFVSE")
+  SET_PROPERTY(CACHE FLUXO_SHOCKCAP_METHOD PROPERTY STRINGS ArtificialVisc NFVSE)
+  
+  IF(FLUXO_SHOCKCAP_METHOD STREQUAL "ArtificialVisc")
+    IF (NOT FLUXO_PARABOLIC)
+      MESSAGE(SEND_ERROR " Activate FLUXO_PARABOLIC for ArtificialVisc shock-capturing.")
+    ENDIF()
+    ADD_DEFINITIONS(-DSHOCK_ARTVISC=1)
+  ELSEIF(FLUXO_SHOCKCAP_METHOD STREQUAL "NFVSE")
+    ADD_DEFINITIONS(-DSHOCK_NFVSE=1)
+  ELSE()
+    MESSAGE(SEND_ERROR " No such shock-capturing method implemented.")
+  ENDIF()
+  
   #### Set the shock capturing indicator
   SET(FLUXO_SHOCKINDICATOR "dens" CACHE STRING "indicator used for shock capturing, dens/pres/ptde/vmbm: density/pressure/pressuretimesdensity/kinplusmagEnergy.")
   SET_PROPERTY(CACHE FLUXO_SHOCKINDICATOR PROPERTY STRINGS dens pres ptde vmbm)
@@ -597,7 +612,7 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/mesh/*.f90
                            ./src/timedisc/*.f90   
                            ./src/shockcapturing/*.f90   
-       			   ./src/positivitypreservation/*.f90   )
+       			   ./src/positivitypreservation/*.f90  )
 
 
 

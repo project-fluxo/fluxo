@@ -41,9 +41,9 @@ FUNCTION CALCTIMESTEP(errType)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_DG_Vars            ,ONLY:U
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu_max
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
 USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem
@@ -130,9 +130,9 @@ DO iElem=1,nElems
 #elif PP_VISC == 2
         muX=sRho*KappasPr_max*mu0*(srho*p/R)**ExpoPow ! compute vsicosity using the power-law
 #endif /*PP_VISC*/
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
         mu_eff = muX + nu_max
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
         MaxLambda_v1=MAX(MaxLambda_v1,mu_eff*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
         MaxLambda_v2=MAX(MaxLambda_v2,mu_eff*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
         MaxLambda_v3=MAX(MaxLambda_v3,mu_eff*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))

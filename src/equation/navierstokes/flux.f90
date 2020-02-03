@@ -144,9 +144,9 @@ SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
                            ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 USE MOD_Equation_Vars      ,ONLY:kappaM1
 #if PARABOLIC
 USE MOD_Equation_Vars      ,ONLY:mu0,sKappaM1,KappasPr,s23
@@ -240,11 +240,11 @@ DO i=1,nTotal_vol
 #if PP_VISC == 2
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
   mu_eff = muS+nu(iElem)
 #else
   mu_eff = muS
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
   ! Viscous part
   ASSOCIATE( gradv1x => gradPx_in(2,i), & 
              gradv2x => gradPx_in(3,i), & 
@@ -525,9 +525,9 @@ END SUBROUTINE EvalDiffFlux3D
 SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
 USE MOD_Equation_Vars ,ONLY:mu0,kappaM1,sKappaM1,KappasPr,s23
 #if PP_VISC==1
 USE MOD_Equation_Vars ,ONLY:muSuth,R
@@ -599,11 +599,11 @@ DO i=1,nTotal_vol
   T=p*srho/R ! Calculate temperature
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
   mu_eff = muS+nu(iElem)
 #else
   mu_eff = muS
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_ARTVISC*/
   ! Viscous part
   divv       = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
