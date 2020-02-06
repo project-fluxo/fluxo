@@ -31,8 +31,15 @@ LOGICAL          :: ShockCapturingInitIsDone=.FALSE.     !< marks whether the sh
 REAL,ALLOCATABLE :: sVdm_Leg(:,:)                        !< 1D inverse Vandermondematrix to Legendre polynomials
 REAL             :: nu_max                               !< Globally maximum artificial viscosity
 REAL,ALLOCATABLE :: nu(:),nu_Master(:),nu_Slave(:)       !< Cellwise (and Facewise) artificial viscosity
-real,allocatable :: alpha(:)                             !< Cellwise blending function
 
+! For NFVSE
+real, allocatable :: alpha(:)                             !< Element-wise blending function
+real, allocatable :: alpha_Master(:)                      !< Blending function on master sides
+real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides
+real              :: threshold
+real, parameter   :: alpha_max = 0.5d0
+real, parameter   :: alpha_min = 0.1d0
+real, parameter   :: sharpness = log((1.d0-1.d-4)/1.d-4)
 
 !===================================================================================================================================
 

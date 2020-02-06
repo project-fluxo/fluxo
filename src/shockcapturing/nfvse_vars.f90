@@ -19,7 +19,7 @@ module MOD_NFVSE_Vars
   implicit none
   
   private
-  public :: SubCellMetrics, SubCellMetrics_t, sWGP
+  public :: SubCellMetrics, SubCellMetrics_t, sWGP, MPIRequest_alpha
   
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
@@ -42,9 +42,10 @@ module MOD_NFVSE_Vars
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Variables
 !-----------------------------------------------------------------------------------------------------------------------------------
-  type(SubCellMetrics_t), allocatable :: SubCellMetrics(:)  !< Metric terms for the native sub-cell finite volumes
-  real                  , allocatable :: sWGP(:)            !< Inverse of the Gauss quadrature weights
-
+  type(SubCellMetrics_t), allocatable :: SubCellMetrics(:)      !< Metric terms for the native sub-cell finite volumes
+  real                  , allocatable :: sWGP(:)                !< Inverse of the Gauss quadrature weights
+  integer               , allocatable :: MPIRequest_alpha(:,:)  !< MPI request for the transfer of the blending coefficient
+                                                                !< (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
   
   contains
 

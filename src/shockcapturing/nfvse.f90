@@ -35,11 +35,12 @@ contains
 !> Initializes the NFVSE module
 !===================================================================================================================================
   subroutine InitNFVSE()
-    use MOD_NFVSE_Vars        , only: SubCellMetrics, sWGP
+    use MOD_NFVSE_Vars        , only: SubCellMetrics, sWGP, MPIRequest_alpha
+    use MOD_MPI_Vars          , only: nNbProcs
     use MOD_Mesh_Vars         , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
     use MOD_Interpolation_Vars, only: wGP
     implicit none
-    !--------------------------------------------------------------------------------------------------------------------------------
+    !-------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES 
     integer :: iElem
     integer :: i,j,k      !DOF counters
@@ -92,6 +93,9 @@ contains
     ! Compute the inverse of the quadrature weights (sub-cell dimensions)
     sWGP = 1.d0 / wGP
     
+#if MPI
+    allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
+#endif
   end subroutine InitNFVSE
   
 !===================================================================================================================================
@@ -104,9 +108,12 @@ contains
   !----------------------------------------------------------------------------------------------------------------------------------
     ! Modules
     use MOD_PreProc
-    use MOD_DG_Vars   , only: U
-    use MOD_Mesh_Vars , only: nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
-    use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP
+    use MOD_DG_Vars            , only: U
+    use MOD_Mesh_Vars          , only: nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP
+    use MOD_ShockCapturing_Vars, only: alpha
+    use MOD_Basis              , only: ALMOSTEQUAL
+    use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff
     ! IMPLICIT VARIABLE HANDLING
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
@@ -119,11 +126,14 @@ contains
     integer                                            :: i,j,k,iElem
     !===============================================================================================================================
     
+    call PropagateBlendingCoeff()
+    
     ftilde = 0.d0
     gtilde = 0.d0
     htilde = 0.d0
     
     do iElem=1,nElems
+      if ( ALMOSTEQUAL(alpha(iElem),0.d0) ) cycle
       !compute inner Riemann solutions (TODO: Not optimal.. Improve)
       call Compute_VolFluxes( U(:,:,:,:,iElem), SubCellMetrics(iElem), ftilde(:,0:PP_N-1, 0:PP_N  , 0:PP_N  ), &
                                                                        gtilde(:,0:PP_N  , 0:PP_N-1, 0:PP_N  ), &
@@ -131,9 +141,10 @@ contains
       
       ! Update the inner nodes
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + sWGP(i) * ( ftilde(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
-                                              + sWGP(j) * ( gtilde(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
-                                              + sWGP(k) * ( htilde(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
+        Ut(:,i,j,k,iElem) = (1.d0 - alpha(iElem)) * Ut(:,i,j,k,iElem) &
+                          +  alpha(iElem) * (  sWGP(i) * ( ftilde(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
+                                             + sWGP(j) * ( gtilde(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
+                                             + sWGP(k) * ( htilde(:,i,j,k) - htilde(:,i  ,j  ,k-1) ) )
       end do       ; end do       ; end do ! i,j,k
       
     end do ! iElem

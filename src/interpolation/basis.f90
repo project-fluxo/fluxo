@@ -96,6 +96,7 @@ PUBLIC::PolynomialDerivativeMatrix
 PUBLIC::BarycentricWeights
 PUBLIC::LagrangeInterpolationPolys
 PUBLIC::EQUALTOTOLERANCE
+public::ALMOSTEQUAL
 
 !==================================================================================================================================
 

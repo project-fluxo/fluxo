@@ -47,6 +47,9 @@ PUBLIC :: InitShockCapturing
 #if SHOCK_ARTVISC
 PUBLIC :: CalcArtificialViscosity
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_NFVSE
+public :: CalcBlendingCoefficient
+#endif /*SHOCK_NFVSE*/
 PUBLIC :: FinalizeShockCapturing
 !===================================================================================================================================
 CONTAINS
@@ -69,8 +72,11 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars
 USE MOD_ReadInTools
-USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide 
+USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh
 USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
+#if SHOCK_NFVSE
+use MOD_NFVSE             , only: InitNFVSE
+#endif /*SHOCK_NFVSE*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -88,12 +94,29 @@ IF (PP_N.LT.2) THEN
   CALL abort(__STAMP__,'Polynomial Degree too small for Shock Capturing!',999,999.)
   RETURN
 END IF
+
 ! shock caturing parameters
+#if SHOCK_ARTVISC
 ALLOCATE(nu(nElems),nu_Master(nSides),nu_Slave(firstSlaveSide:LastSlaveSide))
 nu     = 0.
 nu_max = 0.
 nu_Master = 0.
 nu_Slave = 0.
+#elif SHOCK_NFVSE
+allocate ( alpha(nElems) )
+allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
+allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
+alpha        = 0.d0
+alpha_Master = 0.d0
+alpha_Slave  = 0.d0
+
+
+!~ threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N + 1)**4)      ! Old Sebastian: This is almost cero ALWAYS
+!~ threshold = 0.5d0 * (PP_N + 1)**(-1.8d0 * 4)               ! Mine
+threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N + 1.d0)**0.25d0) ! New Sebastian
+
+call InitNFVSE()
+#endif /*SHOCK_NFVSE/SHOCK_ARTVISC*/
 
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
@@ -107,6 +130,10 @@ SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE TIMES DENSITY AS SHOCK INDICATOR!'
 #elif (PP_Indicator_Var==4)
 SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
 #endif
+if (isMortarMesh) then
+  SWRITE(UNIT_stdOut,'(A)')' WARNING: Shock capturing coefficients are not transferred correctly across mortars!'
+end if
+
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -228,7 +255,44 @@ END DO ! l
 
 END SUBROUTINE CalcArtificialViscosity
 #endif /*SHOCK_ARTVISC*/
-
+#if SHOCK_NFVSE
+!===================================================================================================================================
+!> Routines to compute the blending coefficient for NFVSE
+!> -> See Hennemann and Gassner (2020). "Entropy stable shock capturing for the discontinuous galerkin spectral element
+!>                                          method with native finite volume sub elements"
+!> -> This routine computes the sensor, makes the correction (with alpha_min and alpha_max), and sends the information with MPI
+!> -> No propagation is done yet (MPI informationmust be received).
+!===================================================================================================================================
+subroutine CalcBlendingCoefficient(U)
+  use MOD_PreProc
+  use MOD_ShockCapturing_Vars
+  use MOD_Mesh_Vars          , only: nElems
+  use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces
+  implicit none
+  ! Arguments
+  !---------------------------------------------------------------------------------------------------------------------------------
+  real,dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems), intent(in)  :: U
+  !---------------------------------------------------------------------------------------------------------------------------------
+  ! Local variables
+  real ::  eta(nElems)
+  !---------------------------------------------------------------------------------------------------------------------------------
+  
+  ! Shock indicator
+  call ShockSensor_PerssonPeraire(U,eta)
+  
+  ! Compute and correct alpha
+  alpha = 1.d0 / (1 + exp(-sharpness * (eta - threshold)/threshold ))
+  
+  where (alpha < alpha_min)
+    alpha = 0.d0
+  elsewhere (alpha >= alpha_max)
+    alpha = alpha_max
+  end where
+  
+  call ProlongBlendingCoeffToFaces()
+  
+end subroutine CalcBlendingCoefficient
+#endif /*SHOCK_NFVSE*/
 !============================================================================================================================
 !> Modal shock sensor of Persson and Peraire
 !> Persson, P. O.; Peraire, J. (2006). "Sub-cell shock capturing for discontinuous Galerkin methods". In 44th AIAA Aerospace Sciences Meeting and Exhibit (p. 112).
@@ -306,6 +370,9 @@ SUBROUTINE FinalizeShockCapturing()
 ! MODULES
 USE MOD_Globals
 USE MOD_ShockCapturing_Vars
+#if SHOCK_NFVSE
+use MOD_NFVSE             , only: FinalizeNFVSE
+#endif /*SHOCK_NFVSE*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -323,6 +390,14 @@ ShockCapturingInitIsDone = .FALSE.
 nu_max = 0.
 SDEALLOCATE(sVdm_Leg)
 SDEALLOCATE(nu)
+SDEALLOCATE(nu_Master)
+SDEALLOCATE(nu_Slave)
+SDEALLOCATE(alpha)
+
+#if SHOCK_NFVSE
+call FinalizeNFVSE()
+#endif /*SHOCK_NFVSE*/
+
 END SUBROUTINE FinalizeShockCapturing
 #endif
 END MODULE MOD_ShockCapturing

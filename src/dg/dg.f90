@@ -70,9 +70,6 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
-#if SHOCK_NFVSE
-use MOD_NFVSE              ,only: InitNFVSE
-#endif /*SHOCK_NFVSE*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -157,9 +154,6 @@ DGInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT DG DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 
-#if SHOCK_NFVSE
-call InitNFVSE()
-#endif /*SHOCK_NFVSE*/
 END SUBROUTINE InitDG
 
 
@@ -267,6 +261,7 @@ USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 #if SHOCK_NFVSE
 use MOD_NFVSE               ,only: VolInt_NFVSE
+use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 #if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt
@@ -316,17 +311,18 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
+! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
+#if SHOCK_NFVSE
+call CalcBlendingCoefficient(U)
+#endif /*SHOCK_NFVSE*/
+
 ! for all remaining sides (buffer routine for latency hiding!)
 !!write(*,*)'u in dgtimederivative', U
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
 
 #if PP_DiscType==2
-#if SHOCK_NFVSE
-call VolInt_NFVSE(Ut)
-#else
 CALL VolInt_adv_SplitForm(Ut)
-#endif /*SHOCK_NFVSE*/
 #endif /*PP_DiscType==2*/
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
@@ -337,6 +333,11 @@ CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 !complete send / receive of side data (WAIT...)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
 #endif
+
+! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
+#if SHOCK_NFVSE
+call VolInt_NFVSE(Ut)
+#endif /*SHOCK_NFVSE*/
 
 #if PARABOLIC
 ! Lifting 
@@ -414,9 +415,6 @@ SUBROUTINE FinalizeDG()
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_DG_Vars
-#if SHOCK_NFVSE
-use MOD_NFVSE, only: FinalizeNFVSE
-#endif /*SHOCK_NFVSE*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -440,10 +438,6 @@ SDEALLOCATE(U_slave)
 SDEALLOCATE(Flux_master)
 SDEALLOCATE(Flux_slave)
 DGInitIsDone = .FALSE.
-
-#if SHOCK_NFVSE
-call FinalizeNFVSE()
-#endif /*SHOCK_NFVSE*/
 
 END SUBROUTINE FinalizeDG
 
