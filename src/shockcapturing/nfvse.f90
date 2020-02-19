@@ -109,7 +109,7 @@ contains
     ! Modules
     use MOD_PreProc
     use MOD_DG_Vars            , only: U
-    use MOD_Mesh_Vars          , only: nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
+    use MOD_Mesh_Vars          , only: nElems
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP
     use MOD_ShockCapturing_Vars, only: alpha
     use MOD_Basis              , only: ALMOSTEQUAL
@@ -229,10 +229,12 @@ contains
 !> Finalizes the NFVSE module
 !===================================================================================================================================
   subroutine FinalizeNFVSE()
-    use MOD_NFVSE_Vars, only: SubCellMetrics
+    use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, MPIRequest_alpha
     implicit none
     
     SDEALLOCATE (SubCellMetrics)
+    SDEALLOCATE (sWGP)
+    SDEALLOCATE (MPIRequest_alpha)
     
   end subroutine FinalizeNFVSE
 #endif /*SHOCK_NFVSE*/

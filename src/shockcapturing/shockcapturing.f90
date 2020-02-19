@@ -51,6 +51,17 @@ PUBLIC :: CalcArtificialViscosity
 public :: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 PUBLIC :: FinalizeShockCapturing
+!==================================================================================================================================
+! local definitions for inlining / optimizing routines
+#if PP_Indicator_Var==1
+#  define PP_GetIndicator GetDensity
+#elif PP_Indicator_Var==2
+#  define PP_GetIndicator GetPressure
+#elif PP_Indicator_Var==3
+#  define PP_GetIndicator GetDensityTimesPressure
+#elif PP_Indicator_Var==4
+#  define PP_GetIndicator GetKinEnergy
+#endif
 !===================================================================================================================================
 CONTAINS
 
@@ -319,39 +330,14 @@ subroutine ShockSensor_PerssonPeraire(U,eta)
   !---------------------------------------------------------------------------------------------------------------------------------
   
   do l=1, nElems
-    ! Select a shock indicator: density = 1, pressure = 2
-    SELECT CASE(PP_Indicator_Var)
-      CASE(1) ! Density
-      Uind(1,:,:,:) = U(1,:,:,:,l)
-      CASE(2) ! Pressure
-      Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
-#ifdef mhd
-      Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#ifdef PP_GLM
-      Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
-#endif /*PP_GLM*/
-#endif /*mhd*/
-      CASE(3) ! Density * Pressure
-      Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
-#ifdef mhd
-      Uind(1,:,:,:) = Uind(1,:,:,:)-KappaM1*s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#ifdef PP_GLM
-      Uind(1,:,:,:) = Uind(1,:,:,:)-0.5*KappaM1*U(9,:,:,:,l)*U(9,:,:,:,l)
-#endif /*PP_GLM*/
-#endif /*mhd*/
-      Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
-      CASE(4) ! Kintetic energy
-      Uind(1,:,:,:) = SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)    
-#ifdef mhd
-      Uind(1,:,:,:) = Uind(1,:,:,:)+s2mu_0*SUM(U(6:8,:,:,:,l)*U(6:8,:,:,:,l))
-#endif
-    end select
-  
+    ! Get the indicator variable (Uind)
+    call GetIndicator_3D(Uind,U(:,:,:,:,l))
+    
     ! Transform Uind into modal Legendre interpolant Umod
     CALL ChangeBasis3D(1,PP_N,PP_N,sVdm_Leg,Uind,Umod)
-
+        
     ! Compute (truncated) error norms
-    LU     = SUM(Umod(1,:,:,:)**2)
+    LU     = SUM(Umod(1,0:PP_N  ,0:PP_N  ,0:PP_N  )**2)
     LUM1   = SUM(Umod(1,0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
     LUM2   = SUM(Umod(1,0:PP_N-2,0:PP_N-2,0:PP_N-2)**2)
     LU_N   = LU-LUM1
@@ -362,7 +348,24 @@ subroutine ShockSensor_PerssonPeraire(U,eta)
     
   end do !l
 end subroutine ShockSensor_PerssonPeraire
-
+!============================================================================================================================
+!> Get the shock indicator quantity for all degrees of freedom of an element
+!============================================================================================================================
+  pure subroutine GetIndicator_3D(Uind,U)
+    USE MOD_PreProc
+    implicit none
+    !-arguments-------------------------------------------
+    real, intent(in)  :: U(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(out) :: Uind (1:1,0:PP_N,0:PP_N,0:PP_N)
+    !-local-variables-------------------------------------
+    integer :: i,j,k
+    !-----------------------------------------------------
+    
+    do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+      call PP_GetIndicator(U(:,i,j,k),Uind(1,i,j,k))
+    end do       ; end do       ; end do
+  end subroutine GetIndicator_3D
+  
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================
 !> Deallocate all global shock capturing variables.
@@ -399,5 +402,66 @@ call FinalizeNFVSE()
 #endif /*SHOCK_NFVSE*/
 
 END SUBROUTINE FinalizeShockCapturing
-#endif
+!============================================================================================================================
+!============================================================================================================================
+! FOLLOWING ROUTINES COMPUTE PHYSICAL QUANTITIES... THEY COULD BE MOVED TO equation
+
+!============================================================================================================================
+!> Get Density
+!============================================================================================================================
+  pure subroutine GetDensity(U,rho)
+    implicit none
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: rho
+    
+    rho = U(1)
+    
+  end subroutine GetDensity
+!============================================================================================================================
+!> Get Pressure
+!============================================================================================================================
+  pure subroutine GetPressure(U,p)
+    use MOD_Equation_Vars      , only: KappaM1
+    implicit none
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: p
+    
+    p = KappaM1*(U(5)-0.5*(SUM(U(2:4)*U(2:4))/U(1)))
+#ifdef mhd
+    p = p - KappaM1*s2mu_0*SUM(U(6:8)*U(6:8))
+#ifdef PP_GLM
+    p = p - 0.5*KappaM1*U(9)*U(9)
+#endif /*PP_GLM*/
+#endif /*mhd*/
+  end subroutine GetPressure
+!============================================================================================================================
+!> Get Density Times Pressure
+!============================================================================================================================
+  pure subroutine GetDensityTimesPressure(U,rhop)
+    implicit none
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: rhop
+    !-----------------------------------------
+    real :: p
+    !-----------------------------------------
+    
+    call GetPressure(U,p)
+    rhop = U(1) * p
+    
+  end subroutine GetDensityTimesPressure
+!============================================================================================================================
+!> Get Density Times Pressure
+!============================================================================================================================
+  pure subroutine GetKinEnergy(U,kinen)
+    implicit none
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: kinen
+    
+    kinen = SUM(U(2:4)*U(2:4))/U(1)    
+#ifdef mhd
+    kinen = kinen + s2mu_0*SUM(U(6:8)*U(6:8))
+#endif /*mhd*/
+  end subroutine GetKinEnergy
+
+#endif /*SHOCKCAPTURE*/
 END MODULE MOD_ShockCapturing
