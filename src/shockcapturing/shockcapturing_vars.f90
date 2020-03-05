@@ -38,7 +38,7 @@ real, allocatable :: alpha_Master(:)                      !< Blending function o
 real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides
 real              :: threshold
 real, parameter   :: alpha_max = 0.5d0
-real, parameter   :: alpha_min = 0.1d0
+real, parameter   :: alpha_min = 0.001d0
 real, parameter   :: sharpness = log((1.d0-1.d-4)/1.d-4)
 
 !===================================================================================================================================
