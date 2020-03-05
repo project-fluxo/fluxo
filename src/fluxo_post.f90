@@ -44,6 +44,12 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
 USE MOD_Output_vars,       ONLY: ProjectName
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY:DefineParametersPositivityPreservation,InitPositivityPreservation,FinalizePositivityPreservation
+#endif /*POSITIVITYPRES*/
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -67,6 +73,12 @@ CALL DefineParametersTestcase()
 #if PARABOLIC
 CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
+#if SHOCKCAPTURE
+CALL DefineParametersShockCapturing()
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL DefineParametersPositivityPreservation()
+#endif /*POSITIVITYPRES*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 CALL DefineParametersAnalyzeAllStates()
@@ -138,6 +150,13 @@ CALL InitTimeDisc()
 CALL Restart(doFlush_in=.FALSE.)
 CALL InitAnalyze()
 CALL InitTestcase()
+#if SHOCKCAPTURE
+CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL InitPositivityPreservation()
+#endif /*POSITIVITYPRES*/
+
 ! initialization finished
 CALL IgnoredParameters()
 !
@@ -164,6 +183,12 @@ CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
+#if SHOCKCAPTURE
+CALL FinalizeShockCapturing()
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL FinalizePositivityPreservation()
+#endif /*POSITIVITYPRES*/
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()
