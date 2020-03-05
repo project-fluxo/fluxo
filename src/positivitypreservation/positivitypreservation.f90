@@ -49,6 +49,11 @@ PUBLIC::InitPositivityPreservation
 PUBLIC::MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 PUBLIC::FinalizePositivityPreservation
+
+
+real, allocatable :: Jac(:,:,:,:)  ! det of jacobian. TODO: Move to Mesh_vars
+real, allocatable :: vol      (:)  ! Volume of cell.  TODO: Move to Mesh_vars
+
 !===================================================================================================================================
 CONTAINS
 
@@ -71,6 +76,8 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_PositivityPreservation_Vars
 USE MOD_ReadInTools
+USE MOD_mesh_Vars                  , ONLY: sJ,nElems
+USE MOD_Interpolation_Vars         , ONLY: wGP
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -79,6 +86,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+integer :: i,j,k, l
 !============================================================================================================================
 IF (PositivityPreservationInitIsDone) THEN
   SWRITE(*,*) "InitPositivityPreservation already called."
@@ -89,6 +97,17 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT POSITIVITYPRESERVATION...'
 PositivityPreservationInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT POSITIVITYPRESERVATION DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
+
+allocate ( Jac(0:PP_N,0:PP_N,0:PP_N,nElems) )
+allocate ( vol(nElems) )
+vol = 0.
+do l=1, nElems
+  do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+    Jac(i,j,k,l) = 1./sJ(i,j,k,l)
+    vol(l) = vol(l) + Jac(i,j,k,l) * wGP(i)*wGP(j)*wGP(k)
+  end do       ; end do       ; end do
+end do
+
 END SUBROUTINE InitPositivityPreservation
 
 #if POSITIVITYPRES
@@ -99,11 +118,8 @@ SUBROUTINE MakeSolutionPositive(U)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Interpolation_Vars         , ONLY: wGP
-USE MOD_Equation_Vars              , ONLY: KappaM1
-#ifdef mhd
-USE MOD_Equation_Vars      , ONLY: s2mu_0
-#endif /*mhd*/
-USE MOD_mesh_Vars                  , ONLY: sJ,nElems
+use MOD_ShockCapturing             , only: GetPressure ! TODO:read from MOD_Equation_Vars
+USE MOD_mesh_Vars                  , ONLY: nElems
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -128,13 +144,13 @@ DO l = 1,nElems
   DO k = 0,PP_N
     DO j = 0,PP_N
       DO i = 0,PP_N
-        Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)/sJ(i,j,k,l)
+        Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
         rho_min = MIN(rho_min,Uloc(1,i,j,k))
       END DO ! i
     END DO ! j
   END DO ! k
 ! Compute the cell average
-  Umean = Umean/8.
+  Umean = Umean/vol(l)  ! Is this hard-coded 2x2x2?
 ! Limit the density
   IF(rho_min.LT.0.) THEN
 !    WRITE(*,*)
@@ -155,11 +171,7 @@ DO l = 1,nElems
   DO k = 0,PP_N
     DO j = 0,PP_N
       DO i = 0,PP_N
-        p(i,j,k) = KappaM1*(Uloc(5,i,j,k) - 0.5*(SUM(Uloc(2:4,i,j,k)*Uloc(2:4,i,j,k))/Uloc(1,i,j,k)) &
-               & - s2mu_0*SUM(Uloc(6:8,i,j,k)*Uloc(6:8,i,j,k)))
-#ifdef PP_GLM
-    	p(i,j,k) = p(i,j,k)-0.5*KappaM1*Uloc(9,i,j,k)*Uloc(9,i,j,k)
-#endif /*PP_GLM*/
+        call GetPressure(Uloc(:,i,j,k),p(i,j,k))
         p_min = MIN(p_min,p(i,j,k))
       END DO ! i
     END DO ! j
@@ -170,10 +182,7 @@ DO l = 1,nElems
 !    WRITE(*,*)
 !    WRITE(*,*)'      The pressure was limited !'
 !    WRITE(*,*)
-    p_mean = KappaM1*(Umean(5)-0.5*(SUM(Umean(2:4)*Umean(2:4))/Umean(1))-s2mu_0*SUM(Umean(6:8)*Umean(6:8)))
-#ifdef PP_GLM
-    p_mean = p_mean-0.5*KappaM1*Umean(9)*Umean(9)
-#endif /*PP_GLM*/
+    call GetPressure(Umean,p_mean)
     delta  = p_mean/(p_mean - p_min)
     delta  = 0.999*delta ! make delta > 0
     DO k = 0,PP_N

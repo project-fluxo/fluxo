@@ -51,6 +51,7 @@ PUBLIC :: CalcArtificialViscosity
 public :: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 PUBLIC :: FinalizeShockCapturing
+public :: GetPressure ! TODO: Move this to equation
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines
 #if PP_Indicator_Var==1
@@ -312,11 +313,7 @@ subroutine ShockSensor_PerssonPeraire(U,eta)
   USE MOD_PreProc
   use MOD_ChangeBasis        , only: ChangeBasis3D
   use MOD_Mesh_Vars          , only: nElems
-  use MOD_Equation_Vars      , only: KappaM1
   use MOD_ShockCapturing_Vars, only: sVdm_Leg
-#ifdef mhd
-  use MOD_Equation_Vars      , only: s2mu_0
-#endif /*mhd*/
   implicit none
   ! Arguments
   !---------------------------------------------------------------------------------------------------------------------------------
@@ -335,7 +332,7 @@ subroutine ShockSensor_PerssonPeraire(U,eta)
     
     ! Transform Uind into modal Legendre interpolant Umod
     CALL ChangeBasis3D(1,PP_N,PP_N,sVdm_Leg,Uind,Umod)
-        
+    
     ! Compute (truncated) error norms
     LU     = SUM(Umod(1,0:PP_N  ,0:PP_N  ,0:PP_N  )**2)
     LUM1   = SUM(Umod(1,0:PP_N-1,0:PP_N-1,0:PP_N-1)**2)
@@ -421,6 +418,9 @@ END SUBROUTINE FinalizeShockCapturing
 !> Get Pressure
 !============================================================================================================================
   pure subroutine GetPressure(U,p)
+#ifdef mhd
+    use MOD_Equation_Vars      , only: s2mu_0
+#endif /*mhd*/
     use MOD_Equation_Vars      , only: KappaM1
     implicit none
     real, intent(in)  :: U(PP_nVar)
