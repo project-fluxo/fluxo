@@ -42,6 +42,15 @@ INTERFACE FinalizeShockCapturing
    MODULE PROCEDURE FinalizeShockCapturing
 END INTERFACE
 
+abstract interface
+  pure subroutine i_sub_GetIndicator(U,ind)
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: ind
+  end subroutine i_sub_GetIndicator
+end interface
+
+procedure(i_sub_GetIndicator), pointer :: CustomIndicator
+
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
 #if SHOCK_ARTVISC
@@ -54,7 +63,9 @@ PUBLIC :: FinalizeShockCapturing
 public :: GetPressure ! TODO: Move this to equation
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines
-#if PP_Indicator_Var==1
+#if PP_Indicator_Var==0
+#  define PP_GetIndicator CustomIndicator
+#elif PP_Indicator_Var==1
 #  define PP_GetIndicator GetDensity
 #elif PP_Indicator_Var==2
 #  define PP_GetIndicator GetPressure
@@ -75,6 +86,13 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("ShockCapturing")
+
+CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be used as shock-indicator "//&
+                                              "  1: Density"//&
+                                              "  2: Pressure"//&
+                                              "  3: Density times Pressure"//&
+                                              "  4: Kinetic Energy"&
+                                             ,"3")
 END SUBROUTINE DefineParametersShockCapturing
 
 SUBROUTINE InitShockCapturing()
@@ -97,6 +115,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+integer :: whichIndicator
 !============================================================================================================================
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
   SWRITE(*,*) "InitShockCapturing not ready to be called or already called."
@@ -133,15 +152,27 @@ call InitNFVSE()
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 CALL InitBasisTrans(PP_N,xGP)
-#if (PP_Indicator_Var==1)
-SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY AS SHOCK INDICATOR!'
-#elif (PP_Indicator_Var==2)
-SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE AS SHOCK INDICATOR!'
-#elif (PP_Indicator_Var==3)
-SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE TIMES DENSITY AS SHOCK INDICATOR!'
-#elif (PP_Indicator_Var==4)
-SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
+
+#if PP_Indicator_Var==0
+whichIndicator = GETINT('ShockIndicator','3')
+#else
+whichIndicator = PP_Indicator_Var
 #endif
+select case (whichIndicator)
+  case(1)
+    CustomIndicator => GetDensity
+    SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY AS SHOCK INDICATOR!'
+  case(2)
+    CustomIndicator => GetPressure
+    SWRITE(UNIT_StdOut,'(A)') '    USING PRESSURE AS SHOCK INDICATOR!'
+  case(3)
+    CustomIndicator => GetDensityTimesPressure
+    SWRITE(UNIT_StdOut,'(A)') '    USING DENSITY TIMES PRESSURE AS SHOCK INDICATOR!'
+  case(4)
+    CustomIndicator => GetKinEnergy
+    SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
+end select
+
 if (isMortarMesh) then
   SWRITE(UNIT_stdOut,'(A)')' WARNING: Shock capturing coefficients are not transferred correctly across mortars!'
 end if
