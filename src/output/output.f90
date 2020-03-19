@@ -198,6 +198,9 @@ nOutVars=PP_nVar
 ! If shock-capturing is activated output an extra quantity
 #if SHOCKCAPTURE
 nOutvars = nOutvars + 1
+#if NFVSE_CORR
+nOutvars = nOutvars + 1
+#endif /*NFVSE_CORR*/
 #endif /*SHOCKCAPTURE*/
 allocate(strvarnames_tmp(nOutVars))
 
@@ -211,8 +214,11 @@ strvarnames_tmp(2)='ExactSolution'
 strvarnames_tmp(nOutVars) = 'ArtificialViscosity'
 #endif /*SHOCK_ARTVISC*/
 #if SHOCK_NFVSE
-strvarnames_tmp(nOutVars) = 'BlendingFunction'
-#endif /*SHOCK_ARTVISC/SHOCK_NFVSE*/
+strvarnames_tmp(PP_nVar+1) = 'BlendingFunction'
+#if NFVSE_CORR
+strvarnames_tmp(nOutVars) = 'BlendingFunction_old'
+#endif /*NFVSE_CORR*/
+#endif /*SHOCK_NFVSE*/
 
 
 OutputInitIsDone =.TRUE.
@@ -281,7 +287,7 @@ USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 use MOD_ShockCapturing_Vars ,only: nu
 #endif /*SHOCK_ARTVISC*/
 #if SHOCK_NFVSE
-use MOD_ShockCapturing_Vars ,only: alpha
+use MOD_ShockCapturing_Vars ,only: alpha, alpha_old
 #endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
@@ -364,10 +370,13 @@ DO iElem=1,nElems
 #endif /*linadv,navierstokes,mhd*/
 #if SHOCK_ARTVISC
 ! Print artificial viscosity instead of divergence error?
-  U_NVisu(nOutvars,:,:,:,iElem) = nu(iElem)
+  U_NVisu(nOutvars ,:,:,:,iElem) = nu(iElem)
 #endif /*SHOCK_ARTVISC*/
 #if SHOCK_NFVSE
-  U_NVisu(nOutvars,:,:,:,iElem) = alpha(iElem)
+  U_NVisu(PP_nVar+1,:,:,:,iElem) = alpha(iElem)
+#if NFVSE_CORR
+  U_NVisu(nOutvars ,:,:,:,iElem) = alpha_old(iElem)
+#endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)

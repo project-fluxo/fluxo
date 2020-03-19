@@ -319,6 +319,20 @@ DO
 
   ! Analyze and output now
   IF(doAnalyze) THEN
+  
+    ! Visualize data and write solution
+    writeCounter=writeCounter+1
+    IF(nWriteData.GT.0) THEN
+      IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
+        ! Visualize data
+        CALL Visualize(t,U)
+        ! Write state to file
+        CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
+        writeCounter=0
+        tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+      END IF
+    END IF
+    
     ! Call DG operator to fill face data, fluxes, gradients for analyze
     CALL DGTimeDerivative(t)
 
@@ -336,19 +350,6 @@ DO
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
       WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps   : ',REAL(iter)
     END IF !MPIroot
-
-    ! Visualize data and write solution
-    writeCounter=writeCounter+1
-    IF(nWriteData.GT.0) THEN
-      IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
-        ! Visualize data
-        CALL Visualize(t,U)
-        ! Write state to file
-        CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
-        writeCounter=0
-        tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
-      END IF
-    END IF
 
     ! do analysis
     CALL Analyze(t,iter)
@@ -381,6 +382,9 @@ USE MOD_Mesh_Vars    ,ONLY: nElems
 #if SHOCK_ARTVISC
 USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
 #endif /*SHOCK_ARTVISC*/
+#if NFVSE_CORR
+use MOD_NFVSE                 , only: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
@@ -409,6 +413,9 @@ CALL MakeSolutionPositive(U)
 #if SHOCK_ARTVISC
 CALL CalcArtificialViscosity(U)
 #endif /*SHOCK_ARTVISC*/
+#if NFVSE_CORR
+call Apply_NFVSE_Correction(U,t,b_dt(1))
+#endif /*NFVSE_CORR*/
 
 ! Following steps
 DO iStage=2,nRKStages
@@ -420,6 +427,9 @@ DO iStage=2,nRKStages
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,t,b_dt(iStage))
+#endif /*NFVSE_CORR*/
 END DO
 CurrentStage=1
 

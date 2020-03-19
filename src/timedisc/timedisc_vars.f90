@@ -104,6 +104,10 @@ CASE('standardrk3-3','carpenterrk4-5','niegemannrk4-14',&
   TimeDiscType='LSERKW2'
 CASE('ketchesonrk4-20','ketchesonrk4-18')
   TimeDiscType='LSERKK3'
+#if NFVSE_CORR
+  CALL CollectiveStop(__STAMP__,&
+                      'NFVSE correction is only implemented for LSERKW2 methods')
+#endif
 CASE DEFAULT
   CALL CollectiveStop(__STAMP__,&
                       'Unknown method of time discretization: '//TRIM(TimeDiscMethod))

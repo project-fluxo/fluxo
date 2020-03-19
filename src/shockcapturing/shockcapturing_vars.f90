@@ -33,12 +33,14 @@ REAL             :: nu_max                               !< Globally maximum art
 REAL,ALLOCATABLE :: nu(:),nu_Master(:),nu_Slave(:)       !< Cellwise (and Facewise) artificial viscosity
 
 ! For NFVSE
-real, allocatable :: alpha(:)                             !< Element-wise blending function
+real, allocatable :: alpha(:)                             !< Element-wise blending function (modified every time Ut is computed)
+real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
 real, allocatable :: alpha_Master(:)                      !< Blending function on master sides
 real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides
 real              :: threshold
-real, parameter   :: alpha_max = 0.5d0
-real, parameter   :: alpha_min = 0.001d0
+real              :: beta              ! Limiting factor for NFVSE correction
+real, parameter   :: alpha_max = 0.5   ! Maximum blending factor
+real, parameter   :: alpha_min = 0.001 ! Minimum blending factor
 real, parameter   :: sharpness = log((1.d0-1.d-4)/1.d-4)
 
 !===================================================================================================================================

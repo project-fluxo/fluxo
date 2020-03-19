@@ -93,6 +93,7 @@ CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be
                                               "  3: Density times Pressure"//&
                                               "  4: Kinetic Energy"&
                                              ,"3")
+CALL prms%CreateRealOption(     "ShockCorrFactor",  " The correction factor for NFVSE")
 END SUBROUTINE DefineParametersShockCapturing
 
 SUBROUTINE InitShockCapturing()
@@ -176,6 +177,11 @@ end select
 if (isMortarMesh) then
   SWRITE(UNIT_stdOut,'(A)')' WARNING: Shock capturing coefficients are not transferred correctly across mortars!'
 end if
+
+#if NFVSE_CORR
+beta = GETREAL('ShockCorrFactor','0.1')
+SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with beta=', beta
+#endif /*NFVSE_CORR*/
 
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
