@@ -268,7 +268,7 @@ REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
 ! LOCAL VARIABLES                                                                                                               !
 INTEGER :: i,j
 REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
-REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, HTilde, vTilde, aTilde
 REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
 !==================================================================================================================================
 CALL EvalEulerFlux1D(U_LL,F_L)
@@ -281,13 +281,32 @@ DO j=0,PP_N
     Vel_R =U_RR(2:4,i,j)*sRho_R
     p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
     p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
-    Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
-    Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+!   
+!   Davis (not recommended according to Toro)
+!   -----------------------------------------
+!~     Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
+!~     Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+!
+!   Davis and Einfeldt
+!   ------------------
+    !! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)/U_LL(1,i,j)
+    H_R = (U_RR(5,i,j) + p_R)/U_RR(1,i,j)
+
+    !! Roe averages
+    HTilde = (SQRT(U_LL(1,i,j))*H_L      + SQRT(U_RR(1,i,j))*H_R     )/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+    vTilde = (SQRT(U_LL(1,i,j))*Vel_L(1) + SQRT(U_RR(1,i,j))*Vel_R(1))/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+
+    aTilde = SQRT((kappa-1.)*(HTilde - 0.5*vTilde**2))
+
+    Ssl = vTilde - aTilde
+    Ssr = vTilde + aTilde
+    
     ! positive supersonic speed
-    IF(Ssl .GE. 0.)THEN
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
       F(:,i,j)=F_L(:,i,j)
     ! negative supersonic speed
-    ELSEIF(Ssr .LE. 0.)THEN
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
       F(:,i,j)=F_R(:,i,j)
     ! subsonic case
     ELSE
@@ -366,6 +385,131 @@ DO j=0,PP_N
 END DO ! j
 END SUBROUTINE RiemannSolverByHLLC
 
+
+!==================================================================================================================================
+!> HLLC Riemann solver with Carbuncle fix
+!==================================================================================================================================
+SUBROUTINE RiemannSolverByHLLCnoCarbuncle(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+real,DIMENSION(1:5) :: F_HLLE, F_HLLC
+real :: smooth, a_L, a_R, H_L, H_R, HTilde, vTilde, aTilde
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    
+!   ***************************    
+!   Direct wave speed estimates
+!   ***************************
+    
+!   Davis estimates:
+!   ----------------   ...not recommended for practical computations [Toro,2009]
+!~     a_L   =SQRT(kappa*p_L*sRho_L)
+!~     a_R   =SQRT(kappa*p_R*sRho_R)
+!~     !(1)
+!~     Ssl = Vel_L(1) - a_L
+!~     Ssr = Vel_R(1) + a_R
+!~     !(2)
+!~     Ssl = min( Vel_L(1) - a_L, Vel_R(1) - a_R )
+!~     Ssr = max( Vel_L(1) + a_L, Vel_R(1) + a_R )
+    
+!   Davis (1988) and Einfeldt (1988):
+!   ---------------------------------
+    !! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)/U_LL(1,i,j)
+    H_R = (U_RR(5,i,j) + p_R)/U_RR(1,i,j)
+
+    !! Roe averages
+    HTilde = (SQRT(U_LL(1,i,j))*H_L      + SQRT(U_RR(1,i,j))*H_R     )/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+    vTilde = (SQRT(U_LL(1,i,j))*Vel_L(1) + SQRT(U_RR(1,i,j))*Vel_R(1))/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+
+    aTilde = SQRT((kappa-1.)*(HTilde - 0.5*vTilde**2))
+
+    Ssl = vTilde - aTilde
+    Ssr = vTilde + aTilde
+    
+!   ***************
+!   Riemann solver!
+!   ***************
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      sMu_L = Ssl - Vel_L(1)
+      sMu_R = Ssr - Vel_R(1)
+      SStar = (p_R - p_L +                    &
+               U_LL(2,i,j)*sMu_L - U_RR(2,i,j)*sMu_R) / &
+              (U_LL(1,i,j)*sMu_L - U_RR(1,i,j)*sMu_R)
+      IF ((Ssl .LE. 0.).AND.(SStar .GE. 0.)) THEN
+        U_Star(:) = U_LL(1,i,j) * sMu_L/(Ssl-SStar)*                  &
+          (/ 1., SStar, U_LL(3:4,i,j)*sRho_L,                         &
+             U_LL(PP_nVar,i,j)*sRho_L + (SStar-Vel_L(1))*             &
+            (SStar + p_L*sRho_L/sMu_L)                              /)
+        
+        ! Original HLLC:
+        !F(:,i,j)=F_L(:,i,j)+Ssl*(U_Star(:)-U_LL(:,i,j))
+        
+        ! For Carbuncle:
+        F_HLLE = (Ssr*F_L(:,i,j) - Ssl*F_R(:,i,j) + Ssl*Ssr*(U_RR(:,i,j) - U_LL(:,i,j))) / (Ssr - Ssl)
+        F_HLLC = F_L(:,i,j) + Ssl*(U_Star(:) - U_LL(:,i,j))
+
+        smooth = SQRT(abs(p_L - p_R)/(p_L + p_R))
+
+        F(:,i,j) = smooth*F_HLLE + (1.-smooth)*F_HLLC
+
+        
+      ELSE
+        U_Star(:) = U_RR(1,i,j) * sMu_R/(Ssr-SStar)*                  &
+          (/ 1., SStar, U_RR(3:4,i,j)*sRho_R,                         &
+             U_RR(PP_nVar,i,j)*sRho_R + (SStar-Vel_R(1))*             &
+            (SStar + p_R*sRho_R/sMu_R)                              /)
+        
+        ! Original HLLC:
+        !F(:,i,j)=F_R(:,i,j)+Ssr*(U_Star(:)-U_RR(:,i,j))
+        
+        ! For Carbuncle:
+        F_HLLE = (Ssr*F_L(:,i,j) - Ssl*F_R(:,i,j) + Ssl*Ssr*(U_RR(:,i,j) - U_LL(:,i,j))) / (Ssr - Ssl)
+        F_HLLC = F_R(:,i,j) + Ssr*(U_Star(:) - U_RR(:,i,j))
+
+        smooth = SQRT(abs(p_L - p_R)/(p_L + p_R))
+
+        F(:,i,j) = smooth*F_HLLE + (1.-smooth)*F_HLLC
+      END IF
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLCnoCarbuncle
 
 !==================================================================================================================================
 !> Roe riemann solver, depending on "whichvolumeflux" global parameter, consistent dissipation is added
