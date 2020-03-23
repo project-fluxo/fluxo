@@ -178,7 +178,7 @@ SWRITE(UNIT_stdOut,'(132("="))')
 
 
 
-CALL InitVortex()
+CALL InitData()
 
 ! Run Simulation
 CALL TimeDisc()

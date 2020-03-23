@@ -560,6 +560,7 @@ CASE(4) ! exact function
 
   ! g(t)
   Resu(1:4)=2.+ IniAmplitude*sin(Omega*(SUM(x) - tEval))
+
   Resu(5)=Resu(1)*Resu(1)
   ! g'(t)
   Resu_t(1:4)=(-omega)*IniAmplitude*cos(Omega*(SUM(x) - tEval))
@@ -695,10 +696,33 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
   prim(2:4) = 0.     ! gas at rest initially
   prim(5)   = 0.00001! ambient pressure
   r2 = SQRT(SUM(x*x))! the radius
-  IF ((r2.LE.0.1).AND.(r2.NE.0.)) THEN
+  IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN
     du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
-    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/VPP_Pi
   END IF
+  CALL PrimToCons(prim,resu)
+CASE(14) ! Weak Circular Blast Wave
+  r2 = (SUM((x(2:3)-0.5)*(x(2:3)-0.5)))! the radius**2
+    prim(1)   = sin(X(3)*2.*PP_Pi)+2.!1. !+ 0.5/(2.*PP_Pi*3.e-2*3.e-2*400)*exp(-0.5*r2/(3.e-2*3.e-2*2))     ! ambient density
+    prim(2) = 10.     ! gas at rest initially stop
+    prim(3) = 10.     ! gas at rest initially stop
+    prim(4) = 10.     ! gas at rest initially stop
+      prim(5)   =50.! 50.e1/kappaM1 + 0.5*1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*2))
+ 
+  !IF (R2 < 0.25) THEN
+  !  prim(1)   = 1. !+0.5/(2.*PP_Pi*3.e-2*3.e-2)*exp(-0.5*r2/(3.e-2*3.e-2 * 4))     ! ambient density
+  !  prim(2:4) = 0.     ! gas at rest initially
+  !  prim(5)   = 1.e5*0.005!/kappaM1 + 1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*4))
+  !ELSE
+
+  !prim(1)   = 1. !+0.5/(2.*PP_Pi*3.e-2*3.e-2)*exp(-0.5*r2/(3.e-2*3.e-2 * 4))     ! ambient density
+  !prim(2:4) = 0.     ! gas at rest initially
+  !prim(5)   = 1.e5!/kappaM1 + 1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*4))
+  !ENDIF
+  ! IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN
+  !   du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
+  !   prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+  ! END IF
   CALL PrimToCons(prim,resu)
 END SELECT ! ExactFunction
 
@@ -771,7 +795,7 @@ CASE(4) ! exact function
       Ut_src(1)   = tmp(1)*cosXGP
       Ut_src(2:4) = tmp(2)*cosXGP + tmp(3)*sinXGP2
       Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+0*Ut_src
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
 CASE DEFAULT

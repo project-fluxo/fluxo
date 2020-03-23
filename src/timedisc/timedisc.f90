@@ -226,14 +226,19 @@ doAMR = 0
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
-DO
+DO ITER = 1,8
  IF (UseAMR) THEN 
-  doAMR = doAMR + 1;
-  IF (doAMR .EQ. 2) THEN
-    doAMR = 0;
+  ! doAMR = doAMR + 1;
+  ! IF (doAMR .EQ. 1) THEN
+    ! doAMR = 0;
     CALL ShockCapturingAMR()
-  ENDIF
+  ! ENDIF
  ENDIF 
+ENDDO
+
+iter = 0
+DO
+ 
   IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
