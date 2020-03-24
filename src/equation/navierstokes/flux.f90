@@ -116,8 +116,8 @@ DO i=1,nTotal_vol
   ! Euler fluxes y-direction
   g(1)=U_in(3,i)
   g(2)=f(3)                      ! rho*u*v
-  g(3)=U_in(2,i)*v2+p  
-  g(4)=U_in(2,i)*v3
+  g(3)=U_in(3,i)*v2+p  
+  g(4)=U_in(3,i)*v3
   g(5)=(U_in(5,i)+p)*v2 
   ! Euler fluxes z-direction
   h(1)=U_in(4,i)
