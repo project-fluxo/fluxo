@@ -40,11 +40,15 @@ contains
     use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
     use MOD_Interpolation_Vars , only: wGP
     use MOD_ShockCapturing_Vars, only: alpha_old
+    USE MOD_Globals,     ONLY: CROSS
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES 
     integer :: iElem
     integer :: i,j,k      !DOF counters
+    real :: Metrics_fCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) xi metrics
+    real :: Metrics_gCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) eta metrics
+    real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
     real, parameter :: half = 0.5d0
     !--------------------------------------------------------------------------------------------------------------------------------
     
@@ -54,39 +58,89 @@ contains
     
     allocate ( sWGP(0:PP_N) )
     
-    ! Compute inner normal and tangent vectors (the storage access to Metrics_*Tilde is not optimized... but this is done only once!)
+    ! Compute inner normal and tangent vectors
     do iElem=1, nElems
       
+!     Xi planes
+!     ---------
+      Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,4,2,3])
+      Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,4,2,3])
+!~       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,4,2,3])
       do i=0, PP_N-1
         ! Compute vectors
-        SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = half * ( Metrics_fTilde(:,i,:,:,iElem) + Metrics_fTilde(:,i+1,:,:,iElem) )
-        SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = half * ( Metrics_gTilde(:,i,:,:,iElem) + Metrics_gTilde(:,i+1,:,:,iElem) )
-        SubCellMetrics(iElem) % xi   % t2(:,:,:,i) = half * ( Metrics_hTilde(:,i,:,:,iElem) + Metrics_hTilde(:,i+1,:,:,iElem) )
-        
-        SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = half * ( Metrics_gTilde(:,:,i,:,iElem) + Metrics_gTilde(:,:,i+1,:,iElem) )
-        SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = half * ( Metrics_hTilde(:,:,i,:,iElem) + Metrics_hTilde(:,:,i+1,:,iElem) )
-        SubCellMetrics(iElem) % eta  % t2(:,:,:,i) = half * ( Metrics_fTilde(:,:,i,:,iElem) + Metrics_fTilde(:,:,i+1,:,iElem) )
-        
-        SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = half * ( Metrics_hTilde(:,:,:,i,iElem) + Metrics_hTilde(:,:,:,i+1,iElem) )
-        SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = half * ( Metrics_fTilde(:,:,:,i,iElem) + Metrics_fTilde(:,:,:,i+1,iElem) )
-        SubCellMetrics(iElem) % zeta % t2(:,:,:,i) = half * ( Metrics_gTilde(:,:,:,i,iElem) + Metrics_gTilde(:,:,:,i+1,iElem) )
+        SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = half * ( Metrics_fCont(:,:,:,i) + Metrics_fCont(:,:,:,i+1) )
+        SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = half * ( Metrics_gCont(:,:,:,i) + Metrics_gCont(:,:,:,i+1) )
+!~         SubCellMetrics(iElem) % xi   % t2(:,:,:,i) = half * ( Metrics_hCont(:,:,:,i) + Metrics_hCont(:,:,:,i+1) )
         
         ! Normalize each
         do k=0, PP_N ; do j=0, PP_N
-          SubCellMetrics(iElem) % xi   % norm(j,k,i) = norm2 (SubCellMetrics(iElem) % xi   % nv(:,j,k,i))
-          SubCellMetrics(iElem) % xi   % nv(:,j,k,i) = SubCellMetrics(iElem) % xi   % nv(:,j,k,i) / SubCellMetrics(iElem) % xi   % norm(j,k,i)
-          SubCellMetrics(iElem) % xi   % t1(:,j,k,i) = SubCellMetrics(iElem) % xi   % t1(:,j,k,i) / norm2 (SubCellMetrics(iElem) % xi   % t1(:,j,k,i))
-          SubCellMetrics(iElem) % xi   % t2(:,j,k,i) = SubCellMetrics(iElem) % xi   % t2(:,j,k,i) / norm2 (SubCellMetrics(iElem) % xi   % t2(:,j,k,i))
+          associate (norm => SubCellMetrics(iElem) % xi   % norm(j,k,i), &
+                     nv   => SubCellMetrics(iElem) % xi   % nv(:,j,k,i), &
+                     t1   => SubCellMetrics(iElem) % xi   % t1(:,j,k,i), &
+                     t2   => SubCellMetrics(iElem) % xi   % t2(:,j,k,i) )
+          norm = norm2 (nv)
+          nv   = nv / norm
           
-          SubCellMetrics(iElem) % eta  % norm(j,k,i) = norm2 (SubCellMetrics(iElem) % eta  % nv(:,j,k,i))
-          SubCellMetrics(iElem) % eta  % nv(:,j,k,i) = SubCellMetrics(iElem) % eta  % nv(:,j,k,i) / SubCellMetrics(iElem) % eta  % norm(j,k,i)
-          SubCellMetrics(iElem) % eta  % t1(:,j,k,i) = SubCellMetrics(iElem) % eta  % t1(:,j,k,i) / norm2 (SubCellMetrics(iElem) % eta  % t1(:,j,k,i))
-          SubCellMetrics(iElem) % eta  % t2(:,j,k,i) = SubCellMetrics(iElem) % eta  % t2(:,j,k,i) / norm2 (SubCellMetrics(iElem) % eta  % t2(:,j,k,i))
+          t1   = t1 - dot_product(t1, nv) * nv
+          t1   = t1 / norm2(t1)
           
-          SubCellMetrics(iElem) % zeta % norm(j,k,i) = norm2 (SubCellMetrics(iElem) % zeta % nv(:,j,k,i))
-          SubCellMetrics(iElem) % zeta % nv(:,j,k,i) = SubCellMetrics(iElem) % zeta % nv(:,j,k,i) / SubCellMetrics(iElem) % zeta % norm(j,k,i)
-          SubCellMetrics(iElem) % zeta % t1(:,j,k,i) = SubCellMetrics(iElem) % zeta % t1(:,j,k,i) / norm2 (SubCellMetrics(iElem) % zeta % t1(:,j,k,i))
-          SubCellMetrics(iElem) % zeta % t2(:,j,k,i) = SubCellMetrics(iElem) % zeta % t2(:,j,k,i) / norm2 (SubCellMetrics(iElem) % zeta % t2(:,j,k,i))
+          t2   = CROSS(nv, t1)
+          end associate
+        end do       ; end do
+      end do
+      
+!     Eta planes
+!     ----------
+!~       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,2,4,3])
+      Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,2,4,3])
+      Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,2,4,3])
+      
+      do i=0, PP_N-1
+        ! Compute vectors
+        SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = half * ( Metrics_gCont(:,:,:,i) + Metrics_gCont(:,:,:,i+1) )
+        SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = half * ( Metrics_hCont(:,:,:,i) + Metrics_hCont(:,:,:,i+1) )
+!~         SubCellMetrics(iElem) % eta  % t2(:,:,:,i) = half * ( Metrics_fCont(:,:,:,i) + Metrics_fCont(:,:,:,i+1) )
+        
+        ! Normalize each
+        do k=0, PP_N ; do j=0, PP_N
+          associate (norm => SubCellMetrics(iElem) % eta  % norm(j,k,i), &
+                     nv   => SubCellMetrics(iElem) % eta  % nv(:,j,k,i), &
+                     t1   => SubCellMetrics(iElem) % eta  % t1(:,j,k,i), &
+                     t2   => SubCellMetrics(iElem) % eta  % t2(:,j,k,i) )
+          norm = norm2 (nv)
+          nv   = nv / norm
+          
+          t1   = t1 - dot_product(t1, nv) * nv
+          t1   = t1 / norm2(t1)
+          
+          t2   = CROSS(nv, t1)
+          end associate
+        end do       ; end do
+      end do
+      
+!     Zeta planes
+!     -----------
+      ! (here we don't have to reshape)
+      do i=0, PP_N-1
+        ! Compute vectors
+        SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = half * ( Metrics_hTilde(:,:,:,i,iElem) + Metrics_hTilde(:,:,:,i+1,iElem) )
+        SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = half * ( Metrics_fTilde(:,:,:,i,iElem) + Metrics_fTilde(:,:,:,i+1,iElem) )
+!~         SubCellMetrics(iElem) % zeta % t2(:,:,:,i) = half * ( Metrics_gTilde(:,:,:,i,iElem) + Metrics_gTilde(:,:,:,i+1,iElem) )
+        
+        ! Normalize each
+        do k=0, PP_N ; do j=0, PP_N
+          associate (norm => SubCellMetrics(iElem) % zeta % norm(j,k,i), &
+                     nv   => SubCellMetrics(iElem) % zeta % nv(:,j,k,i), &
+                     t1   => SubCellMetrics(iElem) % zeta % t1(:,j,k,i), &
+                     t2   => SubCellMetrics(iElem) % zeta % t2(:,j,k,i) )
+          norm = norm2 (nv)
+          nv   = nv / norm
+          
+          t1   = t1 - dot_product(t1, nv) * nv
+          t1   = t1 / norm2(t1)
+          
+          t2   = CROSS(nv, t1)
+          end associate
         end do       ; end do
       end do
     end do
