@@ -475,69 +475,7 @@ PL2R(0,:,:)=M_1_0(:,:); Pl2R(1,:,:)=M_2_0(:,:);
 ! PL2R(0,:,:) = PL2R(0,:,:) - TRANSPOSE(pl2r_lower);
 ! Pl2R(1,:,:) = Pl2R(1,:,:) - TRANSPOSE(pl2r_upper);
 
-! DO s =0,1
-!   DO i = 0,PP_N
-!     SUM1 = 0.
-!     DO l = 0,PP_N
-!       PRINT *,"s = ",s," l = ", l, " i = ", i, "PR2L(S,l,i) = ", PR2L(S,l,i)
-!     ENDDO
-!     ENDDO
-! ENDDO
-! PRINT *, "****************************************"
-
-! DO s =0,1
-!   DO i = 0,PP_N
-!     SUM1 = 0.
-!     DO l = 0,PP_N
-!       PRINT *,"s = ",s," l = ", l, " i = ", i, "PL2R(S,l,i) = ", PL2R(S,l,i)
-!     ENDDO
-!     ENDDO
-! ENDDO
-! CALL EXIT()
-! DO s =0,1
-!   DO i = 0,PP_N
-!     SUM1 = 0.
-!     DO l = 0,PP_N
-!       SUM1 = SUM1 + PR2L(S,l,i)
-!     ENDDO
-!     PRINT *,"s = ",s, " i = ", i, "SUM = ", SUM1
-!   ENDDO
-! ENDDO
-! PRINT *, "****************************************"
-
-! DO i = 0,PP_N
-!   SUM1 = 0.
-!   DO s =0,1
-!     DO l = 0,PP_N
-!       SUM1 = SUM1 + PL2R(S,l,i)
-!     ENDDO
-!   ENDDO
-!   PRINT *,"s = ",s, " i = ", i, "SUM = ", SUM1
-! ENDDO
-
-! DO i = 0,PP_N
-!   SUM1 = 0.
-!   DO s =0,1
-!     DO l = 0,PP_N
-!       SUM1 = SUM1 + PL2R(S,l,i)
-!     ENDDO
-!   ENDDO
-!   PRINT *,"s = ",s, " i = ", i, "SUM = ", SUM1
-! ENDDO
-
-! SUM1  = 0
-! DO i = 0,PP_N
-!   SUM1 = 0.
-!   DO s =0,1
-!     DO l = 0,PP_N
-!       PRINT *,"s = ",s, " i = ", i, " l = ", l, "PR2L(S,l,i)*w = ", PR2L(S,l,i)*wGP(l), "PL2R(S,i,l)*w = ", PL2R(S,i,l)*wGP(i)
-!       ! SUM1 = SUM1 + PL2R(S,l,i)
-!     ENDDO
-!   ENDDO
-! ENDDO
-
-
-!CALL EXIT()
+!
 DO MortarSideID=firstMortarSideID,lastMortarSideID
   nMortars=MERGE(4,2,MortarType(1,MortarSideID).EQ.1)
   iSide=MortarType(2,MortarSideID)
@@ -611,10 +549,11 @@ t2 = TangVec2(:,:,:, MortarSideID);
     U_LL = 0;
   ! If (iVar1 .EQ. 0) THEN
       U_LL(1,:,:,:,:) = 1.
-      U_LL(2,:,:,:,:) = -1.
-      U_LL(3,1,1,0,0) = 1.
+      U_LL(2,:,:,:,:) = 1.
+      U_LL(3,:,:,:,:) = 1.
+      ! U_LL(3,:,:,1,1) = -1.
       U_LL(4,:,:,:,:) = .5
-      U_LL(5,:,:,:,:) = 12.
+      U_LL(5,:,:,:,:) = 11.
   ! ELSE 
   !   U_LL(1,:,:,:,:) = 1.
   !   U_LL(2,:,:,:,:) = 1.
@@ -625,9 +564,10 @@ t2 = TangVec2(:,:,:, MortarSideID);
   ! ENDIF
 U_RR = 0;
 ! If (iVar1 .EQ. 0) THEN
-  U_RR(1,:,:) = 1.5
+  U_RR(1,:,:) = 1.0
   U_RR(2,:,:) = 1.
-  U_RR(3,1,1) = 1.
+  U_RR(3,:,:) = 1.
+  ! U_RR(3,1,1) = -1.
   U_RR(4,:,:) = 0.5
   U_RR(5,:,:) = 10.
 ! ELSE 
@@ -641,9 +581,8 @@ U_RR = 0;
 
 S=0; T=0;
   DO i = 0,PP_N; DO j = 0,PP_N;
-    ! DO S = 0, 1; DO T = 0,1;
-    ! DO S = 0, 0; DO T = 0,0;
-      ! DO l = 0,PP_N; DO m = 0,PP_N;
+    DO S = 0, 1; DO T = 0,1;
+      DO l = 0,PP_N; DO m = 0,PP_N;
       
         ! CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
         !               uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
@@ -652,22 +591,48 @@ S=0; T=0;
         !EntropyAndEnergyConservingFlux
         ! CALL EntropyAndEnergyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
         ! uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-       CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,i,j),&
-        uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+         CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
+         uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+      !  CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,i,j),&
+      !   uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
         ! PRINT *, "slave F_c =", F_c
 
         ! U_LL is U_slave (S,T)
         ! U_RR is U_mortar
         ! PRINT *, "uHat = ", uHat,"vHat = ",vHat,"wHat=",wHat,"aHat",aHat,"HHAt ",HHat,"p1Hat",p1Hat,"rhoHat",rhoHat
         ! PRINT *, "F_C = ", F_c
-      !  Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,i,l) * PR2L(t,j,m) * F_c(:); !1(a)
+       Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,i,l) * PR2L(t,j,m) * F_c(:); !1(a)
       !  Flux_l(:,i,j,S,T) =0* Flux_l(:,i,j,S,T) +  F_c(:); !1(a)
       !  Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:); !1(a)
-       Flux_R(:,i,j) = F_c(:);
-      ! END DO; END DO !l,m
+      !  Flux_R(:,i,j) = F_c(:);
+      END DO; END DO !l,m
       ! PRINT *, " Flux_l(:,i,j,S,T)",  Flux_l(:,i,j,S,T) , i ,j , s ,t
-    ! END DO; END DO !S,T
+    END DO; END DO !S,T
   END DO; END DO !i ,j 
+
+  Flux_R(:,:,:) = 0;
+
+  DO i = 0,PP_N; DO j = 0,PP_N;
+          DO S = 0, 1; DO T = 0,1;
+      DO l = 0,PP_N; DO m = 0,PP_N;
+      !  CALL EntropyAndEnergyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
+      !   uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+       CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
+       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+        ! U_LL is U_slave (S,T)
+        ! U_RR is U_mortar
+        ! PRINT *, " master F_c =", F_c
+        
+        Flux_R(:,i,j) =  Flux_R(:,i,j) + PL2R(s,L,I) * PL2R(t,M,J) * F_c(:);
+        ! Flux_R(:,i,j) =  0*Flux_R(:,i,j) +  F_c(:);
+        ! Flux_R(:,i,j) =  F_c(:);
+       
+      END DO; END DO ! l, m 
+    END DO; END DO !S,T,
+  END DO; END DO !i,j
+
+  ! Flux_l = 0.5 *Flux_l
+  ! Flux_R = 0.25 *Flux_R
     ! Back Rotate the normal flux into Cartesian direction
   ! DO S = 0, 0; DO T = 0,0;
   !   ! DO S = 0, 1; DO T = 0,1;
@@ -691,7 +656,9 @@ S=0; T=0;
   S=0; T=0;
   DO i = 0,PP_N; DO j = 0,PP_N;
     ! s = 0; t = 0;
-    ! DO S = 0, 1; DO T = 0,1;
+    SUM3=0.
+    SUM2=0.
+    DO S = 0, 1; DO T = 0,1;
       ! DO S = 0, 0; DO T = 0,0;  
       ! DO l = 0,PP_N; DO m = 0,PP_N;
         CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
@@ -718,22 +685,21 @@ S=0; T=0;
         FluxF(4) = rhov1*v3    
         FluxF(5) = (rhoE+pres)*v1
         END ASSOCIATE !v_x/y/z...
-
-        SUM2=0.
+     
         DO iVar = 1, PP_nVar
-          SUM2 = SUM2 + F_C(iVar) * Flux_R(iVar, i,j)
+          SUM2 = SUM2 + F_C(iVar) * Flux_L(iVar, i,j,S,T)
         ENDDO
 
         
 
-        SUM3=0.
+      
         DO iVar = 1, PP_nVar
           SUM3 = SUM3 + F_C(iVar) * FluxF(iVar)
         ENDDO
         SUM3 = SUM3 - ent_loc * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
       
       ! END DO; END DO ! l, m 
-    ! END DO; END DO !S,T,
+    END DO; END DO !S,T,
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
   PRINT *, "iVar1 = ", iVar1, "= IS_t second part = ", Sum1
