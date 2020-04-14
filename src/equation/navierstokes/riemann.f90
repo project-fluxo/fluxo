@@ -446,7 +446,7 @@ REAL         :: U_LL( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_RR( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
 REAL         :: U_L( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
-REAL         :: SUM2, SUM3, sRho, pres,v1,v2,v3
+REAL         :: SUM2, SUM3, sRho, pres,v1,v2,v3, SumA, SumB
 REAL         :: F_c( PP_nVar), ent_loc, FluxF(PP_nVar) !Returned Value from TwoPointFlux
 ! REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
 ! REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
@@ -470,6 +470,10 @@ END IF !doMPISides
 PR2L(0,:,:)=M_0_1(:,:); PR2L(1,:,:)=M_0_2(:,:);
 
 PL2R(0,:,:)=M_1_0(:,:); Pl2R(1,:,:)=M_2_0(:,:);
+
+! PR2L(0,:,:)=TRANSPOSE(M_0_1(:,:)); PR2L(1,:,:)=TRANSPOSE(M_0_2(:,:));
+
+! PL2R(0,:,:)=TRANSPOSE(M_1_0(:,:)); Pl2R(1,:,:)=TRANSPOSE(M_2_0(:,:));
 ! PR2L(0,:,:) = PR2L(0,:,:) - TRANSPOSE(pr2l_lower);
 ! PR2L(1,:,:) = PR2L(1,:,:) - TRANSPOSE(pr2l_upper);
 ! PL2R(0,:,:) = PL2R(0,:,:) - TRANSPOSE(pl2r_lower);
@@ -544,16 +548,17 @@ t2 = TangVec2(:,:,:, MortarSideID);
 
   DO iVar1 = 0,0
 
-    Flux_l = 0;
     Flux_R = 0;
     U_LL = 0;
   ! If (iVar1 .EQ. 0) THEN
-      U_LL(1,:,:,:,:) = 1.
+      U_LL(1,:,:,:,:) = 2.
       U_LL(2,:,:,:,:) = 1.
       U_LL(3,:,:,:,:) = 1.
-      ! U_LL(3,:,:,1,1) = -1.
-      U_LL(4,:,:,:,:) = .5
-      U_LL(5,:,:,:,:) = 11.
+      U_LL(3,:,:,1,1) = 3.
+      U_LL(4,:,:,:,:) = 1.0
+
+      U_LL(5,:,:,:,:) = 15.
+      ! U_LL(5,1,1,0,0) = 5.
   ! ELSE 
   !   U_LL(1,:,:,:,:) = 1.
   !   U_LL(2,:,:,:,:) = 1.
@@ -565,11 +570,11 @@ t2 = TangVec2(:,:,:, MortarSideID);
 U_RR = 0;
 ! If (iVar1 .EQ. 0) THEN
   U_RR(1,:,:) = 1.0
-  U_RR(2,:,:) = 1.
+  U_RR(2,:,:) = 2.
   U_RR(3,:,:) = 1.
-  ! U_RR(3,1,1) = -1.
-  U_RR(4,:,:) = 0.5
-  U_RR(5,:,:) = 10.
+  U_RR(3,1,1) = 3.
+  U_RR(4,:,:) = 1.
+  U_RR(5,:,:) = 11.
 ! ELSE 
 !   U_RR(1,:,:) = 1.1
 !   U_RR(2,:,:) = 1.
@@ -579,6 +584,7 @@ U_RR = 0;
 
 ! ENDIF
 
+  Flux_l = 0;
 S=0; T=0;
   DO i = 0,PP_N; DO j = 0,PP_N;
     DO S = 0, 1; DO T = 0,1;
@@ -601,7 +607,7 @@ S=0; T=0;
         ! U_RR is U_mortar
         ! PRINT *, "uHat = ", uHat,"vHat = ",vHat,"wHat=",wHat,"aHat",aHat,"HHAt ",HHat,"p1Hat",p1Hat,"rhoHat",rhoHat
         ! PRINT *, "F_C = ", F_c
-       Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,i,l) * PR2L(t,j,m) * F_c(:); !1(a)
+       Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,l,i) * PR2L(t,m,j) * F_c(:); !1(a)
       !  Flux_l(:,i,j,S,T) =0* Flux_l(:,i,j,S,T) +  F_c(:); !1(a)
       !  Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:); !1(a)
       !  Flux_R(:,i,j) = F_c(:);
@@ -651,6 +657,11 @@ S=0; T=0;
 ! Flux_R(:,:,:) = Flux_l(:,:,:,0,0)
  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Remove after tests
+
+  Flux_R = Flux_R/4.
+  ! PRINT *, "Flux_R(:,1,1) = ", Flux_R(:,1,1)
+
+  ! PRINT *, "Flux_L(:,1,1,1,1) = ", Flux_l(:,1,1,0,1)
   SUM1 = 0
   SUM2 = 0.
   S=0; T=0;
@@ -685,7 +696,7 @@ S=0; T=0;
         FluxF(4) = rhov1*v3    
         FluxF(5) = (rhoE+pres)*v1
         END ASSOCIATE !v_x/y/z...
-     
+       
         DO iVar = 1, PP_nVar
           SUM2 = SUM2 + F_C(iVar) * Flux_L(iVar, i,j,S,T)
         ENDDO
@@ -698,19 +709,20 @@ S=0; T=0;
         ENDDO
         SUM3 = SUM3 - ent_loc * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
       
-      ! END DO; END DO ! l, m 
-    END DO; END DO !S,T,
-    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
+        ! END DO; END DO ! l, m 
+      END DO; END DO !S,T,
+      SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
-  PRINT *, "iVar1 = ", iVar1, "= IS_t second part = ", Sum1
+  SumB = Sum1 /4.
+  PRINT *, "iVar1 = ", iVar1, "= IS_t second part = ", SumB
 
   
-  SUM1 = 0
+  SUM1 = 0.
   SUM2 = 0.
   DO i = 0,PP_N; DO j = 0,PP_N;
     ! s = 0; t = 0;
     ! DO S = 0, 1; DO T = 0,1;
-      DO S = 0, 0; DO T = 0,0;  
+      ! DO S = 0, 0; DO T = 0,0;  
       ! DO l = 0,PP_N; DO m = 0,PP_N;
         CALL ConsToPrim(prim,U_RR(:,i,j))
         ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
@@ -750,10 +762,12 @@ S=0; T=0;
         SUM3 = SUM3 - ent_loc * U_RR(2,i,j)/U_RR(1,i,j)
       
       ! END DO; END DO ! l, m 
-    END DO; END DO !S,T,
+    ! END DO; END DO !S,T,
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
-  PRINT *, "iVar1 = ", iVar1, "= IS_t first part = ", Sum1
+  SumA = Sum1
+  PRINT *, "iVar1 = ", iVar1, "= IS_t  first part = ", SumA
+  PRINT *, "iVar1 = ", iVar1, "= Diff = ", SumA - SumB
 
 ENDDO
   PRINT *, "TEST FINISH"
