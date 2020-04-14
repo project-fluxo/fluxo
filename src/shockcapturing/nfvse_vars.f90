@@ -37,6 +37,7 @@ module MOD_NFVSE_Vars
     type(InnerFaceMetrics_t) :: zeta
     contains
       procedure :: construct => SubCellMetrics_construct
+      procedure :: TestMetricIdentities => SubCellMetrics_TestMetricIdentities
   end type SubCellMetrics_t
   
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -72,5 +73,30 @@ module MOD_NFVSE_Vars
       
     end subroutine SubCellMetrics_construct
     
-  
+    subroutine SubCellMetrics_TestMetricIdentities(this,iSC,jSC,kSC,div)
+      use MOD_Interpolation_Vars , only: wGP
+      implicit none
+      class(SubCellMetrics_t), intent(inout) :: this
+      integer                , intent(in)    :: iSC, jSC, kSC !< Subcell index: 1...N-1
+      real, dimension(3)     , intent(out)   :: div
+      !----------------------------------------------
+      real, dimension(3) :: a, b, c, d, e, f
+      real               :: anorm, bnorm, cnorm, dnorm, enorm, fnorm
+      !----------------------------------------------
+        
+      a     = this % xi   % nv(:,jSC,kSC,iSC)
+      anorm = this % xi   % norm(jSC,kSC,iSC)
+      b     = this % xi   % nv(:,jSC,kSC,iSC-1)
+      bnorm = this % xi   % norm(jSC,kSC,iSC-1)
+      c     = this % eta  % nv(:,iSC,kSC,jSC)
+      cnorm = this % eta  % norm(iSC,kSC,jSC)
+      d     = this % eta  % nv(:,iSC,kSC,jSC-1)
+      dnorm = this % eta  % norm(iSC,kSC,jSC-1)
+      e     = this % zeta % nv(:,iSC,jSC,kSC)
+      enorm = this % zeta % norm(iSC,jSC,kSC)
+      f     = this % zeta % nv(:,iSC,jSC,kSC-1)
+      fnorm = this % zeta % norm(iSC,jSC,kSC-1)
+      
+      div = (a * anorm - b * bnorm) / wGP(iSC) + (c * cnorm - d * dnorm) / wGP(jSC) + (e * enorm - f * fnorm) / wGP(kSC)
+    end subroutine SubCellMetrics_TestMetricIdentities
 end module MOD_NFVSE_Vars
