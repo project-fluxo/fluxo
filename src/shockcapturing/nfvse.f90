@@ -40,12 +40,13 @@ contains
     use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
     use MOD_Interpolation_Vars , only: wGP
     use MOD_ShockCapturing_Vars, only: alpha_old
+    use MOD_DG_Vars            , only: D
     USE MOD_Globals,     ONLY: CROSS
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES 
     integer :: iElem
-    integer :: i,j,k      !DOF counters
+    integer :: i,j,k,l,m         !DOF counters
     real :: Metrics_fCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) xi metrics
     real :: Metrics_gCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) eta metrics
     real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
@@ -65,12 +66,16 @@ contains
 !     ---------
       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,4,2,3])
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,4,2,3])
-!~       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,4,2,3])
+      
       do i=0, PP_N-1
         ! Compute vectors
-        SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = half * ( Metrics_fCont(:,:,:,i) + Metrics_fCont(:,:,:,i+1) )
-        SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = half * ( Metrics_gCont(:,:,:,i) + Metrics_gCont(:,:,:,i+1) )
-!~         SubCellMetrics(iElem) % xi   % t2(:,:,:,i) = half * ( Metrics_hCont(:,:,:,i) + Metrics_hCont(:,:,:,i+1) )
+        SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = Metrics_fCont(:,:,:,0)
+        SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = Metrics_gCont(:,:,:,0)
+        
+        do m=0, PP_N  ; do l=0, i
+          SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = SubCellMetrics(iElem) % xi   % nv(:,:,:,i) + wGP(l)*D(l,m) * Metrics_fCont(:,:,:,m)
+          SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = SubCellMetrics(iElem) % xi   % t1(:,:,:,i) + wGP(l)*D(l,m) * Metrics_gCont(:,:,:,m)
+        end do        ; end do
         
         ! Normalize each
         do k=0, PP_N ; do j=0, PP_N
@@ -91,15 +96,18 @@ contains
       
 !     Eta planes
 !     ----------
-!~       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,2,4,3])
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,2,4,3])
       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,2,4,3])
       
       do i=0, PP_N-1
         ! Compute vectors
-        SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = half * ( Metrics_gCont(:,:,:,i) + Metrics_gCont(:,:,:,i+1) )
-        SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = half * ( Metrics_hCont(:,:,:,i) + Metrics_hCont(:,:,:,i+1) )
-!~         SubCellMetrics(iElem) % eta  % t2(:,:,:,i) = half * ( Metrics_fCont(:,:,:,i) + Metrics_fCont(:,:,:,i+1) )
+        SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = Metrics_gCont(:,:,:,0)
+        SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = Metrics_hCont(:,:,:,0)
+        
+        do m=0, PP_N  ; do l=0, i
+          SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = SubCellMetrics(iElem) % eta  % nv(:,:,:,i) + wGP(l)*D(l,m) * Metrics_gCont(:,:,:,m)
+          SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = SubCellMetrics(iElem) % eta  % t1(:,:,:,i) + wGP(l)*D(l,m) * Metrics_hCont(:,:,:,m)
+        end do        ; end do
         
         ! Normalize each
         do k=0, PP_N ; do j=0, PP_N
@@ -123,9 +131,13 @@ contains
       ! (here we don't have to reshape)
       do i=0, PP_N-1
         ! Compute vectors
-        SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = half * ( Metrics_hTilde(:,:,:,i,iElem) + Metrics_hTilde(:,:,:,i+1,iElem) )
-        SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = half * ( Metrics_fTilde(:,:,:,i,iElem) + Metrics_fTilde(:,:,:,i+1,iElem) )
-!~         SubCellMetrics(iElem) % zeta % t2(:,:,:,i) = half * ( Metrics_gTilde(:,:,:,i,iElem) + Metrics_gTilde(:,:,:,i+1,iElem) )
+        SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = Metrics_hTilde(:,:,:,0,iElem)
+        SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = Metrics_fTilde(:,:,:,0,iElem)
+        
+        do m=0, PP_N  ; do l=0, i
+          SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = SubCellMetrics(iElem) % zeta % nv(:,:,:,i) + wGP(l)*D(l,m) * Metrics_hTilde(:,:,:,m,iElem)
+          SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = SubCellMetrics(iElem) % zeta % t1(:,:,:,i) + wGP(l)*D(l,m) * Metrics_fTilde(:,:,:,m,iElem)
+        end do        ; end do
         
         ! Normalize each
         do k=0, PP_N ; do j=0, PP_N
@@ -143,7 +155,8 @@ contains
           end associate
         end do       ; end do
       end do
-    end do
+      
+    end do !iElem
     
     ! Compute the inverse of the quadrature weights (sub-cell dimensions)
     sWGP = 1.d0 / wGP
