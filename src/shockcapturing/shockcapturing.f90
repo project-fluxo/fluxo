@@ -490,6 +490,9 @@ END SUBROUTINE FinalizeShockCapturing
 !> Get Density Times Pressure
 !============================================================================================================================
   pure subroutine GetKinEnergy(U,kinen)
+#ifdef mhd
+    use MOD_Equation_Vars      , only: s2mu_0
+#endif /*mhd*/
     implicit none
     real, intent(in)  :: U(PP_nVar)
     real, intent(out) :: kinen

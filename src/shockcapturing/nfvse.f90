@@ -14,7 +14,10 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
-
+module MOD_NFVSE
+#if SHOCK_NFVSE
+  use MOD_PreProc
+  implicit none
 !==================================================================================================================================
 !> Computes the spatial operator using Native Finite Volume Sub-Elements (NFVSE)
 !> Based on: Hennemann and Gassner (2020). "Entropy stable shock capturing for the discontinuous galerkin spectral element
@@ -22,14 +25,31 @@
 !> Attention 1: The current strategy is to perform the operations on "inner faces". This can be improved, but the Riemann solver 
 !>              routines have to be adapted
 !==================================================================================================================================
-module MOD_NFVSE
-#if SHOCK_NFVSE
-  use MOD_PreProc
-  implicit none
-  
+!
+! Example for N=4 in 1D
+! ---------------------
+!
+! O Gauss-Lobatto point
+! · FV boundary
+! 0 Both a Gauss-Lobatto point and a FV boundary
+!
+! Three different kinds of indexes
+!
+!(1) DG DOF idx:     0    1      2      3    4
+!                    |    |      |      |    |
+!                    0-·--O--·---O---·--O--·-0
+!                    | |     |       |     | |
+!(2) FV BC idx:     -1 0     1       2     3 4 (ftilde,gtilde,htilde,ftildeR,gtildeR,htildeR)
+!                    └─┴─────┴───────┴─────┴─┘
+!(3) FV subcell idx:  0   1      2      3   4
+!
+!   * (1) matches (3) for consistency
+!===================================================================================================================================
   private
-  public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE, Apply_NFVSE_Correction
-  
+  public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE
+#if NFVSE_CORR
+  public :: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
 contains
 !===================================================================================================================================
 !> Initializes the NFVSE module
@@ -193,36 +213,52 @@ contains
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     ! INPUT/OUTPUT VARIABLES
-    real,intent(inout)                                 :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+    real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
     !< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
     !-------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES
-    real,dimension(PP_nVar,-1:PP_N,-1:PP_N,-1:PP_N) :: ftilde, gtilde, htilde ! transformed flux inter-subcell fluxes (with ghost cells)
+    ! LOCAL VARIABLES TODO: Change intexing of *tilfe!!
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htilde   ! transformed inter-subcell flux in zeta (with ghost cells)
+#if NONCONS
+    ! For the right interfaces:
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftildeR  ! transformed inter-subcell flux in xi (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtildeR  ! transformed inter-subcell flux in eta (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htildeR  ! transformed inter-subcell flux in zeta (with ghost cells)
+#endif /*NONCONS*/
     real,dimension(PP_nVar)                         :: F_FV
     integer                                         :: i,j,k,iElem
     !===============================================================================================================================
     
     call PropagateBlendingCoeff()
     
-    ftilde = 0.d0
-    gtilde = 0.d0
-    htilde = 0.d0
-    
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
       if ( ALMOSTEQUAL(alpha(iElem),0.d0) ) cycle
 #endif /*NFVSE_CORR*/
-      !compute inner Riemann solutions (TODO: Not optimal.. Improve)
-      call Compute_VolFluxes( U(:,:,:,:,iElem), SubCellMetrics(iElem), ftilde(:,0:PP_N-1, 0:PP_N  , 0:PP_N  ), &
-                                                                       gtilde(:,0:PP_N  , 0:PP_N-1, 0:PP_N  ), &
-                                                                       htilde(:,0:PP_N  , 0:PP_N  , 0:PP_N-1)  )
       
-      ! Update the inner nodes
+!     Compute the finite volume fluxes
+!     --------------------------------
+      call Compute_FVFluxes( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
+#if NONCONS
+                                               ftildeR, gtildeR, htildeR, iElem, &
+#endif /*NONCONS*/
+                                               SubCellMetrics(iElem) )
+      
+!     Update Ut
+!     ---------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         ! Get Finite Volume Ut
+#if NONCONS
+        F_FV =   sWGP(i) * ( ftildeR(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
+               + sWGP(j) * ( gtildeR(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
+               + sWGP(k) * ( htildeR(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
+#else
         F_FV =   sWGP(i) * ( ftilde(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
                + sWGP(j) * ( gtilde(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
                + sWGP(k) * ( htilde(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
+#endif /*NONCONS*/
+               
 #if NFVSE_CORR
         Fsafe(:,i,j,k,iElem) = (1. - alpha_max   ) * Ut(:,i,j,k,iElem) +  alpha_max    * F_FV
         Fblen(:,i,j,k,iElem) = (1. - alpha(iElem)) * Ut(:,i,j,k,iElem) +  alpha(iElem) * F_FV
@@ -258,6 +294,7 @@ contains
 !===================================================================================================================================
 !> Corrects the Solution after the Runge-Kutta stage
 !===================================================================================================================================
+#if NFVSE_CORR
   subroutine Apply_NFVSE_Correction(U,t,dt)
     use MOD_ShockCapturing_Vars, only: alpha, alpha_max, beta, alpha_old
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen
@@ -462,32 +499,73 @@ contains
 !#      print*, corrElems(1:numCorrElems)
 !#    end if
   end subroutine Apply_NFVSE_Correction
-
+#endif /*NFVSE_CORR*/
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux
 !> Attention 1: It's not optimal to reshape the vectors (TODO: Improve)
 !===================================================================================================================================
-  subroutine Compute_VolFluxes(U,sCM,F,G,H)
+  subroutine Compute_FVFluxes(U, F , G , H , &
+#if NONCONS
+                                 FR, GR, HR, iElem, &
+#endif /*NONCONS*/
+                                              sCM )
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: SubCellMetrics_t
     use MOD_Riemann   , only: Riemann
+#if NONCONS
+    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+#endif /*NONCONS*/
     implicit none
-    !
-    real,dimension(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N  ), intent(in)    :: U         !< The element solution
-    type(SubCellMetrics_t)                            , intent(in)    :: sCM       !< Sub-cell metric terms
-    real,dimension(PP_nVar,0:PP_N-1,0:PP_N  ,0:PP_N  ), intent(inout) :: F
-    real,dimension(PP_nVar,0:PP_N  ,0:PP_N-1,0:PP_N  ), intent(inout) :: G
-    real,dimension(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N-1), intent(inout) :: H
-    !
+    !-arguments---------------------------------------------------------------
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
+#if NONCONS
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
+    integer                                        , intent(in)    :: iElem
+#endif /*NONCONS*/
+    type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
+    !-local-variables---------------------------------------------------------
     integer  :: i,j,k
-    real :: U_(PP_nVar,0:PP_N,0:PP_N,0:PP_N  )
-    real :: F_(PP_nVar,0:PP_N,0:PP_N,0:PP_N-1)
+    real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
+    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+#if NONCONS
+    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+#endif /*NONCONS*/
+    !-------------------------------------------------------------------------
     
-    !--
+!   *****************
+!   Initialize values
+!   *****************
     
+    F   = 0.0
+    G   = 0.0
+    H   = 0.0
+#if NONCONS
+    FR  = 0.0
+    GR  = 0.0
+    HR  = 0.0
+#endif /*NONCONS*/
+    
+!   *********
 !   Xi-planes
-!   ---------
+!   *********
+    F_  = 0.0
     U_ = reshape(U , shape(U_), order = [1,4,2,3])
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
     do i=0, PP_N-1
       
       call Riemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
@@ -496,16 +574,58 @@ contains
 #endif
                    sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
       
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i),&
+                          sCM % xi   % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % xi   % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
       ! Scale flux
       do k=0, PP_N ; do j=0, PP_N
-        F_(:,j,k,i) = F_(:,j,k,i) * sCM % xi   % norm(j,k,i)
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
       end do       ; end do
-    end do
-    F  = reshape(F_, shape(F ), order = [1,3,4,2])
+    end do ! i (xi planes)
     
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
+#if NONCONS
+    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
+#endif /*NONCONS*/
+
+!   **********    
 !   Eta-planes
-!   ----------
+!   **********
+    F_ = 0.0
     U_ = reshape(U , shape(U_), order = [1,2,4,3])
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
     do i=0, PP_N-1
       
       call Riemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
@@ -513,15 +633,57 @@ contains
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
 #endif
                    sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
+                          sCM % eta  % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % eta  % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
       ! Scale flux
       do k=0, PP_N ; do j=0, PP_N
-        F_(:,j,k,i) = F_(:,j,k,i) * sCM % eta  % norm(j,k,i)
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
       end do       ; end do
-    end do
-    G  = reshape(F_, shape(G ), order = [1,2,4,3])
+    end do ! i (eta planes)
+   
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
+#endif /*NONCONS*/
     
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
+#if NONCONS
+    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
+#endif /*NONCONS*/
+
+!   ***********    
 !   Zeta-planes
-!   -----------
+!   ***********
+
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
     do i=0, PP_N-1
       
       call Riemann(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1), &
@@ -529,13 +691,38 @@ contains
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
 #endif
                    sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      HR(:,:,:,i) = H(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+                          U(:,:,:,i+1), U(:,:,:,i  ),&
+                          sCM % zeta % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          U(:,:,:,i  ), U(:,:,:,i+1),&
+                          sCM % zeta % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
       ! Scale flux
       do k=0, PP_N ; do j=0, PP_N
         H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
       end do       ; end do
-    end do
+    end do ! i (zeta planes)
     
-  end subroutine Compute_VolFluxes
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
+#endif /*NONCONS*/
+    
+  end subroutine Compute_FVFluxes
   
 !===================================================================================================================================
 !> Finalizes the NFVSE module
