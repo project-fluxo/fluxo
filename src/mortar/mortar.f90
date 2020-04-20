@@ -30,9 +30,9 @@ INTERFACE MortarBasis_BigToSmall
 END INTERFACE
 
 INTERFACE MortarBasis_SmallToBig
-!  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
+  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
 !  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation2
-  MODULE PROCEDURE MortarBasis_SmallToBig_Projection
+  !MODULE PROCEDURE MortarBasis_SmallToBig_Projection
 END INTERFACE
 
 INTERFACE FinalizeMortar
