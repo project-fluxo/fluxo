@@ -410,12 +410,12 @@ SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,Flux_master,Flux_slave,doM
   USE MOD_Preproc
   USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
   USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
-  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo, FS2M
+  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo, FS2M,nElems,nMortarSides
   USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
   USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
   USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
   USE MOD_Mesh_Vars,   ONLY: NormVec,TangVec1,TangVec2,FS2M,nSides, SurfElem
-  USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux, EntropyAndEnergyConservingFlux
+  USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
   USE MOD_Interpolation_Vars  ,ONLY: wGP
   USE MOD_Analyze_Vars  ,ONLY: wGPSurf
   USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa
@@ -436,8 +436,8 @@ SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,Flux_master,Flux_slave,doM
 
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
-  INTEGER      :: p,q,l, m, s,t, i,j, iSide, iVar1
-INTEGER      :: iMortar,nMortars, iVar
+  INTEGER      :: p,q,l, m, s,t, i,j, iSide
+INTEGER      :: iMortar,nMortars,iVar,iVar1
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID(4),locSide,flip(4)
 REAL         :: Flux_l( PP_nVar,0:PP_N,0:PP_N,0:1,0:1) ! For small mortar sides
@@ -446,8 +446,10 @@ REAL         :: U_LL( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_RR( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
 REAL         :: U_L( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
-REAL         :: SUM2, SUM3, sRho, pres,v1,v2,v3, SumA, SumB
-REAL         :: F_c( PP_nVar), ent_loc, FluxF(PP_nVar) !Returned Value from TwoPointFlux
+REAL         :: SUM2, SUM3, sRho, pres,v1,v2,v3, SumA, SumB, uint_r( PP_nVar), uint_l( PP_nVar)
+REAL         :: ent_loc, FluxF(PP_nVar), prim(PP_nVar)
+
+REAL         :: F_c( PP_nVar) !Returned Value from TwoPointFlux
 ! REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
 ! REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
 REAL,POINTER :: M1(:,:),M2(:,:)
@@ -455,7 +457,7 @@ REAL         ::PR2L(0:1,0:PP_N,0:PP_N),PL2R(0:1,0:PP_N,0:PP_N)
 REAL                  :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
 REAL         :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
 REAL         :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
-REAL         :: t2(            3,0:PP_N,0:PP_N), prim(PP_nVar) !< 2nd tangential vector of face
+REAL         :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
 REAL         :: SUM1, pr2l_upper(PP_N+1,PP_N+1), pr2l_lower(PP_N+1,PP_N+1) , pl2r_upper(PP_N+1,PP_N+1) , pl2r_lower(PP_N+1,PP_N+1)
 !==================================================================================================================================
 IF(doMPISides)THEN
@@ -471,13 +473,6 @@ PR2L(0,:,:)=M_0_1(:,:); PR2L(1,:,:)=M_0_2(:,:);
 
 PL2R(0,:,:)=M_1_0(:,:); Pl2R(1,:,:)=M_2_0(:,:);
 
-! PR2L(0,:,:)=TRANSPOSE(M_0_1(:,:)); PR2L(1,:,:)=TRANSPOSE(M_0_2(:,:));
-
-! PL2R(0,:,:)=TRANSPOSE(M_1_0(:,:)); Pl2R(1,:,:)=TRANSPOSE(M_2_0(:,:));
-! PR2L(0,:,:) = PR2L(0,:,:) - TRANSPOSE(pr2l_lower);
-! PR2L(1,:,:) = PR2L(1,:,:) - TRANSPOSE(pr2l_upper);
-! PL2R(0,:,:) = PL2R(0,:,:) - TRANSPOSE(pl2r_lower);
-! Pl2R(1,:,:) = Pl2R(1,:,:) - TRANSPOSE(pl2r_upper);
 
 !
 DO MortarSideID=firstMortarSideID,lastMortarSideID
@@ -485,6 +480,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   iSide=MortarType(2,MortarSideID)
   locSide=MortarType(2,MortarSideID)
   
+! For debugging, store MortarSideID
+  iVar1=MortarSideID
+
   DO iMortar=1,nMortars
     SideID(iMortar)= MortarInfo(MI_SIDEID,iMortar,locSide)
     flip(iMortar)  = MortarInfo(MI_FLIP,iMortar,locSide)
@@ -545,123 +543,206 @@ t2 = TangVec2(:,:,:, MortarSideID);
     END DO ! i 
   END DO ! j
   ! PRINT *, "Riemann 1"
-
-  DO iVar1 = 0,0
-
-    Flux_R = 0;
-    U_LL = 0;
-  ! If (iVar1 .EQ. 0) THEN
-      U_LL(1,:,:,:,:) = 2.
-      U_LL(2,:,:,:,:) = 1.
-      U_LL(3,:,:,:,:) = 1.
-      U_LL(3,:,:,1,1) = 3.
-      U_LL(4,:,:,:,:) = 1.0
-
-      U_LL(5,:,:,:,:) = 15.
-      ! U_LL(5,1,1,0,0) = 5.
-  ! ELSE 
-  !   U_LL(1,:,:,:,:) = 1.
-  !   U_LL(2,:,:,:,:) = 1.
-  !   U_LL(3,1,1,0,0) = 1.
-  !   U_LL(4,:,:,:,:) = .5
-  !   U_LL(5,:,:,:,:) = 10.
-
-  ! ENDIF
-U_RR = 0;
-! If (iVar1 .EQ. 0) THEN
-  U_RR(1,:,:) = 1.0
-  U_RR(2,:,:) = 2.
-  U_RR(3,:,:) = 1.
-  U_RR(3,1,1) = 3.
-  U_RR(4,:,:) = 1.
-  U_RR(5,:,:) = 11.
-! ELSE 
-!   U_RR(1,:,:) = 1.1
-!   U_RR(2,:,:) = 1.
-!   U_RR(3,1,1) = -1.
-!   U_RR(4,:,:) = 0.5
-!   U_RR(5,:,:) = 10.
-
-! ENDIF
-
   Flux_l = 0;
-S=0; T=0;
+    DO S = 0, 1; DO T = 0,1;
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+     nv = NormVec(:,:,:,SideID(S + T*2 + 1));
+     t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
+     t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
+      print *, "s = ", s, "     t = ", t
+      print *, "nv = ", nv(:, 1, 1)
+      print *, "t1 = ", t1(:, 1, 1)
+      print *, "t2 = ", t2(:, 1, 1)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+  end do; end do
+
   DO i = 0,PP_N; DO j = 0,PP_N;
     DO S = 0, 1; DO T = 0,1;
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+     nv = NormVec(:,:,:,SideID(S + T*2 + 1));
+     t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
+     t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
       DO l = 0,PP_N; DO m = 0,PP_N;
-      
-        ! CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
-        !               uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-        ! PRINT *, "U_LL(:,i,j,s,t) = ", U_LL(:,i,j,s,t)
-        ! PRINT *, "U_RR(:,l,m) = ", U_RR(:,l,m)
-        !EntropyAndEnergyConservingFlux
-        ! CALL EntropyAndEnergyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
-        ! uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-         CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
-         uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-      !  CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,i,j),&
-      !   uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-        ! PRINT *, "slave F_c =", F_c
+        CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
+        uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        F_c(2:4)= nv(:,i,j)*F_c(2) &
+        +t1(:,i,j)*F_c(3) &
+        +t2(:,i,j)*F_c(4)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         ! U_LL is U_slave (S,T)
         ! U_RR is U_mortar
-        ! PRINT *, "uHat = ", uHat,"vHat = ",vHat,"wHat=",wHat,"aHat",aHat,"HHAt ",HHat,"p1Hat",p1Hat,"rhoHat",rhoHat
-        ! PRINT *, "F_C = ", F_c
-       Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,l,i) * PR2L(t,m,j) * F_c(:); !1(a)
-      !  Flux_l(:,i,j,S,T) =0* Flux_l(:,i,j,S,T) +  F_c(:); !1(a)
-      !  Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:); !1(a)
-      !  Flux_R(:,i,j) = F_c(:);
+       Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:); !1(a)
+        
       END DO; END DO !l,m
-      ! PRINT *, " Flux_l(:,i,j,S,T)",  Flux_l(:,i,j,S,T) , i ,j , s ,t
     END DO; END DO !S,T
   END DO; END DO !i ,j 
-
-  Flux_R(:,:,:) = 0;
-
-  DO i = 0,PP_N; DO j = 0,PP_N;
-          DO S = 0, 1; DO T = 0,1;
-      DO l = 0,PP_N; DO m = 0,PP_N;
-      !  CALL EntropyAndEnergyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
-      !   uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-       CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
-       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-        ! U_LL is U_slave (S,T)
-        ! U_RR is U_mortar
-        ! PRINT *, " master F_c =", F_c
+  
+  
+  ! Back Rotate the normal flux into Cartesian direction
+  !DO S = 0, 1; DO T = 0,1;
+  !  nv = NormVec(:,:,:,SideID(S + T*2 + 1));
+  !  t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
+  !  t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
+  !  !print *, "S,T=",S,T
+  !  !print *, "nv=",nv
+  !  !print *, "t1=",t1
+  !  !print *, "t2=",t2
+  !  DO j=0,PP_N
+  !    DO i=0,PP_N
+  !      Flux_l(2:4,i,j,S,T)= nv(:,i,j)*Flux_l(2,i,j,S,T) &
+  !      +t1(:,i,j)*Flux_l(3,i,j,S,T) &
+  !      +t2(:,i,j)*Flux_l(4,i,j,S,T)
+  !      !Flux_l(2,i,j,S,T)= -Flux_l(2,i,j,S,T)
+  !      !Flux_l(3,i,j,S,T)=  Flux_l(3,i,j,S,T)
+  !      !Flux_l(4,i,j,S,T)= -Flux_l(4,i,j,S,T)
+  !    END DO ! i
+  !  END DO ! j
+  !END DO; END DO !S,T
+  
+  DO S = 0, 1; DO T = 0,1;
+    DO q=0,PP_N
+      DO p=0,PP_N
         
-        Flux_R(:,i,j) =  Flux_R(:,i,j) + PL2R(s,L,I) * PL2R(t,M,J) * F_c(:);
-        ! Flux_R(:,i,j) =  0*Flux_R(:,i,j) +  F_c(:);
-        ! Flux_R(:,i,j) =  F_c(:);
-       
-      END DO; END DO ! l, m 
-    END DO; END DO !S,T,
-  END DO; END DO !i,j
+        Flux_master(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
+        Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
+        ! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
+        ! Flux_slave(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
 
-  ! Flux_l = 0.5 *Flux_l
-  ! Flux_R = 0.25 *Flux_R
-    ! Back Rotate the normal flux into Cartesian direction
-  ! DO S = 0, 0; DO T = 0,0;
-  !   ! DO S = 0, 1; DO T = 0,1;
-  !   nv = NormVec(:,:,:,SideID(S + T*2 + 1));
-  !   t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
-  !   t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
-  !   DO j=0,PP_N
-  !     DO i=0,PP_N
-  !       Flux_l(2:4,i,j,S,T)= nv(:,i,j)*Flux_l(2,i,j,S,T) &
-  !       +t1(:,i,j)*Flux_l(3,i,j,S,T) &
-  !       +t2(:,i,j)*Flux_l(4,i,j,S,T)
-  !     END DO ! i
-  !   END DO ! j
-  ! END DO; END DO !S,T
+        ! Flux_slave(:,:,:,SideID(0+2)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,0) 
+        ! Flux_slave(:,:,:,SideID(0+3)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),0,1) 
+        ! Flux_slave(:,:,:,SideID(0+4)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,1) 
+        
+      ENDDO; ENDDO;
+      
+    END DO; END DO !S,T
+    ! Flux_master(:,:,:,MortarSideID) = Flux_slave(:,:,:,SideID(1))
+  ! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))!, Flux_slave(:,1,1,SideID(1))
+! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))
+DO i = 1,4
+  DO q=0,PP_N
+    DO p=0,PP_N
+      IF(weak)THEN
+        Flux_slave(:,p,q,SideID(i))= Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
+      else
+        Flux_slave(:,p,q,SideID(i))= -Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
+      ENDIF
+    END DO
+  END DO
+  
+END DO
+! PRINT *, "NACHDEM Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))!, Flux_slave(:,1,1,SideID(1))
 
-! Flux_R(:,:,:) = Flux_l(:,:,:,0,0)
- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! Remove after tests
+! PRINT *, "Riemann 2"
+! NOw BIG Master Side
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+  nv =  NormVec(:,:,:,  MortarSideID);
+  t1 = TangVec1(:,:,:, MortarSideID);
+  t2 = TangVec2(:,:,:, MortarSideID);
+  print *, "nv = ", nv(:, 1, 1)
+  print *, "t1 = ", t1(:, 1, 1)
+  print *, "t2 = ", t2(:, 1, 1)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+Flux_R(:,:,:) = 0;
+
+DO i = 0,PP_N; DO j = 0,PP_N;
+  ! s = 0; t = 0;
+  DO S = 0, 1; DO T = 0,1;
+    
+    DO l = 0,PP_N; DO m = 0,PP_N;
+      CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
+      uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        F_c(2:4)= nv(:,i,j)*F_c(2) &
+        +t1(:,i,j)*F_c(3) &
+        +t2(:,i,j)*F_c(4)
+  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+      ! U_LL is U_slave (S,T)
+      ! U_RR is U_mortar
+      Flux_R(:,i,j) =  Flux_R(:,i,j) + PL2R(s,L,I) * PL2R(t,M,J) * F_c(:);
+     
+    END DO; END DO ! l, m 
+  END DO; END DO !S,T,
+END DO; END DO !i,j
+
+
+!nv =  NormVec(:,:,:,  MortarSideID);
+!t1 = TangVec1(:,:,:, MortarSideID);
+!t2 = TangVec2(:,:,:, MortarSideID);
+!!print *, "nv=",nv
+!!print *, "t1=",t1
+!!print *, "t2=",t2
+!DO j=0,PP_N
+!  DO i=0,PP_N
+!    Flux_R(2:4,i,j)= nv(:,i,j)*Flux_R(2,i,j) &
+!    +t1(:,i,j)*Flux_R(3,i,j) &
+!    +t2(:,i,j)*Flux_R(4,i,j)
+!    !Flux_R(2,i,j)= -Flux_R(2,i,j)
+!    !Flux_R(3,i,j)=  Flux_R(3,i,j)
+!    !Flux_R(4,i,j)= -Flux_R(4,i,j)
+!  END DO ! i
+!END DO ! j
+!cALL EXIT()
+
+Flux_master(:,:,:,MortarSideID) = 0.25* Flux_R(:,:,:)
+
+! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
+
+! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
+DO q=0,PP_N
+  DO p=0,PP_N
+    ! Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
+    Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
+  END DO
+END DO
+    ! PRINT *, "Riemann 3"
+  ! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
+
+! PRINT *, "NACHDEM Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
+!  CALL EXIT()
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Remove after tests
+  print *, "nElems=",nElems
+  print *, "nMortarSides=",nMortarSides
 
   Flux_R = Flux_R/4.
-  ! PRINT *, "Flux_R(:,1,1) = ", Flux_R(:,1,1)
 
-  ! PRINT *, "Flux_L(:,1,1,1,1) = ", Flux_l(:,1,1,0,1)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! PRIMARY CONSERVATION - SECOND TERM
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  uint_l = 0.
+  S=0; T=0;
+  DO i = 0,PP_N; DO j = 0,PP_N;
+    DO S = 0, 1; DO T = 0,1;
+        DO iVar = 1, PP_nVar
+          uint_l(iVar) = uint_l(iVar) + wGPSurf(i,j) * Flux_L(iVar, i,j,S,T)
+        ENDDO
+      END DO; END DO !S,T,
+  END DO; END DO !i,j
+  uint_l = uint_l /4.
+  PRINT *, "IU_t second part = ", uint_l
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! PRIMARY CONSERVATION - FIRST TERM
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  
+  uint_r = 0.
+  DO i = 0,PP_N; DO j = 0,PP_N;
+        DO iVar = 1, PP_nVar
+          uint_r(iVar) = uint_r(iVar) + wGPSurf(i,j) * Flux_R(iVar, i,j)
+        ENDDO
+    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
+  END DO; END DO !i,j
+  PRINT *, "IU_t  first part = ", uint_r
+  PRINT *, "Diff = ", uint_r - uint_l
+  PRINT *
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   SUM1 = 0
   SUM2 = 0.
   S=0; T=0;
@@ -670,12 +751,8 @@ S=0; T=0;
     SUM3=0.
     SUM2=0.
     DO S = 0, 1; DO T = 0,1;
-      ! DO S = 0, 0; DO T = 0,0;  
-      ! DO l = 0,PP_N; DO m = 0,PP_N;
         CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
         ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-        ! ent_loc  = (LOG(prim(5))-kappa*LOG(prim(1)))
-        ! -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
         F_c = ConsToEntropy(U_LL(:,i,j,S,T)) ! '\NU^T
         ASSOCIATE(rho   =>U_LL(1,i,j,S,T), &
           rhov1 =>U_LL(2,i,j,S,T), &
@@ -700,16 +777,12 @@ S=0; T=0;
         DO iVar = 1, PP_nVar
           SUM2 = SUM2 + F_C(iVar) * Flux_L(iVar, i,j,S,T)
         ENDDO
-
-        
-
       
         DO iVar = 1, PP_nVar
           SUM3 = SUM3 + F_C(iVar) * FluxF(iVar)
         ENDDO
         SUM3 = SUM3 - ent_loc * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
       
-        ! END DO; END DO ! l, m 
       END DO; END DO !S,T,
       SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
@@ -720,13 +793,8 @@ S=0; T=0;
   SUM1 = 0.
   SUM2 = 0.
   DO i = 0,PP_N; DO j = 0,PP_N;
-    ! s = 0; t = 0;
-    ! DO S = 0, 1; DO T = 0,1;
-      ! DO S = 0, 0; DO T = 0,0;  
-      ! DO l = 0,PP_N; DO m = 0,PP_N;
         CALL ConsToPrim(prim,U_RR(:,i,j))
         ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-        ! ent_loc  = (LOG(prim(5))-kappa*LOG(prim(1)))
         F_c = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
         ASSOCIATE(rho   =>U_RR(1,i,j), &
           rhov1 =>U_RR(2,i,j), &
@@ -753,174 +821,28 @@ S=0; T=0;
           SUM2 = SUM2 + F_C(iVar) * Flux_R(iVar, i,j)
         ENDDO
 
-        
-
         SUM3=0.
         DO iVar = 1, PP_nVar
           SUM3 = SUM3 + F_C(iVar) * FluxF(iVar)
         ENDDO
         SUM3 = SUM3 - ent_loc * U_RR(2,i,j)/U_RR(1,i,j)
       
-      ! END DO; END DO ! l, m 
-    ! END DO; END DO !S,T,
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
   SumA = Sum1
   PRINT *, "iVar1 = ", iVar1, "= IS_t  first part = ", SumA
   PRINT *, "iVar1 = ", iVar1, "= Diff = ", SumA - SumB
 
-ENDDO
-  PRINT *, "TEST FINISH"
-
-CALL EXIT()
-! NOw BIG Master Side
-  Flux_R(:,:,:) = 0;
-
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    ! s = 0; t = 0;
-    DO S = 0, 0; DO T = 0,0;
-      ! DO S = 0, 1; DO T = 0,1;
-      DO l = 0,PP_N; DO m = 0,PP_N;
-      !  CALL EntropyAndEnergyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
-      !   uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-       CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
-       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-        ! U_LL is U_slave (S,T)
-        ! U_RR is U_mortar
-        ! PRINT *, " master F_c =", F_c
-        
-        ! Flux_R(:,i,j) =  Flux_R(:,i,j) + PL2R(s,L,I) * PL2R(t,M,J) * F_c(:);
-        Flux_R(:,i,j) =  0*Flux_R(:,i,j) +  F_c(:);
-        ! Flux_R(:,i,j) =  F_c(:);
-       
-      END DO; END DO ! l, m 
-    END DO; END DO !S,T,
-  END DO; END DO !i,j
-  
-  nv =  NormVec(:,:,:,  MortarSideID);
-  t1 = TangVec1(:,:,:, MortarSideID);
-  t2 = TangVec2(:,:,:, MortarSideID);
-  DO j=0,PP_N
-    DO i=0,PP_N
-      Flux_R(2:4,i,j)= nv(:,i,j)*Flux_R(2,i,j) &
-      +t1(:,i,j)*Flux_R(3,i,j) &
-      +t2(:,i,j)*Flux_R(4,i,j)
-    END DO ! i
-  END DO ! j
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! Remove after tests
-  SUM1 = 0
-  SUM2 = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    ! s = 0; t = 0;
-    ! DO S = 0, 1; DO T = 0,1;
-      DO S = 0, 0; DO T = 0,0;  
-      ! DO l = 0,PP_N; DO m = 0,PP_N;
-        CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
-        ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
-        ! ent_loc  = (LOG(prim(5))-kappa*LOG(prim(1)))
-        F_c = ConsToEntropy(U_LL(:,i,j,S,T))
-        SUM2=0.
-        DO iVar = 1, PP_nVar
-          SUM2 = SUM2 + F_C(iVar) * Flux_l(iVar, i,j, S,T)
-        ENDDO
-
-      
-
-        SUM3=0.
-        DO iVar = 1, PP_nVar
-          SUM3 = SUM3 + F_C(iVar) * U_LL(iVar, i, j, S, T)
-        ENDDO
-        SUM3 = SUM3 - ent_loc
-      
-      ! END DO; END DO ! l, m 
-    END DO; END DO !S,T,
-    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
-  END DO; END DO !i,j
-  PRINT *, "IS_t second part = ", Sum1
-
-  
-  SUM1 = 0 
-  SUM2 = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    ! s = 0; t = 0;
-    ! DO S = 0, 1; DO T = 0,1;
-      
-      ! DO l = 0,PP_N; DO m = 0,PP_N;
-        CALL ConsToPrim(prim,U_RR(:,i,j))
-        ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
-        ! ent_loc  = (LOG(prim(5))-kappa*LOG(prim(1)))
-        F_c = ConsToEntropy(U_RR(:,i,j))
-        SUM2=0.
-        DO iVar = 1, PP_nVar
-          SUM2 = SUM2 + F_C(iVar) * Flux_R(iVar, i,j)
-        ENDDO
-
-        SUM3=0.
-        DO iVar = 1, PP_nVar
-          SUM3 = SUM3 + F_C(iVar) * U_RR(iVar, i, j)
-        ENDDO
-        SUM3 = SUM3 - ent_loc
-        SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
-      ! END DO; END DO ! l, m 
-    ! END DO; END DO !S,T,
-  END DO; END DO !i,j
-  PRINT *, "IS_t first part = ", Sum1
-! ENDDO
   PRINT *, "TEST FINISH"
   CALL EXIT()
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! DO S = 0, 1; DO T = 0,1;
-  !   DO q=0,PP_N
-  !     DO p=0,PP_N
-        
-  !       Flux_master(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
-  !       Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
-  !       ! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
-  !       ! Flux_slave(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),SideID((S + T*2 + 1))) = Flux_l(:,p,q,S,T)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  !       ! Flux_slave(:,:,:,SideID(0+2)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,0) 
-  !       ! Flux_slave(:,:,:,SideID(0+3)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),0,1) 
-  !       ! Flux_slave(:,:,:,SideID(0+4)) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,1) 
-        
-  !     ENDDO; ENDDO;
-      
-  !   END DO; END DO !S,T
-    ! Flux_master(:,:,:,MortarSideID) = Flux_slave(:,:,:,SideID(1))
-  ! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))!, Flux_slave(:,1,1,SideID(1))
-! PRINT *, " Flux_slave(:,1,1,SideID(1))",  Flux_slave(:,1,1,SideID(1))
-! DO i = 1,4
-!   DO q=0,PP_N
-!     DO p=0,PP_N
-!       IF(weak)THEN
-!         Flux_slave(:,p,q,SideID(i))= Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
-!       else
-!         Flux_slave(:,p,q,SideID(i))= -Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
-!       ENDIF
-!     END DO
-!   END DO
-  
-! END DO
-
-
-
-
-Flux_master(:,:,:,MortarSideID) = 0.25* Flux_R(:,:,:)
-
-! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
-
-! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
-DO q=0,PP_N
-  DO p=0,PP_N
-    ! Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
-    Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
-  END DO
-END DO
-    ! PRINT *, "Riemann 3"
-  ! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
-
-! PRINT *, "NACHDEM Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
-!  CALL EXIT()
+!if(iVar1 .eq. 32) then
+if(iVar1 .eq. 24) then
+  call exit()
+end if
 ENDDO !DO MortarSideID=firstMortarSideID,lastMortarSideID
   ! PRINT *, "Riamann ENd"
 
