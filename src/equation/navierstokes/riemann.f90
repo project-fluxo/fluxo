@@ -91,6 +91,9 @@ SUBROUTINE Riemann(F,U_L,U_R, &
 USE MOD_PreProc
 USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
 USE MOD_Flux_Average
+  USE MOD_Analyze_Vars  ,ONLY: wGPSurf
+  USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa
+  USE MOD_Equation_Vars ,ONLY:kappaM1
 #if PARABOLIC
 USE MOD_Flux            ,ONLY:EvalDiffFlux3D    ! and the NSE diffusion fluxes in all directions to approximate the numerical flux
 #endif
@@ -121,6 +124,10 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 #if PARABOLIC
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: g_L,g_R,k_L,k_R,j_L,j_R
 #endif
+REAL                                          :: Sum1, sum2, sum3, sum3_1, sum3_2, suma, sumb
+REAL                                          :: ent_loc, prim(PP_nVar), sRho, pres,v1,v2,v3
+REAL                                          :: FluxF_R(PP_nVar), FluxF_L(PP_nVar)
+REAL                                          :: F_C_R(PP_nVar), F_C_L(PP_nVar)
 !==================================================================================================================================
 ! Momentum has to be rotatet using the normal system individual for each
 ! Gauss point i,j
@@ -146,6 +153,93 @@ END DO ! j
 
 CALL SolveRiemannProblem(F,U_LL,U_RR)
 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Remove after tests
+  !print *, "nElems=",nElems
+  !print *, "nMortarSides=",nMortarSides
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  SUM1 = 0.
+  SUM2 = 0.
+  DO i = 0,PP_N; DO j = 0,PP_N;
+        !!!!! Right contribution
+        CALL ConsToPrim(prim,U_RR(:,i,j))
+        ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+        F_c_R = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
+        ASSOCIATE(rho   =>U_RR(1,i,j), &
+          rhov1 =>U_RR(2,i,j), &
+          rhov2 =>U_RR(3,i,j), &
+          rhov3 =>U_RR(4,i,j), &
+          rhoE  =>U_RR(5,i,j)   )
+          
+          srho = 1./rho
+          v1   = rhov1*srho 
+          v2   = rhov2*srho 
+          v3   = rhov3*srho 
+          pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+
+       
+        FluxF_R(1) = rhov1
+        FluxF_R(2) = rhov1*v1+pres
+        FluxF_R(3) = rhov1*v2    
+        FluxF_R(4) = rhov1*v3    
+        FluxF_R(5) = (rhoE+pres)*v1
+        END ASSOCIATE !v_x/y/z...
+
+        SUM3_1 = 0.
+        DO iVar = 1, PP_nVar
+          SUM3_1 = SUM3_1 + F_C_R(iVar) * FluxF_R(iVar)
+        ENDDO
+        SUM3_1 = SUM3_1 - ent_loc * U_RR(2,i,j)/U_RR(1,i,j)
+
+        !!!!! Left contribution
+        CALL ConsToPrim(prim,U_LL(:,i,j))
+        ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+        F_c_L = ConsToEntropy(U_LL(:,i,j)) ! '\NU^T
+        ASSOCIATE(rho   =>U_LL(1,i,j), &
+          rhov1 =>U_LL(2,i,j), &
+          rhov2 =>U_LL(3,i,j), &
+          rhov3 =>U_LL(4,i,j), &
+          rhoE  =>U_LL(5,i,j)   )
+          
+          srho = 1./rho
+          v1   = rhov1*srho 
+          v2   = rhov2*srho 
+          v3   = rhov3*srho 
+          pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+
+       
+        FluxF_L(1) = rhov1
+        FluxF_L(2) = rhov1*v1+pres
+        FluxF_L(3) = rhov1*v2    
+        FluxF_L(4) = rhov1*v3    
+        FluxF_L(5) = (rhoE+pres)*v1
+        END ASSOCIATE !v_x/y/z...
+
+        SUM3_2 = 0.
+        DO iVar = 1, PP_nVar
+          SUM3_2 = SUM3_2 + F_C_L(iVar) * FluxF_L(iVar)
+        ENDDO
+        SUM3_2 = SUM3_2 - ent_loc * U_LL(2,i,j)/U_LL(1,i,j)
+
+        SUM2=0.
+        DO iVar = 1, PP_nVar
+          SUM2 = SUM2 + (F_C_R(iVar) - F_C_L(iVar)) * F(iVar, i,j)
+        ENDDO
+
+        SUM3=sum3_1 - sum3_2
+      
+    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
+  END DO; END DO !i,j
+  PRINT *, "##### CONFORMING FLUX Diff = ", Sum1
+
+  !PRINT *, "TEST FINISH"
+  !CALL EXIT()
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Back Rotate the normal flux into Cartesian direction
 DO j=0,PP_N
@@ -155,6 +249,7 @@ DO j=0,PP_N
                +t2(:,i,j)*F(4,i,j)
   END DO ! i
 END DO ! j
+
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute NSE Diffusion flux in cartesian coordinates
