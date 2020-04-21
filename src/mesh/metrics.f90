@@ -331,7 +331,7 @@ DO iElem=1,nElems
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N1,iElem)
+    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N,iElem)
   ENDIF
    
 
