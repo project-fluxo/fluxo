@@ -518,8 +518,8 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
      CALL MOVE_ALLOC(U_New, U)
   ENDIF
 
-  ! CALL CalcMetrics((/0/))
-  CALL CalcMetrics()
+  CALL CalcMetrics((/0/))
+
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
   NULLIFY(MInfo)
