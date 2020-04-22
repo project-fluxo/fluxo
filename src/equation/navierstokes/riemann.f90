@@ -532,7 +532,7 @@ SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,Flux_master,Flux_slave,doM
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   INTEGER      :: p,q,l, m, s,t, i,j, iSide
-INTEGER      :: iMortar,nMortars,iVar,iVar1
+INTEGER      :: iMortar,nMortars,iVar
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID(4),locSide,flip(4)
 REAL         :: Flux_l( PP_nVar,0:PP_N,0:PP_N,0:1,0:1) ! For small mortar sides
@@ -545,8 +545,6 @@ REAL         :: SUM2, SUM3, sRho, pres,v1,v2,v3, SumA, SumB, uint_r( PP_nVar), u
 REAL         :: ent_loc, FluxF(PP_nVar), prim(PP_nVar)
 
 REAL         :: F_c( PP_nVar) !Returned Value from TwoPointFlux
-! REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
-! REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
 REAL,POINTER :: M1(:,:),M2(:,:)
 REAL         ::PR2L(0:1,0:PP_N,0:PP_N),PL2R(0:1,0:PP_N,0:PP_N)
 REAL                  :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
@@ -555,6 +553,8 @@ REAL         :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
 REAL         :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
 REAL         :: SUM1, pr2l_upper(PP_N+1,PP_N+1), pr2l_lower(PP_N+1,PP_N+1) , pl2r_upper(PP_N+1,PP_N+1) , pl2r_lower(PP_N+1,PP_N+1)
 !==================================================================================================================================
+
+! Select mortar side id range depending on MPI/non-MPI use
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
   lastMortarSideID =  lastMortarMPISide
@@ -563,20 +563,14 @@ ELSE
   lastMortarSideID =  lastMortarInnerSide
 END IF !doMPISides
 
-! First compute F^{L_st}
+! Store L2 projection matrices for convenience
 PR2L(0,:,:)=M_0_1(:,:); PR2L(1,:,:)=M_0_2(:,:);
-
 PL2R(0,:,:)=M_1_0(:,:); Pl2R(1,:,:)=M_2_0(:,:);
 
-
-!
 DO MortarSideID=firstMortarSideID,lastMortarSideID
   nMortars=MERGE(4,2,MortarType(1,MortarSideID).EQ.1)
   iSide=MortarType(2,MortarSideID)
   locSide=MortarType(2,MortarSideID)
-  
-! For debugging, store MortarSideID
-  iVar1=MortarSideID
 
   DO iMortar=1,nMortars
     SideID(iMortar)= MortarInfo(MI_SIDEID,iMortar,locSide)
@@ -836,7 +830,7 @@ END DO; END DO !i,j
       SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
   SumB = Sum1 /4.
-  PRINT *, "iVar1 = ", iVar1, "= IS_t second part = ", SumB
+  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t second part = ", SumB
 
   
   SUM1 = 0.
@@ -879,8 +873,8 @@ END DO; END DO !i,j
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-sum3)
   END DO; END DO !i,j
   SumA = Sum1
-  PRINT *, "iVar1 = ", iVar1, "= IS_t  first part = ", SumA
-  PRINT *, "iVar1 = ", iVar1, "= Diff = ", SumA - SumB
+  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t  first part = ", SumA
+  PRINT *, "MortarSideID = ", MortarSideID, "= Diff = ", SumA - SumB
 
 nv =  NormVec(:,:,:,  MortarSideID);
 t1 = TangVec1(:,:,:, MortarSideID);
@@ -971,12 +965,7 @@ END DO
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!if(iVar1 .eq. 32) then
-if(iVar1 .eq. 24) then
-  call exit()
-end if
 ENDDO !DO MortarSideID=firstMortarSideID,lastMortarSideID
-  ! PRINT *, "Riamann ENd"
 
 END SUBROUTINE RiemannSolver_ESM
 
