@@ -555,8 +555,9 @@ ELSE
 END IF !doMPISides
 
 ! Store L2 projection matrices for convenience
-PR2L(0,:,:)=M_0_1(:,:); PR2L(1,:,:)=M_0_2(:,:);
-PL2R(0,:,:)=M_1_0(:,:); Pl2R(1,:,:)=M_2_0(:,:);
+PR2L(0,:,:)=    M_0_1(:,:); PR2L(1,:,:)=    M_0_2(:,:);
+PL2R(0,:,:)=0.5*M_1_0(:,:); Pl2R(1,:,:)=0.5*M_2_0(:,:);
+! Note: Multiplication by 0.5 necessary since the M_X_0 matrices are missing this factor
 
 DO MortarSideID=firstMortarSideID,lastMortarSideID
   ! Do some mortar side id magic
@@ -604,16 +605,14 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   t2 = TangVec2(:,:,:, MortarSideID);
   DO j=0,PP_N
     DO i=0,PP_N
-      ! random_number(u)
-      !right
       U_RR(1,i,j)=U_R(1,i,j)
       U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
       U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
       U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
       U_RR(5,i,j)=U_R(5,i,j)
-
     END DO ! i 
   END DO ! j
+
   ! Rotate left/small faces
   DO S = 0, 1; DO T = 0,1;
     nv = NormVec(:,:,:,SideID(S + T*2 + 1));
@@ -623,7 +622,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     DO j=0,PP_N
       DO i=0,PP_N
         U_LL(1,i,j,S,T)=U_L(1,i,j,S,T)
-        ! rotate momentum
         U_LL(2,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*nv(:,i,j))
         U_LL(3,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*t1(:,i,j))
         U_LL(4,i,j,S,T)=SUM(U_L(2:4,i,j,S,T)*t2(:,i,j))
@@ -646,15 +644,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       END DO; END DO !l,m
     END DO; END DO !i ,j 
   END DO; END DO !S,T
-  
-  !!!!!!!!!!!!!!!!!! ECMORTAR
-  nv =  NormVec(:,:,:,  MortarSideID);
-  t1 = TangVec1(:,:,:, MortarSideID);
-  t2 = TangVec2(:,:,:, MortarSideID);
-  print *, "nv = ", nv(:, 1, 1)
-  print *, "t1 = ", t1(:, 1, 1)
-  print *, "t2 = ", t2(:, 1, 1)
-  !!!!!!!!!!!!!!!!!! ECMORTAR
 
   ! Calculate right fluxes (large element side): Eq. (5b)
   Flux_R = 0;
