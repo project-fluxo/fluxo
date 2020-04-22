@@ -1170,6 +1170,16 @@ CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but r
   prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
   prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
+CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
+  prim    = 0.
+  prim(1) =  25./(36.*PP_Pi)
+  prim(2) = -SIN(2.*PP_Pi*x(2))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(5) =  5./(12*PP_Pi)
+  prim(6) = -SIN(2.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
+
 CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov 
           ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
   prim    = 0.
