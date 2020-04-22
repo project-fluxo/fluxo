@@ -656,7 +656,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   print *, "t2 = ", t2(:, 1, 1)
   !!!!!!!!!!!!!!!!!! ECMORTAR
 
-  ! Calculate left fluxes (small element side): Eq. (5b)
+  ! Calculate right fluxes (large element side): Eq. (5b)
   Flux_R = 0;
   DO i = 0,PP_N; DO j = 0,PP_N;
     DO S = 0, 1; DO T = 0,1;
@@ -674,13 +674,13 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   ! Multiply by metric terms
   DO q=0,PP_N
     DO p=0,PP_N
-      Flux_R = Flux_R * SurfElem(p,q,MortarSideID)
+      Flux_R(:, p, q) = Flux_R(:, p, q) * SurfElem(p,q,MortarSideID)
     END DO ! p
   END DO ! q
   DO S = 0,1; DO T = 0,1
     DO q=0,PP_N
       DO p=0,PP_N
-        Flux_L(:,:,:,S,T) = Flux_L(:,:,:,S,T) * SurfElem(p,q,SideID((S + T*2 + 1)))
+        Flux_L(:,p,q,S,T) = Flux_L(:,p,q,S,T) * SurfElem(p,q,SideID((S + T*2 + 1)))
       END DO ! p
     END DO ! q
   END DO; END DO ! S,T
