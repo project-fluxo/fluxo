@@ -589,26 +589,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     ! U_L(:,p,q,0,1) = Uface_slave(:,p,q,SideID(0+3))
     ! U_L(:,p,q,1,1) = Uface_slave(:,p,q,SideID(0+4))
   END DO; END DO ! q, p
-  ! DO iMortar=1,nMortars
-    ! SideID = MortarInfo(MI_SIDEID,iMortar,iSide)
-    ! flip   = MortarInfo(MI_FLIP,iMortar,iSide)
-
-!   DO j=0,PP_N
-!     DO i=0,PP_N
-!   DO S = 0, 1; DO T = 0,1;
-!     CALL random_number(U_L(1,i,j,S,T));
-!     CALL random_number(U_L(2,i,j,S,T))!,j,S,T)*nv(:,i,j))
-!     CALL random_number(U_L(3,i,j,S,T))!,j,S,T)*t1(:,i,j))
-!     CALL random_number(U_L(4,i,j,S,T))!,j,S,T)*t2(:,i,j))
-!     CALL random_number(U_L(5,i,j,S,T));
-!     U_L(1,i,j,S,T) = U_L(1,i,j,S,T) + 1!)
-!     U_L(2,i,j,S,T) = -1*U_L(2,i,j,S,T) !)
-!     U_L(3,i,j,S,T) = 2*U_L(3,i,j,S,T) !)
-!     U_L(4,i,j,S,T) = 3*U_L(4,i,j,S,T) !)
-!     U_L(5,i,j,S,T) = U_L(5,i,j,S,T) + 10!)
-!     ENDDO
-!   ENDDO
-! ENDDO; ENDDO;
 
 
   DO S = 0, 1; DO T = 0,1;
@@ -635,20 +615,6 @@ ENDDO; ENDDO;
 
 
 U_R(:,:,:) = Uface_master(:,:,:,MortarSideID)
-! DO j=0,PP_N
-!   DO i=0,PP_N
-! CALL random_number(U_R(1,i,j));                
-! CALL random_number(U_R(2,i,j)) !                    
-! CALL random_number(U_R(3,i,j)) !                     
-! CALL random_number(U_R(4,i,j))                      
-! CALL random_number(U_R(5,i,j)); 
-! U_R(1,i,j) = U_R(1,i,j) + 1!  !     
-! U_R(2,i,j) = 1*U_R(2,i,j) !  !     
-! U_R(3,i,j) = 2*U_R(3,i,j) !  !     
-! U_R(4,i,j) = -3*U_R(4,i,j) !  !     
-! U_R(5,i,j) = U_R(5,i,j) + 10!     
-! END DO ! i 
-! END DO ! j
 
 nv =  NormVec(:,:,:,  MortarSideID);
 t1 = TangVec1(:,:,:, MortarSideID);
@@ -682,25 +648,13 @@ t2 = TangVec2(:,:,:, MortarSideID);
 
   DO i = 0,PP_N; DO j = 0,PP_N;
     DO S = 0, 1; DO T = 0,1;
-  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-     nv = NormVec(:,:,:,SideID(S + T*2 + 1));
-     t1 = TangVec1(:,:,:,SideID(S + T*2 + 1));
-     t2 = TangVec2(:,:,:,SideID(S + T*2 + 1));
-  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
       DO l = 0,PP_N; DO m = 0,PP_N;
         CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
         uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-  ! !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        ! F_c(2:4)= nv(:,i,j)*F_c(2) &
-        ! +t1(:,i,j)*F_c(3) &
-        ! +t2(:,i,j)*F_c(4)
-  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
         ! U_LL is U_slave (S,T)
         ! U_RR is U_mortar
        Flux_l(:,i,j,S,T) = Flux_l(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:); !1(a)
-        
       END DO; END DO !l,m
     END DO; END DO !S,T
   END DO; END DO !i ,j 
@@ -724,28 +678,16 @@ DO i = 0,PP_N; DO j = 0,PP_N;
     DO l = 0,PP_N; DO m = 0,PP_N;
       CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,l,m,s,t),U_RR(:,i,j),&
       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        ! F_c(2:4)= nv(:,i,j)*F_c(2) &
-        ! +t1(:,i,j)*F_c(3) &
-        ! +t2(:,i,j)*F_c(4)
-  !!!!!!!!!!!!!!!!!! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
       ! U_LL is U_slave (S,T)
       ! U_RR is U_mortar
       Flux_R(:,i,j) =  Flux_R(:,i,j) + PL2R(s,L,I) * PL2R(t,M,J) * F_c(:);
-     
     END DO; END DO ! l, m 
   END DO; END DO !S,T,
 END DO; END DO !i,j
 
 
-!cALL EXIT()
-
-
-    ! PRINT *, "Riemann 3"
-  ! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
-
-! PRINT *, "NACHDEM Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
-!  CALL EXIT()
+! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -879,24 +821,17 @@ END DO; END DO !i,j
 nv =  NormVec(:,:,:,  MortarSideID);
 t1 = TangVec1(:,:,:, MortarSideID);
 t2 = TangVec2(:,:,:, MortarSideID);
-!print *, "nv=",nv
-!print *, "t1=",t1
-!print *, "t2=",t2
 DO j=0,PP_N
  DO i=0,PP_N
    Flux_R(2:4,i,j)= nv(:,i,j)*Flux_R(2,i,j) &
    +t1(:,i,j)*Flux_R(3,i,j) &
    +t2(:,i,j)*Flux_R(4,i,j)
-   !Flux_R(2,i,j)= -Flux_R(2,i,j)
-   !Flux_R(3,i,j)=  Flux_R(3,i,j)
-   !Flux_R(4,i,j)= -Flux_R(4,i,j)
  END DO ! i
 END DO ! j
 Flux_master(:,:,:,MortarSideID) = Flux_R(:,:,:)
 
 ! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_l(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
 
-! PRINT *, "Flux_master(:,1,1,MortarSideID)", Flux_master(:,1,1,MortarSideID)
 DO q=0,PP_N
   DO p=0,PP_N
     ! Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
@@ -960,7 +895,6 @@ END DO
 END DO
 
   PRINT *, "TEST FINISH"
-  ! CALL EXIT()
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
