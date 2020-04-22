@@ -634,8 +634,8 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
 
   ! Calculate left fluxes (small element side): Eq. (5a)
   Flux_L = 0;
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    DO S = 0, 1; DO T = 0,1;
+  DO S = 0, 1; DO T = 0,1;
+    DO i = 0,PP_N; DO j = 0,PP_N;
       DO l = 0,PP_N; DO m = 0,PP_N;
         ! Calculate two-point flux
         CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j,s,t),U_RR(:,l,m),&
@@ -644,8 +644,8 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         ! Add to overall flux
         Flux_L(:,i,j,S,T) = Flux_L(:,i,j,S,T) + PR2L(s,L,I) * PR2L(t,M,J) * F_c(:);
       END DO; END DO !l,m
-    END DO; END DO !S,T
-  END DO; END DO !i ,j 
+    END DO; END DO !i ,j 
+  END DO; END DO !S,T
   
   !!!!!!!!!!!!!!!!!! ECMORTAR
   nv =  NormVec(:,:,:,  MortarSideID);
