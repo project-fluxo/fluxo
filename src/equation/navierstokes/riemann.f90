@@ -671,22 +671,19 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     END DO; END DO !S,T,
   END DO; END DO !i,j
 
-  ! Divide flux by four - required for consistency with Flux_L
-  Flux_R = Flux_R/4.
-
   ! Multiply by metric terms
-  !DO S = 0,1; DO T = 0,1
-  !  DO q=0,PP_N
-  !    DO p=0,PP_N
-  !      Flux_L(:,:,:,S,T) = Flux_L(:,:,:,S,T) * SurfElem(p,q,SideID((S + T*2 + 1)))
-  !    END DO ! p
-  !  END DO ! q
-  !END DO; END DO ! S,T
-  !DO q=0,PP_N
-  !  DO p=0,PP_N
-  !    Flux_R = Flux_R * SurfElem(p,q,MortarSideID)
-  !  END DO ! p
-  !END DO ! q
+  DO q=0,PP_N
+    DO p=0,PP_N
+      Flux_R = Flux_R * SurfElem(p,q,MortarSideID)
+    END DO ! p
+  END DO ! q
+  DO S = 0,1; DO T = 0,1
+    DO q=0,PP_N
+      DO p=0,PP_N
+        Flux_L(:,:,:,S,T) = Flux_L(:,:,:,S,T) * SurfElem(p,q,SideID((S + T*2 + 1)))
+      END DO ! p
+    END DO ! q
+  END DO; END DO ! S,T
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ECMORTAR - BEGIN
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -714,7 +711,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         ENDDO
       END DO; END DO !S,T,
   END DO; END DO !i,j
-  !uint_l = uint_l /4.
   PRINT *, "IU_t second part = ", uint_l
 
   PRINT *, "Diff = ", uint_r - uint_l
@@ -726,40 +722,40 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
 
   ! First term of Eq. (9)
   SUM1 = 0.
-  SUM2 = 0.
   DO i = 0,PP_N; DO j = 0,PP_N;
-        CALL ConsToPrim(prim,U_RR(:,i,j))
-        math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-        entropy_vars = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
-        ASSOCIATE(rho   =>U_RR(1,i,j), &
-                  rhov1 =>U_RR(2,i,j), &
-                  rhov2 =>U_RR(3,i,j), &
-                  rhov3 =>U_RR(4,i,j), &
-                  rhoE  =>U_RR(5,i,j)   )
-          
-          srho = 1./rho
-          v1   = rhov1*srho 
-          v2   = rhov2*srho 
-          v3   = rhov3*srho 
-          pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+    CALL ConsToPrim(prim,U_RR(:,i,j))
+    math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+    entropy_vars = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
+    ASSOCIATE(rho   =>U_RR(1,i,j), &
+              rhov1 =>U_RR(2,i,j), &
+              rhov2 =>U_RR(3,i,j), &
+              rhov3 =>U_RR(4,i,j), &
+              rhoE  =>U_RR(5,i,j)   )
+      
+      srho = 1./rho
+      v1   = rhov1*srho 
+      v2   = rhov2*srho 
+      v3   = rhov3*srho 
+      pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
 
-          Flux_F(1) = rhov1
-          Flux_F(2) = rhov1*v1+pres
-          Flux_F(3) = rhov1*v2
-          Flux_F(4) = rhov1*v3        
-          Flux_F(5) = (rhoE+pres)*v1
-        END ASSOCIATE !v_x/y/z...
+      Flux_F(1) = rhov1
+      Flux_F(2) = rhov1*v1+pres
+      Flux_F(3) = rhov1*v2
+      Flux_F(4) = rhov1*v3        
+      Flux_F(5) = (rhoE+pres)*v1
+    END ASSOCIATE !v_x/y/z...
 
-        SUM2=0.
-        DO iVar = 1, PP_nVar
-          SUM2 = SUM2 + entropy_vars(iVar) * Flux_R(iVar, i,j)
-        ENDDO
+    SUM2=0.
+    DO iVar = 1, PP_nVar
+      SUM2 = SUM2 + entropy_vars(iVar) * Flux_R(iVar, i,j)
+    ENDDO
 
-        entropy_potential=0.
-        DO iVar = 1, PP_nVar
-          entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
-        ENDDO
-        entropy_potential = entropy_potential - math_entropy * U_RR(2,i,j)/U_RR(1,i,j)
+    entropy_potential=0.
+    DO iVar = 1, PP_nVar
+      entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
+    ENDDO
+    entropy_potential = entropy_potential - math_entropy * U_RR(2,i,j)/U_RR(1,i,j)
+    entropy_potential = entropy_potential*SurfElem(i,j,MortarSideID)
       
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
   END DO; END DO !i,j
@@ -767,11 +763,8 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   PRINT *, "MortarSideID = ", MortarSideID, "= IS_t  first part = ", SumA
 
   ! Second term of Eq. (9)
-  SUM1 = 0
-  SUM2 = 0.
+  SUM1 = 0.0
   DO i = 0,PP_N; DO j = 0,PP_N;
-    entropy_potential=0.
-    SUM2=0.
     DO S = 0, 1; DO T = 0,1;
       CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
       math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
@@ -795,20 +788,22 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         Flux_F(5) = (rhoE+pres)*v1
       END ASSOCIATE !v_x/y/z...
       
+      SUM2=0.0
       DO iVar = 1, PP_nVar
         SUM2 = SUM2 + entropy_vars(iVar) * Flux_L(iVar, i,j,S,T)
       ENDDO
       
+      entropy_potential=0.0
       DO iVar = 1, PP_nVar
         entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
       ENDDO
       entropy_potential = entropy_potential - math_entropy * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
+      entropy_potential = entropy_potential * SurfElem(i,j,SideID((S + T*2 + 1)))
       
+      SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
     END DO; END DO !S,T,
-    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
   END DO; END DO !i,j
-  SumB = Sum1 /4.
-  !SumB = Sum1
+  SumB = Sum1
   PRINT *, "MortarSideID = ", MortarSideID, "= IS_t second part = ", SumB
 
   PRINT *, "MortarSideID = ", MortarSideID, "= Diff = ", SumA - SumB
@@ -838,7 +833,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   ! Multiply flux with surface area
   DO q=0,PP_N
     DO p=0,PP_N
-      !print *, "SurfElem(p,q,MortarSideID) = ", SurfElem(p,q,MortarSideID)
+      ! NOT NECESSARY ANYMORE: We multiply with SurfElem already above ! ECMORTAR 
       !Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
     END DO
   END DO
@@ -881,10 +876,10 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     DO q=0,PP_N
       DO p=0,PP_N
         IF(weak)THEN
-          !print *, "SurfElem(p,q,SideID(i)) = ", SurfElem(p,q,SideID(i))
+          ! NOT NECESSARY ANYMORE: We multiply with SurfElem already above ! ECMORTAR 
           !Flux_slave(:,p,q,SideID(i))=  Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
         else
-          print *, "wololo"
+          print *, "wololo" ! should not happen, just in case
           call exit()
           Flux_slave(:,p,q,SideID(i))= -Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
         ENDIF
