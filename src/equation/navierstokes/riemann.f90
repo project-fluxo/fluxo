@@ -700,7 +700,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       uint_r(iVar) = uint_r(iVar) + wGPSurf(i,j) * Flux_R(iVar, i,j)
     ENDDO
   END DO; END DO !i,j
-  PRINT *, "IU_t  first part = ", uint_r
+  PRINT *, "IU_t right/big   = ", uint_r
 
   ! Second term of Eq. (8)
   uint_l = 0.
@@ -711,9 +711,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         ENDDO
       END DO; END DO !S,T,
   END DO; END DO !i,j
-  PRINT *, "IU_t second part = ", uint_l
+  PRINT *, "IU_t left/small  = ", uint_l
 
-  PRINT *, "Diff = ", uint_r - uint_l
+  PRINT *, "IU_t Diff        = ", uint_r - uint_l
   PRINT *
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -760,7 +760,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
   END DO; END DO !i,j
   SumA = Sum1
-  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t  first part = ", SumA
+  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t first part  = ", SumA
 
   ! Second term of Eq. (9)
   SUM1 = 0.0
@@ -806,7 +806,7 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   SumB = Sum1
   PRINT *, "MortarSideID = ", MortarSideID, "= IS_t second part = ", SumB
 
-  PRINT *, "MortarSideID = ", MortarSideID, "= Diff = ", SumA - SumB
+  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t Diff        = ", SumA - SumB
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
