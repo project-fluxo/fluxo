@@ -124,11 +124,11 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 #if PARABOLIC
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: g_L,g_R,k_L,k_R,j_L,j_R
 #endif
-REAL                                          :: Sum1, sum2, sum3, sum3_1, sum3_2, suma, sumb
-REAL                                          :: math_entropy_R, math_entropy_L, prim(PP_nVar), sRho, pres,v1,v2,v3
-REAL                                          :: Flux_F_R(PP_nVar), Flux_F_L(PP_nVar)
-REAL                                          :: entropy_vars_R(PP_nVar), entropy_vars_L(PP_nVar)
-REAL                                          :: entropy_flux_R, entropy_flux_L
+!REAL                                          :: Sum1, sum2, sum3, sum3_1, sum3_2, suma, sumb ! ECMORTAR
+!REAL                                          :: math_entropy_R, math_entropy_L, prim(PP_nVar), sRho, pres,v1,v2,v3 ! ECMORTAR
+!REAL                                          :: Flux_F_R(PP_nVar), Flux_F_L(PP_nVar) ! ECMORTAR
+!REAL                                          :: entropy_vars_R(PP_nVar), entropy_vars_L(PP_nVar) ! ECMORTAR
+!REAL                                          :: entropy_flux_R, entropy_flux_L ! ECMORTAR
 !==================================================================================================================================
 ! Momentum has to be rotatet using the normal system individual for each
 ! Gauss point i,j
@@ -154,83 +154,83 @@ END DO ! j
 
 CALL SolveRiemannProblem(F,U_LL,U_RR)
 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ECMORTAR - BEGIN
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  SUM1 = 0.
-  SUM2 = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    ! Right contribution
-    CALL ConsToPrim(prim,U_RR(:,i,j))
-    math_entropy_R = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-    entropy_vars_R = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
-    ASSOCIATE(rho   =>U_RR(1,i,j), &
-              rhov1 =>U_RR(2,i,j), &
-              rhov2 =>U_RR(3,i,j), &
-              rhov3 =>U_RR(4,i,j), &
-              rhoE  =>U_RR(5,i,j)   )
-      
-      srho = 1./rho
-      v1   = rhov1*srho 
-      v2   = rhov2*srho 
-      v3   = rhov3*srho 
-      pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
-      
-      Flux_F_R(1) = rhov1
-      Flux_F_R(2) = rhov1*v1+pres
-      Flux_F_R(3) = rhov1*v2    
-      Flux_F_R(4) = rhov1*v3    
-      Flux_F_R(5) = (rhoE+pres)*v1
-    END ASSOCIATE !v_x/y/z...
+  !SUM1 = 0.
+  !SUM2 = 0.
+  !DO i = 0,PP_N; DO j = 0,PP_N;
+  !  ! Right contribution
+  !  CALL ConsToPrim(prim,U_RR(:,i,j))
+  !  math_entropy_R = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+  !  entropy_vars_R = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
+  !  ASSOCIATE(rho   =>U_RR(1,i,j), &
+  !            rhov1 =>U_RR(2,i,j), &
+  !            rhov2 =>U_RR(3,i,j), &
+  !            rhov3 =>U_RR(4,i,j), &
+  !            rhoE  =>U_RR(5,i,j)   )
+  !    
+  !    srho = 1./rho
+  !    v1   = rhov1*srho 
+  !    v2   = rhov2*srho 
+  !    v3   = rhov3*srho 
+  !    pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+  !    
+  !    Flux_F_R(1) = rhov1
+  !    Flux_F_R(2) = rhov1*v1+pres
+  !    Flux_F_R(3) = rhov1*v2    
+  !    Flux_F_R(4) = rhov1*v3    
+  !    Flux_F_R(5) = (rhoE+pres)*v1
+  !  END ASSOCIATE !v_x/y/z...
 
-    entropy_flux_R = 0.
-    DO iVar = 1, PP_nVar
-      entropy_flux_R = entropy_flux_R + entropy_vars_R(iVar) * Flux_F_R(iVar)
-    ENDDO
-    entropy_flux_R = entropy_flux_R - math_entropy_R * U_RR(2,i,j)/U_RR(1,i,j)
-  
-    ! Left contribution
-    CALL ConsToPrim(prim,U_LL(:,i,j))
-    math_entropy_L = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-    entropy_vars_L = ConsToEntropy(U_LL(:,i,j)) ! '\NU^T
-    ASSOCIATE(rho   =>U_LL(1,i,j), &
-              rhov1 =>U_LL(2,i,j), &
-              rhov2 =>U_LL(3,i,j), &
-              rhov3 =>U_LL(4,i,j), &
-              rhoE  =>U_LL(5,i,j)   )
-      
-      srho = 1./rho
-      v1   = rhov1*srho 
-      v2   = rhov2*srho 
-      v3   = rhov3*srho 
-      pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
-    
-      Flux_F_L(1) = rhov1
-      Flux_F_L(2) = rhov1*v1+pres
-      Flux_F_L(3) = rhov1*v2    
-      Flux_F_L(4) = rhov1*v3    
-      Flux_F_L(5) = (rhoE+pres)*v1
-    END ASSOCIATE !v_x/y/z...
+  !  entropy_flux_R = 0.
+  !  DO iVar = 1, PP_nVar
+  !    entropy_flux_R = entropy_flux_R + entropy_vars_R(iVar) * Flux_F_R(iVar)
+  !  ENDDO
+  !  entropy_flux_R = entropy_flux_R - math_entropy_R * U_RR(2,i,j)/U_RR(1,i,j)
+  !
+  !  ! Left contribution
+  !  CALL ConsToPrim(prim,U_LL(:,i,j))
+  !  math_entropy_L = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+  !  entropy_vars_L = ConsToEntropy(U_LL(:,i,j)) ! '\NU^T
+  !  ASSOCIATE(rho   =>U_LL(1,i,j), &
+  !            rhov1 =>U_LL(2,i,j), &
+  !            rhov2 =>U_LL(3,i,j), &
+  !            rhov3 =>U_LL(4,i,j), &
+  !            rhoE  =>U_LL(5,i,j)   )
+  !    
+  !    srho = 1./rho
+  !    v1   = rhov1*srho 
+  !    v2   = rhov2*srho 
+  !    v3   = rhov3*srho 
+  !    pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+  !  
+  !    Flux_F_L(1) = rhov1
+  !    Flux_F_L(2) = rhov1*v1+pres
+  !    Flux_F_L(3) = rhov1*v2    
+  !    Flux_F_L(4) = rhov1*v3    
+  !    Flux_F_L(5) = (rhoE+pres)*v1
+  !  END ASSOCIATE !v_x/y/z...
 
-    entropy_flux_L = 0.
-    DO iVar = 1, PP_nVar
-      entropy_flux_L = entropy_flux_L + entropy_vars_L(iVar) * Flux_F_L(iVar)
-    ENDDO
-    entropy_flux_L = entropy_flux_L - math_entropy_L * U_LL(2,i,j)/U_LL(1,i,j)
+  !  entropy_flux_L = 0.
+  !  DO iVar = 1, PP_nVar
+  !    entropy_flux_L = entropy_flux_L + entropy_vars_L(iVar) * Flux_F_L(iVar)
+  !  ENDDO
+  !  entropy_flux_L = entropy_flux_L - math_entropy_L * U_LL(2,i,j)/U_LL(1,i,j)
 
-    SUM2=0.
-    DO iVar = 1, PP_nVar
-      SUM2 = SUM2 + (entropy_vars_R(iVar) - entropy_vars_L(iVar)) * F(iVar, i,j)
-    ENDDO
-    SUM2 = SUM2 - (entropy_flux_R - entropy_flux_L)
+  !  SUM2=0.
+  !  DO iVar = 1, PP_nVar
+  !    SUM2 = SUM2 + (entropy_vars_R(iVar) - entropy_vars_L(iVar)) * F(iVar, i,j)
+  !  ENDDO
+  !  SUM2 = SUM2 - (entropy_flux_R - entropy_flux_L)
 
-    SUM1 = SUM1 + SUM2
-  END DO; END DO !i,j
+  !  SUM1 = SUM1 + SUM2
+  !END DO; END DO !i,j
 
-  PRINT *, "##### CONFORMING FLUX Diff = ", Sum1
+  !PRINT *, "##### CONFORMING FLUX Diff = ", Sum1
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ECMORTAR - END
 
 ! Back Rotate the normal flux into Cartesian direction
 DO j=0,PP_N
@@ -493,36 +493,36 @@ END SUBROUTINE RiemannSolverByRoe
 !==================================================================================================================================
 
 SUBROUTINE RiemannSolver_ESM(Uface_master,Uface_slave,Flux_master,Flux_slave,doMPISides, weak)
-  USE MOD_Preproc
-  USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
-  USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
-  USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo, FS2M,nElems,nMortarSides
-  USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
-  USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
-  USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
-  USE MOD_Mesh_Vars,   ONLY: NormVec,TangVec1,TangVec2,FS2M,nSides, SurfElem
-  USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
-  USE MOD_Interpolation_Vars  ,ONLY: wGP
-  USE MOD_Analyze_Vars  ,ONLY: wGPSurf
-  USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa
-  USE MOD_Equation_Vars ,ONLY:kappaM1
-  
-  IMPLICIT NONE
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! INPUT/OUTPUT VARIABLES
-  REAL,INTENT(INOUT) :: Uface_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
-  REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide) !< (INOUT) can be U or Grad_Ux/y/z_master
-  REAL,INTENT(INOUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: has flux from small mortar sides 
-                                                                      !< on output: flux on big mortar sides filled
-  REAL,INTENT(INOUT   )   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) !<has flux from small mortar sides,
-                                                                      !< set -F_slave in call if surfint is weak (dg.f90)
-                                                                      !< set +F_slave in call if surfint is strong (lifting)
-  LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
-  LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
+USE MOD_Preproc
+USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
+USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
+USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo, FS2M,nElems,nMortarSides
+USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
+USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
+USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
+USE MOD_Mesh_Vars,   ONLY: NormVec,TangVec1,TangVec2,FS2M,nSides, SurfElem
+USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
+USE MOD_Interpolation_Vars  ,ONLY: wGP
+USE MOD_Analyze_Vars  ,ONLY: wGPSurf
+USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa
+USE MOD_Equation_Vars ,ONLY:kappaM1
 
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! LOCAL VARIABLES
-  INTEGER      :: p,q,l, m, s,t, i,j
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT) :: Uface_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
+REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide) !< (INOUT) can be U or Grad_Ux/y/z_master
+REAL,INTENT(INOUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: has flux from small mortar sides 
+                                                                    !< on output: flux on big mortar sides filled
+REAL,INTENT(INOUT   )   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) !<has flux from small mortar sides,
+                                                                    !< set -F_slave in call if surfint is weak (dg.f90)
+                                                                    !< set +F_slave in call if surfint is strong (lifting)
+LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
+LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
+
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER      :: p,q,l, m, s,t, i,j
 INTEGER      :: iMortar,nMortars,iVar
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID(4),locSide,flip(4)
@@ -532,17 +532,16 @@ REAL         :: U_LL( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_RR( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
 REAL         :: U_L( PP_nVar,0:PP_N,0:PP_N,0:1, 0:1) !For small mortar sides
 REAL         :: U_R( PP_nVar,0:PP_N,0:PP_N) !Big mortar Side
-REAL         :: SUM2, entropy_potential, sRho, pres,v1,v2,v3, SumA, SumB, uint_r( PP_nVar), uint_l( PP_nVar)
-REAL         :: math_entropy, entropy_vars(PP_nVar), Flux_F(PP_nVar), prim(PP_nVar)
+!REAL         :: SUM1, SUM2, entropy_potential, sRho, pres,v1,v2,v3, SumA, SumB, uint_r( PP_nVar), uint_l( PP_nVar) ! ECMORTAR
+!REAL         :: math_entropy, entropy_vars(PP_nVar), Flux_F(PP_nVar), prim(PP_nVar) ! ECMORTAR
 
 REAL         :: F_c( PP_nVar) !Returned Value from TwoPointFlux
 REAL,POINTER :: M1(:,:),M2(:,:)
-REAL         ::PR2L(0:1,0:PP_N,0:PP_N),PL2R(0:1,0:PP_N,0:PP_N)
-REAL                  :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+REAL         :: PR2L(0:1,0:PP_N,0:PP_N),PL2R(0:1,0:PP_N,0:PP_N)
+REAL         :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
 REAL         :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
 REAL         :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
 REAL         :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
-REAL         :: SUM1, pr2l_upper(PP_N+1,PP_N+1), pr2l_lower(PP_N+1,PP_N+1) , pl2r_upper(PP_N+1,PP_N+1) , pl2r_lower(PP_N+1,PP_N+1)
 !==================================================================================================================================
 
 ! Select mortar side id range depending on MPI/non-MPI use
@@ -678,124 +677,124 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! PRIMARY CONSERVATION - Eq. (8)
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  
-  ! First term of Eq. (8)
-  uint_r = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    DO iVar = 1, PP_nVar
-      uint_r(iVar) = uint_r(iVar) + wGPSurf(i,j) * Flux_R(iVar, i,j)
-    ENDDO
-  END DO; END DO !i,j
-  PRINT *, "IU_t right/big   = ", uint_r
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !! PRIMARY CONSERVATION - Eq. (8)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !! First term of Eq. (8)
+  !uint_r = 0.
+  !DO i = 0,PP_N; DO j = 0,PP_N;
+  !  DO iVar = 1, PP_nVar
+  !    uint_r(iVar) = uint_r(iVar) + wGPSurf(i,j) * Flux_R(iVar, i,j)
+  !  ENDDO
+  !END DO; END DO !i,j
+  !PRINT *, "IU_t right/big   = ", uint_r
 
-  ! Second term of Eq. (8)
-  uint_l = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    DO S = 0, 1; DO T = 0,1;
-        DO iVar = 1, PP_nVar
-          uint_l(iVar) = uint_l(iVar) + wGPSurf(i,j) * Flux_L(iVar, i,j,S,T)
-        ENDDO
-      END DO; END DO !S,T,
-  END DO; END DO !i,j
-  PRINT *, "IU_t left/small  = ", uint_l
+  !! Second term of Eq. (8)
+  !uint_l = 0.
+  !DO i = 0,PP_N; DO j = 0,PP_N;
+  !  DO S = 0, 1; DO T = 0,1;
+  !      DO iVar = 1, PP_nVar
+  !        uint_l(iVar) = uint_l(iVar) + wGPSurf(i,j) * Flux_L(iVar, i,j,S,T)
+  !      ENDDO
+  !    END DO; END DO !S,T,
+  !END DO; END DO !i,j
+  !PRINT *, "IU_t left/small  = ", uint_l
 
-  PRINT *, "IU_t Diff        = ", uint_r - uint_l
-  PRINT *
+  !PRINT *, "IU_t Diff        = ", uint_r - uint_l
+  !PRINT *
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! ENTROPY CONSERVATION - Eq. (9)
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !! ENTROPY CONSERVATION - Eq. (9)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  ! First term of Eq. (9)
-  SUM1 = 0.
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    CALL ConsToPrim(prim,U_RR(:,i,j))
-    math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-    entropy_vars = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
-    ASSOCIATE(rho   =>U_RR(1,i,j), &
-              rhov1 =>U_RR(2,i,j), &
-              rhov2 =>U_RR(3,i,j), &
-              rhov3 =>U_RR(4,i,j), &
-              rhoE  =>U_RR(5,i,j)   )
-      
-      srho = 1./rho
-      v1   = rhov1*srho 
-      v2   = rhov2*srho 
-      v3   = rhov3*srho 
-      pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+  !! First term of Eq. (9)
+  !SUM1 = 0.
+  !DO i = 0,PP_N; DO j = 0,PP_N;
+  !  CALL ConsToPrim(prim,U_RR(:,i,j))
+  !  math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+  !  entropy_vars = ConsToEntropy(U_RR(:,i,j)) ! '\NU^T
+  !  ASSOCIATE(rho   =>U_RR(1,i,j), &
+  !            rhov1 =>U_RR(2,i,j), &
+  !            rhov2 =>U_RR(3,i,j), &
+  !            rhov3 =>U_RR(4,i,j), &
+  !            rhoE  =>U_RR(5,i,j)   )
+  !    
+  !    srho = 1./rho
+  !    v1   = rhov1*srho 
+  !    v2   = rhov2*srho 
+  !    v3   = rhov3*srho 
+  !    pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
 
-      Flux_F(1) = rhov1
-      Flux_F(2) = rhov1*v1+pres
-      Flux_F(3) = rhov1*v2
-      Flux_F(4) = rhov1*v3        
-      Flux_F(5) = (rhoE+pres)*v1
-    END ASSOCIATE !v_x/y/z...
+  !    Flux_F(1) = rhov1
+  !    Flux_F(2) = rhov1*v1+pres
+  !    Flux_F(3) = rhov1*v2
+  !    Flux_F(4) = rhov1*v3        
+  !    Flux_F(5) = (rhoE+pres)*v1
+  !  END ASSOCIATE !v_x/y/z...
 
-    SUM2=0.
-    DO iVar = 1, PP_nVar
-      SUM2 = SUM2 + entropy_vars(iVar) * Flux_R(iVar, i,j)
-    ENDDO
+  !  SUM2=0.
+  !  DO iVar = 1, PP_nVar
+  !    SUM2 = SUM2 + entropy_vars(iVar) * Flux_R(iVar, i,j)
+  !  ENDDO
 
-    entropy_potential=0.
-    DO iVar = 1, PP_nVar
-      entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
-    ENDDO
-    entropy_potential = entropy_potential - math_entropy * U_RR(2,i,j)/U_RR(1,i,j)
-    entropy_potential = entropy_potential*SurfElem(i,j,MortarSideID)
-      
-    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
-  END DO; END DO !i,j
-  SumA = Sum1
-  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t first part  = ", SumA
+  !  entropy_potential=0.
+  !  DO iVar = 1, PP_nVar
+  !    entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
+  !  ENDDO
+  !  entropy_potential = entropy_potential - math_entropy * U_RR(2,i,j)/U_RR(1,i,j)
+  !  entropy_potential = entropy_potential*SurfElem(i,j,MortarSideID)
+  !    
+  !  SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
+  !END DO; END DO !i,j
+  !SumA = Sum1
+  !PRINT *, "MortarSideID = ", MortarSideID, "= IS_t first part  = ", SumA
 
-  ! Second term of Eq. (9)
-  SUM1 = 0.0
-  DO i = 0,PP_N; DO j = 0,PP_N;
-    DO S = 0, 1; DO T = 0,1;
-      CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
-      math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
-      entropy_vars = ConsToEntropy(U_LL(:,i,j,S,T)) ! '\NU^T
-      ASSOCIATE(rho   =>U_LL(1,i,j,S,T), &
-                rhov1 =>U_LL(2,i,j,S,T), &
-                rhov2 =>U_LL(3,i,j,S,T), &
-                rhov3 =>U_LL(4,i,j,S,T), &
-                rhoE  =>U_LL(5,i,j,S,T)   )
-        
-        srho = 1./rho
-        v1   = rhov1*srho 
-        v2   = rhov2*srho 
-        v3   = rhov3*srho 
-        pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
+  !! Second term of Eq. (9)
+  !SUM1 = 0.0
+  !DO i = 0,PP_N; DO j = 0,PP_N;
+  !  DO S = 0, 1; DO T = 0,1;
+  !    CALL ConsToPrim(prim,U_LL(:,i,j,S,T))
+  !    math_entropy  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))/kappaM1
+  !    entropy_vars = ConsToEntropy(U_LL(:,i,j,S,T)) ! '\NU^T
+  !    ASSOCIATE(rho   =>U_LL(1,i,j,S,T), &
+  !              rhov1 =>U_LL(2,i,j,S,T), &
+  !              rhov2 =>U_LL(3,i,j,S,T), &
+  !              rhov3 =>U_LL(4,i,j,S,T), &
+  !              rhoE  =>U_LL(5,i,j,S,T)   )
+  !      
+  !      srho = 1./rho
+  !      v1   = rhov1*srho 
+  !      v2   = rhov2*srho 
+  !      v3   = rhov3*srho 
+  !      pres    = kappaM1*(rhoE-0.5*(rhov1*v1+rhov2*v2+rhov3*v3))
 
-        Flux_F(1) = rhov1
-        Flux_F(2) = rhov1*v1+pres
-        Flux_F(3) = rhov1*v2
-        Flux_F(4) = rhov1*v3        
-        Flux_F(5) = (rhoE+pres)*v1
-      END ASSOCIATE !v_x/y/z...
-      
-      SUM2=0.0
-      DO iVar = 1, PP_nVar
-        SUM2 = SUM2 + entropy_vars(iVar) * Flux_L(iVar, i,j,S,T)
-      ENDDO
-      
-      entropy_potential=0.0
-      DO iVar = 1, PP_nVar
-        entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
-      ENDDO
-      entropy_potential = entropy_potential - math_entropy * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
-      entropy_potential = entropy_potential * SurfElem(i,j,SideID((S + T*2 + 1)))
-      
-      SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
-    END DO; END DO !S,T,
-  END DO; END DO !i,j
-  SumB = Sum1
-  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t second part = ", SumB
+  !      Flux_F(1) = rhov1
+  !      Flux_F(2) = rhov1*v1+pres
+  !      Flux_F(3) = rhov1*v2
+  !      Flux_F(4) = rhov1*v3        
+  !      Flux_F(5) = (rhoE+pres)*v1
+  !    END ASSOCIATE !v_x/y/z...
+  !    
+  !    SUM2=0.0
+  !    DO iVar = 1, PP_nVar
+  !      SUM2 = SUM2 + entropy_vars(iVar) * Flux_L(iVar, i,j,S,T)
+  !    ENDDO
+  !    
+  !    entropy_potential=0.0
+  !    DO iVar = 1, PP_nVar
+  !      entropy_potential = entropy_potential + entropy_vars(iVar) * Flux_F(iVar)
+  !    ENDDO
+  !    entropy_potential = entropy_potential - math_entropy * U_LL(2,i,j,S,T)/U_LL(1,i,j,S,T)
+  !    entropy_potential = entropy_potential * SurfElem(i,j,SideID((S + T*2 + 1)))
+  !    
+  !    SUM1 = SUM1 + wGPSurf(i,j)*(SUM2-entropy_potential)
+  !  END DO; END DO !S,T,
+  !END DO; END DO !i,j
+  !SumB = Sum1
+  !PRINT *, "MortarSideID = ", MortarSideID, "= IS_t second part = ", SumB
 
-  PRINT *, "MortarSideID = ", MortarSideID, "= IS_t Diff        = ", SumA - SumB
+  !PRINT *, "MortarSideID = ", MortarSideID, "= IS_t Diff        = ", SumA - SumB
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
