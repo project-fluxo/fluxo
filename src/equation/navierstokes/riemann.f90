@@ -91,9 +91,9 @@ SUBROUTINE Riemann(F,U_L,U_R, &
 USE MOD_PreProc
 USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
 USE MOD_Flux_Average
-  USE MOD_Analyze_Vars  ,ONLY: wGPSurf
-  USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa
-  USE MOD_Equation_Vars ,ONLY:kappaM1
+!USE MOD_Analyze_Vars  ,ONLY: wGPSurf ! ECMORTAR
+!USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa ! ECMORTAR
+!USE MOD_Equation_Vars ,ONLY:kappaM1 ! ECMORTAR
 #if PARABOLIC
 USE MOD_Flux            ,ONLY:EvalDiffFlux3D    ! and the NSE diffusion fluxes in all directions to approximate the numerical flux
 #endif
