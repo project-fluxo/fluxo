@@ -557,7 +557,6 @@ CASE(3) !Alfven Wave without Magnetic Field
   Resu_tt(5) = 0.5*Resu(1)*2.*SUM(Resu(2:4)*Resu_tt(2:4) + Resu_t(2:4)*Resu_t(2:4))
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
-  Omega=Omega*1.014928 ! ensure that IC is *not* continuous ECMORTAR
 
   ! g(t)
   Resu(1:4)=2.+ IniAmplitude*sin(Omega*(SUM(x) - tEval))
