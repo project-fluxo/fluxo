@@ -79,6 +79,32 @@ ELSE
 END IF
 
 DO SideID=firstSideID,lastSideID
+  ! ECMORTAR - BEGIN
+  if (SideId .eq. 5) then
+    cycle
+  endif
+  if (SideId .eq. 6) then
+    cycle
+  endif
+  if (SideId .eq. 7) then
+    cycle
+  endif
+  if (SideId .eq. 8) then
+    cycle
+  endif
+  if (SideId .eq. 9) then
+    cycle
+  endif
+  if (SideId .eq. 10) then
+    cycle
+  endif
+  if (SideId .eq. 11) then
+    cycle
+  endif
+  if (SideId .eq. 12) then
+    cycle
+  endif
+  ! ECMORTAR - END
   CALL Riemann(Flux_master(:,:,:,SideID),     U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID), &
 #if PARABOLIC
                                   gradPx_Master(:,:,:,SideID),gradPx_Slave(:,:,:,SideID), &
