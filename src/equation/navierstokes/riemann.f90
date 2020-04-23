@@ -240,7 +240,6 @@ DO j=0,PP_N
                +t2(:,i,j)*F(4,i,j)
   END DO ! i
 END DO ! j
-
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute NSE Diffusion flux in cartesian coordinates
