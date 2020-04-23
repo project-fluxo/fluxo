@@ -361,25 +361,21 @@ b_dt=RKb*dt
 ! First evaluation of DG operator already done in timedisc
 CurrentStage=1
 tStage=t
-print *, ">>>>>>>>>>>>> PRE-RK <<<<<<<<<<<<<" ! ECMORTAR
 CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-print *, ">>>>>>>>>>>>> POST-STAGE ", 1, " <<<<<<<<<<<<<" ! ECMORTAR
 
 
 ! Following steps
-!DO iStage=2,nRKStages
-!DO iStage=2,2 ! ECMORTAR
-!  CurrentStage=iStage
-!  tStage=t+dt*RKc(iStage)
-!  CALL DGTimeDerivative(tStage)
-!  CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
-!  CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
-!  print *, ">>>>>>>>>>>>> POST-STAGE ", iStage, " <<<<<<<<<<<<<" ! ECMORTAR
-!
-!END DO
-!CurrentStage=1
+DO iStage=2,nRKStages
+  CurrentStage=iStage
+  tStage=t+dt*RKc(iStage)
+  CALL DGTimeDerivative(tStage)
+  CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
+  CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
+
+END DO
+CurrentStage=1
 
 END SUBROUTINE TimeStepByLSERKW2
 
