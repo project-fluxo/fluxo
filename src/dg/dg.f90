@@ -345,8 +345,8 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
-CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.FALSE., weak=.TRUE.)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.FALSE., weak=.TRUE.)
 
 ! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
 ! CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
