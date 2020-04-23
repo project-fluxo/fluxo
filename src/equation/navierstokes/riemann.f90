@@ -590,11 +590,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     U_L(:,p,q,1,0) = Uface_slave(:,FS2M(1,p,q,flip(2)),FS2M(2,p,q,flip(2)),SideID(0+2))
     U_L(:,p,q,0,1) = Uface_slave(:,FS2M(1,p,q,flip(3)),FS2M(2,p,q,flip(3)),SideID(0+3))
     U_L(:,p,q,1,1) = Uface_slave(:,FS2M(1,p,q,flip(4)),FS2M(2,p,q,flip(4)),SideID(0+4))
-    
-    ! U_L(:,p,q,0,0) = Uface_slave(:,p,q,SideID(0+1))
-    ! U_L(:,p,q,1,0) = Uface_slave(:,p,q,SideID(0+2))
-    ! U_L(:,p,q,0,1) = Uface_slave(:,p,q,SideID(0+3))
-    ! U_L(:,p,q,1,1) = Uface_slave(:,p,q,SideID(0+4))
   END DO; END DO ! q, p
 
   ! Rotate states into face-local coordinate system such that face is normal to xi-direction
@@ -812,20 +807,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     END DO ! i
   END DO ! j
 
-  ! Store flux on master side of large element
-  Flux_master(:,:,:,MortarSideID) = Flux_R(:,:,:)
-
-  ! ???
-  ! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_L(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
-
-  ! Multiply flux with surface area
-  DO q=0,PP_N
-    DO p=0,PP_N
-      ! NOT NECESSARY ANYMORE: We multiply with SurfElem already above ! ECMORTAR 
-      !Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)*SurfElem(p,q,MortarSideID)
-    END DO
-  END DO
-
   ! Rotate left/small face fluxes back to global coordinate system
   DO S = 0, 1; DO T = 0,1;
     nv = NormVec(:,:,:,SideID(S + T*2 + 1));
@@ -839,6 +820,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       END DO ! i
     END DO ! j
   END DO; END DO !S,T
+
+  ! Store flux on master side of large element
+  Flux_master(:,:,:,MortarSideID) = Flux_R(:,:,:)
   
   ! Store flux on master *and* slave side of small element ???
   DO S = 0, 1; DO T = 0,1;
@@ -848,36 +832,25 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_L(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),S,T)
         ! Flux_slave(:,p,q,SideID((S + T*2 + 1))) = Flux_L(:,p,q,S,T)
         ! Flux_slave(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),SideID((S + T*2 + 1))) = Flux_L(:,p,q,S,T)
-
-        ! Flux_slave(:,:,:,SideID(0+2)) = Flux_L(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,0) 
-        ! Flux_slave(:,:,:,SideID(0+3)) = Flux_L(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),0,1) 
-        ! Flux_slave(:,:,:,SideID(0+4)) = Flux_L(:,FS2M(1,p,q,flip(S + T*2 + 1)),FS2M(2,p,q,flip(S + T*2 + 1)),1,1) 
       ENDDO;
     ENDDO;
   END DO; END DO !S,T
 
-  ! ???
-  ! Flux_master(:,:,:,MortarSideID) = Flux_slave(:,:,:,SideID(1))
-
-  ! Flip sign depending on weak or strong form ???
-  DO i = 1,4
-    DO q=0,PP_N
-      DO p=0,PP_N
-        IF(weak)THEN
-          ! NOT NECESSARY ANYMORE: We multiply with SurfElem already above ! ECMORTAR 
-          !Flux_slave(:,p,q,SideID(i))=  Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
-        else
-          print *, "wololo" ! should not happen, just in case
-          call exit()
-          Flux_slave(:,p,q,SideID(i))= -Flux_slave(:,p,q,SideID(i))*SurfElem(p,q,SideID(i))
-        ENDIF
-      END DO ! p
-    END DO ! q
-  END DO ! i
+  ! Flip sign for strong form ???
+  IF (.not. weak) THEN
+    DO S = 0, 1; DO T = 0,1;
+      DO q=0,PP_N
+        DO p=0,PP_N
+          Flux_slave(:,p,q,SideID((S + T*2 + 1)))= -Flux_slave(:,p,q,SideID((S + T*2 + 1)))
+        END DO ! p
+      END DO ! q
+    END DO; END DO ! S, T
+  ENDIF
 
 END DO !DO MortarSideID=firstMortarSideID,lastMortarSideID
 
 END SUBROUTINE RiemannSolver_ESM
+
 
 !==================================================================================================================================
 !> Entropy stable Riemann solver, uses TwoPoint Entropy Conserving flux
