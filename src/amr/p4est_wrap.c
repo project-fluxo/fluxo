@@ -1283,9 +1283,7 @@ ElementNumberChanges(p4est_iter_volume_info_t *info, void *user_data) {
     int Fside = 0;
     int iElem = dataquad->ElementID;
     int *ChangeElements = (int *) data->ChngElementPtr;
-
-
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < 8; ++i) {
         ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldElementID[i];
     }
 #ifndef NON_OPTIMIZED
@@ -1317,7 +1315,7 @@ p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void *FortranData) {
     p4est_locidx_t jl;
     p4est_locidx_t num_ghost = 0;
     int nNBProcs = 0;
-
+    int iElem;
     num_ghost = (p4est_locidx_t) ghost->ghosts.elem_count;
     p4est_fortran_data->ghost_to_proc = (int *) malloc(num_ghost * sizeof(int));
 
@@ -1339,7 +1337,47 @@ p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void *FortranData) {
 
 
     p4est_fortran_data->nNBProcs = nNBProcs;
+    
+
+
+
     return p4est_fortran_data;
+}
+
+void FillElemsChange(p4est_t *p4est, void *FortranData){
+
+    p4est_fortran_data_t *p4est_fortran_data = (p4est_fortran_data_t *) FortranData;
+    int i, iElem;
+    int nElems = p4est_fortran_data->nElems;
+    int *ChangeElements = p4est_fortran_data->ChngElementPtr;// = (int*) malloc(8 * nElems * sizeof(int));
+    for (iElem = 1; iElem <= nElems; ++iElem)
+        for (i = 1; i <= 8; i++) {
+            ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; 
+        }
+    //Set the ElementID and OldElement, OldElement[0]=ElementID, OldElement[1:7]=0
+    // // Count  Elements and Sides
+    p4est_fortran_data->nElems = 0;
+    p4est_iterate(p4est,                     
+                  NULL,                      
+                  (void *) p4est_fortran_data, 
+                  ElementCounter_iter,
+                  NULL,          
+                  NULL,          
+                  NULL);         
+    p4est_iterate(p4est,
+                  NULL,
+                  (void *) p4est_fortran_data,
+                  ElementNumberChanges,
+                  NULL,
+                  NULL,
+                  NULL);
+
+   // p4est_fortran_data->nElems = p4est->local_num_quadrants;
+    return;
+}   
+
+int GetNElems(p4est_t *p4est){
+    return p4est->local_num_quadrants;
 }
 
 void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
@@ -1406,32 +1444,32 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
                               edges between quadrants */
                   NULL);
     p4est->user_pointer = NULL;
-    int *ChangeElements = p4est_fortran_data->ChngElementPtr;// = (int*) malloc(8 * nElems * sizeof(int));
-    for (iElem = 1; iElem <= nElems; ++iElem)
-        for (i = 1; i <= 8; i++) {
-            // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-            ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
-        }
-#ifndef NON_OPTIMIZED
-    // p4est_iterate(p4est,
-    //               NULL,
-    //               (void *)p4est_fortran_data,
-    //               NULL,
+//     int *ChangeElements = p4est_fortran_data->ChngElementPtr;// = (int*) malloc(8 * nElems * sizeof(int));
+//     for (iElem = 1; iElem <= nElems; ++iElem)
+//         for (i = 1; i <= 8; i++) {
+//             // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
+//             ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
+//         }
+// #ifndef NON_OPTIMIZED
+//     // p4est_iterate(p4est,
+//     //               NULL,
+//     //               (void *)p4est_fortran_data,
+//     //               NULL,
 
-    //               CheckChanges,
+//     //               CheckChanges,
 
-    //               NULL,
+//     //               NULL,
 
-    //               NULL);
-#endif
+//     //               NULL);
+// #endif
 
-    p4est_iterate(p4est,
-                  NULL,
-                  (void *) p4est_fortran_data,
-                  ElementNumberChanges,
-                  NULL,
-                  NULL,
-                  NULL);
+//     p4est_iterate(p4est,
+//                   NULL,
+//                   (void *) p4est_fortran_data,
+//                   ElementNumberChanges,
+//                   NULL,
+//                   NULL,
+//                   NULL);
 
     pfree(ghost_data);
     p8est_ghost_destroy(ghost);
@@ -1452,7 +1490,7 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
 
     /* Calculate ghost information */
 
-    int nElems = p4est_fortran_data->nElems = 0;
+    int nElems;// = p4est_fortran_data->nElems = 0;
     int nSides = p4est_fortran_data->nSides = 0;
     p4est_fortran_data->nGlobalElems = p4est->global_num_quadrants;
     p4est_fortran_data->nBCSides = 0;
@@ -1486,8 +1524,8 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     p4est_iterate(p4est,                      /* the forest */
                   ghost,                      /* the ghost layer May be LAter!!! */
                   (void *) p4est_fortran_data, /* the synchronized ghost data */
-                  ElementCounter_iter,        /* callback to compute each quad's
-                                             interior contribution to du/dt */
+                  NULL,//ElementCounter_iter,        /* callback to compute each quad's
+                                          //   interior contribution to du/dt */
                   SidesCounter_iter,          /* callback to compute each quads'
                                              faces' contributions to du/du */
                   NULL,                       /* there is no callback for the
@@ -1773,15 +1811,6 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
 
     p4est_coarsen_ext(p4est, recursive, Callbackorphans,
                       coarse_fn, NULL, replace_quads);
-    // p4est_iterate(p4est, /* the forest */
-    //                   NULL,
-    //                   NULL,
-    //                   Elm_iter,
-    //                   NULL,
-    //                   NULL,
-    //                   NULL);
-    //     printf("COARSE!!!!\n");
-
     p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
                       replace_quads);
     p4est->user_pointer = NULL;

@@ -22,7 +22,7 @@ CONTAINS
         USE MOD_PreProc
         USE MOD_Globals, ONLY : MPIroot, myrank
         USE MOD_DG_Vars, ONLY : U
-        USE MOD_AMR, ONLY : RunAMR, LoadBalancingAMR, SaveMesh, LoadBalancingAMRold;
+        USE MOD_AMR, ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
         USE MOD_Mesh_Vars, ONLY : nElems, Elem_xGP, nGlobalElems
         USE MOD_Interpolation_Vars, ONLY : xGP
         USE MOD_Basis, ONLY : BuildLegendreVdm
@@ -40,7 +40,7 @@ CONTAINS
         INTEGER :: iXMax(3), iXMin(3),i,j,k
         LOGICAL :: doBalance = .TRUE.
 
-        MinLevel = 1!4!-2;
+        MinLevel = 0!4!-2;
         MaxLevel = MinLevel +1!+ 1!4;
        
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
@@ -88,7 +88,7 @@ CONTAINS
         ! IF (Count .EQ. 0 ) THEN
             COUNT = 1; 
         DO l = 1,nElems
-            IF (Minval(Elem_xGP(1,:,:,:,l)) .GT. 0.4999) THEN 
+            IF (Minval(Elem_xGP(1,:,:,:,l)) .GE. 0.4999) THEN 
                 ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,l))
                 ! CALL EXIT()
                 ElemToRefineAndCoarse(l) = MinLevel          
@@ -115,16 +115,15 @@ CONTAINS
             IF (MPIRoot) PRINT *, "InitData"
         ENDIF
         Deallocate(ElemToRefineAndCoarse)
-        doLBalance = doLBalance + 1
-        IF (doLBalance .EQ. 1) THEN
-            doLBalance = 0;
+      
+       
             ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
             ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems
-            IF (doBalance) CALL LoadBalancingAMR()
-            IF (MPIRoot) THEN
-                print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
-            ENDIF
-        ENDIF
+            ! IF (doBalance) CALL LoadBalancingAMR()
+        !     IF (MPIRoot) THEN
+        !         print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
+        !     ENDIF
+        ! ENDIF
 
     END SUBROUTINE ShockCapturingAMR
 

@@ -67,6 +67,13 @@ INTERFACE
     END SUBROUTINE p4est_destroy
 
 
+    SUBROUTINE FillElemsChanges(P4EST, P4fortrandata) BIND(C, NAME = 'FillElemsChange')
+        IMPORT :: C_PTR
+        TYPE(C_PTR), VALUE :: P4EST
+        TYPE(C_PTR), VALUE :: P4fortrandata
+    END SUBROUTINE FillElemsChanges
+
+
     SUBROUTINE p4est_ResetElementNumber(P4) BIND(C, NAME = 'ResetElementNumber')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4
@@ -151,6 +158,12 @@ INTERFACE
         TYPE(C_PTR), VALUE :: P4EST
         TYPE(C_PTR), VALUE :: P4fortrandata
     END SUBROUTINE GetnNBProcs
+
+    FUNCTION GetNElems(P4EST) BIND(C, NAME = 'GetNElems')
+        IMPORT :: C_PTR, C_INT
+        TYPE(C_PTR), VALUE :: P4EST
+        INTEGER :: GetNElems
+    END FUNCTION GetNElems
 
     SUBROUTINE RefineCoarse(P4EST, ElemToRC) BIND(C, NAME = 'RefineCoarse')
         IMPORT :: C_PTR

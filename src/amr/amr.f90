@@ -39,9 +39,9 @@ INTERFACE LoadBalancingAMR
   MODULE PROCEDURE LoadBalancingAMR
 END INTERFACE
 
-INTERFACE LoadBalancingAMRold
-  MODULE PROCEDURE LoadBalancingAMRold
-END INTERFACE
+! INTERFACE LoadBalancingAMRold
+!   MODULE PROCEDURE LoadBalancingAMRold
+! END INTERFACE
 
 INTERFACE SaveMesh
   MODULE PROCEDURE SaveMesh
@@ -55,7 +55,7 @@ PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
 PUBLIC::DefineParametersAMR
 PUBLIC::LoadBalancingAMR
-PUBLIC::LoadBalancingAMRold
+! PUBLIC::LoadBalancingAMRold
 ! INTEGER :: COUNT =0 
 CONTAINS
 
@@ -179,6 +179,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
   USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
+  USE MOD_P4est,              ONLY: FillElemsChanges, GetNElems
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
@@ -203,7 +204,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, doLBalance
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -223,10 +224,72 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ENDIF 
 
   DATAPtr = C_LOC(FortranData)
-  CALL GetnNBProcs(p4est_ptr, DATAPtr)
-  ! CALL C_F_POINTER(DataPtr, FortranData)
+  
 
   
+  FortranData%nElems = GetNElems(p4est_ptr)
+  ! print *, "old nElems = ", nElemsOld ,"=>", FortranData%nElems
+
+  ALLOCATE(ChangeElem(8,FortranData%nElems))
+  FortranData%ChngElmPtr = C_LOC(ChangeElem)
+  
+  CALL FillElemsChanges(p4est_ptr, DATAPtr)
+  ! CALL EXIT()
+
+  ! CALL C_F_POINTER(DataPtr, FortranData)
+  ! PRINT *, size(ChangeElem(1,:))
+
+  IF (PRESENT(ElemToRefineAndCoarse)) THEN
+    ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
+    ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
+    iElem=0;
+    !  DO iElem=1,FortranData%nElems
+     DO 
+     iElem=iElem+1;
+     IF (iElem .GT. FortranData%nElems) EXIT
+       i=1;
+       Ie= ChangeElem(i,iElem);
+       IF (Ie .LT. 0) THEN
+         !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+         ! contains the number of child element 
+         CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
+                                      U(:,:,:,:,-Ie:-Ie),&
+                                      Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
+                                      Elem_xGP(:,:,:,:,-Ie:-Ie))
+         !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
+         iElem=iElem+7;
+       ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+        !  This is COARSE. Array ChangeElem(:,iElem) Contains 
+        !  8 Element which must be COARSED to the new number iElem
+         CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
+                                      U(:,:,:,:,ChangeElem(:,iElem)),&
+                                      Elem_xGP_New(:,:,:,:,iElem:iElem),&
+                                      Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
+       ELSE
+         IF (iE .LE. 0) THEN
+         print *, "Error, iE = 0!, iElem = ", ielem
+         CALL EXIT()
+       ENDIF
+       ! This is simple case of renumeration of Elements
+       Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+       U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
+     ENDIF
+             
+     END DO
+      CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+      CALL MOVE_ALLOC(U_New, U)
+   ENDIF
+   doLBalance = doLBalance + 1
+   IF (doLBalance .EQ. 1) THEN
+      doLBalance = 0;
+      IF (doLBalance .EQ. 0) CALL LoadBalancingAMR()
+        IF (MPIRoot) THEN
+          print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
+        ENDIF
+   ENDIF
+
+   CALL GetnNBProcs(p4est_ptr, DATAPtr)
+
   IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
@@ -325,8 +388,8 @@ FortranData%EtSPtr = C_LOC(ElemToSide)
 FortranData%StEPtr = C_LOC(SideToElem)
 FortranData%MTPtr = C_LOC(MortarType)
 
-ALLOCATE(ChangeElem(8,FortranData%nElems))
-FortranData%ChngElmPtr = C_LOC(ChangeElem)
+! ALLOCATE(ChangeElem(8,FortranData%nElems))
+! FortranData%ChngElmPtr = C_LOC(ChangeElem)
 
 CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
@@ -477,46 +540,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   !   ElementToCalc(j)=j;
   ! enddo
 
-  IF (PRESENT(ElemToRefineAndCoarse)) THEN
-   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
-   ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
-   iElem=0;
-   !  DO iElem=1,FortranData%nElems
-    DO 
-    iElem=iElem+1;
-    IF (iElem .GT. FortranData%nElems) EXIT
-      i=1;
-      Ie= ChangeElem(i,iElem);
-      IF (Ie .LT. 0) THEN
-        !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-        ! contains the number of child element 
-        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
-                                     U(:,:,:,:,-Ie:-Ie),&
-                                     Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                     Elem_xGP(:,:,:,:,-Ie:-Ie))
-        !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
-        iElem=iElem+7;
-      ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-       !  This is COARSE. Array ChangeElem(:,iElem) Contains 
-       !  8 Element which must be COARSED to the new number iElem
-        CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
-                                     U(:,:,:,:,ChangeElem(:,iElem)),&
-                                     Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                     Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
-      ELSE
-        IF (iE .LE. 0) THEN
-        print *, "Error, iE = 0!, iElem = ", ielem
-        CALL EXIT()
-      ENDIF
-      ! This is simple case of renumeration of Elements
-      Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-      U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-    ENDIF
-            
-    END DO
-     CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
-     CALL MOVE_ALLOC(U_New, U)
-  ENDIF
+
 
   CALL CalcMetrics((/0/))
 
@@ -770,7 +794,7 @@ SUBROUTINE LoadBalancingAMR()
   CALL MOVE_ALLOC(U_New, U)
   CALL p4est_ResetElementNumber(P4EST_PTR)
   
-  CALL RunAMR()
+  ! CALL RunAMR()
   
 END SUBROUTINE LoadBalancingAMR
       
@@ -778,64 +802,64 @@ END SUBROUTINE LoadBalancingAMR
 !============================================================================================================================
 !> Old LoadBalancing SUBROUTINE, is used for testing
 !============================================================================================================================
-SUBROUTINE LoadBalancingAMRold()
-! MODULES
-USE MOD_AMR_Vars
-USE MOD_P4EST
-USE MOD_DG_Vars,            ONLY: U
-USE MOD_Mesh_Vars,          ONLY: Elem_xGP
-USE, INTRINSIC :: ISO_C_BINDING
-IMPLICIT NONE
+! SUBROUTINE LoadBalancingAMRold()
+! ! MODULES
+! USE MOD_AMR_Vars
+! USE MOD_P4EST
+! USE MOD_DG_Vars,            ONLY: U
+! USE MOD_Mesh_Vars,          ONLY: Elem_xGP
+! USE, INTRINSIC :: ISO_C_BINDING
+! IMPLICIT NONE
 
-REAL,POINTER :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-INTEGER :: DataSize, nElemsNew, PP, nVar
-! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
-! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
-! REAL, POINTER :: UP(:,:,:,:,:)
-!============================================================================================================================
-! Deallocate global variables, needs to go somewhere else later
-TYPE(p4est_balance_data), TARGET :: BalanceData;
+! REAL,POINTER :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
+! INTEGER :: DataSize, nElemsNew, PP, nVar
+! ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
+! ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
+! ! REAL, POINTER :: UP(:,:,:,:,:)
+! !============================================================================================================================
+! ! Deallocate global variables, needs to go somewhere else later
+! TYPE(p4est_balance_data), TARGET :: BalanceData;
 
-IF (.NOT. UseAMR) THEN
-  RETURN;
-ENDIF
-! UP=>U
-! Elem_xGPP=>Elem_xGP
-BalanceData%nVar = size(U(:,0,0,0,1))
-BalanceData%PP = size(U(1,:,0,0,1))-1
-nVar = BalanceData%nVar
-PP = BalanceData%PP
-BalanceData%nElems = size(U(1,0,0,0,:))
-BalanceData%DataSize=INT(sizeof(U(:,:,:,:,1)) + sizeof(Elem_xGP(:,:,:,:,1)))
-
-
-BalanceData%DataSetU = C_LOC(U)
-BalanceData%DataSetElem_xGP = C_LOC(Elem_xGP)
-
-CALL p4est_loadbalancing(P4EST_PTR, C_LOC(BalanceData))
-
-! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
-nElemsNew=BalanceData%nElems;
-CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
-CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
-SDEALLOCATE(Elem_xGP)
-SDEALLOCATE(U)
-ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
-Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
-
-ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
-U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
-
-CALL free_balance_memory(C_LOC(BalanceData))
-
-NULLIFY(U_New)
-NULLIFY(Elem_xGP_New)
-CALL RunAMR()
-! PRINT *,"YAHOOOO!!!! "
-! CALL EXIT()
+! IF (.NOT. UseAMR) THEN
+!   RETURN;
+! ENDIF
+! ! UP=>U
+! ! Elem_xGPP=>Elem_xGP
+! BalanceData%nVar = size(U(:,0,0,0,1))
+! BalanceData%PP = size(U(1,:,0,0,1))-1
+! nVar = BalanceData%nVar
+! PP = BalanceData%PP
+! BalanceData%nElems = size(U(1,0,0,0,:))
+! BalanceData%DataSize=INT(sizeof(U(:,:,:,:,1)) + sizeof(Elem_xGP(:,:,:,:,1)))
 
 
-END SUBROUTINE LoadBalancingAMRold
+! BalanceData%DataSetU = C_LOC(U)
+! BalanceData%DataSetElem_xGP = C_LOC(Elem_xGP)
+
+! CALL p4est_loadbalancing(P4EST_PTR, C_LOC(BalanceData))
+
+! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
+! nElemsNew=BalanceData%nElems;
+! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
+! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
+! SDEALLOCATE(Elem_xGP)
+! SDEALLOCATE(U)
+! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
+! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+
+! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
+! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+
+! CALL free_balance_memory(C_LOC(BalanceData))
+
+! NULLIFY(U_New)
+! NULLIFY(Elem_xGP_New)
+! CALL RunAMR()
+! ! PRINT *,"YAHOOOO!!!! "
+! ! CALL EXIT()
+
+
+! END SUBROUTINE LoadBalancingAMRold
 
 
 
@@ -898,10 +922,10 @@ SUBROUTINE SaveMesh(FileString)
 
   CALL C_F_POINTER(FortranDataSave%ElemInfo, ElInfoF,[6,nElems])
   !read local ElemInfo from data file
-FirstElemInd=offsetElem+1
-LastElemInd=offsetElem+nElems
-ALLOCATE(ElemInfoW(6,nElems), SOURCE  = ElInfoF)
-ElemInfoW = ElInfoF
+  FirstElemInd=offsetElem+1
+  LastElemInd=offsetElem+nElems
+  ALLOCATE(ElemInfoW(6,nElems), SOURCE  = ElInfoF)
+  ElemInfoW = ElInfoF
   ! ALLOCATE(ElemInfo1(6,nElems))
   nIndexSide = ElInfoF(4,nElems)
   
