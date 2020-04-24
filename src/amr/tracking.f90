@@ -14,6 +14,7 @@ MODULE MOD_AMR_tracking
 
     ! IMPLICIT NONE
     INTEGER :: doLBalance = 0
+    INTEGER :: Count = 0
 CONTAINS
 
     SUBROUTINE ShockCapturingAMR()
@@ -36,29 +37,19 @@ CONTAINS
         REAL, DIMENSION(1:1, 0:PP_N, 0:PP_N, 0:PP_N) :: Uind, Umod
         REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
         REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
-        INTEGER :: iXMax(3), iXMin(3)
+        INTEGER :: iXMax(3), iXMin(3),i,j,k
         LOGICAL :: doBalance = .TRUE.
 
-        MaxLevel = 4;
-        MinLevel = 2;
-
-        !MaxLevel = 3;
-
-        !MinLevel = 0;
+        MinLevel = 1!4!-2;
+        MaxLevel = MinLevel +1!+ 1!4;
+       
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = 0;
-        ! ALLOCATE(sVdm_Leg(0:PP_N,0:PP_N))
-        ! ALLOCATE(Vdm_Leg(0:PP_N,0:PP_N))
         CALL BuildLegendreVdm(PP_N, xGP, Vdm_Leg, sVdm_Leg)
-
-        !print *, RefStatePrim(IniRefState,:)
-        ! RhoInf = RefStatePrim(IniRefState,1)
-        !CALL EXIT()
+     
         DO l = 1, nElems
             !     ! if (l .EQ. 1) U()
             Uind(1, :, :, :) = U(1, :, :, :, l)
-            ! !    Uind(1,:,:,:) = KappaM1*(U(5,:,:,:,l)-0.5*(SUM(U(2:4,:,:,:,l)*U(2:4,:,:,:,l))/U(1,:,:,:,l)))
-            ! !    Uind(1,:,:,:) = Uind(1,:,:,:)*U(1,:,:,:,l)
             CALL ChangeBasis3D(1, PP_N, PP_N, sVdm_Leg, Uind, Umod)
             !       ! Compute (truncated) error norms
             LU = SUM(Umod(1, :, :, :)**2)
@@ -70,45 +61,6 @@ CONTAINS
 
             ! DOF energy indicator
             eta_dof = LOG10(MAX(LU_N / LU, LU_NM1 / LUM1, TINY(1.0)))
-            !   print *, " Umod(1,:,1,1) = ", Umod(1,:,1,1)
-            !   print *, " Umod(1,1,:,1) = ", Umod(1,1,:,1)
-            !   print *, " Umod(1,1,1,:) = ", Umod(1,1,1,:)
-            ! print *, " LU = ", LU
-            ! print *, " LUM1 = ", LUM1
-            ! print *, " LUM2 = ", LUM2
-            ! print *, " LU_N = ", LU_N
-            ! print *, " LU_NM1 = ", LU_NM1
-            ! print *, " LU = ", LU
-            !eta_dof = MAXVAL(ABS(U(1,:,:,:,l)- RhoInf)/RhoInf)
-            !eta_dof= LOG10(eta_dof)
-            !iXmax = 0
-            !iXmin = 0
-            !RhoMax = lOG10(MAXVAL(U(1,:,:,:,l)))
-            !RhoMin = LOG10(MINVAL(U(1,:,:,:,l)))
-            ! iXMAX = MAXLOC(U(1,:,:,:,l))
-            ! iXMIN = MINLOC(U(1,:,:,:,l))
-
-            !xMin = Elem_xGP(:,iXmin(1), iXmin(2),iXmin(3),l)
-            ! xMax = Elem_xGP(:,iXmax(1), iXmax(2),iXmax(3),l)
-
-            !Abst = SQRT(SUM((xMax(:) - xMin(:))**2))
-            !print *, eta_dof
-            !IF ((ixMax(1) .EQ. iXMin(1)) .AND. (ixMax(2) .EQ. iXMin(2)) .AND. (ixMax(3) .EQ. iXMin(3)) )  THEN
-            !   eta_dof = 0.
-            !ELSE
-            !  eta_dof = ABS( (RhoMax - RhoMin))/Abst
-            !print *, "eta_dof = ", eta_dof, ABST
-            !ENDIF
-
-            ! Artificial Viscosity
-            ! eta_min = -9.0
-            !eta_max = -3.0
-            ! for N-4
-            ! eta_min = -13.5
-            !eta_max = -12.7
-            !  eta_min = -14.5
-            !  eta_max = -11.7
-            !for N=5
             eta_min = -15.5
             eta_max = -10.0
             !eta_min = -8.
@@ -131,24 +83,37 @@ CONTAINS
             END IF
 
         ENDDO
-        !CALL EXIT()
-        !DO l=1,nElems
-        !   IF (ElemToRefineAndCoarse(l)>1) THEN
-        !
-        !   Print *, ElemToRefineAndCoarse
-        !   CALL EXIT()
-        !   ENDIF
-        !ENDDO
-        ! PRINT *, "RunAMRs"
-        !ElemToRefineAndCoarse = 0
-        !IF (MPIRoot) THEN
-        !  ElemToRefineAndCoarse(1) = 2
-        !ENDIF
+      
+        ElemToRefineAndCoarse = 0
+        ! IF (Count .EQ. 0 ) THEN
+            COUNT = 1; 
+        DO l = 1,nElems
+            IF (Minval(Elem_xGP(1,:,:,:,l)) .GT. 0.4999) THEN 
+                ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,l))
+                ! CALL EXIT()
+                ElemToRefineAndCoarse(l) = MinLevel          
+            ELSE 
+                ElemToRefineAndCoarse(l) = MaxLevel          
+                ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
+                ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,l))
+                ! CALL EXIT()
+            ENDIF
+        ENDDO
+          ! IF (MPIRoot) THEN
+            ! ElemToRefineAndCoarse(1) = MaxLevel
+            ! ENDIF
+        ! ENDIF
+      
         CALL RunAMR(ElemToRefineAndCoarse);
         ! CALL RunAMR(ElemToRefineAndCoarse);
         ! IF (MPIRoot) THEN
         !   Print *, "AMR RUN!"
         ! ENDIF
+        IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
+            COUNT = 1; 
+           CALL InitData();
+            IF (MPIRoot) PRINT *, "InitData"
+        ENDIF
         Deallocate(ElemToRefineAndCoarse)
         doLBalance = doLBalance + 1
         IF (doLBalance .EQ. 1) THEN
@@ -163,7 +128,7 @@ CONTAINS
 
     END SUBROUTINE ShockCapturingAMR
 
-    SUBROUTINE InitVortex()
+    SUBROUTINE InitData()
         USE MOD_DG_Vars, ONLY : U
         USE MOD_Mesh_Vars, ONLY : Elem_xGP, nElems
         USE MOD_Equation_Vars, ONLY : kappam1, skappam1, PrimToCons, kappa, IniExactFunc
@@ -175,13 +140,14 @@ CONTAINS
 
         PP = size(U(1, :, 0, 0, 1)) - 1;
         nVar = size(U(:, 0, 0, 0, 1));
-        X0 = 5.!0.5
-        Y0 = 5.!0.5
-        R = 3. / 2. !sqrt(0.5) !0.005
-        sigma = 1.
-        MachInf = 0.4 !sqrt(skappa) !0.5
-        beta = Machinf * 27. / 3.14159 / 4. * exp(2. / 9.)!Machinf*5./3.14159/2.*exp(1.)!1./5.
-        alfa = 3.14159 / 2.
+        ! X0 = 5.!0.5
+        ! Y0 = 5.!0.5
+        ! R = 3. / 2. !sqrt(0.5) !0.005
+        ! sigma = 1.
+        ! MachInf = 0.4 !sqrt(skappa) !0.5
+        ! beta = Machinf * 27. / 3.14159 / 4. * exp(2. / 9.)!Machinf*5./3.14159/2.*exp(1.)!1./5.
+        ! alfa = 3.14159 / 2.
+!        PRINT *, "IniExactFunc", IniExactFunc
         DO  Iter = 1, 5
             DO iElem = 1, nElems
                 DO i = 0, PP; DO j = 0, PP; DO k = 0, PP;
@@ -209,7 +175,7 @@ CONTAINS
             ! Call RunAMR();
         ENDDO !Iter
 
-    END SUBROUTINE
+    END SUBROUTINE InitData
 
 END MODULE MOD_AMR_tracking
 #endif

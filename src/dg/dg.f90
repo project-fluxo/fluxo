@@ -265,6 +265,9 @@ USE MOD_Testcase_Vars       ,ONLY: doTCSource
 USE MOD_Testcase_Source     ,ONLY: TestcaseSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
 USE MOD_Equation            ,ONLY: CalcSource
+!
+USE MOD_Riemann             ,ONLY: RiemannSolver_ESM
+!
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 #endif /*PARABOLIC*/
@@ -334,6 +337,7 @@ CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR
 CALL StartReceiveMPIData(Flux_slave, DataSizeSide,firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
 ! since mortar solutions are already there, we can directly fill the fluxes for all MPI sides 
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.TRUE.)
+CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.TRUE., weak=.TRUE.)
 
 ! start the sending command
 CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
@@ -343,9 +347,10 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.FALSE., weak=.TRUE.)
 
 ! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
-CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
+! CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
 
 ! add inner and BC side surface contibutions to time derivative 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
@@ -355,7 +360,7 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
 
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
-CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
+! CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
 
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)

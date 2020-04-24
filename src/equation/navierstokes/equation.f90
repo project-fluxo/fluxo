@@ -91,6 +91,7 @@ CALL prms%CreateRealOption(     'mu0'         , "power-law viscosity, prefactor.
 CALL prms%CreateRealOption(     'Tref'        , "power-law viscosity, reference temperature.","280.")
 CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent.","1.5")
 #endif /*PP_VISC==2*/
+CALL prms%CreateLogicalOption(  'doCalcSource', "Apply source terms.", '.TRUE.')
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
                                            " 1: Lax-Friedrichs"//&
@@ -164,7 +165,7 @@ IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsD
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT NAVIER-STOKES...'
-doCalcSource=.TRUE.
+doCalcSource=GETLOGICAL('doCalcSource', '.TRUE.')
 
 s23=2./3.
 
@@ -695,10 +696,33 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
   prim(2:4) = 0.     ! gas at rest initially
   prim(5)   = 0.00001! ambient pressure
   r2 = SQRT(SUM(x*x))! the radius
-  IF ((r2.LE.0.1).AND.(r2.NE.0.)) THEN
+  IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN
     du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
-    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/VPP_Pi
   END IF
+  CALL PrimToCons(prim,resu)
+CASE(14) ! Weak Circular Blast Wave
+  r2 = (SUM((x(2:3)-0.5)*(x(2:3)-0.5)))! the radius**2
+    prim(1)   = sin(X(3)*2.*PP_Pi)+2.!1. !+ 0.5/(2.*PP_Pi*3.e-2*3.e-2*400)*exp(-0.5*r2/(3.e-2*3.e-2*2))     ! ambient density
+    prim(2) = 10.     ! gas at rest initially stop
+    prim(3) = 10.     ! gas at rest initially stop
+    prim(4) = 10.     ! gas at rest initially stop
+      prim(5)   =50.! 50.e1/kappaM1 + 0.5*1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*2))
+ 
+  !IF (R2 < 0.25) THEN
+  !  prim(1)   = 1. !+0.5/(2.*PP_Pi*3.e-2*3.e-2)*exp(-0.5*r2/(3.e-2*3.e-2 * 4))     ! ambient density
+  !  prim(2:4) = 0.     ! gas at rest initially
+  !  prim(5)   = 1.e5*0.005!/kappaM1 + 1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*4))
+  !ELSE
+
+  !prim(1)   = 1. !+0.5/(2.*PP_Pi*3.e-2*3.e-2)*exp(-0.5*r2/(3.e-2*3.e-2 * 4))     ! ambient density
+  !prim(2:4) = 0.     ! gas at rest initially
+  !prim(5)   = 1.e5!/kappaM1 + 1./(2.*PP_Pi*2.e-2*2.e-2)*exp(-0.5*r2/(2.e-2*2.e-2*4))
+  !ENDIF
+  ! IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN
+  !   du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
+  !   prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+  ! END IF
   CALL PrimToCons(prim,resu)
 END SELECT ! ExactFunction
 

@@ -232,7 +232,7 @@ DO iElem=1,nElems
       WRITE(Unit_StdOut,*) 'Negative Jacobian found on Gauss point. Coords:', Elem_xGP(:,i,j,k,iElem)
   END DO; END DO; END DO !i,j,k=0,N
 
-    scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
+    
   ! check scaled Jacobians
   scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
   IF(scaledJac(2).LT.0.001) THEN
@@ -331,7 +331,8 @@ DO iElem=1,nElems
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N1,iElem)
+    CALL CalcSurfMetrics(PP_N,JaGL_N,XGL_N,Vdm_GLN_N,iElem)
+  
   ENDIF
    
 
