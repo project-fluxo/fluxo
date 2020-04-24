@@ -338,6 +338,7 @@ CALL StartReceiveMPIData(Flux_slave, DataSizeSide,firstSlaveSide,lastSlaveSide,M
 ! since mortar solutions are already there, we can directly fill the fluxes for all MPI sides 
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.TRUE.)
 CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.TRUE., weak=.TRUE.)
+
 ! start the sending command
 CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
 #endif /* MPI*/

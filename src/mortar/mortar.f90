@@ -286,8 +286,6 @@ M_2_0=MATMUL(Vdm_Leg,MATMUL(TRANSPOSE(Vphi2),VGP))
 !            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
-
-
 END SUBROUTINE MortarBasis_SmallToBig_projection
 
 !==================================================================================================================================

@@ -561,7 +561,6 @@ CASE(4) ! exact function
 
   ! g(t)
   Resu(1:4)=2.+ IniAmplitude*sin(Omega*(SUM(x) - tEval))
-
   Resu(5)=Resu(1)*Resu(1)
   ! g'(t)
   Resu_t(1:4)=(-omega)*IniAmplitude*cos(Omega*(SUM(x) - tEval))

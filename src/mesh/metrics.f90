@@ -476,13 +476,10 @@ INTEGER            :: p,q
 DO q=0,Nloc; DO p=0,Nloc
   SurfElem(  p,q) = SQRT(SUM(Ja_Face(NormalDir,:,p,q)**2))
   NormVec( :,p,q) = NormalSign*Ja_Face(NormalDir,:,p,q)/SurfElem(p,q)
- 
   TangVec1(:,p,q) = Ja_Face(TangDir,:,p,q) - SUM(Ja_Face(TangDir,:,p,q)*NormVec(:,p,q)) &
                     *NormVec(:,p,q)
   TangVec1(:,p,q) = TangVec1(:,p,q)/SQRT(SUM(TangVec1(:,p,q)**2))
- 
   TangVec2(:,p,q) = CROSS(NormVec(:,p,q),TangVec1(:,p,q))
- 
 END DO; END DO ! p,q
 END SUBROUTINE SurfMetricsFromJa
 

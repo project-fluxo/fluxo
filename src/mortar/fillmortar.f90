@@ -177,12 +177,10 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     SELECT CASE(flip)
       CASE(0) ! master side
         Uface_master(:,:,:,SideID)=U_tmp(:,:,:,iMortar)
-      
       CASE(1:4) ! slave side
         DO q=0,PP_N; DO p=0,PP_N
           Uface_slave(:,p,q,SideID)=U_tmp(:,FS2M(1,p,q,flip), &
                                            FS2M(2,p,q,flip),iMortar)
-                                          
         END DO; END DO ! q, p
     END SELECT !flip(iMortar)
   END DO !iMortar

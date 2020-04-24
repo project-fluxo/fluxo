@@ -42,18 +42,14 @@ CONTAINS
 
         MinLevel = 1!4!-2;
         MaxLevel = MinLevel +1!+ 1!4;
-
        
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = 0;
-      
         CALL BuildLegendreVdm(PP_N, xGP, Vdm_Leg, sVdm_Leg)
-
      
         DO l = 1, nElems
             !     ! if (l .EQ. 1) U()
             Uind(1, :, :, :) = U(1, :, :, :, l)
-          
             CALL ChangeBasis3D(1, PP_N, PP_N, sVdm_Leg, Uind, Umod)
             !       ! Compute (truncated) error norms
             LU = SUM(Umod(1, :, :, :)**2)
@@ -65,7 +61,6 @@ CONTAINS
 
             ! DOF energy indicator
             eta_dof = LOG10(MAX(LU_N / LU, LU_NM1 / LUM1, TINY(1.0)))
-          
             eta_min = -15.5
             eta_max = -10.0
             !eta_min = -8.
