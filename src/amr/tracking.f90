@@ -40,8 +40,8 @@ CONTAINS
         INTEGER :: iXMax(3), iXMin(3),i,j,k
         LOGICAL :: doBalance = .TRUE.
 
-        MinLevel = 0 !1!4!-2;
-        MaxLevel = 1 !MinLevel +1!+ 1!4;
+        MinLevel = 1!4!-2;
+        MaxLevel = MinLevel +1!+ 1!4;
 
        
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!

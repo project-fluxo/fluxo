@@ -150,7 +150,7 @@ CALL InitBC()
 CALL InitDG()
 
 
-!CALL ShockCapturingAMR() !ECMORTAR
+CALL ShockCapturingAMR()
                                                 
 ! ALLOCATE(ElemToRefineAndCoarse(1:nElems))
 ! ElemToRefineAndCoarse = 0
