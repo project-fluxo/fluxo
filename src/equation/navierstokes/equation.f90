@@ -91,6 +91,7 @@ CALL prms%CreateRealOption(     'mu0'         , "power-law viscosity, prefactor.
 CALL prms%CreateRealOption(     'Tref'        , "power-law viscosity, reference temperature.","280.")
 CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent.","1.5")
 #endif /*PP_VISC==2*/
+CALL prms%CreateLogicalOption(  'doCalcSource', "Apply source terms.", '.TRUE.')
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
                                            " 1: Lax-Friedrichs"//&
@@ -164,7 +165,7 @@ IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsD
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT NAVIER-STOKES...'
-doCalcSource=.TRUE.
+doCalcSource=GETLOGICAL('doCalcSource', '.TRUE.')
 
 s23=2./3.
 
@@ -795,7 +796,7 @@ CASE(4) ! exact function
       Ut_src(1)   = tmp(1)*cosXGP
       Ut_src(2:4) = tmp(2)*cosXGP + tmp(3)*sinXGP2
       Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+0*Ut_src
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
 CASE DEFAULT
