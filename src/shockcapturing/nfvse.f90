@@ -39,7 +39,7 @@ module MOD_NFVSE
 !                    |    |      |      |    |
 !                    0-·--O--·---O---·--O--·-0
 !                    | |     |       |     | |
-!(2) FV BC idx:     -1 0     1       2     3 4 (ftilde,gtilde,htilde,ftildeR,gtildeR,htildeR)
+!(2) FV BC idx:     -1 0     1       2     3 4
 !                    └─┴─────┴───────┴─────┴─┘
 !(3) FV subcell idx:  0   1      2      3   4
 !
@@ -196,8 +196,7 @@ contains
 !===================================================================================================================================
 !> Computes the "volume integral": Spatial contribution to Ut by the subcell finite volumes
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
-!> Attention 2: input Ut=0. and is updated with the volume flux derivatives
-!> Attention 3: The element boundaries are neglected in this routine
+!> Attention 2: This routine has to be called after VolInt_adv_SplitForm, since here Ut is updated with the finite volume contribution
 !===================================================================================================================================
   subroutine VolInt_NFVSE(Ut)
   !----------------------------------------------------------------------------------------------------------------------------------
@@ -216,7 +215,7 @@ contains
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
     !< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
     !-------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES TODO: Change intexing of *tilfe!!
+    ! LOCAL VARIABLES
     real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htilde   ! transformed inter-subcell flux in zeta (with ghost cells)
@@ -293,7 +292,6 @@ contains
   end subroutine GetPressure
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux
-!> Attention 1: It's not optimal to reshape the vectors (TODO: Improve)
 !===================================================================================================================================
   subroutine Compute_FVFluxes(U, F , G , H , &
 #if NONCONS
@@ -540,6 +538,7 @@ contains
     real    :: corr, corr1
     real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_max for an element
     real    :: alphadiff
+    real    :: alphacont  !container for alpha
     real    :: a_max, sdt
     real :: pprev, rhoprev
     real :: max_pdev, pdev
@@ -552,7 +551,7 @@ contains
     integer :: i,j,k
     integer :: fID
     integer :: iter
-    integer, parameter :: MAX_NEWTON_ITER = 1
+    integer, parameter :: MAX_ITER = 5
     !--------------------------------------------------------
     
     numCorrElems = 0
@@ -602,105 +601,114 @@ contains
 !#      lowest_rhosafe = huge(1.)
 !#      !debug>
       
-      ! Compute corrections
+      !
+      ! Get Usafe for each point of the element
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         ! Density correction
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * -sJ(i,j,k,eID)
-        
-        a = (beta * Usafe(1,i,j,k) - U(1,i,j,k,eID))
-        if (a > 0.) then ! This DOF doesn't need correction
-          corr1 = (Fblen(1,i,j,k,eID) - Fsafe(1,i,j,k,eID)) * alphadiff * -sJ(i,j,k,eID)
-          corr1 = a / corr1
-          if (corr1 > corr) then
-            corr = corr1
-            a_loc = [i,j,k]
-          end if
-!~           corr = max(corr,corr1)
-        end if
-        
-        !<<<Initial pressure correction
-        call GetPressure(U(:,i,j,k,eID),pres)
-        call GetPressure(Usafe(:,i,j,k),p_safe(i,j,k))
-        if (p_safe(i,j,k) < 0.) then
-          print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
-          stop
-        end if
-        if (Usafe(1,i,j,k) < 0.) then
-          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
-          stop
-        end if
-        ap = (beta * p_safe(i,j,k) - pres) / KappaM1
-        if (ap > 0.) then
-          corr1 = (Fblen(5,i,j,k,eID) - Fsafe(5,i,j,k,eID)) * alphadiff * -sJ(i,j,k,eID)
-          corr1 = ap / corr1
-          if (corr1 > corr) then
-            corr = corr1
-            a_loc = [i,j,k]
-          end if
-        end if
-        !Initial pressure correction>>>
-        
-!#        !<debug
-!#!~         call GetPressure(U(:,i,j,k,eID),pres)
-!#        lowest_pres = min ( lowest_pres, pres)
-!#        lowest_psafe = min (lowest_psafe,p_safe(i,j,k))
-!#        lowest_rhosafe = min ( lowest_rhosafe, Usafe(1,i,j,k))
-!#        !debug>
+        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID))
       end do       ; end do       ; end do ! i,j,k
+      
+      do iter=1, MAX_ITER
+        ! Compute corrections
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          
+          ! Density
+          a = (beta * Usafe(1,i,j,k) - U(1,i,j,k,eID))
+          if (a > 0.) then ! This DOF doesn't need correction
+            corr1 = (Fblen(1,i,j,k,eID) - Fsafe(1,i,j,k,eID)) * alphadiff * (-sJ(i,j,k,eID))
+            corr1 = a / corr1
+            if (corr1 > corr) then
+              corr = corr1
+              a_loc = [i,j,k]
+            end if
+  !~           corr = max(corr,corr1)
+          end if
+          
+          !<<<Initial pressure correction
+          call GetPressure(U(:,i,j,k,eID),pres)
+          call GetPressure(Usafe(:,i,j,k),p_safe(i,j,k))
+          if (p_safe(i,j,k) < 0.) then
+            print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
+            stop
+          end if
+          if (Usafe(1,i,j,k) < 0.) then
+            print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
+            stop
+          end if
+          ap = (beta * p_safe(i,j,k) - pres) / KappaM1
+          if (ap > 0.) then
+            corr1 = (Fblen(5,i,j,k,eID) - Fsafe(5,i,j,k,eID)) * alphadiff * (-sJ(i,j,k,eID))
+            corr1 = ap / corr1
+            if (corr1 > corr) then
+              corr = corr1
+              a_loc = [i,j,k]
+            end if
+          end if
+          !Initial pressure correction>>>
+          
+  !#        !<debug
+  !#!~         call GetPressure(U(:,i,j,k,eID),pres)
+  !#        lowest_pres = min ( lowest_pres, pres)
+  !#        lowest_psafe = min (lowest_psafe,p_safe(i,j,k))
+  !#        lowest_rhosafe = min ( lowest_rhosafe, Usafe(1,i,j,k))
+  !#        !debug>
+        end do       ; end do       ; end do ! i,j,k
+      
       lowest_rho = minval (U(1,:,:,:,eID))
       
-      ! Check if the density went below the allowed value and correct
-      if ( corr > 0. ) then
-!#        !<debug
-!#        print*, '####################'
-!#        print*, '### CORRECTING', rhoprev, pprev
-!#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
-!#        print*, '---'
-!#        print*, '* s', p_safe(a_loc(1),a_loc(2),a_loc(3)), Usafe(1,a_loc(1),a_loc(2),a_loc(3))
-!#        print*, '* _', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
-!#        !debug>
-        
-        alpha_old(eID) = alpha(eID)
-        
-        ! Change the alpha for output
-        alpha(eID) = alpha_old(eID) + corr * sdt
-        
-        ! Change inconsistent alphas
-        if (alpha(eID) > alpha_max) then
-          alpha(eID) = alpha_max
-          corr = (alpha_max - alpha_old(eID) ) * dt
+      ! If the correction is positive, perform it
+        if ( corr > 0. ) then
+  !#        !<debug
+  !#        print*, '####################'
+  !#        print*, '### CORRECTING', rhoprev, pprev
+  !#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
+  !#        print*, '---'
+  !#        print*, '* s', p_safe(a_loc(1),a_loc(2),a_loc(3)), Usafe(1,a_loc(1),a_loc(2),a_loc(3))
+  !#        print*, '* _', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
+  !#        !debug>
+          
+          ! Change the alpha for output
+          alphacont  = alpha(eID)
+          alpha(eID) = alpha(eID) + corr * sdt
+          
+          ! Change inconsistent alphas
+          if (alpha(eID) > alpha_max) then
+            alpha(eID) = alpha_max
+            corr = (alpha_max - alphacont ) * dt
+          end if
+          
+          ! Correct!
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          U(:,i,j,k,eID) = U(:,i,j,k,eID) + corr * (Fblen(:,i,j,k,eID) - Fsafe(:,i,j,k,eID)) * (-sJ(i,j,k,eID)) / (alpha_old(eID) - alpha_max)
+          end do       ; end do       ; enddo
+  !#        !<debug
+  !#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
+  !#        print*, '*af', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
+  !#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+  !#          call GetPressure(U(:,i,j,k,eID),pres)
+  !#          if(pres           +eps < beta *  p_safe(i,j,k)) print*, 'WARNING: p  is too low', i, j, k, pres,  beta * p_safe(i,j,k)
+  !#          if(U(1,i,j,k,eID) +eps < beta * Usafe(1,i,j,k)) print*, 'WARNING:rho is too low', i, j, k, U(1,i,j,k,eID), beta * Usafe(1,i,j,k)
+  !#        end do       ; end do       ; end do ! i,j,k
+  !#        !debug>
+          
+          numCorrElems = numCorrElems + 1
+          corrElems(numCorrElems) = eID + offsetElem
+          
+  !#        print*, 'el ', eID + offsetElem, alpha_old(eID), alpha(eID)
+  !#        print*, '  s', lowest_psafe, lowest_rhosafe
+  !#        print*, '  _', lowest_pres, lowest_rho
+          
+  !#        lowest_pres = huge(1.)
+  !#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+  !#          call GetPressure(U(:,i,j,k,eID),pres)
+  !#          lowest_pres = min ( lowest_pres, pres)
+  !#        end do       ; end do       ; end do ! i,j,k
+  !#        print*, ' af', lowest_pres, minval(U(1,:,:,:,eID))
+        else
+          exit
         end if
-        
-        ! Correct!
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        U(:,i,j,k,eID) = U(:,i,j,k,eID) + corr * (Fblen(:,i,j,k,eID) - Fsafe(:,i,j,k,eID)) * -sJ(i,j,k,eID) / (alpha_old(eID) - alpha_max)
-        end do       ; end do       ; enddo
-!#        !<debug
-!#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
-!#        print*, '*af', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
-!#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-!#          call GetPressure(U(:,i,j,k,eID),pres)
-!#          if(pres           +eps < beta *  p_safe(i,j,k)) print*, 'WARNING: p  is too low', i, j, k, pres,  beta * p_safe(i,j,k)
-!#          if(U(1,i,j,k,eID) +eps < beta * Usafe(1,i,j,k)) print*, 'WARNING:rho is too low', i, j, k, U(1,i,j,k,eID), beta * Usafe(1,i,j,k)
-!#        end do       ; end do       ; end do ! i,j,k
-!#        !debug>
-        
-        numCorrElems = numCorrElems + 1
-        corrElems(numCorrElems) = eID + offsetElem
-        
-!#        print*, 'el ', eID + offsetElem, alpha_old(eID), alpha(eID)
-!#        print*, '  s', lowest_psafe, lowest_rhosafe
-!#        print*, '  _', lowest_pres, lowest_rho
-        
-!#        lowest_pres = huge(1.)
-!#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-!#          call GetPressure(U(:,i,j,k,eID),pres)
-!#          lowest_pres = min ( lowest_pres, pres)
-!#        end do       ; end do       ; end do ! i,j,k
-!#        print*, ' af', lowest_pres, minval(U(1,:,:,:,eID))
-        
-      end if
       
+      end do !iter
     end do !eID
     
 !#    ! Debug
