@@ -85,7 +85,7 @@ OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
 
-SET(   FLUXO_EQNSYSNAME "mhd" CACHE STRING
+SET(   FLUXO_EQNSYSNAME "navierstokes" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
