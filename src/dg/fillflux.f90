@@ -38,17 +38,21 @@ CONTAINS
 !===================================================================================================================================
 !>Fills the inner and the mpi sides fluxes, BC fluxes are separately called in dg
 !===================================================================================================================================
-SUBROUTINE FillFlux(Flux,doMPISides)
+SUBROUTINE FillFlux(Flux_master,Flux_slave,doMPISides)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars,         ONLY: U_Master,U_Slave
 USE MOD_Mesh_Vars,       ONLY: NormVec,TangVec1,TangVec2,SurfElem
 USE MOD_Mesh_Vars,       ONLY: nSides
 USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,lastMPISide_MINE
+USE MOD_Mesh_Vars,       ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Riemann,         ONLY: Riemann
+#if NONCONS
+USE MOD_Riemann,         ONLY: AddNonConsFlux
+#endif /*NONCONS*/
 #if PARABOLIC
-USE MOD_Lifting_Vars,    ONLY: gradUx_Master,gradUy_Master,gradUz_Master
-USE MOD_Lifting_Vars,    ONLY: gradUx_Slave ,gradUy_Slave ,gradUz_Slave
+USE MOD_Lifting_Vars,    ONLY: gradPx_Master,gradPy_Master,gradPz_Master
+USE MOD_Lifting_Vars,    ONLY: gradPx_Slave ,gradPy_Slave ,gradPz_Slave
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -57,7 +61,8 @@ IMPLICIT NONE
 LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only MINE MPISides are filled, =.FALSE. InnerSides  
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)   :: Flux(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(OUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(OUT)   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: SideID,p,q,firstSideID,lastSideID
@@ -74,19 +79,33 @@ ELSE
 END IF
 
 DO SideID=firstSideID,lastSideID
-  CALL Riemann(Flux(:,:,:,SideID),     U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID), &
+  CALL Riemann(Flux_master(:,:,:,SideID),     U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID), &
 #if PARABOLIC
-                                  gradUx_Master(:,:,:,SideID),gradUx_Slave(:,:,:,SideID), &
-                                  gradUy_Master(:,:,:,SideID),gradUy_Slave(:,:,:,SideID), &
-                                  gradUz_Master(:,:,:,SideID),gradUz_Slave(:,:,:,SideID), &
+                                  gradPx_Master(:,:,:,SideID),gradPx_Slave(:,:,:,SideID), &
+                                  gradPy_Master(:,:,:,SideID),gradPy_Slave(:,:,:,SideID), &
+                                  gradPz_Master(:,:,:,SideID),gradPz_Slave(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                                   NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+
+  !conservative flux:
+  Flux_slave(:,:,:,SideID)=Flux_master(:,:,:,SideID)
+#if NONCONS
+  !add nonconservative fluxes
+  CALL AddNonConsFlux(Flux_master(:,:,:,SideID), &
+                      U_Master(:,:,:,SideID),     U_Slave(:,:,:,SideID),&
+                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+  CALL AddNonConsFlux(Flux_slave(:,:,:,SideID), &
+                      U_Slave(:,:,:,SideID) ,U_Master(:,:,:,SideID),&
+                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif /*NONCONS*/
   DO q=0,PP_N
     DO p=0,PP_N
-      Flux(:,p,q,SideID)=Flux(:,p,q,SideID)*SurfElem(p,q,SideID)
+      Flux_master(:,p,q,SideID)=Flux_master(:,p,q,SideID)*SurfElem(p,q,SideID)
+      Flux_slave( :,p,q,SideID)=Flux_slave( :,p,q,SideID)*SurfElem(p,q,SideID)
     END DO
   END DO
 END DO ! SideID
+
 
 END SUBROUTINE FillFlux
 

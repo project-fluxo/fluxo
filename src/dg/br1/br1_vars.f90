@@ -27,15 +27,15 @@ SAVE
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! interior face gradients for all elements
-REAL,ALLOCATABLE :: gradUx_slave(:,:,:,:)         !< slave side gradients in x-dir
-REAL,ALLOCATABLE :: gradUy_slave(:,:,:,:)         !< slave side gradients in x-dir
-REAL,ALLOCATABLE :: gradUz_slave(:,:,:,:)         !< slave side gradients in x-dir
-REAL,ALLOCATABLE :: gradUx_master(:,:,:,:)        !< master side gradients in x-dir
-REAL,ALLOCATABLE :: gradUy_master(:,:,:,:)        !< master side gradients in x-dir
-REAL,ALLOCATABLE :: gradUz_master(:,:,:,:)        !< master side gradients in x-dir
-REAL,ALLOCATABLE :: gradUx(:,:,:,:,:)             !< gradients in x-dir at degree N
-REAL,ALLOCATABLE :: gradUy(:,:,:,:,:)             !< gradients in y-dir at degree N
-REAL,ALLOCATABLE :: gradUz(:,:,:,:,:)             !< gradients in z-dir at degree N
+REAL,ALLOCATABLE :: gradPx_slave(:,:,:,:)         !< slave side gradients in x-dir
+REAL,ALLOCATABLE :: gradPy_slave(:,:,:,:)         !< slave side gradients in x-dir
+REAL,ALLOCATABLE :: gradPz_slave(:,:,:,:)         !< slave side gradients in x-dir
+REAL,ALLOCATABLE :: gradPx_master(:,:,:,:)        !< master side gradients in x-dir
+REAL,ALLOCATABLE :: gradPy_master(:,:,:,:)        !< master side gradients in x-dir
+REAL,ALLOCATABLE :: gradPz_master(:,:,:,:)        !< master side gradients in x-dir
+REAL,ALLOCATABLE :: gradPx(:,:,:,:,:)             !< gradients in x-dir at degree N
+REAL,ALLOCATABLE :: gradPy(:,:,:,:,:)             !< gradients in y-dir at degree N
+REAL,ALLOCATABLE :: gradPz(:,:,:,:,:)             !< gradients in z-dir at degree N
 REAL,ALLOCATABLE :: FluxX(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_x
 REAL,ALLOCATABLE :: FluxY(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_y
 REAL,ALLOCATABLE :: FluxZ(:,:,:,:)                !< = 1/2(U_outer-U_inner)*shat*nvec_z

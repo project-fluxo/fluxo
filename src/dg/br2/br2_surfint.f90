@@ -50,7 +50,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !===================================================================================================================================
-SUBROUTINE BR2_SurfInt(Flux,gradU,gradU_master,gradU_slave,doMPISides)
+SUBROUTINE BR2_SurfInt(Flux,gradP,gradP_master,gradP_slave,doMPISides)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -76,9 +76,9 @@ LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only YOUR MPISides are filled, =.FAL
 REAL,INTENT(IN)    :: Flux(1:PP_nVar,0:PP_N,0:PP_N,nSides)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)   :: gradU(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
-REAL,INTENT(INOUT)   :: gradU_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)
-REAL,INTENT(INOUT)   :: gradU_slave( PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)
+REAL,INTENT(INOUT)   :: gradP(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL,INTENT(INOUT)   :: gradP_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(INOUT)   :: gradP_slave( PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                   :: F_loc(PP_nVar)
@@ -99,7 +99,7 @@ END IF
 
 DO SideID=firstSideID,lastSideID
   ! update DG time derivative with corresponding SurfInt contribution
-  ! master side, flip=0 =>gradU_master
+  ! master side, flip=0 =>gradP_master
   ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
 
   !master sides(ElemID,locSide and flip =-1 if not existing)
@@ -110,15 +110,15 @@ DO SideID=firstSideID,lastSideID
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,flip,locSide) !flip=0
       F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),ElemID)*L_hatMinus(l)*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
-      gradU_master(:,p,q,SideID)           = gradU_master(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
+      gradP(:,ijk(1),ijk(2),ijk(3),ElemID) = gradP(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
+      gradP_master(:,p,q,SideID)           = gradP_master(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide) !flip=0, l=0
       F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),ElemID)*L_hatMinus0*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
-      gradU_master(:,p,q,SideID)           = gradU_master(:,p,q,SideID) + etaBR2*F_loc(:)
+      gradP(:,ijk(1),ijk(2),ijk(3),ElemID) = gradP(:,ijk(1),ijk(2),ijk(3),ElemID) +F_loc(:)
+      gradP_master(:,p,q,SideID)           = gradP_master(:,p,q,SideID) + etaBR2*F_loc(:)
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !master ElemID .NE. 1
@@ -132,15 +132,15 @@ DO SideID=firstSideID,lastSideID
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
       F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),nbElemID)*L_hatMinus(l)*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
-      gradU_slave(:,p,q,SideID)              = gradU_slave(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
+      gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
+      gradP_slave(:,p,q,SideID)              = gradP_slave(:,p,q,SideID) + etaBR2*L_Minus(l)*F_loc(:)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide) !l=0 
       F_loc(:) =sJ(ijk(1),ijk(2),ijk(3),nbElemID)*L_hatMinus0*Flux(:,p,q,SideID)
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
-      gradU_slave(:,p,q,SideID)              = gradU_slave(:,p,q,SideID) + etaBR2*F_loc(:)
+      gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) +F_loc(:)
+      gradP_slave(:,p,q,SideID)              = gradP_slave(:,p,q,SideID) + etaBR2*F_loc(:)
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !nbElemID.NE.-1

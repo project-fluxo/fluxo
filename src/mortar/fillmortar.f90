@@ -208,18 +208,23 @@ END SUBROUTINE U_Mortar
 !> when used for lifting, weak=.false, since volint of lifting is in strong form
 !> and hence Flux_L=1/2*(u_R-u_L)*outwardnormal_L  =  Flux_R = 1/2*(u_L-u_R)*outwardnormal_R
 !==================================================================================================================================
-SUBROUTINE Flux_Mortar(Flux,doMPISides,weak)
+SUBROUTINE Flux_Mortar(Flux_master,Flux_slave,doMPISides,weak)
 ! MODULES
 USE MOD_Preproc
 USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nSides
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide,FS2M
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
+USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,LastSlaveSide
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: flux from small mortar sides 
-                                                             !< on output: flux on big mortar sides filled
+REAL,INTENT(INOUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: has flux from small mortar sides 
+                                                                      !< on output: flux on big mortar sides filled
+REAL,INTENT(IN   )   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) !<has flux from small mortar sides,
+                                                                      !< set -F_slave in call if surfint is weak (dg.f90)
+                                                                      !< set +F_slave in call if surfint is strong (lifting)
+                                                            
 LOGICAL,INTENT(IN) :: doMPISides                                    !< flag whether MPI sides are processed
 LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -228,7 +233,7 @@ INTEGER      :: p,q,l
 INTEGER      :: iMortar,nMortars
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID,iSide,flip
-REAL         :: Flux_master( PP_nVar,0:PP_N,0:PP_N,1:4)
+REAL         :: Flux_m( PP_nVar,0:PP_N,0:PP_N,1:4)
 REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N,1:2)
 REAL,POINTER :: M1(:,:),M2(:,:)
 !==================================================================================================================================
@@ -249,45 +254,44 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     SideID = MortarInfo(MI_SIDEID,iMortar,iSide)
     flip   = MortarInfo(MI_FLIP,iMortar,iSide)
     SELECT CASE(flip)
-    CASE(0) ! master side
-      Flux_master(:,:,:,iMortar)=Flux(:,:,:,SideID)
+    CASE(0) ! small master side
+      Flux_m(:,:,:,iMortar)=Flux_master(:,:,:,SideID)
     CASE(1:4) ! slave sides (should only occur for MPI)
       IF(weak)THEN
         DO q=0,PP_N; DO p=0,PP_N
-          Flux_master(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)=-Flux(:,p,q,SideID)
+          Flux_m(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)=-Flux_slave(:,p,q,SideID)
         END DO; END DO !p,q
       ELSE    ! do not change sign if strong form when used for lifting! 
         DO q=0,PP_N; DO p=0,PP_N
-          Flux_master(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)= Flux(:,p,q,SideID)
+          Flux_m(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)= Flux_slave(:,p,q,SideID)
         END DO; END DO !p,q
       END IF !weak
     END SELECT !slave sides
   END DO
-
   SELECT CASE(MortarType(1,MortarSideID))
   CASE(1) !1->4
     ! first in xi
     DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
       ! The following p- and l-loop are four MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_tmp(iVar,:,q,1)  =  M1 * Flux_master(iVar,:,q,1) + M2 * Flux_master(iVar,:,q,2)
-      !    Flux_tmp(iVar,:,q,2)  =  M1 * Flux_master(iVar,:,q,1) + M2 * Flux_master(iVar,:,q,2)
+      !    Flux_tmp(iVar,:,q,1)  =  M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
+      !    Flux_tmp(iVar,:,q,2)  =  M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
       DO p=0,PP_N
-        Flux_tmp(:,p,q,1)=                      M1(0,p)*Flux_master(:,0,q,1)+M2(0,p)*Flux_master(:,0,q,2)
-        Flux_tmp(:,p,q,2)=                      M1(0,p)*Flux_master(:,0,q,3)+M2(0,p)*Flux_master(:,0,q,4)
+        Flux_tmp(:,p,q,1)=                      M1(0,p)*Flux_m(:,0,q,1)+M2(0,p)*Flux_m(:,0,q,2)
+        Flux_tmp(:,p,q,2)=                      M1(0,p)*Flux_m(:,0,q,3)+M2(0,p)*Flux_m(:,0,q,4)
         DO l=1,PP_N
-          Flux_tmp(:,p,q,1)=Flux_tmp(:,p,q,1) + M1(l,p)*Flux_master(:,l,q,1)+M2(l,p)*Flux_master(:,l,q,2)
-          Flux_tmp(:,p,q,2)=Flux_tmp(:,p,q,2) + M1(l,p)*Flux_master(:,l,q,3)+M2(l,p)*Flux_master(:,l,q,4)
+          Flux_tmp(:,p,q,1)=Flux_tmp(:,p,q,1) + M1(l,p)*Flux_m(:,l,q,1)+M2(l,p)*Flux_m(:,l,q,2)
+          Flux_tmp(:,p,q,2)=Flux_tmp(:,p,q,2) + M1(l,p)*Flux_m(:,l,q,3)+M2(l,p)*Flux_m(:,l,q,4)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
     END DO !q=0,PP_N
     !then in eta
     ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-    !    Flux_master(iVar,p,:,MortarSideID)  =  M1 * Flux_tmp(iVar,p,:,1) + M2 * Flux_tmp(iVar,p,:,2)
+    !    Flux_m(iVar,p,:,MortarSideID)  =  M1 * Flux_tmp(iVar,p,:,1) + M2 * Flux_tmp(iVar,p,:,2)
     DO q=0,PP_N
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        Flux(:,p,q,MortarSideID)=    M1(0,q)*Flux_tmp(:,p,0,1)+M2(0,q)*Flux_tmp(:,p,0,2)
+        Flux_master(:,p,q,MortarSideID)=    M1(0,q)*Flux_tmp(:,p,0,1)+M2(0,q)*Flux_tmp(:,p,0,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID) &
+          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
                                    + M1(l,q)*Flux_tmp(:,p,l,1)+M2(l,q)*Flux_tmp(:,p,l,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
@@ -296,12 +300,12 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   CASE(2) !1->2 in eta
     DO q=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
       ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_master(iVar,p,:,MortarSideID)  =  M1 * Flux_master(iVar,p,:,1) + M2 * Flux_master(iVar,p,:,2)
+      !    Flux_m(iVar,p,:,MortarSideID)  =  M1 * Flux_m(iVar,p,:,1) + M2 * Flux_m(iVar,p,:,2)
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        Flux(:,p,q,MortarSideID)=    M1(0,q)*Flux_master(:,p,0,1)+M2(0,q)*Flux_master(:,p,0,2)
+        Flux_master(:,p,q,MortarSideID)=    M1(0,q)*Flux_m(:,p,0,1)+M2(0,q)*Flux_m(:,p,0,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID) &
-                                   + M1(l,q)*Flux_master(:,p,l,1)+M2(l,q)*Flux_master(:,p,l,2)
+          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
+                                   + M1(l,q)*Flux_m(:,p,l,1)+M2(l,q)*Flux_m(:,p,l,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
     END DO !q=0,PP_N
@@ -309,12 +313,12 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   CASE(3) !1->2 in xi
     DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
       ! The following p- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_master(iVar,:,q,MortarSideID)  =   M1 * Flux_master(iVar,:,q,1) + M2 * Flux_master(iVar,:,q,2)
+      !    Flux_m(iVar,:,q,MortarSideID)  =   M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
       DO p=0,PP_N
-        Flux(:,p,q,MortarSideID)=    M1(0,p)*Flux_master(:,0,q,1)+M2(0,p)*Flux_master(:,0,q,2)
+        Flux_master(:,p,q,MortarSideID)=    M1(0,p)*Flux_m(:,0,q,1)+M2(0,p)*Flux_m(:,0,q,2)
         DO l=1,PP_N
-          Flux(:,p,q,MortarSideID)=Flux(:,p,q,MortarSideID)  &
-                                   + M1(l,p)*Flux_master(:,l,q,1)+M2(l,p)*Flux_master(:,l,q,2)
+          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)  &
+                                   + M1(l,p)*Flux_m(:,l,q,1)+M2(l,p)*Flux_m(:,l,q,2)
         END DO !l=1,PP_N
       END DO !p=0,PP_N
     END DO !q=0,PP_N

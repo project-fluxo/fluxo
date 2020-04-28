@@ -207,7 +207,7 @@ USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
 USE MOD_Flux         ,ONLY: EvalEulerFlux1D
 #if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_Master,gradUy_Master,gradUz_Master
+USE MOD_Lifting_Vars ,ONLY: gradPx_Master,gradPy_Master,gradPz_Master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D,EvalDiffFlux1D_Outflow
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
@@ -230,11 +230,11 @@ REAL                                 :: BCGradMat(1:3,1:3)
 REAL                                 :: Fd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
 REAL                                 :: Gd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
 REAL                                 :: Hd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
-REAL                                 :: gradUx_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
-REAL                                 :: gradUy_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
-REAL                                 :: gradUz_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
-REAL                                 :: gradUn_loc(PP_nVar),gradUt1_loc(PP_nVar),gradUt2_loc(PP_nVar)
-REAL                                 :: gradRho(3,0:PP_N,0:PP_N),gradVel(3,0:PP_N,0:PP_N)
+REAL                                 :: gradPx_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
+REAL                                 :: gradPy_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
+REAL                                 :: gradPz_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
+REAL                                 :: gradPn_loc(PP_nVar),gradPt1_loc(PP_nVar),gradPt2_loc(PP_nVar)
+REAL                                 :: gradVel(3,0:PP_N,0:PP_N)
 #endif /*PARABOLIC*/
 !==================================================================================================================================
 DO iBC=1,nBCs
@@ -249,9 +249,9 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),BCdata(:,:,:,SideID), &
 #if PARABOLIC
-                   gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
-                   gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
-                   gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
+                   gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                   gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                   gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -267,9 +267,9 @@ DO iBC=1,nBCs
         END DO ! q
         CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                     gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
-                     gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
-                     gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
+                     gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                     gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                     gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -283,9 +283,9 @@ DO iBC=1,nBCs
         SideID=BCSideID(iBC,iSide)
         CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                     gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
-                     gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
-                     gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
+                     gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                     gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                     gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -302,9 +302,9 @@ DO iBC=1,nBCs
       END DO ! q
       CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc, &
 #if PARABOLIC
-                   gradUx_Master(:,:,:,SideID),gradUx_Master(:,:,:,SideID), &
-                   gradUy_Master(:,:,:,SideID),gradUy_Master(:,:,:,SideID), &
-                   gradUz_Master(:,:,:,SideID),gradUz_Master(:,:,:,SideID), &
+                   gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                   gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                   gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -354,9 +354,9 @@ DO iBC=1,nBCs
 #if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
       CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:),&
-                          gradUx_Master(:,:,:,SideID),                           &
-                          gradUy_Master(:,:,:,SideID),                           &
-                          gradUz_Master(:,:,:,SideID))                           
+                          gradPx_Master(:,:,:,SideID),                           &
+                          gradPy_Master(:,:,:,SideID),                           &
+                          gradPz_Master(:,:,:,SideID))                           
       ! Sum up Euler and Diffusion Flux
       DO iVar=2,PP_nVar
         Flux(iVar,:,:,SideID) = Flux(iVar,:,:,SideID)               + & 
@@ -411,22 +411,22 @@ DO iBC=1,nBCs
           BCGradMat(2,1) = BCGradMat(1,2)
           BCGradMat(3,1) = BCGradMat(1,3)
           BCGradMat(2,3) = BCGradMat(3,2)
-          gradUx_Face_loc(:,p,q) = BCGradMat(1,1) * gradUx_Master(:,p,q,SideID) &
-                                 + BCGradMat(1,2) * gradUy_Master(:,p,q,SideID) &
-                                 + BCGradMat(1,3) * gradUz_Master(:,p,q,SideID)
-          gradUy_Face_loc(:,p,q) = BCGradMat(2,1) * gradUx_Master(:,p,q,SideID) &
-                                 + BCGradMat(2,2) * gradUy_Master(:,p,q,SideID) &
-                                 + BCGradMat(2,3) * gradUz_Master(:,p,q,SideID)
-          gradUz_Face_loc(:,p,q) = BCGradMat(3,1) * gradUx_Master(:,p,q,SideID) &
-                                 + BCGradMat(3,2) * gradUy_Master(:,p,q,SideID) &
-                                 + BCGradMat(3,3) * gradUz_Master(:,p,q,SideID)
+          gradPx_Face_loc(:,p,q) = BCGradMat(1,1) * gradPx_Master(:,p,q,SideID) &
+                                 + BCGradMat(1,2) * gradPy_Master(:,p,q,SideID) &
+                                 + BCGradMat(1,3) * gradPz_Master(:,p,q,SideID)
+          gradPy_Face_loc(:,p,q) = BCGradMat(2,1) * gradPx_Master(:,p,q,SideID) &
+                                 + BCGradMat(2,2) * gradPy_Master(:,p,q,SideID) &
+                                 + BCGradMat(2,3) * gradPz_Master(:,p,q,SideID)
+          gradPz_Face_loc(:,p,q) = BCGradMat(3,1) * gradPx_Master(:,p,q,SideID) &
+                                 + BCGradMat(3,2) * gradPy_Master(:,p,q,SideID) &
+                                 + BCGradMat(3,3) * gradPz_Master(:,p,q,SideID)
 #endif /*PARABOLIC*/
         END DO ! p
       END DO ! q
 #if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
       CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Master(:,:,:,SideID), &
-                          gradUx_Face_loc,gradUy_Face_loc,gradUz_Face_loc)
+                          gradPx_Face_loc,gradPy_Face_loc,gradPz_Face_loc)
       ! Sum up Euler and Diffusion Flux
       DO iVar=2,PP_nVar
         Flux(iVar,:,:,SideID) = Flux(iVar,:,:,SideID)                       + & 
@@ -460,42 +460,16 @@ DO iBC=1,nBCs
 #if PARABOLIC
           ! for diffusion, we use the rotational invariance of the diffusion fluxes
           !   for this, we need to transform the gradients into the normal system (see GG Diss for details)
-          !     First step: tranform the derivatives (dx,dy,dz) into normal system 
-          gradUn_loc  = N_loc(1,1)*gradUx_Master(:,p,q,SideID) &
-                      + N_loc(2,1)*gradUy_Master(:,p,q,SideID) &
-                      + N_loc(3,1)*gradUz_Master(:,p,q,SideID)
-          gradUt1_loc = N_loc(1,2)*gradUx_Master(:,p,q,SideID) &
-                      + N_loc(2,2)*gradUy_Master(:,p,q,SideID) &
-                      + N_loc(3,2)*gradUz_Master(:,p,q,SideID)
-          gradUt2_loc = N_loc(1,3)*gradUx_Master(:,p,q,SideID) &
-                      + N_loc(2,3)*gradUy_Master(:,p,q,SideID) &
-                      + N_loc(3,3)*gradUz_Master(:,p,q,SideID)
-          !     Second step: tranform the state of the gradients into normal system
-   
-          !TODO: actually only gradUx,y,z(1) and gradUx..(2,), gradUy..(3,), gradUz..(4) are needed
-          ! maybe save some time
-          !gradUx_Face_loc(1,p,q)=gradUn_loc(1)
-          !gradUx_Face_loc(5,p,q)=gradUn_loc(5)
-          !gradUx_Face_loc(2,p,q)=SUM(gradUn_loc(2:4)*N_loc(:,1))
-          !gradUx_Face_loc(3,p,q)=SUM(gradUn_loc(2:4)*N_loc(:,2))
-          !gradUx_Face_loc(4,p,q)=SUM(gradUn_loc(2:4)*N_loc(:,3))
-   
-          !gradUy_Face_loc(1,p,q)=gradUt1_loc(1)
-          !gradUy_Face_loc(5,p,q)=gradUt1_loc(5)
-          !gradUy_Face_loc(2,p,q)=SUM(gradUt1_loc(2:4)*N_loc(:,1))
-          !gradUy_Face_loc(3,p,q)=SUM(gradUt1_loc(2:4)*N_loc(:,2))
-          !gradUy_Face_loc(4,p,q)=SUM(gradUt1_loc(2:4)*N_loc(:,3))
-   
-          !gradUz_Face_loc(1,p,q)=gradUt2_loc(1)
-          !gradUz_Face_loc(5,p,q)=gradUt2_loc(5)
-          !gradUz_Face_loc(2,p,q)=SUM(gradUt2_loc(2:4)*N_loc(:,1))
-          !gradUz_Face_loc(3,p,q)=SUM(gradUt2_loc(2:4)*N_loc(:,2))
-          !gradUz_Face_loc(4,p,q)=SUM(gradUt2_loc(2:4)*N_loc(:,3))
-   
-          gradRho(:,p,q) = (/gradUn_loc(1),gradUt1_loc(1),gradUt2_loc(1)/)
-          gradVel(:,p,q) = (/SUM(gradUn_loc(2:4) *N_loc(:,1)),&
-                             SUM(gradUt1_loc(2:4)*N_loc(:,2)),&
-                             SUM(gradUt2_loc(2:4)*N_loc(:,3)) /)
+          !    two steps: tranform the derivatives (dx,dy,dz) into normal system, then compute normal and tangential components
+          gradVel(1,p,q) = SUM((  N_loc(1,1)*gradPx_Master(2:4,p,q,SideID) &
+                                + N_loc(2,1)*gradPy_Master(2:4,p,q,SideID) &
+                                + N_loc(3,1)*gradPz_Master(2:4,p,q,SideID))*N_loc(:,1))
+          gradVel(2,p,q) = SUM((  N_loc(1,2)*gradPx_Master(2:4,p,q,SideID) &
+                                + N_loc(2,2)*gradPy_Master(2:4,p,q,SideID) &
+                                + N_loc(3,2)*gradPz_Master(2:4,p,q,SideID))*N_loc(:,2))
+          gradVel(3,p,q) = SUM((  N_loc(1,3)*gradPx_Master(2:4,p,q,SideID) &
+                                + N_loc(2,3)*gradPy_Master(2:4,p,q,SideID) &
+                                + N_loc(3,3)*gradPz_Master(2:4,p,q,SideID))*N_loc(:,3))
 #endif /*PARABOLIC*/
         END DO ! p
       END DO ! q
@@ -505,7 +479,7 @@ DO iBC=1,nBCs
       ! Compute 1D diffusion Flux Fd_Face_loc
       !   Use: tau_12 = 0, tau_13 = 0, q1 = 0 (Paper POINSOT and LELE, JCP 1992, page 113, Table IV)
       !   We use special evalflux routine
-      CALL EvalDiffFlux1D_Outflow(Fd_Face_loc,U_Face_loc,gradRho,gradVel)
+      CALL EvalDiffFlux1D_Outflow(Fd_Face_loc,U_Face_loc,gradVel)
       ! Sum up Euler and Diffusion Flux and tranform back into Cartesian system
       Flux(:,:,:,SideID) = Flux(:,:,:,SideID) + Fd_Face_loc
 #endif /*PARABOLIC*/

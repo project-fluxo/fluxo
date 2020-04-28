@@ -48,7 +48,7 @@ CONTAINS
 SUBROUTINE Lifting_FillFlux(FluxX,FluxY,FluxZ,doMPISides)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,         ONLY: U_master,U_slave
+USE MOD_Flux,            ONLY: EvalLiftingSurfFlux
 USE MOD_Mesh_Vars,       ONLY: NormVec,SurfElem
 USE MOD_Mesh_Vars,       ONLY: nSides
 USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,lastMPISide_MINE
@@ -65,7 +65,7 @@ REAL,INTENT(OUT)   :: FluxZ(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: SideID,p,q,firstSideID,lastSideID
-REAL               :: F_loc(1:PP_nVar)
+REAL               :: F_loc(1:PP_nVar,0:PP_N,0:PP_N)
 !===================================================================================================================================
 ! fill flux for sides ranging between firstSideID and lastSideID using Riemann solver
 IF(doMPISides)THEN 
@@ -79,14 +79,11 @@ ELSE
 END IF
 
 DO SideID = firstSideID,lastSideID
-  ! BR1/BR2 uses arithmetic mean value of states for the Riemann flux
+  CALL EvalLiftingSurfFlux(SideID,F_loc) !strong flux (1/2(U_s+U_m) -U_m)*surfElem
   DO q=0,PP_N; DO p=0,PP_N
-    !Flux(:,p,q,SideID)=0.5*(U_master(:,p,q,SideID)+U_slave( :,p,q,SideID))*NormVec(dir,p,q,SideID)*SurfElem(p,q,SideID)
-    !BR2, 1/2(UR+UL)-UL=1/2(UR-UL)
-    F_loc(:)=0.5*(U_slave(:,p,q,SideID)-U_master( :,p,q,SideID))*SurfElem(p,q,SideID)
-    FluxX(:,p,q,SideID)=F_loc(:)*NormVec(1,p,q,SideID)
-    FluxY(:,p,q,SideID)=F_loc(:)*NormVec(2,p,q,SideID)
-    FluxZ(:,p,q,SideID)=F_loc(:)*NormVec(3,p,q,SideID)
+    FluxX(:,p,q,SideID)=F_loc(:,p,q)*NormVec(1,p,q,SideID)
+    FluxY(:,p,q,SideID)=F_loc(:,p,q)*NormVec(2,p,q,SideID)
+    FluxZ(:,p,q,SideID)=F_loc(:,p,q)*NormVec(3,p,q,SideID)
   END DO; END DO !p,q
 END DO ! SideID
 
@@ -120,7 +117,7 @@ REAL,INTENT(OUT)   :: FluxZ(PP_nVar,0:PP_N,0:PP_N,1:nBCSides)
 INTEGER            :: SideID,p,q
 !===================================================================================================================================
 ! fill flux for boundary sides (surface element is already added in getboundaryflux
-CALL Lifting_GetBoundaryFlux(t,FluxZ) ! uses the current U_master at the boundary
+CALL Lifting_GetBoundaryFlux(t,FluxZ) ! uses the current U_master at the boundary , includes surfelem
 
 DO SideID=1,nBCSides
   DO q=0,PP_N; DO p=0,PP_N

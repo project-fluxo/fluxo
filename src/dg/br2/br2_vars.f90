@@ -27,16 +27,16 @@ SAVE
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! interior face gradients for all elements
-REAL,ALLOCATABLE                      :: gradUx_Slave(:,:,:,:),gradUx_Master(:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUy_Slave(:,:,:,:),gradUy_Master(:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUz_Slave(:,:,:,:),gradUz_Master(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPx_Slave(:,:,:,:),gradPx_Master(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPy_Slave(:,:,:,:),gradPy_Master(:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPz_Slave(:,:,:,:),gradPz_Master(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxX(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxY(:,:,:,:)
 REAL,ALLOCATABLE                      :: FluxZ(:,:,:,:)
 ! the lifted gradients needed for NSE
-REAL,ALLOCATABLE                      :: gradUx(:,:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUy(:,:,:,:,:)
-REAL,ALLOCATABLE                      :: gradUz(:,:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPx(:,:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPy(:,:,:,:,:)
+REAL,ALLOCATABLE                      :: gradPz(:,:,:,:,:)
 REAL                                  :: etaBR2              !<stabilization constant, the higher the stiffer (timestep!)
 LOGICAL                               :: LiftingInitIsDone=.FALSE.
 !===================================================================================================================================

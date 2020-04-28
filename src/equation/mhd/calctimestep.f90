@@ -73,7 +73,9 @@ REAL                         :: Max_Lambda_v
 REAL                         :: Lambda_v(3)
 REAL                         :: muKappasPr_max,diffC_max
 #endif /*PARABOLIC*/
+#if MPI
 REAL                         :: buf(3)
+#endif /*MPI*/
 !==================================================================================================================================
 errType=0
 #if PARABOLIC

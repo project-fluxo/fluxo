@@ -55,9 +55,12 @@ USE MOD_Equation_Vars,ONLY: BCdata,BCSideID
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2
 USE MOD_DG_Vars      ,ONLY: U_Master
 #if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY: gradUx_master,gradUy_master,gradUz_master
+USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
 #endif /*PARABOLIC*/
 USE MOD_Riemann      ,ONLY: Riemann
+#if NONCONS
+USE MOD_Riemann,         ONLY: AddNonConsFlux
+#endif /*NONCONS*/
 USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: smu_0,s2mu_0
 #ifdef PP_GLM
@@ -87,38 +90,42 @@ CASE(21) !steadyStateBCs
     SideID=BCSideID(iBC,iSide)
     CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),BCdata(:,:,:,SideID), &
 #if PARABOLIC
-                 gradUx_master(:,:,:,SideID),gradUx_master(:,:,:,SideID), &
-                 gradUy_master(:,:,:,SideID),gradUy_master(:,:,:,SideID), &
-                 gradUz_master(:,:,:,SideID),gradUz_master(:,:,:,SideID), &
+                 gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                 gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                 gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+      CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),  BCdata(:,:,:,SideID), &
+                       NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
   END DO !iSide=1,nBCloc
-CASE(29) !steadyState BC using State from mhd_equilibriumTestcase, 
-         ! but with slip v*n=0, rho=rho_inner, p=p_equi, B=B_equi (B.n) /=0 !!
-         !and no viscous contribution 
-  DO iSide=1,nBCLoc
-    SideID=BCSideID(iBC,iSide)
-    DO q=0,PP_N
-      DO p=0,PP_N
-        ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
-        CALL ConsToPrim(PrimR(:),BCdata(:,p,q,SideID))
-        CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
-        PrimL(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
-        BR_n=SUM(PrimR(6:8)*nvec(:))
-        Flux(1,  p,q,SideID) = 0.
-        Flux(2:4,p,q,SideID) = (PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2))*nvec(:)-smu_0*BR_n*PrimR(6:8)
-        Flux(5,  p,q,SideID) =  -smu_0*BR_n*SUM(PrimR(6:8)*PrimL(2:4)) !-1/mu_0(B.v)*(B.n)
-        Flux(6:8,p,q,SideID) =        -BR_n*PrimL(2:4) ! (v.n)B - (B.n)v
-#ifdef PP_GLM
-        Flux(9,p,q,SideID) =  GLM_ch*BR_n !0.5*GLM_ch*PrimL(9) !outflow for GLM (psi_outer=0, LF jump)
-#endif /* PP_GLM */
-        END ASSOCIATE !nvec
-      END DO !p=0,PP_N
-    END DO !q=0,PP_N
-  END DO !iSide=1,nBCLoc
+!CASE(29) !steadyState BC using State from mhd_equilibriumTestcase, 
+!         ! but with slip v*n=0, rho=rho_inner, p=p_equi, B=B_equi (B.n) /=0 !!
+!         !and no viscous contribution 
+!  DO iSide=1,nBCLoc
+!    SideID=BCSideID(iBC,iSide)
+!    DO q=0,PP_N
+!      DO p=0,PP_N
+!        ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
+!        CALL ConsToPrim(PrimR(:),BCdata(:,p,q,SideID))
+!        CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
+!        PrimL(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
+!        BR_n=SUM(PrimR(6:8)*nvec(:))
+!        Flux(1,  p,q,SideID) = 0.
+!        Flux(2:4,p,q,SideID) = (PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2))*nvec(:)-smu_0*BR_n*PrimR(6:8)
+!        Flux(5,  p,q,SideID) =  -smu_0*BR_n*SUM(PrimR(6:8)*PrimL(2:4)) !-1/mu_0(B.v)*(B.n)
+!        Flux(6:8,p,q,SideID) =        -BR_n*PrimL(2:4) ! (v.n)B - (B.n)v
+!#ifdef PP_GLM
+!        Flux(9,p,q,SideID) =  GLM_ch*BR_n !0.5*GLM_ch*PrimL(9) !outflow for GLM (psi_outer=0, LF jump)
+!#endif /* PP_GLM */
+!        END ASSOCIATE !nvec
+!      END DO !p=0,PP_N
+!    END DO !q=0,PP_N
+!  END DO !iSide=1,nBCLoc
 CASE DEFAULT ! unknown BCType
   CALL abort(__STAMP__,&
-       'no BC defined in default testcase_getboundaryflux.f90!',999,999.)
+       'no BC defined in default testcase_getboundaryflux.f90!',BCType,999.)
 END SELECT ! BCType
 END SUBROUTINE TestcaseGetBoundaryFlux
 
@@ -164,31 +171,31 @@ CASE(21)
       END DO ! p
     END DO ! q
   END DO !iSide=1,nBCloc
-CASE(29) !steadyState BC using State from mhd_equilibriumTestcase, 
-         ! but with slip v*n=0, rho=rho_inner, p=p_equi, B=B_equi (B.n) /=0 !!
-         !and no viscous contribution 
-  DO iSide=1,nBCLoc
-    SideID=BCSideID(iBC,iSide)
-    DO q=0,PP_N
-      DO p=0,PP_N
-        ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
-        CALL ConsToPrim(PrimR(:),BCdata(:,p,q,SideID))
-        CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
-        PrimR(1  )=PrimL(1)
-        PrimR(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
-        !PrimR(5:8) = PrimR(5:8)
-#ifdef PP_GLM
-        PrimR(9)=0. 
-#endif /* PP_GLM */
-        CALL PrimToCons(PrimR(:),Flux(:,p,q,SideID))
-
-        END ASSOCIATE !nvec
-      END DO !p=0,PP_N
-    END DO !q=0,PP_N
-  END DO !iSide=1,nBCLoc
+!CASE(29) !steadyState BC using State from mhd_equilibriumTestcase, 
+!         ! but with slip v*n=0, rho=rho_inner, p=p_equi, B=B_equi (B.n) /=0 !!
+!         !and no viscous contribution 
+!  DO iSide=1,nBCLoc
+!    SideID=BCSideID(iBC,iSide)
+!    DO q=0,PP_N
+!      DO p=0,PP_N
+!        ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
+!        CALL ConsToPrim(PrimR(:),BCdata(:,p,q,SideID))
+!        CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
+!        PrimR(1  )=PrimL(1)
+!        PrimR(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
+!        !PrimR(5:8) = PrimR(5:8)
+!#ifdef PP_GLM
+!        PrimR(9)=0. 
+!#endif /* PP_GLM */
+!        CALL PrimToCons(PrimR(:),Flux(:,p,q,SideID))
+!
+!        END ASSOCIATE !nvec
+!      END DO !p=0,PP_N
+!    END DO !q=0,PP_N
+!  END DO !iSide=1,nBCLoc
 CASE DEFAULT ! unknown BCType
   CALL abort(__STAMP__,&
-       'no BC defined in default /lifting testcase_getboundaryflux.f90!',999,999.)
+       'no BC defined in default /lifting testcase_getboundaryflux.f90!',BCType,999.)
 END SELECT ! BCType
 END SUBROUTINE TestcaseLiftingGetBoundaryFlux
 #endif /*PARABOLIC*/

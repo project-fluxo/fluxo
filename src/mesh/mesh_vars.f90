@@ -135,6 +135,7 @@ INTEGER,ALLOCATABLE :: MortarInfo(:,:,:)       !< 1:2,1:4,1:nMortarSides: [1] nb
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255),ALLOCATABLE :: BoundaryName(:) !< names of the boundary conditions read from the mesh file
 CHARACTER(LEN=255)             :: MeshFile     !< name of hdf5 meshfile (write with ending .h5!)
+CHARACTER(LEN=255)             :: NodeTypeMesh
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL          :: useCurveds                 !< Marker wheter curved boundaries should be used in the mesh, read from parameter
                                                !< file. If set to false only linear part of curved meshes is used.

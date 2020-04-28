@@ -49,7 +49,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !===================================================================================================================================
-SUBROUTINE BR1_SurfInt(Flux,gradU,doMPISides)
+SUBROUTINE BR1_SurfInt(Flux,gradP,doMPISides)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
@@ -70,7 +70,7 @@ LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only YOUR MPISides are filled, =.FAL
 REAL,INTENT(IN)    :: Flux(1:PP_nVar,0:PP_N,0:PP_N,nSides)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
-REAL,INTENT(INOUT)   :: gradU(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+REAL,INTENT(INOUT)   :: gradP(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)
@@ -90,7 +90,7 @@ END IF
 
 DO SideID=firstSideID,lastSideID
   ! update DG time derivative with corresponding SurfInt contribution
-  ! master side, flip=0 =>gradU_master
+  ! master side, flip=0 =>gradP_master
   ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
 
   !master sides(ElemID,locSide and flip =-1 if not existing)
@@ -100,12 +100,12 @@ DO SideID=firstSideID,lastSideID
 #if (PP_NodeType==1)
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,flip,locSide) !flip=0
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
+      gradP(:,ijk(1),ijk(2),ijk(3),ElemID) = gradP(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide) !flip=0, l=0
-      gradU(:,ijk(1),ijk(2),ijk(3),ElemID) = gradU(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus0
+      gradP(:,ijk(1),ijk(2),ijk(3),ElemID) = gradP(:,ijk(1),ijk(2),ijk(3),ElemID) +Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !master ElemID .NE. 1
@@ -118,12 +118,12 @@ DO SideID=firstSideID,lastSideID
 #if (PP_NodeType==1)
     DO q=0,PP_N; DO p=0,PP_N; DO l=0,PP_N
       ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
+      gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus(l)
     END DO; END DO; END DO ! l,p,q
 #elif (PP_NodeType==2)
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide) !l=0 
-      gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradU(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus0
+      gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) = gradP(:,ijk(1),ijk(2),ijk(3),nbElemID) +Flux(:,p,q,SideID)*L_hatMinus0
     END DO; END DO ! p,q
 #endif /*PP_NodeType*/
   END IF !nbElemID.NE.-1

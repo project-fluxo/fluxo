@@ -79,10 +79,6 @@ doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
 last_Ekin_comp = 0.
 last_Emag_comp = 0.
 
-IF(.NOT.doAnalyzeToFile)THEN
-  CALL abort(__STAMP__,"Testcase analyze = T, but AnalyzeToFile = F")
-END IF
-
 IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Dissipation Rate Incompressible"'
@@ -116,6 +112,10 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_VarNames(A2F_iVar)='"Emag comp"'
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"-dEmag/dt"'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar)='"Maximum Current"'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar)='"Magnetic Enstrophy"'
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeTestcase
 
@@ -129,10 +129,12 @@ SUBROUTINE AnalyzeTestCase(Time)
 USE MOD_PreProc
 USE MOD_Globals
 USE MOD_DG_Vars,        ONLY: U
-USE MOD_Lifting_Vars,   ONLY: GradUx,GradUy,GradUz
+#if PARABOLIC
+USE MOD_Lifting_Vars,   ONLY: GradPx,GradPy,GradPz
+#endif
 USE MOD_Analyze_Vars,   ONLY: wGPVol,Vol
 USE MOD_Analyze_Vars,   ONLY: A2F_iVar,A2F_Data
-USE MOD_Analyze_Vars,   ONLY: Analyze_dt
+USE MOD_Analyze_Vars,   ONLY: doAnalyzeToFile,Analyze_dt
 USE MOD_Restart_Vars,   ONLY: RestartTime
 USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
 USE MOD_Mesh_Vars,      ONLY: sJ,nElems
@@ -146,8 +148,8 @@ REAL,INTENT(IN)                 :: Time
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                         :: iElem,i,j,k,p,q
-REAL                            :: Vel(1:3),GradVel(1:3,1:3),Ekin,uprime,BField(1:3)
-REAL                            :: Vorticity(1:3),max_Vorticity,mean_temperature, temperature
+REAL                            :: Vel(1:3),GradVel(1:3,1:3),Ekin,uprime,BField(1:3),GradB(1:3,1:3)
+REAL                            :: Vorticity(1:3),max_Vorticity,mean_temperature,temperature,curlB(1:3),max_Current
 REAL                            :: S(1:3,1:3)                    !< Strain rate tensor S (symmetric)
 REAL                            :: Sd(1:3,1:3)                   !< Deviatoric part of the strain rate tensor S 
 REAL                            :: divU                          !< Divergence of velocity vector
@@ -157,14 +159,15 @@ REAL                            :: magE_comp                     !< Integrand: 0
 REAL                            :: ens                           !< Integrand: 0.5*rho*omega*omega
 REAL                            :: ent                           !< Integrand: -rho*s/kappaM1, s = log(p) - kappa*log(rho)
 REAL                            :: eps3                          !< Integrand: p*(div u)
+REAL                            :: mag_ens                       !< Integrand: 0.5*j*j, j = curl(B)
 REAL                            :: u_tens, s_tens, sd_tens       !< matrix : matrix product, integrands of Gradvel, S, Sd
 REAL                            :: Intfactor                     !< Integrationweights with Jacobian
 REAL                            :: rho,srho                      !< rho,1/rho
-REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_comp,mag_comp
+REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_comp,mag_comp,Mag_Enstrophy
 REAL                            :: DR_u,DR_S,DR_Sd,DR_p          !< Contributions to dissipation rate
 REAL                            :: Pressure,rho0,negdEkindt,negdEmagdt
 #ifdef MPI
-REAL                            :: buf(11)
+REAL                            :: buf(13)
 #endif
 !===================================================================================================================================
 IF(.NOT.doTCanalyze)RETURN
@@ -173,9 +176,11 @@ Ekin_comp=0.
 Emag_comp=0.
 Enstrophy_comp=0.
 Entropy_comp=0.
+Mag_Enstrophy=0.
 
 DR_u=0.;DR_S=0.;DR_Sd=0.;DR_p=0.
 max_Vorticity=-1.
+max_Current=-1.
 mean_Temperature=0.
 
 DO iElem=1,nElems
@@ -187,11 +192,24 @@ DO iElem=1,nElems
         ! compute primitive gradients (of u,v,w) at each GP
         Vel(1:3)    =U(2:4,i,j,k,iElem)*srho
         BField(1:3) =U(6:8,i,j,k,iElem)
-        GradVel(:,1)=srho*(GradUx(2:4,i,j,k,iElem)-Vel(1:3)*GradUx(1,i,j,k,iElem))
-        GradVel(:,2)=srho*(GradUy(2:4,i,j,k,iElem)-Vel(1:3)*GradUy(1,i,j,k,iElem))
-        GradVel(:,3)=srho*(GradUz(2:4,i,j,k,iElem)-Vel(1:3)*GradUz(1,i,j,k,iElem))
+#if PARABOLIC
+        GradVel(:,1)=GradPx(2:4,i,j,k,iElem)
+        GradVel(:,2)=GradPy(2:4,i,j,k,iElem)
+        GradVel(:,3)=GradPz(2:4,i,j,k,iElem)
+        GradB(:,1)=GradPx(6:8,i,j,k,iElem)
+        GradB(:,2)=GradPy(6:8,i,j,k,iElem)
+        GradB(:,3)=GradPz(6:8,i,j,k,iElem)
+#else
+        GradVel=0.
+        GradB=0.
+#endif
         ! Pressure
+#ifdef PP_GLM
+        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*(SUM(BField(1:3)*BField(1:3))&
+                          +U(9,i,j,k,iElem)*U(9,i,j,k,iElem)))
+#else
         Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*SUM(BField(1:3)*BField(1:3)))
+#endif /*PP_GLM*/
         ! compute divergence of velocity
         divU=GradVel(1,1)+GradVel(2,2)+GradVel(3,3)
         ! compute tensor of velocity gradients
@@ -214,6 +232,13 @@ DO iElem=1,nElems
         max_Vorticity=MAX(max_Vorticity,SQRT(SUM(Vorticity(:)*Vorticity(:))))
         ! compute enstrophy integrand
         ens=0.5*rho*SUM(Vorticity(1:3)*Vorticity(1:3))
+        ! compute curl(B) (the current) and max(current)
+        curlB(1)=GradB(3,2) - GradB(2,3)
+        curlB(2)=GradB(1,3) - GradB(3,1)
+        curlB(3)=GradB(2,1) - GradB(1,2)
+        max_Current=MAX(max_Current,SQRT(SUM(curlB(:)*curlB(:))))
+        ! compute magnetic enstrophy integrand
+        mag_ens=s2mu_0*SUM(curlB(1:3)*curlB(1:3))
         ! compute the entropy integrand
         ent=-rho*(LOG(Pressure) - kappa*LOG(rho))/kappaM1
         ! compute integrand for epsilon3, pressure contribution to dissipation (compressiblity effect)
@@ -237,6 +262,8 @@ DO iElem=1,nElems
         Emag_comp=Emag_comp+mag_comp*IntFactor
           ! Enstrophy compressible
         Enstrophy_comp=Enstrophy_comp+ens*IntFactor
+          ! Magnetic enstrophy (norm of the current)
+        Mag_Enstrophy=Mag_Enstrophy+mag_ens*IntFactor
           ! Entropy compressible
         Entropy_comp=Entropy_comp+ent*IntFactor
           ! dissipation rate epsilon incomp from velocity gradient tensor (Diss Fauconnier)
@@ -248,7 +275,11 @@ DO iElem=1,nElems
           ! dissipation rate epsilon 3 from pressure times div u (compressible)
         DR_p=DR_p+eps3*Intfactor
           ! compute mean temperature
-        Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE)
+#ifdef PP_GLM
+Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho-s2mu_0*U(9,i,j,k,iElem)*U(9,i,j,k,iElem))
+#else
+        Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho)
+#endif /*PP_GLM*/
         mean_temperature=mean_temperature+Temperature*Intfactor       
       END DO
     END DO
@@ -267,10 +298,12 @@ buf( 8) = Enstrophy_comp
 buf( 9) = Entropy_comp
 buf(10) = mean_temperature
 buf(11) = Emag_comp
+buf(12) = max_Current
+buf(13) = Mag_Enstrophy
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,12,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ELSE
-  CALL MPI_REDUCE(buf  ,0           ,12,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(buf  ,0           ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
 END IF
 max_Vorticity    = buf( 1)
 DR_u             = buf( 2)
@@ -283,6 +316,8 @@ Enstrophy_comp   = buf( 8)
 Entropy_comp     = buf( 9)
 mean_temperature = buf(10)
 Emag_comp        = buf(11)
+max_Current      = buf(12)
+Mag_Enstrophy    = buf(13)
 #endif /*MPI*/
 IF(MPIroot)THEN
   ! some turbulent quantities
@@ -301,6 +336,7 @@ IF(MPIroot)THEN
   Emag_comp=Emag_comp/(rho0*Vol)
 
   Enstrophy_comp=Enstrophy_comp/(rho0*Vol)
+  Mag_Enstrophy=Mag_Enstrophy/(rho0*Vol)
   Entropy_comp=Entropy_comp/(rho0*Vol)
   DR_u=DR_u*mu_0/Vol
   DR_S=DR_S*2.*mu_0/(rho0*Vol)
@@ -322,39 +358,44 @@ IF(MPIroot)THEN
     WRITE(UNIT_StdOut,'(A,E21.11)')' TGV Analyze -dEmag_comp/dt : ',negdEmagdt
   END IF !time>Analyze_dt
 
-  !output to out file (doAnalyzeToFile must be T, already checked in initAnalyzeTestcase), write is done in analyzetofile
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=DR_S             !"Dissipation Rate Incompressible"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_Sd+DR_p       !"Dissipation Rate Compressible"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Ekin             !"Ekin incomp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Ekin_comp        !"Ekin comp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=Enstrophy_comp   !"Enstrophy comp"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_u             !"DR_u"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_S             !"DR_S"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_Sd            !"DR_Sd"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=DR_p             !"DR_p"'
-  A2F_iVar=A2F_iVar+1                     
-  A2F_data(A2F_iVar)=max_Vorticity    !"Maximum Vorticity"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=mean_temperature !"Mean Temperature"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=uprime           !"uprime"'
-  A2F_iVar=A2F_iVar+1           
-  A2F_data(A2F_iVar)=Entropy_comp     !"Entropy comp"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=negdEkindt       !'"-dEkin/dt"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
-  A2F_iVar=A2F_iVar+1
-  A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
+  IF(doAnalyzeToFile) THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=DR_S             !"Dissipation Rate Incompressible"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_Sd+DR_p       !"Dissipation Rate Compressible"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Ekin             !"Ekin incomp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Ekin_comp        !"Ekin comp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=Enstrophy_comp   !"Enstrophy comp"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_u             !"DR_u"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_S             !"DR_S"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_Sd            !"DR_Sd"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=DR_p             !"DR_p"'
+    A2F_iVar=A2F_iVar+1                     
+    A2F_data(A2F_iVar)=max_Vorticity    !"Maximum Vorticity"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=mean_temperature !"Mean Temperature"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=uprime           !"uprime"'
+    A2F_iVar=A2F_iVar+1           
+    A2F_data(A2F_iVar)=Entropy_comp     !"Entropy comp"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=negdEkindt       !'"-dEkin/dt"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=Emag_comp        !'"Emag comp"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=negdEmagdt       !'"-dEmag/dt"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=max_Current      !'"Maximum Current"'
+    A2F_iVar=A2F_iVar+1
+    A2F_data(A2F_iVar)=Mag_Enstrophy    !'"Magnetic Enstrophy"'
+  END IF !doAnalyzeToFile
 END IF !MPIroot
 
 END SUBROUTINE AnalyzeTestCase

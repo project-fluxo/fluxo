@@ -113,13 +113,18 @@ IniWaveNumber     = GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 IniExactFunc = GETINT('IniExactFunc')
 
 #if (PP_DiscType==2)
+#if PP_VolFlux==-1
 WhichVolumeFlux = GETINT('VolumeFlux','0')
+#else
+WhichVolumeFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
+#endif
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with dealiased metric'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&

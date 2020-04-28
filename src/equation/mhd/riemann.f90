@@ -26,6 +26,10 @@ INTERFACE Riemann
   MODULE PROCEDURE Riemann
 END INTERFACE
 
+!INTERFACE AddNonConsFlux
+!  MODULE PROCEDURE AddNonConsFlux
+!END INTERFACE
+
 INTERFACE RiemannSolverByHLL
   MODULE PROCEDURE RiemannSolverByHLL
 END INTERFACE
@@ -46,13 +50,21 @@ INTERFACE RiemannSolverByRusanov
   MODULE PROCEDURE RiemannSolverByRusanov
 END INTERFACE
 
+INTERFACE EntropyStableByLLF
+  MODULE PROCEDURE EntropyStableByLLF
+END INTERFACE
+
 
 PUBLIC :: Riemann
+#if NONCONS
+PUBLIC :: AddNonConsFlux
+#endif /*NONCONS*/
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
 PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
+PUBLIC :: EntropyStableByLLF
 !==================================================================================================================================
 
 
@@ -147,7 +159,57 @@ END DO
 
 END SUBROUTINE Riemann
 
+#if NONCONS
+!==================================================================================================================================
+!> strong nonconservative flux on a side: 
+!> phi^L 1/2(B^L+B^R)*nvec  - phi^L B^L nvec = phi^L 1/2(B^R-B^L)*nvec
+!> CAREFUL, the "weak" implementation of the nonconservative term in the volume (Phi div B ) already includes the boundary part:
+!> -1/2(phi^L B^L nvec)
+!> so that here, we only add  
+!> 1/2(phi^L B^R nvec)
+!> analogously, the GLM nonconservative term is (0,0,0,v*phi, 0,0,0,v) grad phi  in the volume, therefore
+!> we only need to add
+!> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
+!==================================================================================================================================
+SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
+USE MOD_PreProc
+USE MOD_DG_Vars,ONLY:nTotal_Face
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,nTotal_Face) !< right state on face
+REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,nTotal_Face) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,nTotal_Face) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER :: i
+REAL    :: v_L(3)
+!==================================================================================================================================
+DO i=1,nTotal_Face
+  v_L=UL(2:4,i)/UL(1,i)
+#if NONCONS==1 /*Powell*/
+  FL(2:8,i)=FL(2:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
+#elif NONCONS==2 /*Brackbill*/
+  FL(2:4,i)=FL(2:4,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*UL(6:8,i)
+#elif NONCONS==3 /*Janhunen*/
+  FL(6:8,i)=FL(6:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*v_L(1:3)
+#endif /*NONCONSTYPE*/
 
+
+#if defined (PP_GLM) && defined (PP_NC_GLM)
+  !nonconservative term to restore galilein invariance for GLM term
+  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*UR(9,i),UR(9,i)/)
+#endif /*PP_GLM and PP_NC_GLM*/
+
+END DO !i=1,nTotal_Face
+
+END SUBROUTINE AddNonConsFlux
+#endif /*NONCONS*/
 
 !==================================================================================================================================
 !> Lax-friedrichs / rusanov flux
@@ -165,7 +227,7 @@ REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
+REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES                                                                                                               !
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -207,7 +269,7 @@ REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
+REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES                                                                                                               !
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -270,7 +332,7 @@ REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
+REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -404,7 +466,7 @@ REAL,INTENT(IN)  :: ConsL_in(1:PP_nVar) !<  left conservative state ,not used he
 REAL,INTENT(IN)  :: ConsR_in(1:PP_nVar) !< right conservative state ,not used here
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
+REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -656,7 +718,7 @@ REAL,INTENT(IN)  :: ConsL(1:PP_nVar) !<  left conservative state
 REAL,INTENT(IN)  :: ConsR(1:PP_nVar) !< right conservative state
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(INOUT) :: Flux(1:PP_nVar) !<numerical flux
+REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -904,5 +966,191 @@ Flux(:)=0.5*Flux(:)
 
 END SUBROUTINE RiemannSolverByRoe
 
+
+SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
+!==================================================================================================================================
+! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
+! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
+! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+! 
+!==================================================================================================================================
+! MODULES
+USE MOD_PreProc
+USE MOD_Flux_Average, ONLY:LN_MEAN
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage !pointer to EC routine
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: sbetaLN,beta_R,beta_L
+REAL            :: srho_L,srho_R,rhoLN,srhoLN
+REAL            :: B2_L,B2_R,B2Avg
+REAL            :: u2_L,u2_R,u2Avg,uAvg2
+REAL            :: p_L,p_R,pAvg,pLN !,pTilde
+REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
+REAL            :: u_L(3),u_R(3)
+REAL            :: BAvg(3),uAvg(3)
+!REAL            :: u1_B2Avg,uB_Avg
+REAL            :: Hmatrix(5,5),tau,Eavg
+REAL            :: V_jump(PP_nVar)
+#ifdef PP_GLM
+REAL            :: psiAvg
+#endif
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+#ifdef PP_GLM
+              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+            psi_L =>UL(9)   ,  psi_R =>UR(9), &
+#else
+              E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+              B_L => UL(6:8),    B_R => UR(6:8)  )
+! Get the inverse density, velocity, and pressure on left and right
+srho_L=1./rho_L
+srho_R=1./rho_R
+u_L = rhoU_L(:)*srho_L
+u_R = rhoU_R(:)*srho_R
+
+u2_L = SUM(u_L(:)*u_L(:))
+u2_R = SUM(u_R(:)*u_R(:))
+B2_L = SUM(B_L(:)*B_L(:))
+B2_R = SUM(B_R(:)*B_R(:))
+
+!beta=rho/(2*p)
+p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
+beta_L = 0.5*rho_L/p_L
+beta_R = 0.5*rho_R/P_R
+
+! Get the averages for the numerical flux
+
+rhoLN      = LN_MEAN( rho_L, rho_R)
+sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
+uAvg       = 0.5 * ( u_L +  u_R)
+u2Avg      = 0.5 * (u2_L + u2_R)
+BAvg       = 0.5 * ( B_L +  B_R)
+B2Avg      = 0.5 * (B2_L + B2_R)
+                                                                   
+pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
+#ifdef PP_GLM
+psiAvg     = 0.5*(psi_L+psi_R)
+#endif
+
+! Entropy conserving and kinetic energy conserving flux, pointer to EC routine
+CALL VolumeFluxAverage(UL,UR,Fstar)
+
+!u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+!uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
+!pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+!Fstar(1) = rhoLN*uAvg(1)
+!Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+!Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+!Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
+!Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
+!Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
+!#ifdef PP_GLM
+!Fstar(6) = GLM_ch*psiAvg
+!Fstar(9) = GLM_ch*BAvg(1)
+!#endif
+!
+!Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
+!           + SUM(uAvg(:)*Fstar(2:4)) &
+!           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+!                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
+!#ifdef PP_GLM
+!                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
+!#endif
+!                   )
+! MHD wavespeed
+pLN = 0.5*rhoLN*sbetaLN
+
+srhoLN = 1./rhoLN
+a2Avg  = kappa*pAvg*srhoLN
+va2Avg = B2Avg*sRhoLN
+ca2Avg = BAvg(1)*BAvg(1)*srhoLN
+
+cfAvg  = SQRT(0.5 * ((a2Avg+va2Avg) + SQRT((a2Avg+va2Avg)**2 - 4.0*a2Avg*ca2Avg)))
+
+LambdaMax_s2 =0.5*(ABS(uAvg(1))+cfAvg)
+
+! H matrix stabilization 
+
+uAvg2 = SUM(uAvg(:)*uAvg(:))
+Eavg = pLN*sKappaM1 + 0.5*rhoLN*(2.0*uAvg2-u2Avg)
+
+! Euler components as derived by Dominik, April 18-20, 2016
+! MATRIX IS SYMMETRIC!!
+! Hmatrix = 0.0
+Hmatrix(1:5,1)=(/rhoLN       ,rhoLN*uAvg(1)            ,rhoLN*uAvg(2)            ,rhoLN*uAvg(3)            , Eavg               /)
+!                -------------     ||                       ||                         || 
+Hmatrix(1:5,2)=(/Hmatrix(2,1),Hmatrix(2,1)*uAvg(1)+pAvg,Hmatrix(3,1)*uAvg(1)     ,Hmatrix(4,1)*uAvg(1)     ,(Eavg+pAvg)*uAvg(1) /)
+!                            ---------------------------    ||                         ||
+Hmatrix(1:5,3)=(/Hmatrix(3,1),    Hmatrix(3,2)         ,Hmatrix(3,1)*uAvg(2)+pAvg,Hmatrix(4,1)*uAvg(2)     ,(Eavg+pAvg)*uAvg(2) /)
+!                                                      ---------------------------     ||                     
+Hmatrix(1:5,4)=(/Hmatrix(4,1),    Hmatrix(4,2)         ,    Hmatrix(4,3)         ,Hmatrix(4,1)*uAvg(3)+pAvg,(Eavg+pAvg)*uAvg(3) /)
+!                                                                                ---------------------------                              
+Hmatrix(1:4,5)=(/Hmatrix(5,1),    Hmatrix(5,2)         ,    Hmatrix(5,3)         ,     Hmatrix(5,4)       /)   !Hmatrix(5,5)
+
+tau = 1./(beta_L+beta_R) !0.5/betaA
+!Hmatrix(5,5) = 0.25*rhoA/(betaL*betaR)*sKappaM1 + Eavg*Eavg/rhoLN + (u1A*u1A+v1A*v1A+w1A*w1A)*pAvg + tau*(B11A*B11A + B21A*B21A + B31A*B31A)
+!Special averaging such that RSRT-H = 0 in the Euler case
+Hmatrix(5,5) = (pLN*pLN*sKappaM1 + Eavg*Eavg)*srhoLN + uAvg2*pAvg + tau*( SUM(BAvg(:)*Bavg(:)) &
+#ifdef PP_GLM
+                                                                         + psiAvg*psiAvg &
+#endif
+                                                                        )
+
+!! Magnetic field components 
+!Hmatrix(6:8,5) = tau * Bavg(:)
+!Hmatrix(5,6:8) = Hmatrix(5,6:8)
+!
+!Hmatrix(6,6) = tau
+!Hmatrix(7,7) = tau
+!Hmatrix(8,8) = tau
+!
+!#ifdef PP_GLM
+!! Psi components 
+!Hmatrix(9,5) = tau*psiAvg
+!Hmatrix(5,9) = Hmatrix(9,5)
+!Hmatrix(9,9) = tau
+!#endif /*PP_GLM*/
+
+!V_jump=consToEntropy(UR)-consToEntropy(UL) !better use already computed values!!
+
+!V(1)=(kappa-s)/(kappa-1)-beta*|v|^2 , s = LOG(p) - kappa*LOG(cons(1)), VR-VL, using Log(R)-Log(L)=LOG(R/L)
+V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
+                       - (beta_R*u2_R         -beta_L*u2_L  )  
+V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
+V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
+V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
+
+!Fstar(:) = Fstar -LambdaMax_s2*MATMUL(Hmatrix,(V_jump))
+
+!Hmatrix has only non-zero entries (1:5,1:5),(5,6:9),(6:9,5),diag(6:9,6:9)
+Fstar(1:4) = Fstar(1:4) - LambdaMax_s2       *MATMUL(Hmatrix(1:4,1:5),V_jump(1:5))
+Fstar(  5) = Fstar(  5) - LambdaMax_s2       *(  SUM(Hmatrix(1:5,  5)*V_jump(1:5))  &
+                                                +tau*  (SUM(Bavg(1:3)*V_jump(6:8)) &
+#ifdef PP_GLM                    
+                                                        +      psiAvg*V_jump(  9)  &  
+#endif                           
+                                                       )) 
+Fstar(6:8) = Fstar(6:8) - (LambdaMax_s2*tau)*(Bavg(1:3)*V_jump(5)   + V_jump(6:8))
+#ifdef PP_GLM
+Fstar(  9) = Fstar(  9) - (LambdaMax_s2*tau)*(   psiAvg*V_jump(5)   + V_jump(  9))
+#endif
+
+END ASSOCIATE 
+END SUBROUTINE EntropyStableByLLF
 
 END MODULE MOD_Riemann

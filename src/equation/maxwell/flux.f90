@@ -23,9 +23,9 @@ MODULE MOD_Flux
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-INTERFACE EvalFluxTilde3D
-  MODULE PROCEDURE EvalFluxTilde3D
-END INTERFACE
+!INTERFACE EvalFluxTilde3D
+!  MODULE PROCEDURE EvalFluxTilde3D
+!END INTERFACE
 
 PUBLIC::EvalFluxTilde3D
 !==================================================================================================================================
@@ -35,83 +35,63 @@ CONTAINS
 !==================================================================================================================================
 !> Compute advection flux of Maxwell's equations for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
+                           ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc       ! PP_N
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars ,ONLY:c2,c_corr,c_corr_c2
-USE MOD_DG_Vars       ,ONLY:U
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem  !< current element treated in volint
+REAL,INTENT(IN )   :: U_in(8,1:nTotal_vol) !< solution state (conservative vars)
+REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(8,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(8,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(8,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(8,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                :: f(8),g(8),h(8)    ! Cartesian fluxes 
-INTEGER             :: i,j,k 
-#ifdef CARTESIANFLUX 
-REAL                :: X_xi,Y_eta,Z_zeta
-#endif 
+INTEGER             :: i 
 !==================================================================================================================================
-#ifdef CARTESIANFLUX 
-X_xi   = Metrics_fTilde(1,0,0,0,iElem)
-Y_eta  = Metrics_gTilde(2,0,0,0,iElem)
-Z_zeta = Metrics_hTilde(3,0,0,0,iElem)
-#endif 
-DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-  ASSOCIATE(Uin=>U(:,i,j,k,iElem))
+DO i=1,nTotal_vol
   !A
-  f(1) = Uin(8)*c_corr_c2    ! phi*chi*c^2
-  f(2) = Uin(6)*c2           ! B3*c^2
-  f(3) =-Uin(5)*c2           ! -B2*c^2
-  f(4) = Uin(7)*c_corr       ! psi*c_corr
-  f(5) =-Uin(3)              ! -E3
-  f(6) = Uin(2)              ! E2
-  f(7) = Uin(4)*c_corr_c2    ! B1*c_corr*c^2
-  f(8) = Uin(1)*c_corr       ! E1*c_corr
+  f(1) = U_in(8,i)*c_corr_c2    ! phi*chi*c^2
+  f(2) = U_in(6,i)*c2           ! B3*c^2
+  f(3) =-U_in(5,i)*c2           ! -B2*c^2
+  f(4) = U_in(7,i)*c_corr       ! psi*c_corr
+  f(5) =-U_in(3,i)              ! -E3
+  f(6) = U_in(2,i)              ! E2
+  f(7) = U_in(4,i)*c_corr_c2    ! B1*c_corr*c^2
+  f(8) = U_in(1,i)*c_corr       ! E1*c_corr
   !B
   g(1) =-f(2)                ! -B3*c^2
   g(2) = f(1)                ! phi*c_corr*c^2
-  g(3) = Uin(4)*c2           ! B1*c^2
-  g(4) = Uin(3)              ! E3
+  g(3) = U_in(4,i)*c2           ! B1*c^2
+  g(4) = U_in(3,i)              ! E3
   g(5) = f(4)                ! psi*c_corr
-  g(6) =-Uin(1)              ! -E1
-  g(7) = Uin(5)*c_corr_c2    ! B2*c_corr*c^2
-  g(8) = Uin(2)*c_corr       ! E2*c_corr
+  g(6) =-U_in(1,i)              ! -E1
+  g(7) = U_in(5,i)*c_corr_c2    ! B2*c_corr*c^2
+  g(8) = U_in(2,i)*c_corr       ! E2*c_corr
   !C                              
   h(1) =-f(3)                ! B2*c^2
   h(2) =-g(3)                ! -B1*c^2
   h(3) = f(1)                ! phi*c_corr*c^2
-  h(4) =-Uin(2)              ! -E2
-  h(5) = Uin(1)              ! E1
+  h(4) =-U_in(2,i)              ! -E2
+  h(5) = U_in(1,i)              ! E1
   h(6) = f(4)                ! psi*c_corr
-  h(7) = Uin(6)*c_corr_c2    ! B3*c_corr*c^2
-  h(8) = Uin(3)*c_corr       ! E3*c_corr
-  END ASSOCIATE !Uin
-#ifdef CARTESIANFLUX
-  !for cartesian meshes, metric tensor is constant and diagonal:
-  ftilde(:,i,j,k) =  f(:)*X_xi
-  gtilde(:,i,j,k) =  g(:)*Y_eta
-  htilde(:,i,j,k) =  h(:)*Z_zeta
-#else /* CURVED FLUX*/
-  ! general curved metrics
-  ftilde(:,i,j,k) =   f(:)*Metrics_fTilde(1,i,j,k,iElem)  &
-                    + g(:)*Metrics_fTilde(2,i,j,k,iElem)  &
-                    + h(:)*Metrics_fTilde(3,i,j,k,iElem)
-  gtilde(:,i,j,k) =   f(:)*Metrics_gTilde(1,i,j,k,iElem)  &
-                    + g(:)*Metrics_gTilde(2,i,j,k,iElem)  &
-                    + h(:)*Metrics_gTilde(3,i,j,k,iElem)
-  htilde(:,i,j,k) =   f(:)*Metrics_hTilde(1,i,j,k,iElem)  &
-                    + g(:)*Metrics_hTilde(2,i,j,k,iElem)  &
-                    + h(:)*Metrics_hTilde(3,i,j,k,iElem)
-#endif /*CARTESIANFLUX*/
+  h(7) = U_in(6,i)*c_corr_c2    ! B3*c_corr*c^2
+  h(8) = U_in(3,i)*c_corr       ! E3*c_corr
+  !now transform fluxes to reference ftilde,gtilde,htilde
+  ftilde(:,i) =   f(:)*M_f(1,i) + g(:)*M_f(2,i) + h(:)*M_f(3,i)
+  gtilde(:,i) =   f(:)*M_g(1,i) + g(:)*M_g(2,i) + h(:)*M_g(3,i)
+  htilde(:,i) =   f(:)*M_h(1,i) + g(:)*M_h(2,i) + h(:)*M_h(3,i)
       
-END DO; END DO; END DO ! i,j,k
+END DO ! i
 END SUBROUTINE EvalFluxTilde3D
 
 END MODULE MOD_Flux

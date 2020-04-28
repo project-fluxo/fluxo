@@ -38,6 +38,7 @@ REAL,ALLOCATABLE     :: ElemVol(:)                        !< volume of each elem
 REAL                 :: Vol                               !< volume of the domain
 ! Analyze features
 LOGICAL              :: doCalcErrorNorms  =.FALSE.        !< input, flag to compute L2 and Linf error norms
+LOGICAL              :: doCalcBulk        =.FALSE.        !<handle for analyze: compute Bulk integral of all variables
 LOGICAL              :: doCalcMeanFlux    =.FALSE.        !< input, flag to compute the Mean Flux at boundaries
 INTEGER              :: AnalyzeExactFunc                  !< input, default = IniExactFunc 
 

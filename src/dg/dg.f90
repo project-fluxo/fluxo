@@ -96,7 +96,6 @@ U=0.
 Ut=0.
 
 nDOFElem=(PP_N+1)**3
-nTotalU=PP_nVar*nDOFElem*nElems
 nTotal_face=(PP_N+1)*(PP_N+1)
 nTotal_vol=nTotal_face*(PP_N+1)
 nTotal_IP=nTotal_vol*nElems
@@ -113,23 +112,44 @@ U_master=0.
 U_slave=0.
 
 ! unique flux per side
-ALLOCATE(Flux(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-Flux=0.
+ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+Flux_master=0.
+Flux_slave=0.
 
 #if (PP_DiscType==1)
   SWRITE(UNIT_StdOut,'(A)') ' => VolInt in weak form!'
 #elif (PP_DiscType==2)
   SWRITE(UNIT_StdOut,'(A)') ' => VolInt in fluxdifferencing form!'
 #endif /*PP_DiscType*/
-#ifdef CARTESIANFLUX
-  SWRITE(UNIT_StdOut,'(A)') ' => CARTESIANFLUX=T: FLUXES ONLY FOR CARTESIAN MESHES!!!'
-#endif
 
 IF(.NOT.DoRestart)THEN
   ! U is filled with the ini solution
   CALL FillIni(IniExactFunc,U)
 END IF
 
+!#if MPI
+!!communicate master surface metrics
+!ALLOCATE(geo(13,0:PP_N,0:PP_N,1:nSides))
+!geo(  1:3,:,:,:)=NormVec( :,:,:,:) 
+!geo(  4:6,:,:,:)=TangVec1(:,:,:,:)
+!geo(  7:9,:,:,:)=TangVec2(:,:,:,:)
+!geo(   10,:,:,:)=SurfElem(  :,:,:)
+!geo(11:13,:,:,:)=Face_xGP(:,:,:,:)
+!!!start geo communication
+!CALL StartReceiveMPIData(geo, 13*(PP_N+1)**2, 1,nSides,MPIRequest_U( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+!CALL StartSendMPIData(   geo, 13*(PP_N+1)**2, 1,nSides,MPIRequest_U( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+!!finish geo communication
+!CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U )  ! Flux, MPI_MINE -> MPI_YOUR 
+!ASSOCIATE(low=>FirstMPISide_YOUR,up=>LastMPISide_YOUR)
+!NormVec (:,:,:,low:up)=geo(  1:3,:,:,low:up)
+!TangVec1(:,:,:,low:up)=geo(  4:6,:,:,low:up)
+!TangVec2(:,:,:,low:up)=geo(  7:9,:,:,low:up)
+!SurfElem(  :,:,low:up)=geo(   10,:,:,low:up)
+!Face_xGP(:,:,:,low:up)=geo(11:13,:,:,low:up)
+!END ASSOCIATE
+!DEALLOCATE(geo)
+!#endif /*MPI*/
 DGInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT DG DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -142,27 +162,26 @@ END SUBROUTINE InitDG
 SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
-USE MOD_Basis,ONLY:LegendreGaussNodesAndWeights,LegGaussLobNodesAndWeights,BarycentricWeights
-USE MOD_Basis,ONLY:PolynomialDerivativeMatrix,LagrangeInterpolationPolys
-USE MOD_DG_Vars,ONLY:D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
+USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
 #if PP_DiscType==2
-USE MOD_DG_Vars,ONLY:DvolSurf
+USE MOD_DG_Vars,            ONLY: DvolSurf,DvolSurf_T
 #endif
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                             :: N_in                   !< Polynomial degree
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: xGP                    !< Gauss/Gauss-Lobatto Nodes 
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: wGP                    !< Gauss/Gauss-Lobatto Weights
-REAL,DIMENSION(0:N_in),INTENT(IN)              :: wBary                  !< Barycentric weights to evaluate the Gauss/Gauss-Lobatto lagrange basis
+INTEGER,INTENT(IN)                 :: N_in      !< Polynomial degree
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: xGP       !< Gauss/Gauss-Lobatto Nodes 
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: wGP       !< Gauss/Gauss-Lobatto Weights
+REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evaluate the Gauss/Gauss-Lobatto lagrange basis
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL,DIMENSION(0:N_in,0:N_in)              :: M,Minv     
-REAL,DIMENSION(0:N_in)                     :: L_Minus,L_Plus
-INTEGER                                    :: iMass         
+REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
+REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
+INTEGER                            :: i
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
@@ -174,19 +193,22 @@ D_T=TRANSPOSE(D)
 ! Build D_Hat matrix. (D^ = M^(-1) * D^T * M
 M(:,:)=0.
 Minv(:,:)=0.
-DO iMass=0,N_in
-  M(iMass,iMass)=wGP(iMass)
-  Minv(iMass,iMass)=1./wGP(iMass)
+DO i=0,N_in
+  M(i,i)=wGP(i)
+  Minv(i,i)=1./wGP(i)
 END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
 #if PP_DiscType==2
+!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! DvolSurf^T = -DvolSurf
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
+ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
-Dvolsurf=2.*D
-Dvolsurf(0,0)=2*D(0,0)+1./wGP(0)
-Dvolsurf(N_in,N_in)=2*D(N_in,N_in)-1./wGP(N_in)
+Dvolsurf=2.0*D
+Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
+Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
+Dvolsurf_T= TRANSPOSE(Dvolsurf)
 #endif /*PP_DiscType==2*/
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
@@ -231,12 +253,19 @@ SUBROUTINE DGTimeDerivative_weakForm(tIn)
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Vector              ,ONLY: VNullify,V2D_M_V1D
-USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux
+USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave
 USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+#if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt
+#elif PP_DiscType==2
+USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#if PARABOLIC
+USE MOD_VolInt              ,ONLY: VolInt_visc
+#endif /*PARABOLIC*/
+#endif /*PP_DiscType==2*/
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -250,7 +279,6 @@ USE MOD_Lifting             ,ONLY: Lifting
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
-USE MOD_Mesh_Vars           ,ONLY: nSides
 USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide 
 #endif /*MPI*/
 IMPLICIT NONE
@@ -264,7 +292,6 @@ REAL,INTENT(IN)                 :: tIn                    !< Current time
 
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)
-
 
 #if MPI
 ! Solution is always communicated on the U_Slave array
@@ -283,6 +310,9 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
 !!write(*,*)'u in dgtimederivative', U
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
+#if PP_DiscType==2
+CALL VolInt_adv_SplitForm(Ut)
+#endif
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
@@ -301,7 +331,13 @@ CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
+#if PP_DiscType==1
 CALL VolInt(Ut)
+#elif PP_DiscType==2
+#  if PARABOLIC
+CALL VolInt_visc(Ut)
+#  endif /*PARABOLIC*/
+#endif
 
 
 #if PARABOLIC && MPI
@@ -312,28 +348,34 @@ CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR
 
 #if MPI
 ! start off with the receive command
-CALL StartReceiveMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+CALL StartReceiveMPIData(Flux_slave, DataSizeSide,firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
 ! since mortar solutions are already there, we can directly fill the fluxes for all MPI sides 
-CALL FillFlux(Flux,doMPISides=.TRUE.)
+CALL FillFlux(Flux_master,Flux_slave,doMPISides=.TRUE.)
+
 ! start the sending command
-CALL StartSendMPIData(Flux, DataSizeSide, 1,nSides,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
 #endif /* MPI*/
 
+
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
-CALL GetBoundaryFlux(tIn,Flux)
-CALL FillFlux(Flux,doMPISides=.FALSE.)
-! here, the weak flag is set, since small sides can be slave and must be added to big sides, which are always master!
-CALL Flux_Mortar(Flux,doMPISides=.FALSE.,weak=.TRUE.)
+CALL GetBoundaryFlux(tIn,Flux_master)
+CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+
+! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
+CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
+
 ! add inner and BC side surface contibutions to time derivative 
-CALL SurfInt(Flux,Ut,doMPISides=.FALSE.)
+CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 
 #if MPI
 ! Complete send / receive for  Flux array
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
+
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
-CALL Flux_Mortar(Flux,doMPISides=.TRUE.,weak=.TRUE.)
+CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
+
 ! update time derivative with contribution of MPI sides 
-CALL SurfInt(Flux,Ut,doMPIsides=.TRUE.)
+CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
 
 
@@ -367,13 +409,18 @@ SDEALLOCATE(D)
 SDEALLOCATE(D_T)
 SDEALLOCATE(D_Hat)
 SDEALLOCATE(D_Hat_T)
+#if PP_DiscType==2
+SDEALLOCATE(Dvolsurf)
+SDEALLOCATE(Dvolsurf_T)
+#endif /*PP_DiscType==2*/
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(Ut)
 SDEALLOCATE(U)
 SDEALLOCATE(U_master)
 SDEALLOCATE(U_slave)
-SDEALLOCATE(Flux)
+SDEALLOCATE(Flux_master)
+SDEALLOCATE(Flux_slave)
 DGInitIsDone = .FALSE.
 END SUBROUTINE FinalizeDG
 

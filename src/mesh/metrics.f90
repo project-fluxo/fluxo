@@ -77,7 +77,7 @@ SUBROUTINE CalcMetrics()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Mesh_Vars,     ONLY:NGeo,NgeoRef,nElems,offsetElem,crossProductMetrics
+USE MOD_Mesh_Vars,     ONLY:NGeo,NgeoRef,nElems,offsetElem,crossProductMetrics,NodeTypeMesh
 USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
 USE MOD_Mesh_Vars,     ONLY:Vdm_GLN_N,dXGL_N
@@ -130,7 +130,7 @@ Metrics_hTilde=0.
 ! Always use interpolation for the rest!
 
 ! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
-CALL GetVandermonde(    Ngeo   , NodeTypeVISU, Ngeo    , NodeTypeGL, Vdm_EQNgeo_GLNgeo , modal=.FALSE.)
+CALL GetVandermonde(    Ngeo   , NodeTypeMesh, Ngeo    , NodeTypeGL, Vdm_EQNgeo_GLNgeo , modal=.FALSE.)
 
 ! 1.b) dXGL_Ngeo:
 CALL GetDerivativeMatrix(Ngeo  , NodeTypeGL  , DGL_Ngeo)

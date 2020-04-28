@@ -43,6 +43,7 @@ INTERFACE FinalizeEquation
 END INTERFACE
 
 PUBLIC:: InitEquation
+PUBLIC:: SetRiemannSolver
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
@@ -87,23 +88,28 @@ CALL prms%CreateRealOption(   "kperp" , " If anisotropic heat terms enabled: dif
 CALL prms%CreateRealOption(   "GLM_scale", "MHD with GLM option: save ch from timestep <1","0.5")
 CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of GLM variable 1/cr=5.555 (cr=0.18),"//&
                                          "set zero for no damping.","0.0")
-CALL prms%CreateLogicalOption("DivBsource" , "Set true to add divB-error dependent source terms.",&
-                                                 ".FALSE.")
 #endif /*PP_GLM*/
 CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization" &
                                 ,multiple=.TRUE.)
 CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
+                                           "0: Central flux, "//&
                                            "1: Lax-Friedrichs, "//&
                                            "2: HLLC, "//&
                                            "3: Roe, "//&
                                            "4: HLL, "//&
-                                           "5: HLLD (only with mu_0=1), " )
+                                           "5: HLLD (only with mu_0=1), "//&
+                                           "10: LLF entropy stable flux, "//&
+                                           "11: entropy conservative flux,"//&
+                                           "12: FloGor entropy conservative flux,"//&
+                                           "13: FloGor EC+LLF entropy stable flux")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
-                                              "0: Standard DG Flux"//&
-                                              "1: standard DG Flux with metric dealiasing" &
+                                              "0:  Standard DG Flux"//&
+                                              "1:  standard DG Flux with metric dealiasing" //&
+                                              "10: entropy conservative flux with metric dealiasing" //&
+                                              "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
@@ -119,8 +125,6 @@ USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTAR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars 
-USE MOD_Riemann
-USE MOD_Flux_Average
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -129,7 +133,7 @@ USE MOD_Flux_Average
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i,iSide
-INTEGER :: MaxBCState,locType,locState,nRefState
+INTEGER :: MaxBCState,locType,locState
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -159,6 +163,7 @@ KappaM2  =Kappa-2.
 sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
+R        =GETREAL('R','287.058')
 !permeability
 mu_0    =GETREAL('mu_0','1.')
 smu_0  = 1./(mu_0)
@@ -171,7 +176,6 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
-R        =GETREAL('R','287.058')
 KappasPr =Kappa/Pr
 !heat diffusion coefficients 
 #ifdef PP_ANISO_HEAT
@@ -184,7 +188,6 @@ KappasPr =Kappa/Pr
 #ifdef PP_GLM
 GLM_scale = GETREAL('GLM_scale','0.5')
 GLM_scr    = GETREAL('GLM_scr','0.0') !damping 1/cr, cr=0.18, 1/cr = 5.555
-DivBSource = GETLOGICAL('DivBSource','.FALSE.')
 !compute timestep for ch=1, then compute ch from timestep:
 !dt ~ 1/ch -> dt/dtch1=1/ch -> ch=dtch1/dt
 GLM_dtch1=0. !must be initialized to correct value in first call of calctimestep
@@ -229,8 +232,59 @@ IF(nRefState .GT. 0)THEN
   END DO
 END IF
 
+IF(MPIroot) CALL CheckFluxes()
+
 WhichRiemannSolver = GETINT('Riemann','1')
-SELECT CASE(WhichRiemannSolver)
+CALL SetRiemannSolver(whichRiemannSolver)
+
+#if (PP_DiscType==2)
+#if PP_VolFlux==-1
+WhichVolumeFlux = GETINT('VolumeFlux','0')
+#else
+WhichVolumeFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
+#endif
+CALL SetVolumeFlux(whichVolumeFlux)
+#endif /*PP_DiscType==2*/
+
+#if NONCONS==1
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: POWELL    '
+#elif NONCONS==2                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: BRACKBILL '
+#elif NONCONS==3                                                     
+  SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: JANHUNEN  '
+#endif /*NONCONS*/
+
+
+EquationInitIsDone=.TRUE.
+SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
+SWRITE(UNIT_StdOut,'(132("-"))')
+END SUBROUTINE InitEquation
+
+
+!==================================================================================================================================
+!> Set the pointer of the riemann solver 
+!==================================================================================================================================
+SUBROUTINE SetRiemannSolver(which)
+! MODULES
+USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverage
+USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0
+USE MOD_Riemann
+USE MOD_Flux_Average
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN) :: which
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+SELECT CASE(Which)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: average standard DG flux'
+  SolveRiemannProblem => StandardDGFlux
 CASE(1)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Lax-Friedrichs'
   SolveRiemannProblem => RiemannSolverByRusanov
@@ -249,33 +303,68 @@ CASE(5)
    CALL abort(__STAMP__,&
   'HLLD solver only for mu_0=1 implemented!')
   SolveRiemannProblem => RiemannSolverByHLLD  
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy Stable flux'
+#ifndef PP_GLM
+  CALL abort(__STAMP__,&
+   'Entropy Stable flux can currently only be run with GLM!!!')
+#endif
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
+  SolveRiemannProblem => EntropyStableByLLF  
+CASE(11)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux  
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor  
+CASE(13)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor  
+  SolveRiemannProblem => EntropyStableByLLF 
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
 END SELECT
+END SUBROUTINE SetRiemannSolver
 
 #if (PP_DiscType==2)
-WhichVolumeFlux = GETINT('VolumeFlux','0')
-SELECT CASE(WhichVolumeFlux)
+!==================================================================================================================================
+!> Set the pointer of the volume flux 
+!==================================================================================================================================
+SUBROUTINE SetVolumeFlux(which)
+! MODULES
+USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec
+USE MOD_Flux_Average
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN) :: which
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+SELECT CASE(Which)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with Metrics Dealiasing'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: KEPEC with Metrics Dealiasing'
+  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
+  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+END SUBROUTINE SetVolumeFlux
 #endif /*PP_DiscType==2*/
-
-IF(MPIroot) CALL CheckFluxes()
-
-EquationInitIsDone=.TRUE.
-SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
-END SUBROUTINE InitEquation
-
 
 !==================================================================================================================================
 !> Fill initial solution with IniExactFunc
@@ -318,7 +407,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState
+USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState,nRefState
 USE MOD_Equation_Vars,ONLY:smu_0,mu_0
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:IniDisturbance
@@ -366,8 +455,13 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(5)=6.0
   Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
-CASE(3) ! alfven wave 
-  Omega=PP_Pi*IniFrequency
+CASE(3,301) ! alfven wave , domain [-1,1]^3
+  IF(ExactFunction.EQ.301)THEN
+    Prim(5)=RefStatePrim(IniRefState,5)
+  ELSE
+    Prim(5)=1.
+  END IF
+  Omega=2.*PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
   r=2.
   ! e: epsilon = 0.2
@@ -382,7 +476,7 @@ CASE(3) ! alfven wave
   Resu(2) = -e*ny*COS(phi_alv)
   Resu(3) =  e*nx*COS(phi_alv)
   Resu(4) =  e*SIN(phi_alv)
-  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(5) = Prim(5)*sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !rho=1, CASE(3): p=1, CASE(301):p from RefState
   Resu(6) = nx -Resu(2)*sqr
   Resu(7) = ny -Resu(3)*sqr
   Resu(8) =    -Resu(4)*sqr
@@ -405,6 +499,26 @@ CASE(3) ! alfven wave
   Resu_tt(6) = -Resu_tt(2)*sqr
   Resu_tt(7) = -Resu_tt(3)*sqr
   Resu_tt(8) = -Resu_tt(4)*sqr
+CASE(3001) ! alfven wave , domain [-1,1]^3, rotated
+  Omega=2.*PP_Pi*IniFrequency
+  ! r: lenght-variable = lenght of computational domain
+  r=2.
+  ! e: epsilon = 0.2
+  e=0.2
+  nx  = 1./SQRT(r**2+1.)
+  ny  = r/SQRT(r**2+1.)
+  sqr = 1. !2*SQRT(PP_Pi)
+  Va  = omega/(ny*sqr)
+  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(3)-0.5*r)) - Va*tEval
+  Resu=0.
+  Resu(1) = 1.
+  Resu(2) = -e*ny*COS(phi_alv)
+  Resu(3) =  e*SIN(phi_alv)
+  Resu(4) =  e*nx*COS(phi_alv)
+  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
+  Resu(6) = nx -Resu(2)*sqr
+  Resu(7) =    -Resu(3)*sqr
+  Resu(8) = ny -Resu(4)*sqr
 
 CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate 
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
@@ -524,6 +638,33 @@ CASE(6) ! case 5 rotated
   Resu_tt(6)        = Resu_tt(1)
   !Resu_tt(7)        = 0.
   Resu_tt(8)        =-Resu_tt(1)
+CASE(7) ! constant density / pressure / velocity, periodic magnetic field
+  Omega=PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2)=-1.
+  Prim(3)=2.
+  Prim(4)=3.1
+  Prim(5)=1.
+  Prim(6) = -2.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(7) =  3.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(8) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
+
+  CALL PrimToCons(Prim,Resu)
+CASE(8) ! 2D constant density / pressure / magnetic field , periodic velocity
+  Omega=PP_Pi*IniFrequency  
+  Prim=0.
+  Prim(1)=1.
+  Prim(2) = -2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(3) =  2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(4) = -0.1
+  Prim(5)=1.
+  Prim(6)=-1.
+  Prim(7)=2.
+  Prim(8)=3.1
+
+  CALL PrimToCons(Prim,Resu)
+  
 CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRODUCT(sin(omega*x(:)))
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
@@ -621,6 +762,52 @@ CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
   !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 
+CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1,1], with pressure gradient
+        ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniDisturbance=1.0E-01
+        ! for symmetry BC in y use domain [0,6]x[0,1]x[-1,1] and iniWaveNumber(2)>0
+  Prim=0.
+  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(8)=1.0
+  
+  Prim(1)=1.0
+  Prim(2)=0.1
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=(0.8*REAL(i)+0.9*REAL(j))/(1.+0.8*REAL(IniWaveNumber(1))+0.9*REAL(IniWaveNumber(3)))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
+    END DO!i
+  END DO!j
+  IF(IniWaveNumber(2).GT.0)THEN 
+    Prim(3)=IniDisturbance*Prim(3)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
+  ELSE
+    Prim(3)=IniDisturbance*Prim(3)
+  END IF
+  Prim(5)=0.2  +0.5*(1.0-Prim(6)**2)  !beta~0.2
+  CALL PrimToCons(Prim,Resu)
+
+CASE(74) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1], without pressure gradient
+        ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniDisturbance=1.0E-01
+        ! for symmetry BC in y use domain [0,6]x[0,1]x[-1,1] and iniWaveNumber(2)>0
+  Prim=0.
+  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(8)=SQRT(1.0-Prim(6)*Prim(6))
+  
+  Prim(1)=1.0
+  Prim(2)=0.1
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=(0.8*REAL(i)+0.9*REAL(j))/(1.+0.8*REAL(IniWaveNumber(1))+0.9*REAL(IniWaveNumber(3)))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
+    END DO!i
+  END DO!j
+  IF(IniWaveNumber(2).GT.0)THEN 
+    Prim(3)=IniDisturbance*Prim(3)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
+  ELSE
+    Prim(3)=IniDisturbance*Prim(3)
+  END IF
+  Prim(5)=0.2  !beta~0.2
+  CALL PrimToCons(Prim,Resu)
+
 CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
         ! from L.Chacon "A non-staggered, conservative, ∇ · B = 0, finite-volume scheme for 3D implicit extended MHD..",2004
         ! assuming rho_0=p_0=1
@@ -630,6 +817,23 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
   Prim(5)=1.
   Prim(7)=1.-2./(1+EXP(2*5*(x(1)-0.5))) !tanh((x(1)-0.5)/lambda) lambda=0.2
   Prim(8)=SQRT(1-Prim(7)*Prim(7))
+  CALL PrimToCons(Prim,Resu)
+
+CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
+        ! eta=0, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=0.5 , constant field Bz=1
+  Prim=0.
+  Prim(8)=1.0
+  Prim(2)=IniAmplitude*TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  
+  Prim(1)=1.0
+  DO j=0,NINT(IniWaveNumber(3))
+    DO i=0,NINT(IniWaveNumber(1))
+      a=REAL(0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
+      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
+    END DO
+  END DO
+  Prim(3)=IniDisturbance*Prim(3)
+  Prim(5)=0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(80) ! 2D island coalesence domain [-1,1]^2
@@ -845,6 +1049,15 @@ CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0),
   Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
   
   CALL PrimToCons(Prim,Resu)
+CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplitude, radius=IniHalfwidth 
+  IF(nRefState.LT.2) CALL abort(__STAMP__, &
+         ' 2 states needed for case 201')
+  r=SQRT(SUM((x-IniCenter(:))**2))
+  a=EXP(5.*(r-IniHalfwidth)/IniAmplitude)
+  a=a/(a+1.)
+  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  CALL PrimToCons(Prim,Resu)
+
 CASE(311) ! Orzsag-Tang vortex
   prim    = 0.
   prim(1) = 1.
@@ -854,6 +1067,53 @@ CASE(311) ! Orzsag-Tang vortex
   prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
   prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
+CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but rescaled so the runtime is shorter)
+  prim    = 0.
+  prim(1) =  1.
+  prim(2) = -(1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(2))
+  prim(3) =  (1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(1))
+  prim(4) =  0.2*SIN(2.*PP_Pi*x(3))
+  prim(5) =  1./kappa
+  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  CALL PrimToCons(Prim,Resu)
+CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov 
+          ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
+  prim    = 0.
+  prim(1) =  25./(36.*PP_Pi)
+  prim(2) = -SIN(2.*PP_Pi*x(3))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(4) =  SIN(2.*PP_Pi*x(2))
+  prim(5) =  5./(12*PP_Pi)
+  prim(6) = -SIN(2.*PP_Pi*x(3))/SQRT(4.*PP_Pi)
+  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
+
+!CASE(666) ! random initialization for velocity and B field, only works with GNU
+!  prim =  0.
+!  !CALL RANDOM_NUMBER(prim(2:4))
+!  prim(1) = RAND(NINT(100000000*a))
+!  CALL CPU_TIME(a)
+!  prim(2) = RAND(NINT(10000000*a))
+!  CALL CPU_TIME(a)
+!  prim(3) = RAND(NINT(100000*a))
+!  CALL CPU_TIME(a)
+!  prim(4) = RAND(NINT(100000*a))
+!  prim(5) = RAND(NINT(1000000*a))
+!  CALL CPU_TIME(a)
+!  prim(6) = RAND(NINT(100000000*a))
+!  CALL CPU_TIME(a)
+!  prim(7) = RAND(NINT(1000000*a))
+!  CALL CPU_TIME(a)
+!  prim(8) = RAND(NINT(10000*a))
+!  !CALL RANDOM_NUMBER(prim(6:8))
+!  prim(1)  = 1.+0.8*2.*(prim(1)-0.5)
+!  prim(5)  = 1.+0.9*2.*(prim(5)-0.5)
+!  prim(2:4)=(/0.1,0.05,0.04/)+(prim(2:4)-0.5)*IniAmplitude
+!  prim(6:8)=(prim(6:8)-0.5)*IniHalfwidth
+!  CALL PrimToCons(Prim,Resu)
+
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
             ! is found in the appendix of Bohm et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
@@ -936,11 +1196,6 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
-#ifdef PP_GLM
-USE MOD_Equation_Vars, ONLY:GLM_scr,GLM_ch,smu_0
-USE MOD_Equation_Vars, ONLY:DivBSource
-USE MOD_DG_Vars,       ONLY:U
-#endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -956,9 +1211,6 @@ INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
 REAL                            :: rho,rho_x,rho_xx
-#ifdef PP_GLM
-REAL                            :: v(3),divB,sGLM_ch
-#endif /*PP_GLM*/
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
@@ -1055,28 +1307,6 @@ END SELECT ! ExactFunction
 !#endif /*PP_GLM*/
 !END SELECT ! ExactFunction
 !
-!#ifdef PP_GLM
-!IF(DivBSource)THEN
-!  sGLM_ch=1./GLM_ch
-!  DO iElem=1,nElems
-!    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N 
-!      v=U(2:4,i,j,k,iElem)/U(1,i,j,k,iElem)
-!      ! Ut(9)/ch = -divB
-!      divB=-(sGLM_ch*Ut(9,i,j,k,iElem))
-!      ! to (rhov)_t : -1/mu_0*B*divB  (from JxB = -1/mu_0* [ div(1/2|B|^2-BB) + B div(B) ] )
-!      ! to B_t      : -v*divB
-!      ! to energy v.(rhov)_t +1/mu_0(B.B_t) = -1/mu_0* divB ((v*B) + (B*v))
-!      ! or, regarding entropy conservation, u*(source_rhou) != source_totE
-!      ! so that  energy source is  -1/mu_0* divB (v*B)  
-!      Ut_src(2:4) = -smu_0*divB*U(6:8,i,j,k,iElem)  !=-1/mu_0 *divB * B
-!      Ut_src(5)   =  SUM(Ut_src(2:4)*v(:))          !=-1/mu_0 *divB * (B.v) 
-!      Ut_src(6:8) = -divB*v(:)                      !=-divB * v
-!      Ut(2:8,i,j,k,iElem) = Ut(2:8,i,j,k,iElem) +Ut_src(2:8)
-!    END DO; END DO; END DO ! i,j,k
-!  END DO ! iElem
-!END IF !divBsource
-!Ut(9,:,:,:,:)=Ut(9,:,:,:,:)-GLM_scr*U(9,:,:,:,:)
-!#endif /*PP_GLM*/
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================
@@ -1107,13 +1337,13 @@ SUBROUTINE CheckFluxes()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons 
-USE MOD_Flux,         ONLY: EvalAdvectionFlux1D
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
+USE MOD_Flux,         ONLY: EvalAdvFluxTilde3D,EvalAdvectionFlux1D
 USE MOD_Flux_Average
 USE MOD_Riemann
 #if (PP_DiscType==2)
-USE MOD_Flux_Average , ONLY: standardDGFluxVec
 USE MOD_DG_Vars,       ONLY: DGinitIsDone,nTotal_vol,U
-USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde
+USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
 #endif /*PP_DiscType==2*/
 #ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY:GLM_ch
@@ -1157,7 +1387,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,6
+DO icase=0,7
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1175,14 +1405,16 @@ DO icase=0,6
   CASE(4)
     fluxProc => RiemannSolverByHLLD
     fluxName = "RiemannSolverByHLLD"
-!  CASE(5)
-!    fluxProc => EntropyAndKinEnergyConservingFlux
-!    fluxName = "EntropyAndKinEnergyConservingFlux"
-!  CASE(6)
-!    fluxProc => EntropyStableFlux
-!    fluxName = "EntropyStableFlux"
-  CASE DEFAULT
-    CYCLE
+  CASE(5)
+    fluxProc => EntropyAndKinEnergyConservingFlux
+    fluxName = "EntropyAndKinEnergyConservingFlux"
+  CASE(6)
+    VolumeFluxAverage => EntropyAndKinEnergyConservingFlux !needed by EntropyStableByLLF
+    fluxProc => EntropyStableByLLF
+    fluxName = "EntropyStableByLLF"
+  CASE(7)
+    fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
+    fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)
@@ -1203,18 +1435,15 @@ DO icase=0,6
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*) "consistency check for solver "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" failed",icase,check
     failed=.TRUE.
+  ELSE
+    WRITE(*,*) "     consistency check for solver "//TRIM(fluxName)//" passed",icase,check
   END IF
 END DO !icase
 #if PP_DiscType==2
-#ifdef CARTESIANFLUX
-metricL=(/1.5320,0.,0./)
-metricR=(/1.5320,0.,0./)
-#else
 metricL=(/1.5320,-0.05,4.895/)
 metricR=(/0.8715,0.594,2.531/)
-#endif
 
 !use EvalEulerFluxTilde3D at point (0,0,0) as reference Flux
 IF(DGinitIsDone)THEN
@@ -1231,13 +1460,23 @@ mtmp(:)=Metrics_ftilde(:,0,0,0,1) !save metric
 
 U(:,0,0,0,1)=UL
 Metrics_ftilde(:,0,0,0,1)=metricL
-CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
+                        Metrics_ftilde(:,:,:,:,1), &
+                        Metrics_gtilde(:,:,:,:,1), &
+                        Metrics_htilde(:,:,:,:,1), &
+                        ftildeElem,gtildeElem,htildeElem)
+CALL EvalUaux(U(:,:,:,:,1),UauxElem)
 ULaux=UauxElem(:,0,0,0)
 FrefL = fTildeElem(:,0,0,0)
 
 U(:,0,0,0,1)=UR
 Metrics_ftilde(:,0,0,0,1)=metricR
-CALL EvalEulerFluxTilde3D(1,ftildeElem,gtildeElem,htildeElem,UauxElem)
+CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
+                        Metrics_ftilde(:,:,:,:,1), &
+                        Metrics_gtilde(:,:,:,:,1), &
+                        Metrics_htilde(:,:,:,:,1), &
+                        ftildeElem,gtildeElem,htildeElem)
+CALL EvalUaux(U(:,:,:,:,1),UauxElem)
 URaux=UauxElem(:,0,0,0)
 FrefR = fTildeElem(:,0,0,0)
 
@@ -1248,7 +1487,7 @@ ELSE
   DEALLOCATE(U)
 END IF
 failed_vol=.FALSE.
-DO icase=0,2
+DO icase=0,3
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1257,18 +1496,15 @@ DO icase=0,2
   CASE(1)
     fluxProc => StandardDGFluxDealiasedMetricVec
     fluxName = "StandardDGFluxDealiasedMetricVec"
-!  CASE(2)
-!    fluxProc => EntropyandKinEnergyConservingFluxVec
-!    fluxName = "EntropyandKinEnergyConservingFluxVec"
-  CASE DEFAULT
-    CYCLE
+  CASE(2)
+    fluxProc => EntropyandKinEnergyConservingFluxVec
+    fluxName = "EntropyandKinEnergyConservingFluxVec"
+  CASE(3)
+    fluxProc => EntropyandKinEnergyConservingFluxVec_FloGor
+    fluxName = "FloGor EntropyandKinEnergyConservingFluxVec"
   END SELECT
   !CONSISTENCY
-  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL  & 
-#ifndef CARTESIANFLUX
-                                    ,metricL  &
-#endif          
-                                    ,Fcheck)
+  CALL fluxProc(   UL,UL,ULaux,ULaux,metricL ,metricL ,Fcheck)
   check=1.0e-12
   DO i=1,PP_nVar
     absdiff=ABS(FrefL(i)-Fcheck(i))
@@ -1277,11 +1513,7 @@ DO icase=0,2
       check=max(check,absdiff)
     END IF
   END DO
-  CALL fluxProc(   UR,UR,URaux,URaux,metricR  & 
-#ifndef CARTESIANFLUX
-                                    ,metricR  &
-#endif          
-                                    ,Fcheck)
+  CALL fluxProc(   UR,UR,URaux,URaux,metricR ,metricR ,Fcheck)
   DO i=1,PP_nVar
     absdiff=ABS(FrefR(i)-Fcheck(i))
     IF(absdiff.GT.1.0e-12)THEN
@@ -1290,20 +1522,14 @@ DO icase=0,2
     END IF
   END DO
   IF(check.GT.1.0e-12)THEN
-    WRITE(*,*)"consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" failed",icase,check
     failed_vol=.TRUE.
+  ELSE
+    WRITE(*,*)"     consistency check for volume flux "//TRIM(fluxName)//" passed",icase,check
   END IF
   !SYMMETRY
-  CALL fluxProc(   UL,UR,ULaux,URaux,metricL  & 
-#ifndef CARTESIANFLUX
-                                    ,metricR  &
-#endif
-                                    ,Frefsym)
-  CALL fluxProc(   UR,UL,URaux,ULaux,metricR  & 
-#ifndef CARTESIANFLUX
-                                    ,metricL  &
-#endif
-                                    ,Fcheck)
+  CALL fluxProc(   UL,UR,ULaux,URaux,metricL ,metricR ,Frefsym)
+  CALL fluxProc(   UR,UL,URaux,ULaux,metricR ,metricL ,Fcheck)
   check=1.0e-12
   DO i=1,PP_nVar
     absdiff=ABS(Frefsym(i)-Fcheck(i))

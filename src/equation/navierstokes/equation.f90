@@ -71,6 +71,7 @@ CALL prms%CreateRealArrayOption('MachShock'   , "for exact function, Mach shock.
 CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock density.")
 CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
 CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
+CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
 CALL prms%CreateRealOption(     'IniFrequency', "for exactfunc, frequency.","1.")
 CALL prms%CreateRealOption(     'IniAmplitude', "for exactfunc, Amplitude.","0.1")
 CALL prms%CreateRealOption(     'IniHalfwidth', "for exactfunc, Halfwidth.","0.2")
@@ -93,42 +94,47 @@ CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent."
 #endif /*PP_VISC==2*/
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
-                                           " 1: Lax-Friedrichs"//&
-                                           " 2: HLLC"//&
-                                           " 3: Roe"//&
-                                           " 4: Entropy Stable"//&
-                                           " 5: Entropy Conserving"//&
-                                           " 6: Kennedy & Gruber"//&
-                                           " 7: Ducros"//&
-                                           " 8: Morinishi"//&
-                                           " 9: EC-KEP"//&
-                                           "10: approx. EC-KEP"//&
-                                           "11: EC-KEP + press. aver."//&
-                                           "12: Kennedy & Gruber (Pirozolli version)"//&
-                                           "13: Entropy conservative Ismali and Roe with LLF diss"//&
-                                           "14: Kennedy Gruber with LLF diss"//&
-                                           "15: Decros Flux with LLF diss"//&
-                                           "16: EC+KEP with LLF diss"//&
-                                           "17: EC+KEP - pressure with LLF diss"//&
-                                           "18: Kennedy Gruber (Pirozilli version)  with LLF diss"//&
-                                           "19: Morinishi + LLF diss"//&
-                                           "20: Gassner, Winters, Walch flux"//&
-                                           "21: Gassner, Winters, Walch flux + LLF diss" &
+                                           "  0: Central"//&
+                                           "  1: Local Lax-Friedrichs"//&
+                                           " 22: HLL"//&
+                                           "  2: HLLC"//&
+                                           "  3: Roe"//&
+                                           "  4: Entropy Stable: EC Ismail and Roe + full wave diss."//&
+                                           " 44: Entropy Stable: ECKEP + full wave diss."//&
+                                           "  5: EC Ismail and Roe"//&
+                                           "  6: Kennedy & Gruber"//&
+                                           "  7: Ducros"//&
+                                           "  8: Morinishi"//&
+                                           "  9: EC-KEP"//&
+                                           " 10: approx. EC-KEP"//&
+                                           " 11: EC-KEP + press. aver."//&
+                                           " 12: Kennedy & Gruber (Pirozolli version)"//&
+                                           " 13: EC Ismail and Roe with LLF diss"//&
+                                           " 14: Kennedy Gruber with LLF diss"//&
+                                           " 15: Decros Flux with LLF diss"//&
+                                           " 16: EC+KEP with LLF diss"//&
+                                           " 17: EC+KEP - pressure with LLF diss"//&
+                                           " 18: Kennedy Gruber (Pirozilli version)  with LLF diss"//&
+                                           " 19: Morinishi + LLF diss"//&
+                                           " 20: Gassner, Winters, Walch flux"//&
+                                           " 21: Gassner, Winters, Walch flux + LLF diss" &
                                           ,"1")
+#if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
                                               "DG volume integral "//&
-                                              " 0: Standard DG"//&
-                                              " 1: Standard DG with metirc dealiasing"//&
-                                              " 2: Kennedy-Gruber"//&
-                                              " 3: Ducros"//&
-                                              " 4: Morinishi"//&
-                                              " 5: EC-KEP"//&
-                                              " 6: approx. EC-KEP"//&
-                                              " 7: approx. EC-KEP + press. aver."//&
-                                              " 8: Kenndy & Gruber (pirozolli version)"//&
-                                              " 9: Gassner Winter Walch"//&
-                                              "10: Two-Point EC" &
+                                              "  0: Standard DG"//&
+                                              "  1: Standard DG with metirc dealiasing"//&
+                                              "  2: Kennedy-Gruber"//&
+                                              "  3: Ducros"//&
+                                              "  4: Morinishi"//&
+                                              "  5: EC-KEP"//&
+                                              "  6: approx. EC-KEP"//&
+                                              "  7: approx. EC-KEP + press. aver."//&
+                                              "  8: Kenndy & Gruber (pirozolli version)"//&
+                                              "  9: Gassner Winter Walch"//&
+                                              " 10: EC Ismail and Roe" &
                                              ,"0")
+#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -174,7 +180,7 @@ IniRefState  = 0
 SELECT CASE (IniExactFunc)
 CASE(1,11,12)
   IniRefState  =GETINT('IniRefState')
-CASE(2,21,4,8) ! synthetic test cases
+CASE(2,21,8) ! synthetic test cases
   AdvVel = GETREALARRAY('AdvVel',3)
 CASE(6) ! shock
   MachShock    = GETREAL('MachShock','1.5')
@@ -183,6 +189,7 @@ END SELECT ! IniExactFunc
 IniCenter    = GETREALARRAY('IniCenter',3,'0.,0.,0.')
 IniAxis      = GETREALARRAY('IniAxis',3,'0.,0.,1.')
 IniAxis      = IniAxis/SQRT(SUM(IniAxis*IniAxis)) !Normalize
+IniWaveNumber= GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 IniFrequency = GETREAL('IniFrequency','1.0')
 IniAmplitude = GETREAL('IniAmplitude','0.1')
 IniHalfwidth = GETREAL('IniHalfwidth','0.2')
@@ -265,20 +272,31 @@ END IF
 
 WhichRiemannSolver = GETINT('Riemann','1')
 SELECT CASE(WhichRiemannSolver)
+  CASE(0)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: average standard DG flux'
+    SolveRiemannProblem     => RiemannSolverCentral
   CASE(1)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Lax-Friedrichs'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Local Lax-Friedrichs'
     SolveRiemannProblem     => RiemannSolverByRusanov
   CASE(2)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC'
     SolveRiemannProblem     => RiemannSolverByHLLC
+  CASE(22)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
+    SolveRiemannProblem     => RiemannSolverByHLL
   CASE(3)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
     SolveRiemannProblem     => RiemannSolverByRoe
   CASE(4)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy Stable'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, EC Ismail and Roe + full wave dissipation'
+    VolumeFluxAverage    => TwoPointEntropyConservingFlux
+    SolveRiemannProblem     => RiemannSolver_EntropyStable
+  CASE(44)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, ECKEP + full wave dissipation'
+    VolumeFluxAverage    => EntropyAndEnergyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
   CASE(5)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy Conserving'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: EC Ismail and Roe'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage
   CASE(6)
@@ -310,7 +328,7 @@ SELECT CASE(WhichRiemannSolver)
     VolumeFluxAverage    => KennedyAndGruberFlux2
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage
   CASE(13)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy conservative Ismali and Roe with LLF diss'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy conservative Ismail and Roe with LLF diss'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EC_LLF
   CASE(14)
@@ -350,7 +368,13 @@ SELECT CASE(WhichRiemannSolver)
          "Riemann solver not implemented")
 END SELECT
 
+#if (PP_DiscType==2)
+#if PP_VolFlux==-1
 WhichVolumeFlux = GETINT('VolumeFlux','0')
+#else
+WhichVolumeFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
+#endif
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
@@ -383,12 +407,14 @@ CASE(9)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Gassner Winter Walch'
   VolumeFluxAverageVec => GassnerWintersWalchFluxVec
 CASE(10)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC Ismail and Roe'
   VolumeFluxAverageVec => TwoPointEntropyConservingFluxVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+#endif /*PP_DiscType==2*/
+
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -436,7 +462,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 USE MOD_Preproc
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
-USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis
+USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis,IniWaveNumber
 USE MOD_Equation_Vars,ONLY:PrimToCons
 USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
@@ -452,7 +478,6 @@ REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< state in conservative var
 ! LOCAL VARIABLES 
 REAL                            :: tEval
 REAL                            :: Resu_t(5),Resu_tt(5)          ! state in conservative variables
-REAL                            :: Frequency,Amplitude
 REAL                            :: Omega
 REAL                            :: Vel(3),Cent(3),a
 REAL                            :: Prim(5)
@@ -483,27 +508,24 @@ CASE(1) ! constant
   !Resu(1)  = Prim(1)
   !Resu(2:4)= Resu(1)*Prim(2:4)
   !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
-CASE(2) ! sinus
-  Frequency=0.01
-  Amplitude=0.3
-  Omega=PP_Pi*Frequency
+CASE(2) ! sinus in density, wavenumber 1 <-> [-1,1]
   ! base flow
   prim(1)   = 1.
   prim(2:4) = AdvVel
   prim(5)   = 1.
   Vel=prim(2:4)
   cent=x-Vel*tEval
-  prim(1)=prim(1)*(1.+Amplitude*sin(Omega*SUM(cent(1:3))))
+  prim(1)=prim(1)*(1.+IniAmplitude*sin(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3))))
   ! g(t)
   Resu(1)=prim(1) ! rho
   Resu(2:4)=prim(1)*prim(2:4) ! rho*vel
   Resu(5)=prim(5)*sKappaM1+0.5*prim(1)*SUM(prim(2:4)*prim(2:4)) ! rho*e 
   ! g'(t)
-  Resu_t(1)=-Amplitude*cos(Omega*SUM(cent(1:3)))*Omega*SUM(vel)
+  Resu_t(1)=-IniAmplitude*cos(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3)))*PP_Pi*SUM(IniWaveNumber(:)*vel(:))
   Resu_t(2:4)=Resu_t(1)*prim(2:4) ! rho*vel
   Resu_t(5)=0.5*Resu_t(1)*SUM(prim(2:4)*prim(2:4))
   ! g''(t)
-  Resu_tt(1)=-Amplitude*sin(Omega*SUM(cent(1:3)))*Omega*SUM(vel)*Omega*SUM(vel)
+  Resu_tt(1)=-IniAmplitude*sin(PP_Pi*SUM(IniWaveNumber(:)*cent(1:3)))*(PP_Pi*SUM(IniWaveNumber*vel))**2
   Resu_tt(2:4)=Resu_tt(1)*prim(2:4) 
   Resu_tt(5)=0.5*Resu_tt(1)*SUM(prim(2:4)*prim(2:4))
 CASE(21) ! linear in rho
@@ -524,49 +546,61 @@ CASE(21) ! linear in rho
   Resu_t(5)=0.5*Resu_t(1)*SUM(prim(2:4)*prim(2:4))
   ! g''(t)
   Resu_tt=0.
-CASE(3) !Alfen Wave without Magnetic Field
-  Omega=PP_Pi*IniFrequency
+CASE(3) !2D Alfen Wave without Magnetic Field [-1,1]^2
+  Omega=2.*PP_Pi*IniFrequency
   ! r_len: lenght-variable = lenght of computational domain
   r_len=2.
-  ! e: epsilon = 0.2
-  e=0.2
   nx  = 1./SQRT(r_len**2+1.)
   ny  = r_len/SQRT(r_len**2+1.)
-  sqr = 1.
-  Va  = 1./sqr
+  Va  = 0.1*r_len/nx ! transport v_xy=(nx*va,ny*va), once trough x dir after t=10.
   Phi_alv = Omega/ny*(nx*(x(1)-0.5*r_len) + ny*(x(2)-0.5*r_len) - Va*tEval)
   ! g(t)
   Resu(1) = 1.
-  Resu(2) = 0.*nx - e*ny*COS(Phi_alv)
-  Resu(3) = 0.*ny + e*nx*COS(Phi_alv)
-  Resu(4) = e*SIN(Phi_alv)
-  Prim(5) = 1.
+  Resu(2) = Va*nx - IniAmplitude*ny*COS(Phi_alv)
+  Resu(3) = Va*ny + IniAmplitude*nx*COS(Phi_alv)
+  Resu(4) = 0.!IniAmplitude*SIN(Phi_alv)
+  Prim(5) = 1./Kappa !c_s=1
   ! note, for rho=1...resu(2:4) = prim(2:4) !!!
   Resu(5)=prim(5)*sKappaM1+0.5*Resu(1)*SUM(Resu(2:4)*Resu(2:4))
   ! g'(t) 
   Resu_t(1) = 0.
-  Resu_t(2) = -e*ny*SIN(Phi_alv)*Omega/ny*Va
-  Resu_t(3) =  e*ny*SIN(Phi_alv)*Omega/ny*Va
-  Resu_t(4) = -e*COS(Phi_alv)*Omega/ny*Va
+  Resu_t(2) = -IniAmplitude*ny*SIN(Phi_alv)*Omega/ny*Va
+  Resu_t(3) =  IniAmplitude*ny*SIN(Phi_alv)*Omega/ny*Va
+  Resu_t(4) =0.! -IniAmplitude*COS(Phi_alv)*Omega/ny*Va
   Resu_t(5) = 0.5*Resu(1)*2.*SUM(Resu(2:4)*Resu_t(2:4))
   ! g''(t)
   Resu_tt(1) = 0.
-  Resu_tt(2) =  e*ny*COS(Phi_alv)*Omega/ny*Va*Omega/ny*Va
-  Resu_tt(3) = -e*ny*COS(Phi_alv)*Omega/ny*Va*Omega/ny*Va
-  Resu_tt(4) = -e*SIN(Phi_alv)*Omega/ny*Va*Va*Omega/ny*Va
+  Resu_tt(2) =  IniAmplitude*ny*COS(Phi_alv)*Omega/ny*Va*Omega/ny*Va
+  Resu_tt(3) = -IniAmplitude*ny*COS(Phi_alv)*Omega/ny*Va*Omega/ny*Va
+  Resu_tt(4) =0.! -IniAmplitude*SIN(Phi_alv)*Omega/ny*Va*Va*Omega/ny*Va
   Resu_tt(5) = 0.5*Resu(1)*2.*SUM(Resu(2:4)*Resu_tt(2:4) + Resu_t(2:4)*Resu_t(2:4))
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
 
   ! g(t)
-  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu(1:4)=2.+ IniAmplitude*sin(Omega*(SUM(x) - tEval))
   Resu(5)=Resu(1)*Resu(1)
   ! g'(t)
-  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
+  Resu_t(1:4)=(-omega)*IniAmplitude*cos(Omega*(SUM(x) - tEval))
   Resu_t(5)=2.*Resu(1)*Resu_t(1)
   ! g''(t)
-  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu_tt(1:4)=-omega*omega*IniAmplitude*sin(Omega*(SUM(x) - tEval))
+  Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
+CASE(41) ! exact function, in 2D, rho=2+g(x,y) , rho v_1/2 =2+g(x,y) , rhoE =(2+g(x,y) )^2 = 4+4*g(x,y) + g(x,y)^2
+         ! g(x,y) = A*sin(omega(x+y-1))
+  Omega=PP_Pi*IniFrequency
+
+  ! g(t)
+  Resu(1)=2.+ IniAmplitude*SIN(Omega*(SUM(x(1:2)) - tEval))
+  Resu(2:3)=Resu(1)
+  Resu(5)=Resu(1)*Resu(1)
+  ! g'(t)
+  Resu_t(1)=(-omega)*IniAmplitude*COS(Omega*(SUM(x(1:2)) - tEval))
+  Resu_t(2:3)=Resu_t(1)
+  Resu_t(5)=2.*Resu(1)*Resu_t(1)
+  ! g''(t)
+  Resu_tt(1)=-omega*omega*IniAmplitude*SIN(Omega*(SUM(x(1:2)) - tEval))
+  Resu_tt(2:3)=Resu_tt(1)
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
 CASE(5)
   Resu(2:4) = 1.+x(1)+2.*x(2)-7.*x(3) 
@@ -678,7 +712,7 @@ CASE(12) ! SHU VORTEX,isentropic vortex (adapted from HALO)
   ! base flow
   prim=RefStatePrim(IniRefState,:)  ! Density
   ! ini-Parameter of the Example
-  vel=prim(2:4)
+  vel=prim(2:4)*IniFrequency ! set either =1. / 0. for  time-dependent /not time-dependent
   RT=prim(PP_nVar)/prim(1) !ideal gas
   cent=(iniCenter+vel*tEval)!centerpoint time dependant
   cent=x-cent ! distance to centerpoint
@@ -744,37 +778,61 @@ REAL,INTENT(INOUT)              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< DG
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                            :: Omega,a
+REAL                            :: Omega
 INTEGER                         :: i,j,k,iElem
 REAL                            :: Ut_src(5)
-REAL                            :: sinXGP,sinXGP2,cosXGP,at
+REAL                            :: sinXGP,sinXGP2,cosXGP
 REAL                            :: tmp(6)
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! exact function
   Omega=PP_Pi*IniFrequency
-  a=AdvVel(1)*2.*PP_Pi
-  tmp(1)=-a+3*Omega
-  tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
-  tmp(3)=IniAmplitude*Omega*KappaM1
-  tmp(4)=0.5*((9.+Kappa*15.)*Omega-8.*a)
-  tmp(5)=IniAmplitude*(3.*Omega*Kappa-a)
+  tmp(1)=2.                          !-1+d
+  tmp(2)=2.+2.5*KappaM1              !(d-1 + (kappa-1)*(4-d/2))
+  tmp(3)=IniAmplitude*KappaM1        ! A*(kappa-1) 
+  tmp(4)=0.5*(9.+Kappa*15.)-4.       !(-4 + d*(4*kappa-(kappa-1) d/2))
+  tmp(5)=IniAmplitude*(3.*Kappa-1.)  ! A*(d*kappa-1)
 #if PARABOLIC
-  tmp(6)=3.*mu0*Kappa*Omega*Omega/Pr
+  tmp(6)=3.*mu0*Kappa*Omega/Pr
 #else
   tmp(6)=0.
 #endif
-  tmp=tmp*IniAmplitude
-  at=a*tIn
+  tmp=tmp*IniAmplitude*Omega
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      cosXGP=COS(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-      sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
-      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*t))
+      cosXGP=COS(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      sinXGP=SIN(omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-omega*t))
       Ut_src(1)   = tmp(1)*cosXGP
       Ut_src(2:4) = tmp(2)*cosXGP + tmp(3)*sinXGP2
       Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
+    END DO; END DO; END DO ! i,j,k
+  END DO ! iElem
+CASE(41) ! exact function, in 2D, rho=2+g(x,y) , rho v_i =2+g(x,y) , rhoE =(2+g(x,y) )^2 = 4+4*g(x,y) + g(x,y)^2
+         ! g(x,y) = A*sin(omega(x+y-1))
+  Omega=PP_Pi*IniFrequency
+  tmp(1)=1.                          !-1+d
+  tmp(2)=1.+kappaM1*3.               !(d-1 + (kappa-1)*(4-d/2))
+  tmp(3)=IniAmplitude*KappaM1        ! A*(kappa-1) 
+  tmp(4)=(2.+Kappa*6.)-4.            !(-4 + d*(4*kappa-(kappa-1) d/2))
+  tmp(5)=IniAmplitude*(2.*Kappa-1.)  ! A*(d*kappa-1)
+#if PARABOLIC
+  tmp(6)=2.*mu0*Kappa*Omega/Pr
+#else
+  tmp(6)=0.
+#endif
+  tmp=tmp*IniAmplitude*Omega
+  Ut_src(4)=0.
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      cosXGP=COS(omega*(SUM(Elem_xGP(1:2,i,j,k,iElem))-tIn))
+      sinXGP=SIN(omega*(SUM(Elem_xGP(1:2,i,j,k,iElem))-tIn))
+      sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(1:2,i,j,k,iElem))-omega*t))
+      Ut_src(1)   = tmp(1)*cosXGP
+      Ut_src(2:3) = tmp(2)*cosXGP + tmp(3)*sinXGP2
+      Ut_src(5)   = tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
 CASE DEFAULT

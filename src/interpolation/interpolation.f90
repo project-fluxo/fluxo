@@ -191,6 +191,8 @@ SUBROUTINE GetNodesAndWeights(N_in,NodeType_in,xIP,wIP,wIPBary)
 ! MODULES
 USE MOD_Globals
 USE MOD_Basis,       ONLY: LegendreGaussNodesAndWeights,LegGaussLobNodesAndWeights,ChebyGaussLobNodesAndWeights,BarycentricWeights
+USE MOD_Interpolation_vars, ONLY: InterpolationInitIsDone, NodeType,xGP,wGP,wBary
+
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -203,6 +205,15 @@ REAL,INTENT(OUT),OPTIONAL          :: wIPBary(0:N_in) !< Barycentric weights
 ! LOCAL VARIABLES
 INTEGER                            :: i
 !==================================================================================================================================
+IF( InterpolationInitIsDone)THEN
+  IF((TRIM(NodeType_in).EQ.TRIM(NodeType)).AND.(N_in+1.EQ.SIZE(xGP(:),1)))THEN
+    xIP=xGP
+    IF(PRESENT(wIP)) wIP=wGP
+    IF(PRESENT(wIPBary)) wIPBary=wBary
+!    SWRITE(*,*)'GetNodesAndWeights: use already computed values for N=',N_in, ' and ', TRIM(NodeType_in)
+    RETURN
+  END IF
+END IF
 IF(PRESENT(wIP))THEN
   SELECT CASE(TRIM(NodeType_in))
   CASE('GAUSS')
@@ -211,7 +222,7 @@ IF(PRESENT(wIP))THEN
     CALL LegGaussLobNodesAndWeights(N_in,xIP,wIP)
   CASE('CHEBYSHEV-GAUSS-LOBATTO')
     CALL ChebyGaussLobNodesAndWeights(N_in,xIP,wIP)
-  CASE('VISU')
+  CASE('VISU','EQUIDISTANT')
     DO i=0,N_in
       xIP(i) = 2.*REAL(i)/REAL(N_in) - 1.
     END DO
@@ -237,7 +248,7 @@ ELSE
     CALL LegGaussLobNodesAndWeights(N_in,xIP)
   CASE('CHEBYSHEV-GAUSS-LOBATTO')
     CALL ChebyGaussLobNodesAndWeights(N_in,xIP)
-  CASE('VISU')
+  CASE('VISU','EQUIDISTANT')
     DO i=0,N_in
       xIP(i) = 2.*REAL(i)/REAL(N_in) - 1.
     END DO

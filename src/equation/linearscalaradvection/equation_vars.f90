@@ -30,7 +30,6 @@ REAL                :: AdvVel(3)               !< Advection velocity
 REAL                :: DiffC                   !< Diffusion constant
 REAL                :: IniWavenumber(3)        !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 INTEGER             :: IniExactFunc            !< Exact Function for initialization
-INTEGER,PARAMETER   :: nAuxVar=1               !< Auxiliary variable for DiscType=3
 INTEGER,ALLOCATABLE :: nBCByType(:)            !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)           !< SideIDs for BC types
 
@@ -40,8 +39,54 @@ LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
-PROCEDURE(),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
 #endif /*PP_DiscType==2*/
 
 !==================================================================================================================================
+ABSTRACT INTERFACE
+  PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,metric_L,metric_R,Fstar)
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+    REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+    REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+    REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+  END SUBROUTINE i_sub_VolumeFluxAverageVec
+END INTERFACE
+
+
+#if PARABOLIC
+!INTERFACE ConvertToGradPrimVec
+!  MODULE PROCEDURE ConvertToGradPrimVec
+!END INTERFACE
+#endif /*PARABOLIC*/
+
+CONTAINS
+
+
+#if PARABOLIC
+!==================================================================================================================================
+!> transform gradient from conservative variables, placeholder for linadv
+!==================================================================================================================================
+SUBROUTINE ConvertToGradPrimVec(dim2,cons,gradP)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: cons(PP_nVar,dim2)    !< conservative state 
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(INOUT)    :: gradP(PP_nVar,dim2) !<  on intput: can be gradient of conservative / primivite /entropy variables
+                                             !<  on output: gradient of primitive variables (rho,v1,v2,v3,p,B1,B2,B3,psi)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  gradP(:,i)=cons(:,i)
+END DO!i
+END SUBROUTINE ConvertToGradPrimVec
+#endif /*PARABOLIC*/
+
+
 END MODULE MOD_Equation_Vars

@@ -31,9 +31,11 @@ SAVE
 LOGICAL              :: doCalcBulkVelocity
 LOGICAL              :: doCalcWallVelocity
 LOGICAL              :: doCalcBodyForces
+LOGICAL              :: doCalcEntropy
 
 ! Variables for the specific analyze routines
 ! WallVelocity
 REAL,ALLOCATABLE     :: meanV(:),minV(:),maxV(:)    ! size nBCs
+REAL                 :: Entropy
 !==================================================================================================================================
 END MODULE MOD_AnalyzeEquation_Vars

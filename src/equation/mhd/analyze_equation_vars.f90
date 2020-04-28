@@ -26,12 +26,13 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Analyze features
 LOGICAL              :: doCalcDivergence   !<handle for analyze: compute divergence of B
-LOGICAL              :: doCalcBulk         !<handle for analyze: compute Bulk integral of all variables
 LOGICAL              :: doCalcEnergy       !<handle for analyze: compute kinetic and magnetic energy
 LOGICAL              :: doCalcEntropy      !<handle for analyze: compute entropy
-REAL                 :: Energy(2)          !< store kinetic and magnetic energy to compute growth rate to 
+LOGICAL              :: doCalcCrossHel     !<handle for analyze: compute cross helicity
+REAL                 :: Energy(4)          !< store kinetic and magnetic energy to compute growth rate to 
                                            !< last analyze step 
 REAL                 :: Entropy            !< store entropy to compute change to last step 
+REAL                 :: CrossHel           !< store entropy to compute change to last step 
 
 !==================================================================================================================================
 END MODULE MOD_AnalyzeEquation_Vars
