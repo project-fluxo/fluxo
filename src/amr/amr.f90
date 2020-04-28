@@ -279,14 +279,15 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
       CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
       CALL MOVE_ALLOC(U_New, U)
    ENDIF
-   doLBalance = doLBalance + 1
-   IF (doLBalance .EQ. 1) THEN
-      doLBalance = 0;
-      IF (doLBalance .EQ. 0) CALL LoadBalancingAMR()
+  !  doLBalance = doLBalance + 1
+  !  IF (doLBalance .EQ. 1) THEN
+  !     doLBalance = 0;
+      ! IF (doLBalance .EQ. 0) 
+      CALL LoadBalancingAMR()
         IF (MPIRoot) THEN
           print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
         ENDIF
-   ENDIF
+  !  ENDIF
 
    CALL GetnNBProcs(p4est_ptr, DATAPtr)
 

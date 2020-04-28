@@ -188,7 +188,16 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
-
+DO ITER = 1,8
+  IF (UseAMR) THEN 
+   ! doAMR = doAMR + 1;
+   ! IF (doAMR .EQ. 1) THEN
+     ! doAMR = 0;
+     CALL ShockCapturingAMR()
+    !  PRINT *, "ShockCapturingAMR()"
+   ! ENDIF
+  ENDIF 
+ ENDDO
 
 ! Write the state at time=0, i.e. the initial condition
 CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
@@ -226,15 +235,7 @@ doAMR = 0
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
-DO ITER = 1,8
- IF (UseAMR) THEN 
-  ! doAMR = doAMR + 1;
-  ! IF (doAMR .EQ. 1) THEN
-    ! doAMR = 0;
-    CALL ShockCapturingAMR()
-  ! ENDIF
- ENDIF 
-ENDDO
+
 
 iter = 0
 DO
