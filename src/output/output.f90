@@ -30,7 +30,10 @@ IMPLICIT NONE
 
 ! Output format for state visualization
 INTEGER,PARAMETER :: OUTPUTFORMAT_NONE         = 0
-INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW     = 1
+INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW_3D_SINGLE     = 1
+INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW_3D_MULTI      = 2
+INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW_2D_SINGLE     = 3
+INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW_2D_MULTI      = 4
 
 ! Output format for ASCII data files
 INTEGER,PARAMETER :: ASCIIOUTPUTFORMAT_CSV     = 0
@@ -93,7 +96,10 @@ CALL prms%CreateIntOption(          'NVisu',       "Polynomial degree at which s
 CALL prms%CreateStringOption(       'ProjectName', "Name of the current simulation (mandatory).")
 CALL prms%CreateLogicalOption(      'Logging',     "Write log files containing debug output.", '.FALSE.')
 CALL prms%CreateLogicalOption(      'ErrorFiles',  "Write error files containing error output.", '.TRUE.')
-CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None, 1: ParaView. " , '1')
+CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None, 1: ParaView Single vtu File,"//&
+                                          "2: ParaView vtu files per proc+pvtu link file,"//&
+                                          "3: 2D (zeta=-1 of each element) ParaView, single vtu file,"//&
+                                          "4: 2D (zeta=-1 of each element) ParaView, vtu files per proc+pvtu link file", '1')
 CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: 0: CSV, 1: Tecplot." , '0')
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
 CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
@@ -347,7 +353,8 @@ USE MOD_Output_Vars,ONLY:nBoundingBoxes,VisuBoundingBox
 USE MOD_Mesh_Vars  ,ONLY:nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
-USE MOD_VTK        ,ONLY:WriteDataToVTK3D
+!USE MOD_VTK        ,ONLY:WriteDataToVTK3D
+USE MOD_VTK        ,ONLY:WriteDataToVTK
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -402,9 +409,9 @@ ELSE
     VisuElem(iElem)=iElem
   END DO
 END IF
+ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
+ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
 IF(on_xGP)THEN
-  ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
-  ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nVisuElems))
   U_NVisu = 0.
   jElem=0
   DO iElem=1,nVisuElems
@@ -413,29 +420,41 @@ IF(on_xGP)THEN
     ! Interpolate solution onto visu grid
     CALL ChangeBasis3D(nOutVars,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:nOutVars,:,:,:,VisuElem(iElem)),U_NVisu(1:nOutVars,:,:,:,iElem))
   END DO !iElem
-!ELSE
-!  !use input
+ELSE
+  !use input
+  Coords_NVisu = CoordsIn(1:3,:,:,:,VisuElem(:))
+  U_NVisu      = Uin(:,:,:,:,VisuElem(:))
 END IF !on_xGP
 
+  
 ! Visualize data
 SELECT CASE(OutputFormat)
-CASE(OUTPUTFORMAT_PARAVIEW)
-  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
-  IF(on_xGP)THEN
-    CALL WriteDataToVTK3D(        NVisu,nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
-                                U_NVisu,TRIM(FileString))
-  ELSE
-    CALL WriteDataToVTK3D(        NVisu,nVisuElems,nOutVars,VarNamesIn,CoordsIn(1:3,:,:,:,VisuElem(:)), &
-                                Uin(:,:,:,:,VisuElem(:)),TRIM(FileString))
-  END IF!on_xGP
+CASE(OUTPUTFORMAT_PARAVIEW_3D_SINGLE)
+  !old routines
+  !FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_singleOLD_'//TRIM(FileTypeStrIn),OutputTime))//'.vtu'
+  !CALL WriteDataToVTK3D(        NVisu,nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
+  !                            U_NVisu,TRIM(FileString))
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime)) !without .vtu
+  CALL WriteDataToVTK(3,3,(/NVisu,Nvisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
+                              U_Nvisu(:,:,:,:,:),TRIM(FileString),MPI_SingleFile=.TRUE.)
+CASE(OUTPUTFORMAT_PARAVIEW_3D_MULTI)
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime)) !without .vtu
+  CALL WriteDataToVTK(3,3,(/NVisu,Nvisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
+                              U_Nvisu(:,:,:,:,:),TRIM(FileString),MPI_SingleFile=.FALSE.)
+CASE(OUTPUTFORMAT_PARAVIEW_2D_SINGLE)
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn)//'2D',OutputTime)) !without .vtu
+  CALL WriteDataToVTK(2,3,(/NVisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,0,:), &
+                              U_Nvisu(:,:,:,0,:),TRIM(FileString),MPI_SingleFile=.TRUE.)
+CASE(OUTPUTFORMAT_PARAVIEW_2D_MULTI)
+  FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn)//'2D',OutputTime)) !without .vtu
+  CALL WriteDataToVTK(2,3,(/NVisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,0,:), &
+                              U_Nvisu(:,:,:,0,:),TRIM(FileString),MPI_SingleFile=.FALSE.)
 END SELECT
 
 DEALLOCATE(VisuElem)
 
-IF(on_xGP)THEN
-  DEALLOCATE(U_Nvisu)
-  DEALLOCATE(Coords_NVisu)
-END IF!Nin
+DEALLOCATE(U_Nvisu)
+DEALLOCATE(Coords_NVisu)
 
 END SUBROUTINE VisualizeAny
 

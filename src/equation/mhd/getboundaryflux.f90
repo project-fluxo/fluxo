@@ -353,19 +353,27 @@ DO iBC=1,nBCs
 #endif /*PP_GLM*/
           
 #if NONCONS
-          !NONCONS: Powell term, B*nvec=0, should have no contribution here.
+          !NONCONS: B*nvec=0, should have no contribution here.
           !CAREFUL! the "weak" implementation of the nonconservative volume term already includes -1/2(phi B_n)^inner
           ! but since we want the non-conservative flux to be zero, another -1/2(phi B_n)^inner is missing to get full 
           ! inner surface contribution.
+#if NONCONS==1 /*Powell*/
           phi_L(2:4)=U_master(6:8,p,q,SideID)
           phi_L(6:8)=U_master(2:4,p,q,SideID)/U_master(1,p,q,SideID)
           phi_L(5)  =SUM(phi_L(2:4)*phi_L(6:8))
           Flux(2:8,p,q,SideID)=Flux(2:8,p,q,SideID)-0.5*phi_L(2:8)*PrimL(6)   !1/2 phi B_n
-#ifdef PP_GLM
+#elif NONCONS==2 /*Brackbill*/
+          phi_L(2:4)=U_master(6:8,p,q,SideID)
+          Flux(2:4,p,q,SideID)=Flux(2:4,p,q,SideID)-0.5*phi_L(2:4)*PrimL(6)   !1/2 phi B_n
+#elif NONCONS==3 /*Janhunen*/
+          phi_L(6:8)=U_master(2:4,p,q,SideID)/U_master(1,p,q,SideID)
+          Flux(6:8,p,q,SideID)=Flux(6:8,p,q,SideID)-0.5*phi_L(6:8)*PrimL(6)   !1/2 phi B_n
+#endif /*NONCONSTYPE*/
+#if defined (PP_GLM) && defined (PP_NC_GLM)
           ! galilean invariance for GLM
           Flux((/5,PP_nVar/),p,q,SideID)=Flux((/5,PP_nVar/),p,q,SideID)-0.5*PrimL(2)*(/PrimL(9)**2,PrimL(9)/)  !1/2 v_n (psi^2,psi) 
-#endif /*PP_GLM*/
-#endif 
+#endif /*PP_GLM and PP_NC_GLM*/
+#endif /*NONCONS*/
           END ASSOCIATE !nvec,t1vec,t2vec
         END DO ! p
       END DO ! q

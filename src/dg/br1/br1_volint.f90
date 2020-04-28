@@ -45,7 +45,7 @@ CONTAINS
 SUBROUTINE Lifting_VolInt(gradPx,gradPy,gradPz)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
-USE MOD_DG_Vars            ,ONLY:D_T
+USE MOD_DG_Vars            ,ONLY:D_T,U
 USE MOD_Mesh_Vars          ,ONLY:nElems,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde   ! metrics
 USE MOD_PreProc
 USE MOD_Flux               ,ONLY: EvalLiftingVolumeFlux
@@ -76,8 +76,7 @@ INTEGER                                      :: l
 !gradPz=0.
 Flux = 0.
 DO iElem=1,nElems
-  CALL EvalLiftingVolumeFlux(iElem,Flux)
-
+  CALL EvalLiftingVolumeFlux(U(:,:,:,:,iElem),Flux)
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
