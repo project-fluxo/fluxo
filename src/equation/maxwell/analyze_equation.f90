@@ -57,6 +57,8 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
+CALL prms%CreateLogicalOption('CalcEnergy', "Set true to compute the integrated electric and magnetic energy"&
+           , '.FALSE.')
 END SUBROUTINE DefineParametersAnalyzeEquation
 
 !==================================================================================================================================
@@ -64,10 +66,11 @@ END SUBROUTINE DefineParametersAnalyzeEquation
 !==================================================================================================================================
 SUBROUTINE InitAnalyzeEquation()
 ! MODULES
-!USE MOD_Globals
-!USE MOD_Preproc
-!USE MOD_Analyze_Vars
-!USE MOD_AnalyzeEquation_Vars
+USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Analyze_Vars,       ONLY:doAnalyzeToFile,A2F_iVar,A2F_VarNames
+USE MOD_AnalyzeEquation_Vars
+USE MOD_ReadInTools,        ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -75,6 +78,17 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 ! Get the various analysis/output variables 
+doCalcEnergy           = GETLOGICAL('CalcEnergy','.FALSE.')
+IF(MPIroot.AND.doAnalyzeToFile) THEN
+  IF(doCalcEnergy)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"ElectricEnergy"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"MagneticEnergy"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"TotalEnergy"'
+  END IF !doCalcEnergy
+END IF !MPIroot & doAnalyzeToFile
 
 ! Initialize eval routines
 
@@ -86,11 +100,10 @@ END SUBROUTINE InitAnalyzeEquation
 !==================================================================================================================================
 SUBROUTINE AnalyzeEquation(Time)
 ! MODULES
-!USE MOD_Globals
-!USE MOD_PreProc
-!USE MOD_Analyze_Vars
-!USE MOD_AnalyzeEquation_Vars
-!USE MOD_Restart_Vars,       ONLY: RestartTime
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,        ONLY:doAnalyzeToFile,A2F_iVar,A2F_data
+USE MOD_AnalyzeEquation_Vars,ONLY:doCalcEnergy
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -99,26 +112,74 @@ REAL,INTENT(IN)                 :: Time !< current time
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-!CHARACTER(LEN=40)               :: formatStr
+CHARACTER(LEN=40)    :: formatStr
+REAL                 :: Energy(3) 
 !==================================================================================================================================
-! Attention: during the initialization phase no face data / gradients available!
-!IF(ABS(Time-RestartTime) .GT. 1.E-12) THEN
-!END IF
+! Calculate divergence 
 
-!IF(doCalcMeanFlux)THEN
-!  CALL CalcMeanFlux(Time,MeanFlux)
-!  IF(MPIroot) THEN
-!    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES16.7)'
-!    DO i=1,nBCs
-!      IF(Boundarytype(i,BC_TYPE) .EQ. 1) CYCLE
-!      WRITE(UNIT_StdOut,*)'MeanFlux ',TRIM(BoundaryName(i)),' : '
-!      WRITE(UNIT_StdOut,formatStr)'              ',MeanFlux(:,i)
-!    END DO
-!  END IF
-!END IF  !(doCalcBodyforces)
+IF(doCalcEnergy)THEN
+  !store last energies
+  CALL CalcPotentialEnergy(Energy)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A5,I1,A7)')'(A28,',3,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)' elec./magn./total Energy : ',Energy(1:3)
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Energy(1) !kineticEnergy
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Energy(2) !magneticEnergy
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Energy(3) !TotalEnergy
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF !doCalcEnergy
 
 END SUBROUTINE AnalyzeEquation
 
+!==================================================================================================================================
+!> Calculates electric and magnetic Energy over whole domain (normalized with volume)
+!==================================================================================================================================
+SUBROUTINE CalcPotentialEnergy(Energy)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U
+USE MOD_Equation_Vars,      ONLY: smu0,eps0
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: Energy(3) !< kinetic ,magnetic and total energy
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                         :: iElem,i,j,k
+REAL                            :: IntegrationWeight
+!==================================================================================================================================
+Energy=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    Energy(1)  = Energy(1)+SUM(U(1:3,i,j,k,iElem)**2)*IntegrationWeight
+    Energy(2)  = Energy(2)+SUM(U(4:6,i,j,k,iElem)**2)*IntegrationWeight
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
+
+#if MPI
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,Energy,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(Energy         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+#endif /*MPI*/
+Energy(1)=0.5*eps0*Energy(1)/vol
+Energy(2)=0.5*smu0*Energy(2)/vol
+Energy(3)=Energy(1)+Energy(2)
+
+
+END SUBROUTINE CalcPotentialEnergy
 
 !==================================================================================================================================
 !> Finalizes variables necessary for analyse subroutines

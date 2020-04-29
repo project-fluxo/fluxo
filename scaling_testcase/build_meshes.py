@@ -26,7 +26,7 @@ import subprocess
 
 ########################################################################################################
 # use ../helpers.py
-sys.path.append('../')
+sys.path.append('../tests/')
 
 from helpers import copy2temporary, execute, modify_prm, read_prm
 
@@ -55,22 +55,29 @@ args.prm = copy2temporary(tmp_dir, args.prm)
 args.ntail = 20
 args.procs = 1
 
-# this generates 4 3D refinements meshes
-nElemsX = ['02','04','08','16' ]
-nElemsY = ['02','04','08','16' ]
-nElemsZ = ['02','04','08','16' ]
 
-#this generates 5 2D refinements
-#nElemsX = ['02','04','08','16' ,'32','64' ]
-#nElemsY = ['02','04','08','16' ,'32','64' ]
-#nElemsZ = ['01','01','01','01' ,'01','01' ]
+# this generates different  meshes
+nElemsX = ['02','02','02','04','04','04','08','08','08','16']
+nElemsY = ['02','02','04','04','04','08','08','08','16','16']
+nElemsZ = ['02','04','04','04','08','08','08','16','16','16']
+div='1'
+
+#nElemsX = ['04','04','04' ,'08','08','08','16']
+#nElemsY = ['04','04','08' ,'08','08','16','16']
+#nElemsZ = ['03','06','06' ,'06','12','12','12']
+#div='48'
+
 
 projectname = read_prm(args.prm,'ProjectName')
 
 # loop over meshes
 for i in range(0,len(nElemsX)) :
 
-    projectnameX = projectname+'_'+nElemsX[i]+'_'+nElemsY[i]+'_'+nElemsZ[i] 
+    nTotal= int(nElemsX[i])*int(nElemsY[i])*int(nElemsZ[i])/int(div)
+    nTotal= int(nElemsX[i])*int(nElemsY[i])*int(nElemsZ[i])
+    nTotalStr=("%05.0i" % (nTotal))
+    #projectnameX = projectname+'_'+nElemsX[i]+'_'+nElemsY[i]+'_'+nElemsZ[i]+'_'+nTotalStr+'x'+div
+    projectnameX = projectname+'_'+nElemsX[i]+'_'+nElemsY[i]+'_'+nElemsZ[i]+'_'+nTotalStr
     modify_prm(args.prm, {'ProjectName' : projectnameX})
     print(  "               " )
     print(  "%03.0i === > ProjectName: %s" % (i,projectnameX) )

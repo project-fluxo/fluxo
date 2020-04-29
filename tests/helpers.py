@@ -30,10 +30,7 @@ def copy2temporary(tmp_dir, f) :
 ########################################################################################################
 def execute(exec_path, prm_path, projectname, analyze_fcts=None, log = True, ntail = 0 ,\
       mpi_procs = 1, L2 = 1., Linf=1.,PID=0. ) :
-   if mpi_procs == 1 :
-      cmd = " "
-   else :
-      cmd = ("mpirun -np %d " % mpi_procs)
+   cmd = ("${MPIRUNCOMMAND} %d " % mpi_procs) #should be set in environment (export MPIRUNCOMMAND="mpirun -np" or "srun -p")
 
    cmd=cmd+" "+exec_path.strip()+" "+prm_path.strip()
    if log :
@@ -164,7 +161,7 @@ def write_summarytable(summary) :
 # extract the L2 error of the last timestep
 def get_last_L2_error(lines) :
    for l in lines[-15:] :
-      if "L_2" in l :
+      if "L_2 " in l :
          tmp = l.split(":")[1]
          return [float(x) for x in tmp.split()]
 
@@ -173,7 +170,15 @@ def get_last_L2_error(lines) :
 # extract the L_inf error of the last timestep
 def get_last_Linf_error(lines) :
    for l in lines[-15:] :
-      if "L_inf" in l :
+      if "L_inf " in l :
+         tmp = l.split(":")[1]
+         return [float(x) for x in tmp.split()]
+########################################################################################################
+
+# extract the L_inf error of the last timestep
+def get_last_L2colloc_error(lines) :
+   for l in lines[-15:] :
+      if "L_2_colloc " in l :
          tmp = l.split(":")[1]
          return [float(x) for x in tmp.split()]
 

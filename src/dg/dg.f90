@@ -181,7 +181,7 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 ! LOCAL VARIABLES 
 REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
 REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
-INTEGER                            :: iMass         
+INTEGER                            :: i
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
@@ -193,14 +193,15 @@ D_T=TRANSPOSE(D)
 ! Build D_Hat matrix. (D^ = M^(-1) * D^T * M
 M(:,:)=0.
 Minv(:,:)=0.
-DO iMass=0,N_in
-  M(iMass,iMass)=wGP(iMass)
-  Minv(iMass,iMass)=1./wGP(iMass)
+DO i=0,N_in
+  M(i,i)=wGP(i)
+  Minv(i,i)=1./wGP(i)
 END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
 #if PP_DiscType==2
+!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! DvolSurf^T = -DvolSurf
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
@@ -257,7 +258,14 @@ USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+#if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt
+#elif PP_DiscType==2
+USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#if PARABOLIC
+USE MOD_VolInt              ,ONLY: VolInt_visc
+#endif /*PARABOLIC*/
+#endif /*PP_DiscType==2*/
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -305,6 +313,9 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
 !!write(*,*)'u in dgtimederivative', U
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
+#if PP_DiscType==2
+CALL VolInt_adv_SplitForm(Ut)
+#endif
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
@@ -323,7 +334,13 @@ CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
+#if PP_DiscType==1
 CALL VolInt(Ut)
+#elif PP_DiscType==2
+#  if PARABOLIC
+CALL VolInt_visc(Ut)
+#  endif /*PARABOLIC*/
+#endif
 
 
 #if PARABOLIC && MPI

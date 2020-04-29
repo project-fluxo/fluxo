@@ -61,6 +61,8 @@ CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mand
 CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0 (mandatory)")
 CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0 (mandatory)")
 CALL prms%CreateIntOption(   'maxIter',        "Stop simulation when specified number of timesteps has been performed.", value='-1')
+CALL prms%CreateIntOption(   'maxWCT',        " maximum wall-clock time in seconds, only checked after maxIter is reached! \n"//&
+                                              " Then if WCT<maxWCT, maxIter is set such that  maxWCT is reached.", value ='-1')
 CALL prms%CreateIntOption(   'NCalcTimeStepMax',"Compute dt at least after every Nth timestep.", value='1')
 END SUBROUTINE DefineParametersTimeDisc
 
@@ -115,6 +117,7 @@ CALL fillCFL_DFL(PP_N)
 dt=HUGE(1.)
 ! Read max number of iterations to perform
 maxIter = GETINT('maxIter','-1')
+maxWCT  = GETINT('maxWCT','-1')
 nCalcTimeStepMax = GETINT('nCalcTimeStepMax','1')
 
 SWRITE(UNIT_stdOut,'(A)') ' Method of time integration: '//TRIM(TimeDiscName)
@@ -137,7 +140,7 @@ SUBROUTINE TimeDisc()
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_TimeDisc_Vars       ,ONLY: TEnd,t,dt,tAnalyze,ViscousTimeStep,maxIter,Timestep,nRKStages,nCalcTimeStepMax,PID
+USE MOD_TimeDisc_Vars
 USE MOD_Analyze_Vars        ,ONLY: Analyze_dt,WriteData_dt,tWriteData,nWriteData
 USE MOD_Analyze             ,ONLY: Analyze
 USE MOD_Testcase_vars       ,ONLY: doTCpreTimeStep
@@ -158,10 +161,11 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 REAL                         :: dt_Min,dt_MinOld,dtAnalyze,dtEnd,tStart
 INTEGER(KIND=8)              :: iter,iter_loc
-REAL                         :: CalcTimeStart,CalcTimeEnd
+REAL                         :: iterTimeStart,CalcTimeStart,CalcTimeEnd
 INTEGER                      :: TimeArray(8)              !< Array for system time
 INTEGER                      :: errType,nCalcTimestep,writeCounter, doAMR
 LOGICAL                      :: doAnalyze,doFinalize
+LOGICAL                      :: firstWCTcheck=.TRUE.
 !==================================================================================================================================
 SWRITE(UNIT_StdOut,'(132("-"))')
 
@@ -200,9 +204,11 @@ DO ITER = 1,8
  ENDDO
 
 ! Write the state at time=0, i.e. the initial condition
-CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
- 
-CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+IF(nWriteData.GT.0) THEN
+  CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
+
+  CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+END IF
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
@@ -282,9 +288,33 @@ DO
   iter=iter+1
   iter_loc=iter_loc+1
   t=t+dt
-  IF(iter.EQ.maxIter)THEN
-    tEnd=t; tAnalyze=t; tWriteData=t
-    doAnalyze=.TRUE.; doFinalize=.TRUE.
+  IF(iter.EQ.maxIter)THEN !only entered if maxIter.GT.0
+    IF(maxWCT.EQ.-1)THEN !do not check max wall-clock time
+      maxIter=-11 !finish simulation (after broadcast)
+    ELSE !check max wall-clock time
+      CalcTimeEnd=FLUXOTIME()-IterTimeStart  !current WCT
+      IF(MPIroot)THEN
+        IF(FLOOR(CalcTimeEnd).GE. FLOOR(REAL(maxWCT)*REAL(iter)/REAL(iter+1)))THEN
+          maxIter=-11 !finish simulation (after broadcast)
+        ELSE
+          IF(FirstWCTcheck)THEN ! put maxIter to reach  maxWCT/2, to get a better estimate
+            maxIter = MAX( (maxIter),FLOOR(REAL(maxWCT*iter)/(2.*CalcTimeEnd),KIND=8)-1 )+1
+            WRITE(UNIT_StdOut,'(A,I12,A,I12)')'   iter=',iter,', new maxiter to reach maxWCT/2:', maxIter
+          ELSE !get the estimate to reach maxWCT
+            maxIter = MAX( (maxIter),FLOOR(REAL(maxWCT*iter)/CalcTimeEnd,KIND=8)-1 )+1
+            WRITE(UNIT_StdOut,'(A,I12,A,I12)')'   iter=',iter,', new maxiter to reach maxWCT  : ', maxIter
+          END IF
+          FirstWCTcheck=.FALSE.
+        END IF
+      END IF
+#if MPI
+      CALL MPI_BCAST(maxIter,1,MPI_INTEGER8,0,MPI_COMM_WORLD,iError) 
+#endif /*MPI*/
+    END IF !maxWCT=-1
+    IF(maxIter.EQ.-11)THEN
+      tEnd=t; tAnalyze=t; tWriteData=t
+      doAnalyze=.TRUE.; doFinalize=.TRUE.
+    END IF
   END IF
 
   ! Analyze and output now
@@ -304,18 +334,20 @@ DO
       WRITE(UNIT_stdOut,'(A,ES12.5,A,I4)')' CALCULATION TIME PER TSTEP/DOF: [',PID,' sec ], nRKstages:',nRKstages
       WRITE(UNIT_StdOut,'(A,ES16.7)')' Timestep   : ',dt_Min
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
-      WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps  : ',REAL(iter)
+      WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps   : ',REAL(iter)
     END IF !MPIroot
 
     ! Visualize data and write solution
     writeCounter=writeCounter+1
-    IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
-      ! Visualize data
-      CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
-      ! Write state to file
-      CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
-      writeCounter=0
-      tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+    IF(nWriteData.GT.0) THEN
+      IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
+        ! Visualize data
+        CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+        ! Write state to file
+        CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
+        writeCounter=0
+        tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+      END IF
     END IF
 
     ! do analysis

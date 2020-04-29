@@ -23,25 +23,27 @@ MODULE MOD_Flux
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-INTERFACE EvalFluxTilde3D
-  MODULE PROCEDURE EvalFluxTilde3D
-END INTERFACE
+
+!INTERFACE EvalFluxTilde3D
+!  MODULE PROCEDURE EvalFluxTilde3D
+!END INTERFACE
 
 
 #if PARABOLIC
-INTERFACE EvalDiffFluxTilde3D
-  MODULE PROCEDURE EvalDiffFluxTilde3D
-END INTERFACE
+!INTERFACE EvalDiffFluxTilde3D
+!  MODULE PROCEDURE EvalDiffFluxTilde3D
+!END INTERFACE
 
-INTERFACE EvalLiftingVolumeFlux
-  MODULE PROCEDURE EvalLiftingVolumeFlux
-END INTERFACE
+!INTERFACE EvalLiftingVolumeFlux
+!  MODULE PROCEDURE EvalLiftingVolumeFlux
+!END INTERFACE
 
 INTERFACE EvalLiftingSurfFlux
   MODULE PROCEDURE EvalLiftingSurfFlux
 END INTERFACE
 #endif /*PARABOLIC*/
 
+PUBLIC::EvalAdvFluxTilde3D
 PUBLIC::EvalFluxTilde3D
 #if PARABOLIC
 PUBLIC::EvalDiffFluxTilde3D
@@ -52,71 +54,94 @@ PUBLIC::EvalLiftingSurfFlux
 
 CONTAINS
 
+
 !==================================================================================================================================
-!> Compute linear scalar advection & diffusion fluxes with using the solution and its gradient for every volume Gauss point.
+!> Compute linadvdiff transformed fluxes using conservative variables and derivatives for every volume Gauss point.
+!> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,ftilde,gtilde,htilde)
+SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
 USE MOD_Equation_Vars ,ONLY:AdvVel
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-#if PARABOLIC
-USE MOD_Equation_Vars ,ONLY:DiffC
-USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
-#endif
-#ifdef OPTIMIZED
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem !< Determines the actual element
+REAL,INTENT(IN )   :: U_in(1,1:nTotal_vol) !< solution state (conservative vars)
+REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(1,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(1,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(1,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i 
+!==================================================================================================================================
+DO i=1,nTotal_vol
+  ftilde(1,i) =   (AdvVel(1)*M_f(1,i) + AdvVel(2)*M_f(2,i) + AdvVel(3)*M_f(3,i))*U_in(1,i)
+  gtilde(1,i) =   (AdvVel(1)*M_g(1,i) + AdvVel(2)*M_g(2,i) + AdvVel(3)*M_g(3,i))*U_in(1,i)
+  htilde(1,i) =   (AdvVel(1)*M_h(1,i) + AdvVel(2)*M_h(2,i) + AdvVel(3)*M_h(3,i))*U_in(1,i)
+END DO ! i
+END SUBROUTINE EvalAdvFluxTilde3D
+
+
+!==================================================================================================================================
+!> Compute linear scalar advection & diffusion fluxes with using the solution and its gradient for every volume Gauss point.
+!==================================================================================================================================
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
+#if PARABOLIC
+                           gradPx_in,gradPy_in,gradPz_in,&
+#endif /*PARABOLIC*/
+                           ftilde,gtilde,htilde)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars ,ONLY:AdvVel
+#if PARABOLIC
+USE MOD_Equation_Vars ,ONLY:DiffC
+#endif
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN )   :: U_in(1,1:nTotal_vol) !< solution state (conservative vars)
+REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
+#if PARABOLIC
+REAL,INTENT(IN )   :: gradPx_in(1,1:nTotal_vol) !< gradient x in primitive variables 
+REAL,INTENT(IN )   :: gradPy_in(1,1:nTotal_vol) !< gradient y in primitive variables 
+REAL,INTENT(IN )   :: gradPz_in(1,1:nTotal_vol) !< gradient z in primitive variables 
+#endif /*PARABOLIC*/
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)   :: ftilde(1,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(1,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(1,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i 
-#ifndef OPTIMIZED
-INTEGER             :: j,k
-#endif
 REAL                :: f,g,h
 !==================================================================================================================================
 
-#ifdef OPTIMIZED
-DO i=0,nTotal_vol-1
-#else /*OPTIMIZED*/
-DO k=0,PP_N;  DO j=0,PP_N; DO i=0,PP_N
-#endif /*OPTIMIZED*/
+DO i=1,nTotal_vol
 
-  f=AdvVel(1)*U(1,PP_IJK,iElem)
-  g=AdvVel(2)*U(1,PP_IJK,iElem)
-  h=AdvVel(3)*U(1,PP_IJK,iElem)
 #if PARABOLIC
-  f=f-DiffC*gradPx(1,PP_IJK,iElem)
-  g=g-DiffC*gradPy(1,PP_IJK,iElem)
-  h=h-DiffC*gradPz(1,PP_IJK,iElem)
+  f=AdvVel(1)*U_in(1,i)-DiffC*gradPx_in(1,i)
+  g=AdvVel(2)*U_in(1,i)-DiffC*gradPy_in(1,i)
+  h=AdvVel(3)*U_in(1,i)-DiffC*gradPz_in(1,i)
+#else
+  f=AdvVel(1)*U_in(1,i)
+  g=AdvVel(2)*U_in(1,i)
+  h=AdvVel(3)*U_in(1,i)
 #endif /*PARABOLIC*/
-
-  ftilde(1,PP_IJK) =   f*Metrics_fTilde(1,PP_IJK,iElem) &
-                     + g*Metrics_fTilde(2,PP_IJK,iElem) &
-                     + h*Metrics_fTilde(3,PP_IJK,iElem)
-  gtilde(1,PP_IJK) =   f*Metrics_gTilde(1,PP_IJK,iElem) &
-                     + g*Metrics_gTilde(2,PP_IJK,iElem) &
-                     + h*Metrics_gTilde(3,PP_IJK,iElem)
-  htilde(1,PP_IJK) =   f*Metrics_hTilde(1,PP_IJK,iElem) &
-                     + g*Metrics_hTilde(2,PP_IJK,iElem) &
-                     + h*Metrics_hTilde(3,PP_IJK,iElem)
-
-#ifdef OPTIMIZED
+  !now transform fluxes to reference ftilde,gtilde,htilde
+  ftilde(1,i) =   f*M_f(1,i) + g*M_f(2,i) + h*M_f(3,i)
+  gtilde(1,i) =   f*M_g(1,i) + g*M_g(2,i) + h*M_g(3,i)
+  htilde(1,i) =   f*M_h(1,i) + g*M_h(2,i) + h*M_h(3,i)
 END DO ! i
-#else /*OPTIMIZED*/
-END DO; END DO; END DO ! i,j,k
-#endif /*OPTIMIZED*/
-
 END SUBROUTINE EvalFluxTilde3D
 
 
@@ -124,37 +149,35 @@ END SUBROUTINE EvalFluxTilde3D
 !==================================================================================================================================
 !> Compute linear scalar  diffusion fluxes with using the gradient of the solution  for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Mesh_Vars     ,ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
-USE MOD_Lifting_Vars  ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Equation_Vars ,ONLY:DiffC
-#ifdef OPTIMIZED
 USE MOD_DG_Vars,ONLY:nTotal_vol
-#endif /*OPTIMIZED*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)                                 :: iElem !< Determines the actual element
+REAL,INTENT(IN )   :: U_in(     1,1:nTotal_vol) !< state in conservative variables
+REAL,INTENT(IN )   :: M_f(      3,1:nTotal_vol) !< metrics for ftilde  
+REAL,INTENT(IN )   :: M_g(      3,1:nTotal_vol) !< metrics for gtilde  
+REAL,INTENT(IN )   :: M_h(      3,1:nTotal_vol) !< metrics for htilde  
+REAL,INTENT(IN )   :: gradPx_in(1,1:nTotal_vol) !< gradient x in primitive variables 
+REAL,INTENT(IN )   :: gradPy_in(1,1:nTotal_vol) !< gradient y in primitive variables 
+REAL,INTENT(IN )   :: gradPz_in(1,1:nTotal_vol) !< gradient z in primitive variables 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde !< transformed flux f(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: gtilde !< transformed flux g(iVar,i,j,k)
-REAL,DIMENSION(1,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: htilde !< transformed flux h(iVar,i,j,k)
+REAL,INTENT(OUT)   :: ftilde(1,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+REAL,INTENT(OUT)   :: gtilde(1,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+REAL,INTENT(OUT)   :: htilde(1,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+INTEGER             :: i 
 !==================================================================================================================================
-! general curved metrics
-ftilde(1,:,:,:) = -DiffC*(  Metrics_fTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
-                          + Metrics_fTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
-                          + Metrics_fTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
-gtilde(1,:,:,:) = -DiffC*(  Metrics_gTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
-                          + Metrics_gTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
-                          + Metrics_gTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
-htilde(1,:,:,:) = -DiffC*(  Metrics_hTilde(1,:,:,:,iElem)*gradPx(1,:,:,:,iElem) &
-                          + Metrics_hTilde(2,:,:,:,iElem)*gradPy(1,:,:,:,iElem) &
-                          + Metrics_hTilde(3,:,:,:,iElem)*gradPz(1,:,:,:,iElem) )
+DO i=1,nTotal_vol
+  ftilde(1,i) = -DiffC*(gradPx_in(1,i)*M_f(1,i) + gradPy_in(1,i)*M_f(2,i) + gradPz_in(1,i)*M_f(3,i))
+  gtilde(1,i) = -DiffC*(gradPx_in(1,i)*M_g(1,i) + gradPy_in(1,i)*M_g(2,i) + gradPz_in(1,i)*M_g(3,i))
+  htilde(1,i) = -DiffC*(gradPx_in(1,i)*M_h(1,i) + gradPy_in(1,i)*M_h(2,i) + gradPz_in(1,i)*M_h(3,i))
+END DO ! i
 END SUBROUTINE EvalDiffFluxTilde3D
 
 
@@ -162,21 +185,21 @@ END SUBROUTINE EvalDiffFluxTilde3D
 !> Compute the lifting flux depending on the variable to be used for the gradient
 !> for linadv, only U as variable
 !==================================================================================================================================
-SUBROUTINE EvalLiftingVolumeFlux(iElem,Flux)
+SUBROUTINE EvalLiftingVolumeFlux(U_in,Flux)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_vol,U
+USE MOD_DG_Vars,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN)     :: iElem       !< current element
+REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)       :: flux(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< lifting flux, depending on lifting_var
+REAL,INTENT(OUT)   :: flux(PP_nVar,1:nTotal_vol) !< lifting flux, depending on lifting_var
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-  Flux=U(:,:,:,:,iElem)
+  Flux=U_in
 END SUBROUTINE EvalLiftingVolumeFlux
 
 
@@ -205,6 +228,7 @@ INTEGER  :: p,q
   DO q=0,PP_N; DO p=0,PP_N
       Flux(:,p,q)=0.5*(U_slave(:,p,q,SideID)-U_master(:,p,q,SideID))*SurfElem(p,q,SideID)
   END DO; END DO
+
 END SUBROUTINE EvalLiftingSurfFlux
 
 #endif /*PARABOLIC*/
