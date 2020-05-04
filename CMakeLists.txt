@@ -4,6 +4,11 @@
 # NOTE: use minimum CMake version required by tools/libs (Paraview, HDF5, FFTW)
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5.1)
 # Policies (see https://cmake.org/cmake/help/v3.13/manual/cmake-policies.7.html)
+# TODO: Remove the following old policies and fix the file instead!
+IF ("${CMAKE_VERSION}" VERSION_GREATER 3.0.0)
+  cmake_policy (SET CMP0045 OLD)
+  cmake_policy (SET CMP0046 OLD)
+ENDIF()
 # VERSION_GREATER_EQUAL is incompatible with CMAKE versions < 3.7
 IF(NOT(${CMAKE_VERSION} VERSION_LESS "3.6.0"))
   SET(GITSHALLOW "GIT_SHALLOW ON")
@@ -120,7 +125,7 @@ SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
-#MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
+MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
 SET(_BUILD_FLUXO_POST  OFF  CACHE BOOL "switch to also build the fluxo_post executable (reads a collection of states and calls analyze).")
 
@@ -419,14 +424,14 @@ SET(FLUXO_COMPILERS FC=${FLUXO_FC} CC=${FLUXO_CC} CXX=${FLUXO_CXX})
 # ENDIF()
 # MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
 
-IF(FLUXO_BUILD_HDF5)
+IF(FLUXO_BUILD_HDF5 OR FLUXO_BUILD_P4EST)
   IF(FLUXO_BUILD_MPI)
     SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
   ELSE()
     SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
   ENDIF()
 ELSE()
-  UNSET(FLUXO_EXTERNAL_LIB_DIR CACHE ) 
+  UNSET(FLUXO_EXTERNAL_LIB_DIR CACHE)
 ENDIF()
 MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
 
