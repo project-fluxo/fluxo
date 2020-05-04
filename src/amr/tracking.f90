@@ -17,6 +17,26 @@ MODULE MOD_AMR_tracking
     INTEGER :: Count = 0
 CONTAINS
 
+FUNCTION GetShockCapturing(Uin) result(eta_dof)
+    USE MOD_PreProc
+    USE MOD_ChangeBasis,            ONLY : ChangeBasis3D
+    IMPLICIT NONE
+    REAL, DIMENSION(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), INTENT(IN) :: Uin
+    REAL, DIMENSION(1:1, 0:PP_N, 0:PP_N, 0:PP_N) :: Umod
+    REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
+    REAL :: LU, LUM1, LUM2, LU_N, LU_NM1!, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
+    REAL eta_dof
+    CALL ChangeBasis3D(1, PP_N, PP_N, sVdm_Leg, Uin(1:1,:,:,:), Umod)
+    LU = SUM(Umod(1, :, :, :)**2)
+    LUM1 = SUM(Umod(1, 0:PP_N - 1, 0:PP_N - 1, 0:PP_N - 1)**2)
+    LUM2 = SUM(Umod(1, 0:PP_N - 2, 0:PP_N - 2, 0:PP_N - 2)**2)
+    LU_N = LU - LUM1
+    LU_NM1 = LUM1 - LUM2
+    ! DOF energy indicator
+    eta_dof = LOG10(MAX(LU_N / LU, LU_NM1 / LUM1, TINY(1.0)))
+    
+END FUNCTION 
+
     SUBROUTINE ShockCapturingAMR()
         !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
         USE MOD_PreProc
@@ -26,7 +46,7 @@ CONTAINS
         USE MOD_Mesh_Vars,              ONLY : nElems, Elem_xGP, nGlobalElems
         USE MOD_Interpolation_Vars,     ONLY : xGP
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
-        USE MOD_ChangeBasis,            ONLY : ChangeBasis3D
+
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
         ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE
@@ -35,55 +55,34 @@ CONTAINS
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
         INTEGER :: l
         ! REAL ::
-        REAL, DIMENSION(1:1, 0:PP_N, 0:PP_N, 0:PP_N) :: Uind, Umod
-        REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
-        REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
-        INTEGER :: iXMax(3), iXMin(3),i,j,k
-        LOGICAL :: doBalance = .TRUE.
-
-        MinLevel = 1!4!-2;
-        MaxLevel = MinLevel +1!+ 1!4;
        
+        ! REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
+        ! REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
+        ! INTEGER :: iXMax(3), iXMin(3),i,j,k
+        REAL    :: eta_dof
+            
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = 0;
-        ! CALL BuildLegendreVdm(PP_N, xGP, Vdm_Leg, sVdm_Leg)
-     
-        ! DO l = 1, nElems
-        !     ! !     ! if (l .EQ. 1) U()
-        !     ! Uind(1, :, :, :) = U(1, :, :, :, l)
-        !     ! CALL ChangeBasis3D(1, PP_N, PP_N, sVdm_Leg, Uind, Umod)
-        !     ! !       ! Compute (truncated) error norms
-        !     ! LU = SUM(Umod(1, :, :, :)**2)
-        !     ! LUM1 = SUM(Umod(1, 0:PP_N - 1, 0:PP_N - 1, 0:PP_N - 1)**2)
-        !     ! LUM2 = SUM(Umod(1, 0:PP_N - 2, 0:PP_N - 2, 0:PP_N - 2)**2)
-        !     ! LU_N = LU - LUM1
-        !     ! LU_NM1 = LUM1 - LUM2
-
-
-        !     ! ! DOF energy indicator
-        !     ! eta_dof = LOG10(MAX(LU_N / LU, LU_NM1 / LUM1, TINY(1.0)))
-        !     ! eta_min = -15.5
-        !     ! eta_max = -10.0
-        !     !eta_min = -8.
-        !     !eta_max = -6.99
-
-        !     !eta_min = 0.0001/250.
-        !     !eta_max = 0.1/100.
-        !     ! eps0 = 0.01
-        !     ! IF (eta_dof.GE.eta_max) THEN
-        !     !     ! nu(l) = eps0
-        !     !     ElemToRefineAndCoarse(l) = MaxLevel
-        !     !     !Print *, "Refine!!!", eta_dof
-        !     ! ELSE IF (eta_dof.LE.eta_min) THEN
-        !     !     ! nu(l) = 0.
-        !     !     ElemToRefineAndCoarse(l) = -MinLevel - 1
-        !     !     ! print *, "Coarse!", eta_dof
-        !     ! ELSE
-        !     !     ! nu(l) = 0.5*eps0*(1.0+SIN(PP_Pi*(eta_dof-0.5*(eta_max+eta_min))/(eta_max-eta_min)))
-        !     !     ElemToRefineAndCoarse(l) = 0
-        !     ! END IF
-
-        ! ENDDO
+       
+        DO l = 1, nElems
+            
+            eta_dof = GetShockCapturing(U(1:1,:,:,:,l))
+            ! eta_min = -15.5
+            ! eta_max = -10.0
+            !eta_min = -8.
+            !eta_max = -6.99
+           !eta_min = 0.0001/250.
+            !eta_max = 0.1/100.
+            ! eps0 = 0.01
+            IF (eta_dof .GE. RefineVal) THEN
+                ElemToRefineAndCoarse(l) = MaxLevel
+            
+            ELSE IF (eta_dof .LE. CoarseVal) THEN
+                ElemToRefineAndCoarse(l) = -MinLevel - 1
+            ELSE
+                ElemToRefineAndCoarse(l) = 0
+            END IF
+       ENDDO
    
         ElemToRefineAndCoarse = 0
         ! IF (Count .EQ. 0 ) THEN
@@ -122,13 +121,6 @@ CONTAINS
         Deallocate(ElemToRefineAndCoarse)
       
        
-            ! IF (MPIRoot)  print *, "Balance Loading START: Number of Global Elements = ", nGlobalElems
-            ! PRINT *, "BEFORE: MPIRANK = ", myrank, "nELems = ", nElems
-            ! IF (doBalance) CALL LoadBalancingAMR()
-        !     IF (MPIRoot) THEN
-        !         print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
-        !     ENDIF
-        ! ENDIF
 
     END SUBROUTINE ShockCapturingAMR
 
