@@ -16,7 +16,10 @@ SAVE
 CHARACTER(LEN=255)          :: p4estFile          ! name of hdf5 meshfile (write with ending .h5!)
 LOGICAL                     :: UseAMR
 LOGICAL                     :: AMRInitIsDone
-
+INTEGER                     :: MaxLevel
+INTEGER                     :: MinLevel
+REAL                        :: RefineVal 
+REAL                        :: CoarseVal
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       !
 

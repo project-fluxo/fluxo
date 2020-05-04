@@ -354,9 +354,9 @@ CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR
 CALL StartReceiveMPIData(Flux_slave, DataSizeSide,firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
 ! since mortar solutions are already there, we can directly fill the fluxes for all MPI sides 
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.TRUE.)
-#ifdef navierstokes
-CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.TRUE., weak=.TRUE.)
-#endif
+! #ifdef navierstokes
+! CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.TRUE., weak=.TRUE.)
+! #endif
 ! start the sending command
 CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
 #endif /* MPI*/
@@ -365,13 +365,13 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
-#ifdef navierstokes
-CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.FALSE., weak=.TRUE.)
-#endif
+! #ifdef navierstokes
+! CALL RiemannSolver_ESM(U_master, U_slave, Flux_master, Flux_slave,doMPISides=.FALSE., weak=.TRUE.)
+! #endif
 ! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
-#ifdef navierstokes
+! #ifdef navierstokes
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
-#endif
+! #endif
 ! add inner and BC side surface contibutions to time derivative 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 
@@ -380,9 +380,9 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
 
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
-#ifdef navierstokes
+! #ifdef navierstokes
  CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
-#endif
+! #endif
 
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)

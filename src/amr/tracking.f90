@@ -20,19 +20,20 @@ CONTAINS
     SUBROUTINE ShockCapturingAMR()
         !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
         USE MOD_PreProc
-        USE MOD_Globals, ONLY : MPIroot, myrank
-        USE MOD_DG_Vars, ONLY : U
-        USE MOD_AMR, ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
-        USE MOD_Mesh_Vars, ONLY : nElems, Elem_xGP, nGlobalElems
-        USE MOD_Interpolation_Vars, ONLY : xGP
-        USE MOD_Basis, ONLY : BuildLegendreVdm
-        USE MOD_ChangeBasis, ONLY : ChangeBasis3D
+        USE MOD_Globals,                ONLY : MPIroot, myrank
+        USE MOD_DG_Vars,                ONLY : U
+        USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
+        USE MOD_Mesh_Vars,              ONLY : nElems, Elem_xGP, nGlobalElems
+        USE MOD_Interpolation_Vars,     ONLY : xGP
+        USE MOD_Basis,                  ONLY : BuildLegendreVdm
+        USE MOD_ChangeBasis,            ONLY : ChangeBasis3D
+        USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
         ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE
         ! SAVE
         !Local variables
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-        INTEGER :: l, MaxLevel, MinLevel
+        INTEGER :: l
         ! REAL ::
         REAL, DIMENSION(1:1, 0:PP_N, 0:PP_N, 0:PP_N) :: Uind, Umod
         REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
@@ -83,7 +84,7 @@ CONTAINS
         !     ! END IF
 
         ! ENDDO
-      
+   
         ElemToRefineAndCoarse = 0
         ! IF (Count .EQ. 0 ) THEN
             ! COUNT = 1; 

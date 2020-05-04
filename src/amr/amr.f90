@@ -73,9 +73,24 @@ SUBROUTINE DefineParametersAMR()
   CALL prms%CreateLogicalOption( 'UseAMR',          "Use AMR for solution.",&
                                                       '.FALSE.')
   CALL prms%CreateStringOption('p4estFile', "(relative) path to p4ests connectivity file (mandatory).")
-
+  
+  CALL prms%CreateIntOption(     "ShockIndicatorAMR",  " Specifies the quantity to be used as a shock-indicator "//&
+                                 "  1: Density"//&
+                                 "  2: Pressure"//&
+                                 "  3: Density times Pressure"//&
+                                 "  4: Kinetic Energy"&
+                                ,"3")
+ CALL prms%CreateRealOption(  'RefineVal',       "The value to refine Element", "0")
+ CALL prms%CreateRealOption(  'CoarseVal',       "The value to Coarse 8 Elements", "0")
+ 
+ CALL prms%CreateIntOption(  'MinLevel',       "Minimum refinment level of the forest", "0")
+ CALL prms%CreateIntOption(  'MaxLevel',       "Maximum refinemen level ", "0")
 END SUBROUTINE DefineParametersAMR
 
+
+
+
+  
 
 !==================================================================================================================================
 !> Routine controlling the initialization of the AMR.
@@ -86,7 +101,7 @@ SUBROUTINE InitAMR()
     USE MOD_PreProc
     USE MOD_AMR_Vars
     USE MOD_P4EST
-    USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR
+    USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
     ! USE MOD_P4EST_Binding, ONLY: p4_initvars
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
@@ -114,7 +129,11 @@ SUBROUTINE InitAMR()
       SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
       RETURN;
     ENDIF
-  
+    MinLevel = GetINT('MinLevel',"0")
+    MaxLevel = GetINT('MaxLevel',"0")
+    RefineVal = GetReal('RefineVal',"0.")
+    CoarseVal = GetREal('CoarseVal',"0.")
+
     RET=P4EST_INIT(MPI_COMM_WORLD); 
 
 
