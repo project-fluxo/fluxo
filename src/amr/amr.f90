@@ -136,6 +136,7 @@ SUBROUTINE InitAMR()
     CoarseVal = GetREal('CoarseVal',"0.")
 
     CALL InitIndicator()
+
     RET=P4EST_INIT(MPI_COMM_WORLD); 
 
 
@@ -255,7 +256,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   FortranData%ChngElmPtr = C_LOC(ChangeElem)
   
   CALL FillElemsChanges(p4est_ptr, DATAPtr)
-  ! CALL EXIT()
+
 
   ! CALL C_F_POINTER(DataPtr, FortranData)
   ! PRINT *, size(ChangeElem(1,:))
