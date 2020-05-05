@@ -54,7 +54,7 @@ INTERFACE EntropyStableByLLF
   MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
 
-PUBLIC :: Riemann
+PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
 public :: AddWholeNonConsFlux
@@ -86,9 +86,6 @@ SUBROUTINE Riemann(F,UL,UR,                                                     
                    nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
-#if PARABOLIC
-USE MOD_Flux         ,ONLY: EvalDiffFlux3D
-#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -114,12 +111,43 @@ REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of f
 REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+!==================================================================================================================================
+
+call AdvRiemann(F,UL,UR,nv,t1,t2)
+
+#if PARABOLIC
+!! Don#t forget the diffusion contribution, my young padawan
+!! Compute MHD Diffusion flux
+call DiffRiemann(F,UL,UR,gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
+#if SHOCK_ARTVISC
+                  nu_L,nu_R,									  &
+#endif /*SHOCK_ARTVISC*/
+                  nv,t1,t2)
+#endif /* PARABOLIC */
+
+END SUBROUTINE Riemann
+
+!==================================================================================================================================
+!> Advective Riemann solver
+!==================================================================================================================================
+SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
+USE MOD_PreProc
+USE MOD_Equation_vars,ONLY: SolveRiemannProblem
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
 REAL             :: ConsL(1:PP_nVar)
 REAL             :: ConsR(1:PP_nVar)
-#if PARABOLIC
-REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N) :: k_L,g_L,j_L,k_R,g_R,j_R
-INTEGER          :: iVar
-#endif /*PARABOLIC*/
 INTEGER          :: i,j
 !==================================================================================================================================
 DO j = 0,PP_N
@@ -154,9 +182,48 @@ DO j = 0,PP_N
 
   END DO !i
 END DO !j
+END SUBROUTINE AdvRiemann
+
 #if PARABOLIC
-!! Don#t forget the diffusion contribution, my young padawan
-!! Compute MHD Diffusion flux
+!==================================================================================================================================
+!> Diffusive Riemann solver
+!==================================================================================================================================
+SUBROUTINE DiffRiemann(F,UL,UR,gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
+#if SHOCK_ARTVISC
+                         nu_L,nu_R,									  &
+#endif /*SHOCK_ARTVISC*/
+                         nv,t1,t2)
+USE MOD_PreProc
+USE MOD_Equation_vars,ONLY: SolveRiemannProblem
+USE MOD_Flux         ,ONLY: EvalDiffFlux3D
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
+#if SHOCK_ARTVISC
+REAL,INTENT(IN)  :: nu_L !artficial viscosity
+REAL,INTENT(IN)  :: nu_R
+#endif /*SHOCK_ARTVISC*/
+#if PARABOLIC                                                 
+REAL,INTENT(IN) :: gradUx_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in x 
+REAL,INTENT(IN) :: gradUx_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in x 
+REAL,INTENT(IN) :: gradUy_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in y 
+REAL,INTENT(IN) :: gradUy_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in y 
+REAL,INTENT(IN) :: gradUz_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in z 
+REAL,INTENT(IN) :: gradUz_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in z 
+#endif /*PARABOLIC*/
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N) :: k_L,g_L,j_L,k_R,g_R,j_R
+INTEGER          :: iVar
+!==================================================================================================================================
 
 CALL EvalDiffFlux3D(k_L,g_L,j_L,UL, &
 #if SHOCK_ARTVISC
@@ -172,14 +239,13 @@ gradUx_R,gradUy_R,gradUz_R)
 
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
-DO iVar=2,PP_nVar
+DO iVar=1,PP_nVar
   F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:))  & 
                                +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:))  &
                                +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:))  )
 END DO
-#endif /* PARABOLIC */
-
-END SUBROUTINE Riemann
+END SUBROUTINE DiffRiemann
+#endif
 
 #if NONCONS
 !==================================================================================================================================

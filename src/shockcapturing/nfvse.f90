@@ -300,7 +300,7 @@ contains
                                               sCM )
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: SubCellMetrics_t
-    use MOD_Riemann   , only: Riemann
+    use MOD_Riemann   , only: AdvRiemann
 #if NONCONS
     USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
     use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
@@ -357,10 +357,7 @@ contains
 !   ---------------------
     do i=0, PP_N-1
       
-      call Riemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
-#if PARABOLIC
-                   gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
-#endif
+      call AdvRiemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
                    sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
       
 #if NONCONS
@@ -417,10 +414,7 @@ contains
 !   ---------------------
     do i=0, PP_N-1
       
-      call Riemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
-#if PARABOLIC
-                   gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
-#endif
+      call AdvRiemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
                    sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
       
 #if NONCONS
@@ -475,10 +469,7 @@ contains
 !   ---------------------
     do i=0, PP_N-1
       
-      call Riemann(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1), &
-#if PARABOLIC
-                   gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
-#endif
+      call AdvRiemann(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1), &
                    sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
       
 #if NONCONS

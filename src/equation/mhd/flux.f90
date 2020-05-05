@@ -645,6 +645,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
+  f(1,i)=0.
   f(2,i)=-mu*(2*gradv1x-s23*divv)
   f(3,i)=-mu*(  gradv2x+gradv1y)   
   f(4,i)=-mu*(  gradv3x+gradv1z)   
@@ -657,6 +658,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
 
 
   ! viscous fluxes in y-direction      
+  g(1,i)=0.
   g(2,i)= f(3,i)                  !mu*(  gradv1y+gradv2x)  
   g(3,i)=-mu*(2*gradv2y-s23*divv)     
   g(4,i)=-mu*(  gradv3y+gradv2z)      
@@ -669,6 +671,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
 
 
   ! viscous fluxes in z-direction      
+  h(1,i)=0.
   h(2,i)= f(4,i)                       !mu*(  gradv1z+gradv3x)                 
   h(3,i)= g(4,i)                       !mu*(  gradv2z+gradv3y)                
   h(4,i)=-mu*(2*gradv3z-s23*divv )             
