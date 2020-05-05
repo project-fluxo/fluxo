@@ -43,13 +43,7 @@ USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
 ! Added for AMR ->
 USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh
-USE MOD_Mesh_Vars,           ONLY:nElems, Elem_xGP
-USE MOD_AMR_vars,                 ONLY:UseAMR
 USE MOD_AMR_tracking
-!   !  USE MOD_DG_Vars,            ONLY: U
-!    USE MOD_HDF5_Output,       ONLY: WRITESTATE!
-! USE MOD_Output,            ONLY: Visualize !! //
-! USE MOD_P4est,            ONLY:InitAMR_P4est, SaveP4est,LOAdP4est
 ! <-Added for AMR 
 
 #if PARABOLIC
@@ -59,8 +53,6 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
-INTEGER, ALLOCATABLE, TARGET  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-INTEGER                       :: PP
 !==================================================================================================================================
 ! Added for AMR ->
 

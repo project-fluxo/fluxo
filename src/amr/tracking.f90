@@ -63,26 +63,26 @@ END FUNCTION
             
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = 0;
-       
-        DO l = 1, nElems
+    !!! < ----- Commented for the production ----- >
+    !     DO l = 1, nElems
             
-            eta_dof = GetShockCapturing(U(1:1,:,:,:,l))
-            ! eta_min = -15.5
-            ! eta_max = -10.0
-            !eta_min = -8.
-            !eta_max = -6.99
-           !eta_min = 0.0001/250.
-            !eta_max = 0.1/100.
-            ! eps0 = 0.01
-            IF (eta_dof .GE. RefineVal) THEN
-                ElemToRefineAndCoarse(l) = MaxLevel
+    !         eta_dof = GetShockCapturing(U(1:1,:,:,:,l))
+    !         ! eta_min = -15.5
+    !         ! eta_max = -10.0
+    !         !eta_min = -8.
+    !         !eta_max = -6.99
+    !        !eta_min = 0.0001/250.
+    !         !eta_max = 0.1/100.
+    !         ! eps0 = 0.01
+    !         IF (eta_dof .GE. RefineVal) THEN
+    !             ElemToRefineAndCoarse(l) = MaxLevel
             
-            ELSE IF (eta_dof .LE. CoarseVal) THEN
-                ElemToRefineAndCoarse(l) = -MinLevel - 1
-            ELSE
-                ElemToRefineAndCoarse(l) = 0
-            END IF
-       ENDDO
+    !         ELSE IF (eta_dof .LE. CoarseVal) THEN
+    !             ElemToRefineAndCoarse(l) = -MinLevel - 1
+    !         ELSE
+    !             ElemToRefineAndCoarse(l) = 0
+    !         END IF
+    !    ENDDO
    
         ElemToRefineAndCoarse = 0
         ! IF (Count .EQ. 0 ) THEN
@@ -139,8 +139,8 @@ END FUNCTION
         nVar = size(U(:, 0, 0, 0, 1));
         X0 = 0.5
         Y0 = 0.5
-        Mejecta = 0.1 !0.5
-        SigmaEjecta = 5.e-2!3.e-2
+        Mejecta = 0.5 !0.5
+        SigmaEjecta = 15.e-2!3.e-2
         Eblast = 0*0.1 !1.
         Sigmablast = 5.e-2!2.e-2
         ! R = 3. / 2. !sqrt(0.5) !0.005
@@ -185,9 +185,9 @@ END FUNCTION
                     	    ! P = skappa*(1 - kappam1/2. * Omega*Omega)**(kappa*skappam1)
                       Prim = (/Rho, Ux, Vy, 0., P/)
                     ! Prim = (/1.29, 0.,0., 0., 100000./)
-                    CALL PrimToCons(Prim, U(:,i,j,k,iElem))
+                    ! CALL PrimToCons(Prim, U(:,i,j,k,iElem))
                     ! SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
-                    ! CALL ExactFunc(IniExactFunc, 0., Elem_xGP(:, i, j, k, iElem), U(:, i, j, k, iElem));
+                    CALL ExactFunc(IniExactFunc, 0., Elem_xGP(:, i, j, k, iElem), U(:, i, j, k, iElem));
                 ENDDO;
                 ENDDO;
                 ENDDO;

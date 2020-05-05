@@ -16,12 +16,12 @@ SAVE
 CHARACTER(LEN=255)          :: p4estFile          ! name of hdf5 meshfile (write with ending .h5!)
 LOGICAL                     :: UseAMR
 LOGICAL                     :: AMRInitIsDone
-INTEGER                     :: MaxLevel
-INTEGER                     :: MinLevel
-REAL                        :: RefineVal 
-REAL                        :: CoarseVal
+INTEGER                     :: MaxLevel             ! Loaded from .ini file
+INTEGER                     :: MinLevel             ! Loaded from .ini file
+REAL                        :: RefineVal            ! Loaded from .ini file
+REAL                        :: CoarseVal            ! Loaded from .ini file 
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
-TYPE(C_PTR)                 :: connectivity_ptr       !
+TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
 
 
 TYPE p4est_save_data
