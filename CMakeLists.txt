@@ -305,23 +305,30 @@ ENDIF()
 IF (FLUXO_SHOCKCAPTURE)
   ADD_DEFINITIONS(-DSHOCKCAPTURE=1)
   
-  #### Set the shock capturing method
-  SET(FLUXO_SHOCKCAP_METHOD "NFVSE" CACHE STRING "Shock capturing method: ArtificialVisc/NFVSE")
-  SET_PROPERTY(CACHE FLUXO_SHOCKCAP_METHOD PROPERTY STRINGS ArtificialVisc NFVSE)
+  #### Artificial viscosity shock capturing
+  OPTION(FLUXO_SHOCKCAP_ARTVISC "Use Artificial Viscosity shock capturing" OFF)
   
-  IF(FLUXO_SHOCKCAP_METHOD STREQUAL "ArtificialVisc")
+  IF(FLUXO_SHOCKCAP_ARTVISC)
     IF (NOT FLUXO_PARABOLIC)
-      MESSAGE(SEND_ERROR " Activate FLUXO_PARABOLIC for ArtificialVisc shock-capturing.")
+      MESSAGE(SEND_ERROR " Activate FLUXO_PARABOLIC for ArtificialVisc shock capturing.")
     ENDIF()
     ADD_DEFINITIONS(-DSHOCK_ARTVISC=1)
-  ELSEIF(FLUXO_SHOCKCAP_METHOD STREQUAL "NFVSE")
+  ENDIF()
+  
+  #### NFVSE shock capturing
+  OPTION(FLUXO_SHOCKCAP_NFVSE "Use NFVSE for shock capturing" ON)
+  
+  IF(FLUXO_SHOCKCAP_NFVSE)
     ADD_DEFINITIONS(-DSHOCK_NFVSE=1)
     OPTION(FLUXO_SHOCK_NFVSE_CORR "Blending Correction" OFF)
     IF(FLUXO_SHOCK_NFVSE_CORR)
       ADD_DEFINITIONS(-DNFVSE_CORR=1)
     ENDIF()
-  ELSE()
-    MESSAGE(SEND_ERROR " No such shock-capturing method implemented.")
+  ENDIF()
+  
+  #### None selected?
+  IF((NOT FLUXO_SHOCKCAP_NFVSE) AND (NOT FLUXO_SHOCKCAP_ARTVISC))
+    MESSAGE(SEND_ERROR " No shock capturing method selected.")
   ENDIF()
   
   #### Set the shock capturing indicator

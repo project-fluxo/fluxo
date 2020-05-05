@@ -127,7 +127,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                        :: iBox,OpenStat
+INTEGER                        :: iBox,OpenStat, nVars
 CHARACTER(LEN=8)               :: StrDate
 CHARACTER(LEN=10)              :: StrTime
 CHARACTER(LEN=255)             :: LogFile
@@ -196,12 +196,15 @@ nOutVars=PP_nVar
 nOutVars=PP_nVar
 #endif
 ! If shock-capturing is activated output an extra quantity
-#if SHOCKCAPTURE
+#if SHOCK_ARTVISC
+nOutvars = nOutvars + 1
+#endif /*SHOCK_ARTVISC*/
+#if SHOCK_NFVSE
 nOutvars = nOutvars + 1
 #if NFVSE_CORR
 nOutvars = nOutvars + 1
 #endif /*NFVSE_CORR*/
-#endif /*SHOCKCAPTURE*/
+#endif /*SHOCK_NFVSE*/
 allocate(strvarnames_tmp(nOutVars))
 
 ! Set the default names
@@ -210,13 +213,17 @@ allocate(strvarnames_tmp(nOutVars))
 strvarnames_tmp(1)=StrVarnames(1)
 strvarnames_tmp(2)='ExactSolution'
 #endif /*linearscalaradvection*/
+nVars = PP_nVar
 #if SHOCK_ARTVISC
-strvarnames_tmp(nOutVars) = 'ArtificialViscosity'
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'ArtificialViscosity'
 #endif /*SHOCK_ARTVISC*/
 #if SHOCK_NFVSE
-strvarnames_tmp(PP_nVar+1) = 'BlendingFunction'
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'BlendingFunction'
 #if NFVSE_CORR
-strvarnames_tmp(nOutVars) = 'BlendingFunction_old'
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'BlendingFunction_old'
 #endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/
 
@@ -314,6 +321,7 @@ REAL                          :: Uex(1,0:PP_N,0:PP_N,0:PP_N)
 REAL                          :: cons(PP_nVar)
 #endif
 INTEGER                       :: i,j,k
+integer                       :: nVars
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
 
@@ -368,14 +376,18 @@ DO iElem=1,nElems
     END DO ; END DO ; END DO
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
+nVars = PP_nVar
 #if SHOCK_ARTVISC
 ! Print artificial viscosity instead of divergence error?
-  U_NVisu(nOutvars ,:,:,:,iElem) = nu(iElem)
+nVars = nVars+1
+  U_NVisu(nVars,:,:,:,iElem) = nu(iElem)
 #endif /*SHOCK_ARTVISC*/
 #if SHOCK_NFVSE
-  U_NVisu(PP_nVar+1,:,:,:,iElem) = alpha(iElem)
+nVars = nVars+1
+  U_NVisu(nVars,:,:,:,iElem) = alpha(iElem)
 #if NFVSE_CORR
-  U_NVisu(nOutvars ,:,:,:,iElem) = alpha_old(iElem)
+nVars = nVars+1
+  U_NVisu(nVars ,:,:,:,iElem) = alpha_old(iElem)
 #endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/
 END DO !iElem

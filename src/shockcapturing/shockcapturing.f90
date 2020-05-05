@@ -134,7 +134,9 @@ nu     = 0.
 nu_max = 0.
 nu_Master = 0.
 nu_Slave = 0.
-#elif SHOCK_NFVSE
+#endif SHOCK_ARTVISC
+
+#if SHOCK_NFVSE
 allocate ( alpha(nElems) )
 allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
 allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
@@ -148,7 +150,7 @@ alpha_Slave  = 0.d0
 threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N + 1.d0)**0.25d0) ! New Sebastian
 
 call InitNFVSE()
-#endif /*SHOCK_NFVSE/SHOCK_ARTVISC*/
+#endif /*SHOCK_NFVSE*/
 
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'

@@ -133,7 +133,7 @@ call AdvRiemann(F,U_L,U_R,nv,t1,t2)
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute NSE Diffusion flux in cartesian coordinates
-CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)
+CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)  ! TODO: Add ArtVisc to Riemann!
 CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R,gradUx_R,gradUy_R,gradUz_R)
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
