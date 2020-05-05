@@ -79,7 +79,7 @@ SUBROUTINE DefineParametersAMR()
                                  "  2: Pressure"//&
                                  "  3: Density times Pressure"//&
                                  "  4: Kinetic Energy"&
-                                ,"3")
+                                ,"1")
  CALL prms%CreateRealOption(  'RefineVal',       "The value to refine Element", "0")
  CALL prms%CreateRealOption(  'CoarseVal',       "The value to Coarse 8 Elements", "0")
  
@@ -101,7 +101,8 @@ SUBROUTINE InitAMR()
     USE MOD_PreProc
     USE MOD_AMR_Vars
     USE MOD_P4EST
-    USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
+    USE MOD_ReadInTools         ,ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
+    USE MOD_Indicators          ,ONLY: InitIndicator
     ! USE MOD_P4EST_Binding, ONLY: p4_initvars
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
@@ -134,6 +135,7 @@ SUBROUTINE InitAMR()
     RefineVal = GetReal('RefineVal',"0.")
     CoarseVal = GetREal('CoarseVal',"0.")
 
+    CALL InitIndicator()
     RET=P4EST_INIT(MPI_COMM_WORLD); 
 
 

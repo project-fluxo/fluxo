@@ -1,8 +1,14 @@
 #ifndef P4FLUXO_H
 #define P4FLUXO_H
 
-#include "stdio.h"
-#include "malloc.h"
+// #include "stdio.h"
+// #include "malloc.h"
+#if defined(__MACH__)
+#include <stdlib.h>
+#else
+#include <malloc.h>
+#endif
+
 #include "mpi.h"
 #include <sc_io.h>
 #include "p8est.h"

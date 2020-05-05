@@ -632,6 +632,7 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/output/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
+                           ./src/indicators/*.f90
                            ./src/timedisc/*.f90            )
 
 
