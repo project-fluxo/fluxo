@@ -315,6 +315,16 @@ IF (FLUXO_SHOCKCAPTURE)
     ADD_DEFINITIONS(-DSHOCK_ARTVISC=1)
   ENDIF()
   
+  #### Local physics-based artificial viscosity shock capturing (see Fernandez et al. "A physics-based shock capturing method for unsteady laminar and turbulent flows and turbulent flows" and Ciuca et al. "Implicit hybridized discontinuous Galerkin methods for compressible magnetohydrodynamics"  )
+  OPTION(FLUXO_SHOCKCAP_ARTVISC2 "Use local physics-based artificial Viscosity shock capturing" OFF)
+  
+  IF(FLUXO_SHOCKCAP_ARTVISC2)
+    IF (NOT FLUXO_PARABOLIC)
+      MESSAGE(SEND_ERROR " Activate FLUXO_PARABOLIC for ArtificialVisc shock capturing.")
+    ENDIF()
+    ADD_DEFINITIONS(-DSHOCK_LOC_ARTVISC=1)
+  ENDIF()
+  
   #### NFVSE shock capturing
   OPTION(FLUXO_SHOCKCAP_NFVSE "Use NFVSE for shock capturing" ON)
   

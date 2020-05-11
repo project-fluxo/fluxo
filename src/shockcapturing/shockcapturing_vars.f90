@@ -29,8 +29,16 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL          :: ShockCapturingInitIsDone=.FALSE.     !< marks whether the shock capturing init routine is complete
 REAL,ALLOCATABLE :: sVdm_Leg(:,:)                        !< 1D inverse Vandermondematrix to Legendre polynomials
+
+#if SHOCK_ARTVISC
 REAL             :: nu_max                               !< Globally maximum artificial viscosity
 REAL,ALLOCATABLE :: nu(:),nu_Master(:),nu_Slave(:)       !< Cellwise (and Facewise) artificial viscosity
+#endif /*SHOCK_ARTVISC*/
+
+#if SHOCK_LOC_ARTVISC
+real, allocatable :: artVisc(:,:,:,:,:)     ! Artificial viscosities in each Gauss point
+real, allocatable :: Mh_inv (:,:,:,:,:,:) ! Inverse of metric tensor in each DOF
+#endif /*SHOCK_LOC_ARTVISC*/
 
 ! For NFVSE
 real, allocatable :: alpha(:)                             !< Element-wise blending function (modified every time Ut is computed)

@@ -24,6 +24,7 @@ MODULE MOD_ShockCapturing
 IMPLICIT NONE
 PRIVATE
 ! ----------------------------------------------------------------------------------------------------------------------------------
+
 INTERFACE DefineParametersShockCapturing
    MODULE PROCEDURE DefineParametersShockCapturing
 END INTERFACE
@@ -108,6 +109,11 @@ USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
 #if SHOCK_NFVSE
 use MOD_NFVSE             , only: InitNFVSE
 #endif /*SHOCK_NFVSE*/
+#if SHOCK_LOC_ARTVISC
+use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde, sJ
+use MOD_Basis             , only: INV33
+use MOD_Sensors           , only: SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -117,6 +123,9 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 integer :: whichIndicator
+integer :: i,j,k    ! DOF counters
+integer :: eID      ! Element counter
+real    :: Mh(3,3)  ! Metric tensor in each element
 !============================================================================================================================
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
   SWRITE(*,*) "InitShockCapturing not ready to be called or already called."
@@ -134,7 +143,23 @@ nu     = 0.
 nu_max = 0.
 nu_Master = 0.
 nu_Slave = 0.
-#endif SHOCK_ARTVISC
+#endif /*SHOCK_ARTVISC*/
+
+#if SHOCK_LOC_ARTVISC
+! Allocate vectors
+allocate ( artVisc(SENS_NUM,0:PP_N,0:PP_N,0:PP_N,nElems) )
+allocate ( Mh_inv      (3,3,0:PP_N,0:PP_N,0:PP_N,nElems) )
+
+! Inverse of metric tensor
+do eID=1, nElems
+  do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
+    Mh(:,1) = Metrics_fTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    Mh(:,2) = Metrics_gTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    Mh(:,3) = Metrics_hTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    call INV33(Mh,Mh_inv(:,:,i,j,k,eID))
+  end do        ; end do        ; end do ! ijk
+end do !eID
+#endif /*SHOCK_LOC_ARTVISC*/
 
 #if SHOCK_NFVSE
 allocate ( alpha(nElems) )
@@ -224,10 +249,14 @@ SUBROUTINE CalcArtificialViscosity(U)
 ! MODULES
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars, ONLY: nu,nu_max
-USE MOD_TimeDisc_Vars      , ONLY: dt
 USE MOD_Mesh_Vars          , ONLY: nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      , ONLY: ConsToPrim
 USE MOD_Equation_Vars      , ONLY: FastestWave3D
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors            , only: SensorsByFernandezEtAl
+USE MOD_ShockCapturing_Vars, ONLY: artVisc, Mh_inv
+use MOD_Lifting_Vars       , only: gradPx, gradPy, gradPz
+#endif /*SHOCK_LOC_ARTVISC*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -237,19 +266,33 @@ IMPLICIT NONE
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(IN) :: U
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+REAL                                     :: eta_dof(nElems),eta_min,eta_max,eps0
+REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),h,lambda_max2
+INTEGER                                  :: l,i,j,k
 !===================================================================================================================================
-REAL                                     :: eta_dof(nElems),eta_min,eta_max,eps0,p
-REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),lambda_max,h,lambda_max2
-INTEGER                                  :: l,ind,i,j,k
 
 nu    =0.
 nu_max=0.
 
 call ShockSensor_PerssonPeraire(U,eta_dof)
 
+!<temp Compute the physics based sensors to debug
+#if SHOCK_LOC_ARTVISC
+do l=1, nElems
+  do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
+    call SensorsByFernandezEtAl ( artVisc(:,i,j,k,l), &
+                                        U(:,i,j,k,l), &
+                                   gradPx(:,i,j,k,l), &
+                                   gradPy(:,i,j,k,l), &
+                                   gradPz(:,i,j,k,l), &
+                                 Mh_inv(:,:,i,j,k,l) )
+  end do        ; end do        ; end do ! ijk
+end do !l
+#endif /*SHOCK_LOC_ARTVISC*/
+!temp>
+
 eta_dof = log10(eta_dof)
 DO l=1,nElems
-  
   ! Artificial Viscosity
   eta_min = -9.0
   eta_max = -3.0
@@ -262,7 +305,7 @@ DO l=1,nElems
   ELSE
     nu(l) = 0.5*eps0*(1.0+SIN(PP_Pi*(eta_dof(l)-0.5*(eta_max+eta_min))/(eta_max-eta_min)))
   END IF
-   
+  
   ! Save max artificial viscosity for DFL timestepping
   nu_max = MAX(nu_max,nu(l))
 
@@ -300,7 +343,7 @@ DO l=1,nElems
 
   ! Scaling of artificial viscosity
   nu(l) = nu(l)*lambda_max2/(REAL(PP_N))
-!  nu(l) = 0.005
+!  nu(l) = 0.007
 
 END DO ! l
 

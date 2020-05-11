@@ -121,6 +121,9 @@ USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone,NodeTypeVISU,NodeType
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors           ,only: SENS_NUM, StrArtViscNames
+#endif /*SHOCK_ARTVISC*/
 !USE ISO_C_BINDING,         ONLY: C_NULL_CHAR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -195,10 +198,13 @@ nOutVars=PP_nVar
 !default
 nOutVars=PP_nVar
 #endif
-! If shock-capturing is activated output an extra quantity
+! If shock-capturing is activated output extra quantities
 #if SHOCK_ARTVISC
 nOutvars = nOutvars + 1
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+nOutvars = nOutvars + SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 nOutvars = nOutvars + 1
 #if NFVSE_CORR
@@ -218,6 +224,10 @@ nVars = PP_nVar
 nVars = nVars+1
 strvarnames_tmp(nVars) = 'ArtificialViscosity'
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+strvarnames_tmp(nVars+1:nVars+SENS_NUM) = StrArtViscNames
+nVars = nVars+SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 nVars = nVars+1
 strvarnames_tmp(nVars) = 'BlendingFunction'
@@ -293,6 +303,10 @@ USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #if SHOCK_ARTVISC
 use MOD_ShockCapturing_Vars ,only: nu
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+use MOD_ShockCapturing_Vars ,only: artVisc
+use MOD_Sensors             ,only: SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 use MOD_ShockCapturing_Vars ,only: alpha, alpha_old
 #endif /*SHOCK_NFVSE*/
@@ -360,7 +374,7 @@ U_NVisu = 0.
 ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
 
 DO iElem=1,nElems
-    ! Create coordinates of visualization points
+    ! Create coordinates of visualization points (TODO: can't this be done only once at the beginning?)
     CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,Elem_xGP(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
     ! Interpolate solution onto visu grid
     CALL ChangeBasis3D(PP_nVar,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:PP_nVar,:,:,:,iElem),U_NVisu(1:PP_nVar,:,:,:,iElem))
@@ -376,17 +390,21 @@ DO iElem=1,nElems
     END DO ; END DO ; END DO
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
-nVars = PP_nVar
+  nVars = PP_nVar
 #if SHOCK_ARTVISC
-! Print artificial viscosity instead of divergence error?
-nVars = nVars+1
+  nVars = nVars+1
   U_NVisu(nVars,:,:,:,iElem) = nu(iElem)
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+  ! Interpolate solution onto visu grid
+  CALL ChangeBasis3D(SENS_NUM,PP_N,NVisu,Vdm_GaussN_NVisu,artVisc(1:SENS_NUM,:,:,:,iElem),U_NVisu(nVars+1:nVars+SENS_NUM,:,:,:,iElem))
+  nVars = nVars+SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
-nVars = nVars+1
+  nVars = nVars+1
   U_NVisu(nVars,:,:,:,iElem) = alpha(iElem)
 #if NFVSE_CORR
-nVars = nVars+1
+  nVars = nVars+1
   U_NVisu(nVars ,:,:,:,iElem) = alpha_old(iElem)
 #endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/

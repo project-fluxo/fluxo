@@ -148,7 +148,7 @@ CONTAINS
 !==================================================================================================================================
 !> Computes the inverse of a 3x3 matrix
 !==================================================================================================================================
-SUBROUTINE INV33(M,MInv,detM_out)
+pure SUBROUTINE INV33(M,MInv,detM_out)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
