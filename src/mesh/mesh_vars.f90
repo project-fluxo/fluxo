@@ -100,6 +100,7 @@ INTEGER             :: nGlobalElems=0          !< number of elements in mesh
 INTEGER             :: nElems=0                !< number of local elements
 INTEGER             :: offsetElem=0            !< for MPI, until now=0 Elems pointer array range: [offsetElem+1:offsetElem+nElems]
 INTEGER             :: nSides=0                !< =nInnerSides+nBCSides+nMPISides
+INTEGER             :: nGlobalUniqueSides=0    !< = total number of unique sides in mesh (for MasterMortar)
 INTEGER             :: nSidesMaster=0          !< =sideIDMaster
 INTEGER             :: nSidesSlave=0           !< =nInnerSides+nBCSides+nMPISides
 INTEGER             :: nInnerSides=0           !< InnerSide index range: sideID [nBCSides+1:nBCSides+nInnerSides]

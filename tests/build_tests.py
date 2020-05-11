@@ -873,6 +873,9 @@ baseopts=[
 TEST=[]
 TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-12" ])
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+TEST_MORTAR=[]
+TEST_MORTAR.extend(["freestream","parameter_freestream_navierstokes_mortar.ini", "1.0e-12" ])
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0] ==0 or (caseID in cases)) :
    pname="build_navierstokes_release_type1_br1_GL"
@@ -913,6 +916,25 @@ if(cases[0] ==0 or (caseID in cases)) :
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
+if(cases[0] ==0 or (caseID in cases)) :
+   pname="build_navierstokes_release_type1_br1_GL_curvedmortar"
+   print( "caseID: %d name: %s" % (caseID,pname) )
+
+   options=[]; options.extend(globopts) ; options.extend(baseopts)
+   options.extend([
+             "CMAKE_BUILD_TYPE"       ,"Release"
+            ,"FLUXO_DISCTYPE"         ,"1"
+            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+            ,"FLUXO_PARABOLIC"        ,"ON"
+            ,"FLUXO_PARABOLIC_LIFTING","br1"
+            ,"FLUXO_PARABOLIC_LIFTING_VAR","cons_var"
+            ,"FLUXO_TESTCASE"         ,"default"
+           ])
+   
+   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                          stage=args.stage , run_test=TEST_MORTAR , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
    pname="build_navierstokes_type1_br1"
    print( "caseID: %d name: %s" % (caseID,pname) )
@@ -929,7 +951,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ])
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+                          stage=args.stage , run_test=TEST_MORTAR , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
@@ -1041,6 +1063,8 @@ if(cases[0]==0 or (caseID in cases)) :
    
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #============================================================================
 #FINAL ERROR HANDLING:

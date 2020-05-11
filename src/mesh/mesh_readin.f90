@@ -111,7 +111,8 @@ IF(nUserBCs .GT. 0)THEN
   END DO
 END IF
 DO iUserBC=1,nUserBCs
-  IF(.NOT.UserBCFound(iUserBC)) CALL Abort(__STAMP__,&
+  IF(.NOT.UserBCFound(iUserBC)) CALL Abort(&
+    __STAMP__,&
     'Boundary condition specified in parameter file has not been found: '//TRIM(BoundaryName(iUserBC)))
 END DO
 DEALLOCATE(UserBCFound)
@@ -171,7 +172,7 @@ USE MOD_Mesh_Vars,          ONLY:tElem,tSide
 USE MOD_Mesh_Vars,          ONLY:NGeo
 USE MOD_Mesh_Vars,          ONLY:NodeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,nElems,nGlobalElems
-USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
+USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides,nGlobalUniqueSides
 USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
@@ -216,7 +217,8 @@ LOGICAL                        :: dsExists
 IF(MESHInitIsDone) RETURN
 IF(MPIRoot)THEN
   INQUIRE (FILE=TRIM(FileString), EXIST=fileExists)
-  IF(.NOT.FileExists)  CALL CollectiveStop(__STAMP__, &
+  IF(.NOT.FileExists)  CALL CollectiveStop(&
+    __STAMP__, &
     'readMesh from data file "'//TRIM(FileString)//'" does not exist')
 END IF
 
@@ -233,6 +235,7 @@ END IF
 CHECKSAFEINT(HSize(2),4)
 nGlobalElems=INT(HSize(2),4)
 DEALLOCATE(HSize)
+CALL ReadAttribute(File_ID,'nUniqueSides',1,IntegerScalar=nGlobalUniqueSides)
 #if MPI
 IF(nGlobalElems.LT.nProcessors) THEN
   CALL Abort(__STAMP__,&
@@ -314,12 +317,12 @@ DO iElem=FirstElemInd,LastElemInd
       END SELECT
       ALLOCATE(aSide%MortarSide(aSide%nMortars))
       DO iMortar=1,aSide%nMortars
-        aSide%MortarSide(iMortar)%sp=>GETNEWSIDE()
+        aSide%MortarSide(iMortar)%sp=>GETNEWSIDE()  !mortarType=0
       END DO
     ELSE
       aSide%nMortars=0
     END IF
-    IF(SideInfo(SIDE_Type,iSide).LT.0) aSide%MortarType=-1 !marks side as belonging to a mortar
+    IF(SideInfo(SIDE_Type,iSide).LT.0) aSide%MortarType=-10 !marks small neighbor  side as belonging to a mortar
 
     IF(aSide%MortarType.LE.0)THEN
       aSide%Elem=>aElem
@@ -489,7 +492,7 @@ nMPISides=0
 #if MPI
 ALLOCATE(MPISideCount(0:nProcessors-1))
 MPISideCount=0
-#endif
+#endif /*MPI*/
 DO iElem=FirstElemInd,LastElemInd
   aElem=>Elems(iElem)%ep
   DO iLocSide=1,6
@@ -521,7 +524,7 @@ DO iElem=FirstElemInd,LastElemInd
               nPeriodicSides=nPeriodicSides+1
 #if MPI
               IF(aSide%NbProc.NE.-1) nMPIPeriodics=nMPIPeriodics+1
-#endif
+#endif /*MPI*/
             END IF
           ELSE
             IF(aSide%MortarType.EQ.0)THEN !really a BC side
@@ -535,7 +538,7 @@ DO iElem=FirstElemInd,LastElemInd
           nMPISides=nMPISides+1
           MPISideCount(aSide%NbProc)=MPISideCount(aSide%NbProc)+1
         END IF
-#endif
+#endif /*MPI*/
       END IF
     END DO !iMortar
   END DO !iLocSide
@@ -549,6 +552,7 @@ LOGWRITE(*,'(A22,I8)')'nMortarSides:',nMortarSides
 LOGWRITE(*,'(A22,I8)')'nInnerSides:',nInnerSides
 LOGWRITE(*,'(A22,I8)')'nMPISides:',nMPISides
 LOGWRITE(*,*)'-------------------------------------------------------'
+LOGWRITE_BARRIER
  !now MPI sides
 #if MPI
 nNBProcs=0
@@ -575,7 +579,6 @@ ELSE
   END DO
 END IF
 DEALLOCATE(MPISideCount)
-
 #endif /*MPI*/
 
 ReduceData(1)=nElems

@@ -114,7 +114,7 @@ END SUBROUTINE DefineParametersOutput
 SUBROUTINE InitOutput()
 ! MODULES
 USE MOD_Globals
-USE MOD_Preproc
+USE MOD_Preproc 
 USE MOD_Output_Vars
 USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
@@ -129,7 +129,6 @@ IMPLICIT NONE
 INTEGER                        :: iBox,OpenStat
 CHARACTER(LEN=8)               :: StrDate
 CHARACTER(LEN=10)              :: StrTime
-CHARACTER(LEN=255)             :: LogFile
 !==================================================================================================================================
 IF ((.NOT.InterpolationInitIsDone).OR.OutputInitIsDone) THEN
   CALL CollectiveStop(__STAMP__,&
@@ -172,9 +171,8 @@ IF(Logging)THEN
   WRITE(LogFile,'(A,A1,I6.6,A4)')TRIM(ProjectName),'_',myRank,'.log'
   OPEN(UNIT=UNIT_logOut,  &
        FILE=LogFile,      &
-       STATUS='UNKNOWN',  &
+       STATUS='REPLACE',  &
        ACTION='WRITE',    &
-       POSITION='APPEND', &
        IOSTAT=OpenStat)
   CALL DATE_AND_TIME(StrDate,StrTime)
   WRITE(UNIT_logOut,*)
