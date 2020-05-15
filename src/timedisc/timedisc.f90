@@ -152,7 +152,7 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
-USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
 USE MOD_AMR_Vars            ,ONLY: UseAMR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -198,6 +198,7 @@ DO ITER = 1,8
    ! IF (doAMR .EQ. 1) THEN
      ! doAMR = 0;
      CALL ShockCapturingAMR()
+     CALL InitData()
     !  PRINT *, "ShockCapturingAMR()"
    ! ENDIF
   ENDIF 
@@ -245,7 +246,13 @@ CalcTimeStart=FLUXOTIME()
 
 iter = 0
 DO
- 
+  IF (UseAMR) THEN
+    doAMR = doAMR + 1;
+    IF (doAMR .EQ. 2) THEN
+      doAMR = 0;
+      CALL ShockCapturingAMR()
+    ENDIF
+   ENDIF
   IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
@@ -285,6 +292,7 @@ DO
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   CALL TimeStep(t)
 
+  
   iter=iter+1
   iter_loc=iter_loc+1
   t=t+dt

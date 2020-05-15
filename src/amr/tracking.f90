@@ -53,8 +53,8 @@ CONTAINS
         ! SAVE
         !Local variables
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-        INTEGER :: l
-        ! REAL ::
+        INTEGER :: iElem
+        REAL :: R
        
         ! REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
         ! REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
@@ -65,8 +65,9 @@ CONTAINS
         ElemToRefineAndCoarse = 0;
        
     !!! < ----- Commented for the production ----- >
-        DO l = 1, nElems
-            eta_dof =  ShockSensor_PerssonPeraire(U(:,:,:,:,l))
+    !     DO iElem = 1, nElems
+    !         eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
+    !         ! PRINT *, "eta_dof = " , eta_dof
     !         ! eta_min = -15.5
     !         ! eta_max = -10.0
     !         !eta_min = -8.
@@ -74,32 +75,41 @@ CONTAINS
     !        !eta_min = 0.0001/250.
     !         !eta_max = 0.1/100.
     !         ! eps0 = 0.01
-    !         IF (eta_dof(l) .GE. RefineVal) THEN
-    !             ElemToRefineAndCoarse(l) = MaxLevel
+    !         IF (eta_dof .GE. RefineVal) THEN
+    !             ElemToRefineAndCoarse(iElem) = MaxLevel
             
-    !         ELSE IF (eta_dof(l) .LE. CoarseVal) THEN
-    !             ElemToRefineAndCoarse(l) = -MinLevel - 1
+    !         ELSE IF (eta_dof .LE. CoarseVal) THEN
+    !             ElemToRefineAndCoarse(iElem) = -MinLevel - 1
     !         ELSE
-    !             ElemToRefineAndCoarse(l) = 0
+    !             ElemToRefineAndCoarse(iElem) = 0
     !         END IF
-       ENDDO
-   
-        ElemToRefineAndCoarse = 0
+    !    ENDDO
+    !    CALL EXIT()
         ! IF (Count .EQ. 0 ) THEN
             ! COUNT = 1; 
-        DO l = 1,nElems
-            IF ((Elem_xGP(1,0,0,0,l)) .LE. 0.1499 .OR. &
-                (Elem_xGP(2,0,0,0,l)) .LE. 0.1499 .OR. &
+        DO iElem = 1,nElems
+
+            ! ==== > StressTest
+            ! CALL RANDOM_NUMBER(R)
+            
+            ! If (R .LE. 0.5) THEN 
+            !     ElemToRefineAndCoarse(iElem) = MaxLevel          
+            ! ELSE
+            !     ElemToRefineAndCoarse(iElem) = MinLevel          
+            ! ENDIF
+            ! ==== < StressTest
+            IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
+                (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
                 ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
-                (Elem_xGP(1,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 .OR. &
-                (Elem_xGP(2,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499) THEN ! .OR. &
+                (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
+                (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
                 ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
                 
-                    ElemToRefineAndCoarse(l) = MaxLevel          
+                    ElemToRefineAndCoarse(iElem) = MaxLevel          
                 ELSE 
-                    ElemToRefineAndCoarse(l) = MinLevel          
+                    ElemToRefineAndCoarse(iElem) = MinLevel          
                 ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
-                ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,l))
+                ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
                 ! CALL EXIT()
             ENDIF
         ENDDO
@@ -109,15 +119,11 @@ CONTAINS
         ! ENDIF
       
         CALL RunAMR(ElemToRefineAndCoarse);
-        ! CALL RunAMR(ElemToRefineAndCoarse);
-        ! IF (MPIRoot) THEN
-        !   Print *, "AMR RUN!"
+        ! IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
+        !     COUNT = 1; 
+        !    CALL InitData();
+        !     IF (MPIRoot) PRINT *, "InitData"
         ! ENDIF
-        IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
-            COUNT = 1; 
-           CALL InitData();
-            IF (MPIRoot) PRINT *, "InitData"
-        ENDIF
         Deallocate(ElemToRefineAndCoarse)
       
        
