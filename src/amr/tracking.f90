@@ -90,34 +90,36 @@ CONTAINS
         DO iElem = 1,nElems
 
             ! ==== > StressTest
-            ! CALL RANDOM_NUMBER(R)
-            
-            ! If (R .LE. 0.5) THEN 
-            !     ElemToRefineAndCoarse(iElem) = MaxLevel          
-            ! ELSE
-            !     ElemToRefineAndCoarse(iElem) = MinLevel          
-            ! ENDIF
-            ! ==== < StressTest
-            IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
-                (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
-                ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
-                (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
-                (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
-                ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
-                
-                    ElemToRefineAndCoarse(iElem) = MaxLevel          
-                ELSE 
-                    ElemToRefineAndCoarse(iElem) = MinLevel          
-                ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
-                ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
-                ! CALL EXIT()
+            CALL RANDOM_NUMBER(R)
+            ! PRINT *, "R = ", R
+            If (R .LE. 0.2) THEN 
+                ElemToRefineAndCoarse(iElem) = MaxLevel  
+                ! PRINT *, "Refine = ", R       
+            ELSE
+                ElemToRefineAndCoarse(iElem) = -MinLevel - 1          
+                ! PRINT *, "Coarse = ", R       
             ENDIF
+            ! ==== < StressTest
+            ! IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
+            !     (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
+            !     ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
+            !     (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
+            !     (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
+            !     ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
+                
+            !         ElemToRefineAndCoarse(iElem) = MaxLevel          
+            !     ELSE 
+            !         ElemToRefineAndCoarse(iElem) = MinLevel          
+            !     ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
+            !     ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
+            !     ! CALL EXIT()
+            ! ENDIF
         ENDDO
           ! IF (MPIRoot) THEN
             ! ElemToRefineAndCoarse(1) = MaxLevel
             ! ENDIF
         ! ENDIF
-      
+        ! CALL EXIT()
         CALL RunAMR(ElemToRefineAndCoarse);
         ! IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
         !     COUNT = 1; 
