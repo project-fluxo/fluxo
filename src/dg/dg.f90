@@ -263,6 +263,9 @@ USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 use MOD_NFVSE               ,only: VolInt_NFVSE
 use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
+#if SHOCK_LOC_ARTVISC
+use MOD_ShockCapturing      ,only: CalcArtificialViscosity
+#endif /*SHOCK_LOC_ARTVISC*/
 #if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt
 #elif PP_DiscType==2
@@ -298,13 +301,15 @@ REAL,INTENT(IN)                 :: tIn                    !< Current time
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)
 
+
+
 #if MPI
 ! Solution is always communicated on the U_Slave array
 ! start off with the receive command
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
-CALL ProlongToFace(U,U_master,U_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
@@ -325,7 +330,7 @@ call CalcBlendingCoefficient(U)
 CALL VolInt_adv_SplitForm(Ut)
 #endif /*PP_DiscType==2*/
 
-CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 
 
@@ -345,6 +350,10 @@ call VolInt_NFVSE(Ut)
 ! The communication of the gradients is started within the lifting routines
 CALL Lifting(tIn)
 #endif /*PARABOLIC*/
+
+#if SHOCK_LOC_ARTVISC
+CALL CalcArtificialViscosity(U)
+#endif /*SHOCK_LOC_ARTVISC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
 #if PP_DiscType==1

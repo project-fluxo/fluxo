@@ -343,7 +343,11 @@ END SUBROUTINE EvalEulerFlux1D
 !==================================================================================================================================
 !> Compute Navier-Stokes fluxes 1D using tau_12=tau_13=q1=0 for outflow, for surface points!
 !==================================================================================================================================
-SUBROUTINE EvalDiffFlux1D_Outflow(f,U_Face,gradVel) !gradPx_Face,gradPy_Face,gradPz_Face)
+SUBROUTINE EvalDiffFlux1D_Outflow(f,U_Face, &
+#if SHOCK_LOC_ARTVISC
+                                  artVisc_Face, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                                  gradVel) !gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc ! PP_N
 USE MOD_Equation_Vars,ONLY:s23
@@ -357,12 +361,17 @@ USE MOD_Equation_Vars,ONLY:kappaM1,R,muSuth
 USE MOD_Equation_Vars,ONLY:kappaM1,R,ExpoPow,mu0
 #endif
 USE MOD_DG_Vars,ONLY:nTotal_face
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors      , ONLY:SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 REAL,INTENT(IN)     :: U_Face( 5,nTotal_Face)   !< state (conservative vars) on surface points (iVar,i,j)
 REAL,INTENT(IN)     :: gradVel(3,nTotal_Face)   !< u_x, v_y, w_z 
-
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN)     :: artVisc_Face(SENS_NUM,nTotal_face)    !< 
+#endif /*SHOCK_LOC_ARTVISC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: f(5,nTotal_Face)         !< Cartesian flux in x direction
@@ -376,6 +385,7 @@ REAL                :: T
 REAL                :: srho                    ! reciprocal values for density and the value of specific energy
 REAL                :: v(3)
 REAL                :: gradv_diag(3)           ! diagonal of velocity and energy gradient matrix
+real                :: divv
 INTEGER             :: i
 !==================================================================================================================================
 f=0.
@@ -398,10 +408,21 @@ DO i=1,nTotal_Face
   T  = kappaM1*(Uin(5)*srho-0.5*(SUM(v(:)*v(:))))/R             ! T=p/(rho*R)
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
+! Add local artificial dynamic viscoity and conductivity if needed
+#if SHOCK_LOC_ARTVISC
+  muS = muS + artVisc_face(3,i)
+#endif /*SHOCK_LOC_ARTVISC*/
+  
   ! compute derivatives via product rule (a*b)'=a'*b+a*b' and multiply with viscosity
-  gradv_diag = muS*gradVel(:,i)
+  gradv_diag = gradVel(:,i)
+  divv = gradv_diag(1)+gradv_diag(2) + gradv_diag(3)
   ! viscous fluxes in x-direction      
-  f(2,i)= 2.*gradv_diag(1) - s23*(gradv_diag(1)+gradv_diag(2) + gradv_diag(3)) ! tau_11
+  f(2,i)= muS* (2.*gradv_diag(1) - s23*divv) ! tau_11
+  ! Artificial bulk viscosity
+#if SHOCK_LOC_ARTVISC
+  f(2,i)=f(2,i) + artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
+  
   f(5,i)=f(2,i)*v(1) !tau_11 * v1
 END DO ! i 
 END SUBROUTINE EvalDiffFlux1D_Outflow
@@ -410,7 +431,11 @@ END SUBROUTINE EvalDiffFlux1D_Outflow
 !==================================================================================================================================
 !> Compute 3D Navier-Stokes diffusion fluxes using the conservative variables and derivatives for every surface Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face,gradPx_Face,gradPy_Face,gradPz_Face)
+SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face, &
+#if SHOCK_LOC_ARTVISC
+                          artVisc_Face, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                          gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:s23,KappasPr,kappaM1,skappaM1
@@ -423,6 +448,9 @@ USE MOD_Equation_Vars ,ONLY:R,muSuth
 #if PP_VISC==2
 USE MOD_Equation_Vars ,ONLY:R,ExpoPow,mu0
 #endif
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors      , ONLY:SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 USE MOD_DG_Vars       ,ONLY:nTotal_face
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -431,7 +459,9 @@ REAL,INTENT(IN)     :: U_Face(     5,nTotal_face)    !< state in conservative va
 REAL,INTENT(IN)     :: gradPx_Face(5,nTotal_face)    !< x gradient of state 
 REAL,INTENT(IN)     :: gradPy_Face(5,nTotal_face)    !< y gradient of state 
 REAL,INTENT(IN)     :: gradPz_Face(5,nTotal_face)    !< z gradient of state 
-
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN)     :: artVisc_Face(SENS_NUM,nTotal_face)    !< 
+#endif /*SHOCK_LOC_ARTVISC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: f       !< Cartesian diffusion flux in x
@@ -485,35 +515,55 @@ DO i=1,nTotal_face
   T=p*srho/R                      ! T=p/(rho*R)
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
+  
+  ! Conductivity
+  lambda=muS*KappasPr
+  
+  ! Add local artificial dynamic viscoity and conductivity if needed
+#if SHOCK_LOC_ARTVISC
+  lambda = lambda + artVisc_Face(2,i)
+  muS = muS + artVisc_face(3,i)
+#endif /*SHOCK_LOC_ARTVISC*/
+  
   ! compute derivatives via product rule (a*b)'=a'*b+a*b'
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_Face(5,i)-srho*p*gradPx_Face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_Face(5,i)-srho*p*gradPy_Face(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_Face(5,i)-srho*p*gradPz_Face(1,i)) 
-  lambda=muS*KappasPr
+  
   ! viscous fluxes in x-direction      
   f(1,i)=0.
   f(2,i)=-muS*(2*gradv1x-s23*divv)
+#if SHOCK_LOC_ARTVISC
+  f(2,i)=f(2,i) - artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   f(3,i)=-muS*(  gradv2x+gradv1y)   
   f(4,i)=-muS*(  gradv3x+gradv1z)   
   !energy
   f(5,i)= v1*f(2,i)+v2*f(3,i)+v3*f(4,i) -lambda*cv_gradTx
-                                                     
+  
   ! viscous fluxes in y-direction      
   g(1,i)= 0. 
   g(2,i)= f(3,i)                  !muS*(  gradv1y+gradv2x)  
   g(3,i)=-muS*(2*gradv2y-s23*divv)     
+#if SHOCK_LOC_ARTVISC
+  g(3,i)=g(3,i)-artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   g(4,i)=-muS*(  gradv3y+gradv2z)      
   !energy
   g(5,i)= v1*g(2,i)+v2*g(3,i)+v3*g(4,i) - lambda*cv_gradTy
-
+  
   ! viscous fluxes in z-direction      
   h(1,i)= 0. 
   h(2,i)= f(4,i)                  !muS*(  gradv1z+gradv3x)                 
   h(3,i)= g(4,i)                  !muS*(  gradv2z+gradv3y)                
   h(4,i)=-muS*(2*gradv3z-s23*divv )             
+#if SHOCK_LOC_ARTVISC
+  h(4,i)=h(4,i)-artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   !energy
   h(5,i)= v1*h(2,i)+v2*h(3,i)+v3*h(4,i)-lambda*cv_gradTz
+  
   END ASSOCIATE !rho,rhov1,rhov2,rhov3,rhoE & v_x/y/z...
 END DO !i=1,nTotal
 END SUBROUTINE EvalDiffFlux3D
@@ -522,9 +572,16 @@ END SUBROUTINE EvalDiffFlux3D
 !==================================================================================================================================
 !> Compute transformed 3D Navier-Stokes diffusion fluxes for every volume Gauss point of element iElem.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,&
+#if SHOCK_LOC_ARTVISC
+                               artVisc, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                               ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors            ,only:SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
 #endif /*SHOCK_ARTVISC*/
@@ -547,6 +604,9 @@ REAL,INTENT(IN )   :: M_h(      3,1:nTotal_vol) !< metrics for htilde
 REAL,INTENT(IN )   :: gradPx_in(5,1:nTotal_vol) !< gradient x in primitive variables 
 REAL,INTENT(IN )   :: gradPy_in(5,1:nTotal_vol) !< gradient y in primitive variables 
 REAL,INTENT(IN )   :: gradPz_in(5,1:nTotal_vol) !< gradient z in primitive variables 
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN )   ::  artVisc(SENS_NUM,1:nTotal_vol)
+#endif /*SHOCK_LOC_ARTVISC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)   :: ftilde(5,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
@@ -604,16 +664,28 @@ DO i=1,nTotal_vol
 #else
   mu_eff = muS
 #endif /*SHOCK_ARTVISC*/
+  
+  ! Conductivity
+  lambda=mu_eff*KappasPr
+  
+  ! Add local artificial dynamic viscoity and conductivity if needed
+#if SHOCK_LOC_ARTVISC
+  lambda = lambda + artVisc(2,i)
+  mu_eff = mu_eff + artVisc(3,i)
+#endif /*SHOCK_LOC_ARTVISC*/
+  
   ! Viscous part
   divv       = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
 
-  lambda=mu_eff*KappasPr
   ! viscous fluxes in x-direction      
   f_visc(1)= 0.
   f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
+#if SHOCK_LOC_ARTVISC
+  f_visc(2)=f_visc(2)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   f_visc(3)=-mu_eff*(  gradv2x+gradv1y)
   f_visc(4)=-mu_eff*(  gradv3x+gradv1z)
   !energy
@@ -623,6 +695,9 @@ DO i=1,nTotal_vol
   g_visc(1)= 0.
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
   g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)
+#if SHOCK_LOC_ARTVISC
+  g_visc(3)=g_visc(3)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   g_visc(4)=-mu_eff*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
@@ -632,6 +707,9 @@ DO i=1,nTotal_vol
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
   h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )
+#if SHOCK_LOC_ARTVISC
+  h_visc(4)=h_visc(4)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 

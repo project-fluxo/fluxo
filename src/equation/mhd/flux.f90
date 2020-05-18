@@ -510,6 +510,9 @@ SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face, &
 #if SHOCK_ARTVISC
 nu_Face, &
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+artVisc_Face, &
+#endif /*SHOCK_LOC_ARTVISC*/
 gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc
@@ -521,6 +524,9 @@ USE MOD_Equation_vars,ONLY:kperp,kpar
 #else
 USE MOD_Equation_vars,ONLY:kappasPr
 #endif 
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors      , ONLY:SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -531,6 +537,9 @@ REAL,INTENT(IN)     :: gradPz_Face(PP_nVar,nTotal_face)    !< z gradient of stat
 #if SHOCK_ARTVISC
 REAL,INTENT(IN)     :: nu_Face			           ! artificial viscosity at interface
 #endif /*SHOCK_ARTVISC*/
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN)     :: artVisc_Face(SENS_NUM,nTotal_face)    !< 
+#endif /*SHOCK_LOC_ARTVISC*/
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
@@ -549,6 +558,8 @@ REAL                :: divv
 REAL                :: lambda
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
+real                :: mu_eff
+real                :: etasmu_0eff
 INTEGER             :: i 
 !==================================================================================================================================
 DO i=1,nTotal_face
@@ -609,17 +620,21 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   gradUx(6:PP_nVar)=gradPx_Face(6:PP_nVar,i)
   gradUy(6:PP_nVar)=gradPy_Face(6:PP_nVar,i)
   gradUz(6:PP_nVar)=gradPz_Face(6:PP_nVar,i)
+  
+  mu_eff = mu!+nu_face
+  etasmu_0eff = etasmu_0!+nu_face
 
-!  mu_eff = mu!+nu(iElem)
-! etasmu_0eff = etasmu_0!+nu(iElem)
+#elif SHOCK_LOC_ARTVISC
+  
+  mu_eff = mu + artVisc_face(3,i)
+  etasmu_0eff = etasmu_0 + artVisc_face(4,i)
+  
+#else
 
-!#else
-
-!  mu_eff = mu
-!  etasmu_0eff = etasmu_0
+  mu_eff = mu
+  etasmu_0eff = etasmu_0
 
 #endif /*SHOCK_ARTVISC*/
-
 
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_face(5,i)-srho*p*gradPx_face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
@@ -627,7 +642,11 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   cv_gradTz  = sKappaM1*sRho*(gradPz_face(5,i)-srho*p*gradPz_face(1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
-  lambda=mu*KappasPr
+#if SHOCK_LOC_ARTVISC
+  lambda=mu*KappasPr + artVisc_face(2,i)
+#else
+  lambda=mu_eff*KappasPr
+#endif
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
   Qz=lambda*cv_gradTz
@@ -646,40 +665,46 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
   f(1,i)=0.
-  f(2,i)=-mu*(2*gradv1x-s23*divv)
-  f(3,i)=-mu*(  gradv2x+gradv1y)   
-  f(4,i)=-mu*(  gradv3x+gradv1z)   
+  f(2,i)=-mu_eff*(2*gradv1x-s23*divv)
+#if SHOCK_LOC_ARTVISC
+  f(2,i)=f(2,i) - artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
+  f(3,i)=-mu_eff*(  gradv2x+gradv1y)   
+  f(4,i)=-mu_eff*(  gradv3x+gradv1z)   
   f(6,i)= 0.
-  f(7,i)=-etasmu_0*(gradB2x-gradB1y)
-  f(8,i)=-etasmu_0*(gradB3x-gradB1z)
+  f(7,i)=-etasmu_0eff*(gradB2x-gradB1y)
+  f(8,i)=-etasmu_0eff*(gradB3x-gradB1z)
   !energy
   f(5,i)=v1*f(2,i)+v2*f(3,i)+v3*f(4,i) +smu_0*(b1*f(6,i)+b2*f(7,i)+b3*f(8,i)) - Qx
-
-
 
   ! viscous fluxes in y-direction      
   g(1,i)=0.
   g(2,i)= f(3,i)                  !mu*(  gradv1y+gradv2x)  
-  g(3,i)=-mu*(2*gradv2y-s23*divv)     
-  g(4,i)=-mu*(  gradv3y+gradv2z)      
+  g(3,i)=-mu_eff*(2*gradv2y-s23*divv)     
+#if SHOCK_LOC_ARTVISC
+  g(3,i)=g(3,i)-artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
+  g(4,i)=-mu_eff*(  gradv3y+gradv2z)      
   g(6,i)=-f(7,i)                  !etasmu_0*(gradB1y-gradB2x)
   g(7,i)= 0.
-  g(8,i)=-etasmu_0*(gradB3y-gradB2z)
+  g(8,i)=-etasmu_0eff*(gradB3y-gradB2z)
   !energy
   g(5,i)=v1*g(2,i)+v2*g(3,i)+v3*g(4,i) + smu_0*(b1*g(6,i)+b2*g(7,i)+b3*g(8,i)) - Qy
-
-
 
   ! viscous fluxes in z-direction      
   h(1,i)=0.
   h(2,i)= f(4,i)                       !mu*(  gradv1z+gradv3x)                 
   h(3,i)= g(4,i)                       !mu*(  gradv2z+gradv3y)                
-  h(4,i)=-mu*(2*gradv3z-s23*divv )             
+  h(4,i)=-mu_eff*(2*gradv3z-s23*divv ) 
+#if SHOCK_LOC_ARTVISC
+  h(4,i)=h(4,i)-artVisc_face(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/            
   h(6,i)=-f(8,i)                       !etasmu_0*(gradB1z-gradB3x)
   h(7,i)=-g(8,i)                       !etasmu_0*(gradB2z-gradB3y)
   h(8,i)= 0.
   !energy
   h(5,i)=v1*h(2,i)+v2*h(3,i)+v3*h(4,i) +smu_0*(b1*h(6,i)+b2*h(7,i)+b3*h(8,i)) - Qz
+  
 #ifdef PP_GLM
   f(9,i) = 0.
   g(9,i) = 0.
@@ -701,9 +726,16 @@ END SUBROUTINE EvalDiffFlux3D
 !==================================================================================================================================
 !> Compute only diffusive part of tranformed MHD fluxes, using conservative variables and derivatives for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in, &
+#if SHOCK_LOC_ARTVISC
+                                  artVisc, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                                  ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors            ,only:SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_ARTVISC
 USE MOD_ShockCapturing_Vars,ONLY:nu
 #endif /*SHOCK_ARTVISC*/
@@ -725,6 +757,9 @@ REAL,INTENT(IN )   :: M_h(            3,1:nTotal_vol) !< metrics for htilde
 REAL,INTENT(IN )   :: gradPx_in(PP_nVar,1:nTotal_vol) !< gradient x in primitive variables 
 REAL,INTENT(IN )   :: gradPy_in(PP_nVar,1:nTotal_vol) !< gradient y in primitive variables 
 REAL,INTENT(IN )   :: gradPz_in(PP_nVar,1:nTotal_vol) !< gradient z in primitive variables 
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN )   ::  artVisc(SENS_NUM,1:nTotal_vol)
+#endif /*SHOCK_LOC_ARTVISC*/
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)   :: ftilde(PP_nVar,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
@@ -809,6 +844,11 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   mu_eff = mu!+nu(iElem)
   etasmu_0eff = etasmu_0!+nu(iElem)
 
+#elif SHOCK_LOC_ARTVISC
+  
+  mu_eff = mu+artVisc(3,i)
+  etasmu_0eff = etasmu_0+artVisc(4,i)
+  
 #else
 
   mu_eff = mu
@@ -822,7 +862,13 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
+  
+#if SHOCK_LOC_ARTVISC
+  lambda=mu*KappasPr+artVisc(2,i)
+#else
   lambda=mu_eff*KappasPr
+#endif /* SHOCK_LOC_ARTVISC */
+  
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
   Qz=lambda*cv_gradTz
@@ -842,6 +888,9 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   ! viscous fluxes in x-direction      
   f_visc(1)=0.
   f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
+#if SHOCK_LOC_ARTVISC
+  f_visc(2)=f_visc(2)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   f_visc(3)=-mu_eff*(  gradv2x+gradv1y)   
   f_visc(4)=-mu_eff*(  gradv3x+gradv1z)   
   f_visc(6)=0.
@@ -850,12 +899,13 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) - Qx
 
-
-
   ! viscous fluxes in y-direction      
   g_visc(1)=0.
   g_visc(2)= f_visc(3)                  !-mu*(  gradv1y+gradv2x)  
   g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)     
+#if SHOCK_LOC_ARTVISC
+  g_visc(3)=g_visc(3)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   g_visc(4)=-mu_eff*(  gradv3y+gradv2z)      
   g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
   g_visc(7)=0.
@@ -863,18 +913,20 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   !energy
   g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) - Qy 
 
-
-
   ! viscous fluxes in z-direction      
   h_visc(1)=0.
   h_visc(2)= f_visc(4)                       !-mu*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                       !-mu*(  gradv2z+gradv3y)                
   h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )             
+#if SHOCK_LOC_ARTVISC
+  h_visc(4)=h_visc(4)-artVisc(1,i)*divv
+#endif /*SHOCK_LOC_ARTVISC*/
   h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
   h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
   h_visc(8)=0.
   !energy
   h_visc(5)=v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)+smu_0*(b1*h_visc(6)+b2*h_visc(7)+b3*h_visc(8)) - Qz
+
 #ifdef PP_GLM
   f_visc(9) = 0. 
   g_visc(9) = 0. 

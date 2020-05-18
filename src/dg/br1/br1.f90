@@ -241,13 +241,13 @@ CALL ConvertToGradPrimVec(nTotal_IP,U,gradPx) !overwrites gradPx!
 #if MPI
 !prolongtoface and start send/receive gradPx_slave
 CALL StartReceiveMPIData(gradPx_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,1,RECV),SendID=2)
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
 CALL U_Mortar(gradPx_master,gradPx_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(gradPx_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,1,SEND),SendID=2)
 #endif /*MPI*/
 
 ! Prolong to face for BCSides, InnerSides and MPI_MINE sides 
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
 CALL U_Mortar(gradPx_master,gradPx_slave,doMPISides=.FALSE.)
 
 !gradPx sides finished (will be received in DG)
@@ -277,13 +277,13 @@ CALL ConvertToGradPrimVec(nTotal_IP,U,gradPy) !overwrites gradPy!
 #if MPI
 !ProlongToFace and start send/receive gradPy_slave
 CALL StartReceiveMPIData(gradPy_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,2,RECV),SendID=2)
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
 CALL U_Mortar(gradPy_master,gradPy_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(gradPy_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,2,SEND),SendID=2)
 #endif /*MPI*/
 
 ! Prolong to face for BCSides, InnerSides and MPI_MINE sides 
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
 CALL U_Mortar(gradPy_master,gradPy_slave,doMPISides=.FALSE.)
 
 !gradPy sides finished (will be received in DG)
@@ -312,13 +312,13 @@ CALL ConvertToGradPrimVec(nTotal_IP,U,gradPz) !overwrites gradPz!
 #if MPI
 !ProlongToFace and start send/receive gradPz_slave
 CALL StartReceiveMPIData(gradPz_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,3,RECV),SendID=2)
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
 CALL U_Mortar(gradPz_master,gradPz_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(gradPz_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,3,SEND),SendID=2)
 #endif /*MPI*/
 
 ! Prolong to face for BCSides, InnerSides and MPI_MINE sides 
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 CALL U_Mortar(gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 
 !gradPz sides finished (will be received in DG)

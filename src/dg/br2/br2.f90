@@ -229,14 +229,14 @@ CALL Lifting_VolInt(gradPx,gradPy,gradPz)
 ! The local gradient is now interpolated to the face of the grid cells
 #if MPI
 ! Prolong to face for MPI sides - send direction
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
 #endif /*MPI*/
 ! Prolong to face for BCSides, InnerSides and MPI sides - receive direction
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 
 #if MPI
 ! Complete send / receive

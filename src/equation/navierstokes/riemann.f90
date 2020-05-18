@@ -90,7 +90,10 @@ CONTAINS
 SUBROUTINE Riemann(F,U_L,U_R, &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
-#endif
+#if SHOCK_LOC_ARTVISC
+                   artVisc_L,artVisc_R,                                   &
+#endif /*SHOCK_LOC_ARTVISC*/
+#endif /*PARABOLIC*/
                    nv,t1,t2)
 ! MODULES
 USE MOD_PreProc
@@ -98,7 +101,10 @@ USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
 USE MOD_Flux_Average
 #if PARABOLIC
 USE MOD_Flux            ,ONLY:EvalDiffFlux3D    ! and the NSE diffusion fluxes in all directions to approximate the numerical flux
-#endif
+#if SHOCK_LOC_ARTVISC
+use MOD_Sensors, ONLY: SENS_NUM
+#endif /*SHOCK_LOC_ARTVISC*/
+#endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -112,6 +118,10 @@ REAL,INTENT(IN) :: gradUy_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in y,
 REAL,INTENT(IN) :: gradUy_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in y, not rotated 
 REAL,INTENT(IN) :: gradUz_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in z, not rotated 
 REAL,INTENT(IN) :: gradUz_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in z, not rotated 
+#if SHOCK_LOC_ARTVISC
+REAL,INTENT(IN)  :: artVisc_L(SENS_NUM,0:PP_N,0:PP_N)
+REAL,INTENT(IN)  :: artVisc_R(SENS_NUM,0:PP_N,0:PP_N)
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
 REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
 REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
@@ -133,8 +143,17 @@ call AdvRiemann(F,U_L,U_R,nv,t1,t2)
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute NSE Diffusion flux in cartesian coordinates
-CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)  ! TODO: Add ArtVisc to Riemann!
-CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R,gradUx_R,gradUy_R,gradUz_R)
+CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L, &
+#if SHOCK_LOC_ARTVISC
+                    artVisc_L, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                    gradUx_L,gradUy_L,gradUz_L)  ! TODO: Add ArtVisc to Riemann!
+
+CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R, &
+#if SHOCK_LOC_ARTVISC
+                    artVisc_R, &
+#endif /*SHOCK_LOC_ARTVISC*/
+                    gradUx_R,gradUy_R,gradUz_R)
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
 DO iVar=2,PP_nVar

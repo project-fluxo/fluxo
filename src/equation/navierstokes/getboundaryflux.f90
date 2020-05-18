@@ -209,6 +209,9 @@ USE MOD_Flux         ,ONLY: EvalEulerFlux1D
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradPx_Master,gradPy_Master,gradPz_Master
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D,EvalDiffFlux1D_Outflow
+#if SHOCK_LOC_ARTVISC
+USE MOD_ShockCapturing_Vars,ONLY:artVisc_Master
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
@@ -253,6 +256,9 @@ DO iBC=1,nBCs
                    gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
                    gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
                    gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#if SHOCK_LOC_ARTVISC
+                   artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -271,6 +277,9 @@ DO iBC=1,nBCs
                      gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
                      gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
                      gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#if SHOCK_LOC_ARTVISC
+                     artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -287,6 +296,9 @@ DO iBC=1,nBCs
                      gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
                      gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
                      gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#if SHOCK_LOC_ARTVISC
+                     artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
       END DO !iSide=1,nBCloc
@@ -306,6 +318,9 @@ DO iBC=1,nBCs
                    gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
                    gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
                    gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#if SHOCK_LOC_ARTVISC
+                   artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
     END DO !iSide=1,nBCloc
@@ -354,7 +369,10 @@ DO iBC=1,nBCs
       END DO ! q
 #if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
-      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:),&
+      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:), &
+#if SHOCK_LOC_ARTVISC
+                          artVisc_Master(:,:,:,SideID),                          &
+#endif /*SHOCK_LOC_ARTVISC*/
                           gradPx_Master(:,:,:,SideID),                           &
                           gradPy_Master(:,:,:,SideID),                           &
                           gradPz_Master(:,:,:,SideID))                           
@@ -427,6 +445,9 @@ DO iBC=1,nBCs
 #if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
       CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Master(:,:,:,SideID), &
+#if SHOCK_LOC_ARTVISC
+                          artVisc_Master(:,:,:,SideID),                          &
+#endif /*SHOCK_LOC_ARTVISC*/
                           gradPx_Face_loc,gradPy_Face_loc,gradPz_Face_loc)
       ! Sum up Euler and Diffusion Flux
       DO iVar=2,PP_nVar
@@ -487,7 +508,11 @@ DO iBC=1,nBCs
       ! Compute 1D diffusion Flux Fd_Face_loc
       !   Use: tau_12 = 0, tau_13 = 0, q1 = 0 (Paper POINSOT and LELE, JCP 1992, page 113, Table IV)
       !   We use special evalflux routine
-      CALL EvalDiffFlux1D_Outflow(Fd_Face_loc,U_Face_loc,gradVel)
+      CALL EvalDiffFlux1D_Outflow (Fd_Face_loc,U_Face_loc,&
+#if SHOCK_LOC_ARTVISC
+                                   artVisc_Master(:,:,:,SideID),                          &
+#endif /*SHOCK_LOC_ARTVISC*/
+                                   gradVel)
       ! Sum up Euler and Diffusion Flux and tranform back into Cartesian system
       Flux(:,:,:,SideID) = Flux(:,:,:,SideID) + Fd_Face_loc
 #endif /*PARABOLIC*/

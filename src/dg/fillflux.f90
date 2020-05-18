@@ -56,6 +56,9 @@ USE MOD_Lifting_Vars,    ONLY: gradPx_Slave ,gradPy_Slave ,gradPz_Slave
 #if SHOCK_ARTVISC && mhd
 USE MOD_ShockCapturing_Vars,ONLY:nu_Master,nu_Slave
 #endif /*SHOCK_ARTVISC && mhd*/
+#if SHOCK_LOC_ARTVISC
+USE MOD_ShockCapturing_Vars,ONLY:artVisc_Master,artVisc_Slave
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -90,6 +93,9 @@ DO SideID=firstSideID,lastSideID
 #if SHOCK_ARTVISC && mhd
 				  nu_Master(SideID),nu_Slave(SideID), &
 #endif /*SHOCK_ARTVISC && mhd*/
+#if SHOCK_LOC_ARTVISC
+				  artVisc_Master(:,:,:,SideID),artVisc_Slave(:,:,:,SideID), &
+#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
 				  NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 

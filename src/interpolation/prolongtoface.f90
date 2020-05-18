@@ -40,7 +40,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !==================================================================================================================================
-SUBROUTINE ProlongToFace(Uvol,Uface_master,Uface_slave,doMPISides)
+SUBROUTINE ProlongToFace(nVars,Uvol,Uface_master,Uface_slave,doMPISides)
 ! MODULES
 USE MOD_Preproc          
 USE MOD_Mesh_Vars,          ONLY: nElems
@@ -57,10 +57,11 @@ USE MOD_ShockCapturing_Vars,ONLY:nu_Master,nu_Slave,nu
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
+integer,intent(in)    :: nVars
 LOGICAL,INTENT(IN)    :: doMPISides  !< either fill MPI sides (=.true.) or local sides (=.false.)
-REAL,INTENT(IN)       :: Uvol(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< input volume data
-REAL,INTENT(INOUT)    :: Uface_master(PP_nVar,0:PP_N,0:PP_N,1:nSides)!< output master side data
-REAL,INTENT(INOUT)    :: Uface_slave( PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)!< output slave side data
+REAL,INTENT(IN)       :: Uvol (nVars,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< input volume data
+REAL,INTENT(INOUT)    :: Uface_master(nVars,0:PP_N,0:PP_N,1:nSides)!< output master side data
+REAL,INTENT(INOUT)    :: Uface_slave( nVars,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)!< output slave side data
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)

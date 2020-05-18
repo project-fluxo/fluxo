@@ -379,12 +379,12 @@ do l=1, nElems
                                el_artVisc(:,i,j,k)    )
   end do        ; end do        ; end do ! ijk
   
-!#  CALL ChangeBasis3D(SENS_NUM,PP_N,PP_N,FilterMat,el_artVisc,artVisc(:,:,:,:,l))
+  CALL ChangeBasis3D(SENS_NUM,PP_N,PP_N,FilterMat,el_artVisc,artVisc(:,:,:,:,l))
   
 end do !l
 nu_max = MAX(nu_max,maxval(artVisc))
 
-!#call ProlongToFace(SENS_NUM,artVisc,artVisc_master,artVisc_slave,doMPISides = .FALSE.)
+call ProlongToFace(SENS_NUM,artVisc,artVisc_master,artVisc_slave,doMPISides = .FALSE.)
 #endif /*SHOCK_LOC_ARTVISC*/
 
 #if SHOCK_ARTVISC
