@@ -33,11 +33,11 @@ INTERFACE InitShockCapturing
    MODULE PROCEDURE InitShockCapturing
 END INTERFACE
 
-#if SHOCK_ARTVISC
+#if SHOCK_ARTVISC || SHOCK_LOC_ARTVISC
 INTERFACE CalcArtificialViscosity
    MODULE PROCEDURE CalcArtificialViscosity
 END INTERFACE
-#endif /*SHOCK_ARTVISC*/
+#endif /*SHOCK_ARTVISC || SHOCK_LOC_ARTVISC*/
 
 INTERFACE FinalizeShockCapturing
    MODULE PROCEDURE FinalizeShockCapturing
@@ -54,9 +54,9 @@ procedure(i_sub_GetIndicator), pointer :: CustomIndicator
 
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
-#if SHOCK_ARTVISC
+#if SHOCK_ARTVISC || SHOCK_LOC_ARTVISC
 PUBLIC :: CalcArtificialViscosity
-#endif /*SHOCK_ARTVISC*/
+#endif /*SHOCK_ARTVISC || SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 public :: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
@@ -125,7 +125,7 @@ IMPLICIT NONE
 integer :: whichIndicator
 integer :: i,j,k    ! DOF counters
 integer :: eID      ! Element counter
-real    :: Mh(3,3)  ! Metric tensor in each element
+real    :: conMetrics(3,3)  ! Contravariant metric tensor in each element
 !============================================================================================================================
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
   SWRITE(*,*) "InitShockCapturing not ready to be called or already called."
@@ -136,27 +136,42 @@ IF (PP_N.LT.2) THEN
   RETURN
 END IF
 
+nu_max = 0.
+
 ! shock caturing parameters
 #if SHOCK_ARTVISC
 ALLOCATE(nu(nElems),nu_Master(nSides),nu_Slave(firstSlaveSide:LastSlaveSide))
 nu     = 0.
-nu_max = 0.
 nu_Master = 0.
 nu_Slave = 0.
 #endif /*SHOCK_ARTVISC*/
 
 #if SHOCK_LOC_ARTVISC
 ! Allocate vectors
+allocate (physSens(SENS_NUM,0:PP_N,0:PP_N,0:PP_N,nElems) )
 allocate ( artVisc(SENS_NUM,0:PP_N,0:PP_N,0:PP_N,nElems) )
 allocate ( Mh_inv      (3,3,0:PP_N,0:PP_N,0:PP_N,nElems) )
-
+allocate ( covMetrics  (3,3,0:PP_N,0:PP_N,0:PP_N,nElems) )
+allocate ( sigmamin_Mh     (0:PP_N,0:PP_N,0:PP_N,nElems) )
+allocate ( artVisc_master(SENS_NUM,0:PP_N,0:PP_N,nSides) )
+allocate ( artVisc_slave (SENS_NUM,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) )
 ! Inverse of metric tensor
 do eID=1, nElems
   do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
-    Mh(:,1) = Metrics_fTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
-    Mh(:,2) = Metrics_gTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
-    Mh(:,3) = Metrics_hTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
-    call INV33(Mh,Mh_inv(:,:,i,j,k,eID))
+    ! Compute the covariant metric tensor
+    conMetrics(:,1) = Metrics_fTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    conMetrics(:,2) = Metrics_gTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    conMetrics(:,3) = Metrics_hTilde(:,i,j,k,eID) * sJ(i,j,k,eID)
+    call INV33(conMetrics,covMetrics(:,:,i,j,k,eID))
+    
+    ! Compute Möller's metric tensor (here conMetrics is just a container)
+    conMetrics = matmul ( covMetrics(:,:,i,j,k,eID), transpose(covMetrics(:,:,i,j,k,eID)) )
+    
+    call SmallestEigSym3x3(conMetrics,sigmamin_Mh(i,j,k,eID))
+    sigmamin_Mh(i,j,k,eID) = sqrt(sigmamin_Mh(i,j,k,eID))       ! We need the square root!! typo in paper!
+    
+    call INV33(conMetrics,Mh_inv(:,:,i,j,k,eID))
+    
   end do        ; end do        ; end do ! ijk
 end do !eID
 #endif /*SHOCK_LOC_ARTVISC*/
@@ -215,13 +230,58 @@ SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitShockCapturing
 
+!============================================================================================================================
+!> Smallest eigenvalue for symmetric 3x3 matrix (move to some other place...)
+!============================================================================================================================
+subroutine SmallestEigSym3x3(A,lambdamin)
+  use MOD_Basis, only: ALMOSTEQUAL
+  USE MOD_PreProc       , only: PP_N, PP_Pi
+  implicit none
+  real, intent(in) :: A(3,3)
+  real             :: lambdamin
+  !---
+  real :: p1, p2, p, q, r, phi
+  real :: B(3,3)
+  !---
+  
+  p1 = A(1,2)**2 + A(1,3)**2 + A(2,3)**2
+  
+  if (ALMOSTEQUAL(p1,0.)) then ! A is diagonal
+    lambdamin = min (A(1,1),A(2,2),A(3,3))
+  else
+    q = A(1,1) + A(2,2) + A(3,3)
+    p2 = (A(1,1) - q)**2 + (A(2,2) - q)**2 + (A(3,3) - q)**2 + 2 * p1
+    p = sqrt(p2 / 6.)
+    
+    B = A
+    B(1,1) = B(1,1)- q
+    B(2,2) = B(2,2)- q
+    B(3,3) = B(3,3)- q
+    B = B/p
+    
+    ! r= det(B)/2
+    r = 0.5 * ( B(1,1) * (B(2,2)*B(3,3)-B(3,2)*B(2,3)) - B(1,2) * (B(2,1)*B(3,3)-B(3,1)*B(2,3)) + B(1,3) * (B(2,1)*B(3,2)-B(3,1)*B(2,2)) )
+    
+    ! In exact arithmetic for a symmetric matrix  -1 <= r <= 1
+    ! but computation error can leave it slightly outside this range.
+    if (r <= -1.) then
+      phi = PP_Pi / 3.
+    elseif (r >= 1.) then
+      phi = 0.
+    else
+      phi = acos(r) / 3.
+    end if
+    
+    lambdamin = q + 2. * p * cos(phi + (2.*PP_Pi/3.))
+  end if
+end subroutine SmallestEigSym3x3
 
 SUBROUTINE InitBasisTrans(N_in,xGP)
 !===================================================================================================================================
 !> Initialize Vandermodematrix for basis transformation
 !===================================================================================================================================
 ! MODULES
-USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg
+USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg, FilterMat
 USE MOD_Basis, ONLY :BuildLegendreVdm
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -234,28 +294,49 @@ REAL,DIMENSION(0:N_in,0:N_in)              :: Vdm_Leg
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+real,DIMENSION(0:N_in,0:N_in)              :: Filter
 !===================================================================================================================================
 !  NODAL <--> MODAL
 ! Compute the 1D Vandermondematrix, needed to tranform the nodal basis into a modal (Legendre) basis
 ALLOCATE(sVdm_Leg(0:N_in,0:N_in))
+allocate(FilterMat(0:N_in,0:N_in))
+
 CALL BuildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
+
+! Construct the filter with only two first modes
+Filter = 0.
+Filter(0,0) = 1.
+Filter(1,1) = 1.
+
+FilterMat = matmul(Vdm_Leg,matmul(Filter,sVdm_Leg))
+
+
 END SUBROUTINE InitBasisTrans
 
-#if SHOCK_ARTVISC
+#if SHOCK_ARTVISC || SHOCK_LOC_ARTVISC
 SUBROUTINE CalcArtificialViscosity(U)
 !===================================================================================================================================
 !> Use framework of Persson and Peraire to measure shocks with DOF energy indicator and calculate artificial viscosity, if necessary
 !===================================================================================================================================
 ! MODULES
 USE MOD_PreProc
-USE MOD_ShockCapturing_Vars, ONLY: nu,nu_max
-USE MOD_Mesh_Vars          , ONLY: nElems,sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
+USE MOD_ShockCapturing_Vars, ONLY: nu_max
+USE MOD_Mesh_Vars          , ONLY: nElems
+#if SHOCK_ARTVISC
+USE MOD_ShockCapturing_Vars, ONLY: nu
+USE MOD_Mesh_Vars          , ONLY: sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Equation_Vars      , ONLY: ConsToPrim
 USE MOD_Equation_Vars      , ONLY: FastestWave3D
+#endif /*SHOCK_ARTVISC*/
 #if SHOCK_LOC_ARTVISC
-use MOD_Sensors            , only: SensorsByFernandezEtAl
-USE MOD_ShockCapturing_Vars, ONLY: artVisc, Mh_inv
+use MOD_Sensors            , only: SensorsByFernandezEtAl, SENS_NUM
+USE MOD_ShockCapturing_Vars, ONLY: artVisc, Mh_inv, covMetrics, sigmamin_Mh, artVisc_master, artVisc_slave, physSens, FilterMat
+use MOD_ProlongToFace      , only: ProlongToFace
 use MOD_Lifting_Vars       , only: gradPx, gradPy, gradPz
+use MOD_ChangeBasis        , only: ChangeBasis3D
+!#use MOD_Equation_Vars, only:ConsToPrimVec
+!#USE MOD_DG_Vars            ,ONLY:nTotal_vol
+USE MOD_Mesh_Vars          , ONLY: sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde, Elem_xGP
 #endif /*SHOCK_LOC_ARTVISC*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -269,28 +350,46 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(IN) :: U
 REAL                                     :: eta_dof(nElems),eta_min,eta_max,eps0
 REAL                                     :: v(3),Prim(1:PP_nVar),cf,Max_Lambda(6),h,lambda_max2
 INTEGER                                  :: l,i,j,k
+real :: el_artVisc(SENS_NUM,0:PP_N,0:PP_N,0:PP_N)
+!#real :: primEl   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+!#real :: gradPx   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+!#real :: gradPy   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+!#real :: gradPz   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 !===================================================================================================================================
 
-nu    =0.
 nu_max=0.
 
-call ShockSensor_PerssonPeraire(U,eta_dof)
-
-!<temp Compute the physics based sensors to debug
 #if SHOCK_LOC_ARTVISC
 do l=1, nElems
+!#  call ConsToPrimVec(nTotal_vol,primEl,U(:,:,:,:,l))
+!#  call Get_LocalGradients(primEl,Metrics_fTilde(:,:,:,:,l), &
+!#                                 Metrics_gTilde(:,:,:,:,l), &
+!#                                 Metrics_hTilde(:,:,:,:,l), &
+!#                                               sJ(:,:,:,l),gradPx,gradPy,gradPz)
+
   do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
-    call SensorsByFernandezEtAl ( artVisc(:,i,j,k,l), &
+    call SensorsByFernandezEtAl (physSens(:,i,j,k,l), &
                                         U(:,i,j,k,l), &
                                    gradPx(:,i,j,k,l), &
                                    gradPy(:,i,j,k,l), &
                                    gradPz(:,i,j,k,l), &
-                                 Mh_inv(:,:,i,j,k,l) )
+                                 Mh_inv(:,:,i,j,k,l), &
+                             covMetrics(:,:,i,j,k,l), &
+                                sigmamin_Mh(i,j,k,l), &
+                               el_artVisc(:,i,j,k)    )
   end do        ; end do        ; end do ! ijk
+  
+!#  CALL ChangeBasis3D(SENS_NUM,PP_N,PP_N,FilterMat,el_artVisc,artVisc(:,:,:,:,l))
+  
 end do !l
-#endif /*SHOCK_LOC_ARTVISC*/
-!temp>
+nu_max = MAX(nu_max,maxval(artVisc))
 
+!#call ProlongToFace(SENS_NUM,artVisc,artVisc_master,artVisc_slave,doMPISides = .FALSE.)
+#endif /*SHOCK_LOC_ARTVISC*/
+
+#if SHOCK_ARTVISC
+nu    =0.
+call ShockSensor_PerssonPeraire(U,eta_dof)
 eta_dof = log10(eta_dof)
 DO l=1,nElems
   ! Artificial Viscosity
@@ -346,9 +445,65 @@ DO l=1,nElems
 !  nu(l) = 0.007
 
 END DO ! l
+#endif /*SHOCK_ARTVISC*/
 
 END SUBROUTINE CalcArtificialViscosity
-#endif /*SHOCK_ARTVISC*/
+
+!==================================================================================================================================
+!> Get the local gradients of any variable (U here) in an element
+!==================================================================================================================================
+  pure subroutine Get_LocalGradients(U,M_f,M_g,M_h,sJ,dUdX,dUdY,dUdZ)
+    use MOD_PreProc
+    use MOD_DG_Vars      , only: D_T
+    implicit none
+    !-arguments---------------------------------
+    real, intent(in)  :: U      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)  :: M_f    (   3   ,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)  :: M_g    (   3   ,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)  :: M_h    (   3   ,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)  :: sJ             (0:PP_N,0:PP_N,0:PP_N)
+    real, intent(out) :: dUdX   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(out) :: dUdY   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(out) :: dUdZ   (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    !-local-variables--------------------------
+    real, dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N) :: dUdXi, dUdEta, dUdZeta
+    integer :: i,j,k,l
+    !-------------------------------------------
+    
+    dUdXi   = 0.
+    dUdEta  = 0.
+    dUdZeta = 0.
+    
+    ! Xi contribution
+    do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N  ; do l=0, PP_N
+      dUdXi  (:,i,j,k) = dUdXi  (:,i,j,k) + U(:,l,j,k) * D_T(l,i)
+    end do        ; end do        ; end do        ; end do
+    
+    ! Eta contribution
+    do k=0, PP_N  ; do j=0, PP_N  ; do l=0, PP_N  ; do i=0, PP_N
+      dUdEta (:,i,j,k) = dUdEta (:,i,j,k) + U(:,i,l,k) * D_T(l,j)
+    end do        ; end do        ; end do        ; end do
+    
+    ! Zeta contribution
+    do k=0, PP_N  ; do l=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
+      dUdZeta(:,i,j,k) = dUdZeta(:,i,j,k) + U(:,i,j,l) * D_T(l,k)
+    end do        ; end do        ; end do        ; end do
+    
+    do k=0, PP_N  ; do j=0, PP_N  ; do i=0, PP_N
+      dUdX(:,i,j,k) = ( dUdXi  (:,i,j,k) * M_f(1,i,j,k) + &
+                        dUdEta (:,i,j,k) * M_g(1,i,j,k) + &
+                        dUdZeta(:,i,j,k) * M_h(1,i,j,k) ) * sJ(i,j,k)
+      dUdY(:,i,j,k) = ( dUdXi  (:,i,j,k) * M_f(2,i,j,k) + &
+                        dUdEta (:,i,j,k) * M_g(2,i,j,k) + &
+                        dUdZeta(:,i,j,k) * M_h(2,i,j,k) ) * sJ(i,j,k)
+      dUdZ(:,i,j,k) = ( dUdXi  (:,i,j,k) * M_f(3,i,j,k) + &
+                        dUdEta (:,i,j,k) * M_g(3,i,j,k) + &
+                        dUdZeta(:,i,j,k) * M_h(3,i,j,k) ) * sJ(i,j,k)
+    end do        ; end do        ; end do
+    
+  end subroutine Get_LocalGradients
+
+#endif /*SHOCK_ARTVISC || SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 !===================================================================================================================================
 !> Routines to compute the blending coefficient for NFVSE
@@ -469,11 +624,25 @@ IF (.NOT.ShockCapturingInitIsDone) THEN
   RETURN
 END IF
 ShockCapturingInitIsDone = .FALSE.
-nu_max = 0.
 SDEALLOCATE(sVdm_Leg)
+
+#if SHOCK_ARTVISC
+nu_max = 0.
 SDEALLOCATE(nu)
 SDEALLOCATE(nu_Master)
 SDEALLOCATE(nu_Slave)
+#endif /*SHOCK_ARTVISC*/
+
+#if SHOCK_LOC_ARTVISC
+SDEALLOCATE(physSens)
+SDEALLOCATE(artVisc)
+SDEALLOCATE(Mh_inv)
+SDEALLOCATE(covMetrics)
+SDEALLOCATE(sigmamin_Mh)
+SDEALLOCATE(artVisc_master)
+SDEALLOCATE(artVisc_slave)
+#endif /*SHOCK_LOC_ARTVISC*/
+
 SDEALLOCATE(alpha)
 
 #if SHOCK_NFVSE

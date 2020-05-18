@@ -494,6 +494,8 @@ REAL                            :: sines(256)
 INTEGER                         :: f
 ! needed for cylinder potential flow
 REAL                            :: phi
+! For KHI
+real                            :: dens0, dens1, pres0, velx0, vely0, slope
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
@@ -586,6 +588,24 @@ CASE(4) ! exact function
   ! g''(t)
   Resu_tt(1:4)=-omega*omega*IniAmplitude*sin(Omega*(SUM(x) - tEval))
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
+  
+case(17) ! KHI
+  ! parameters
+  dens0 = 0.5
+  dens1 = 1.5
+  pres0 = 1.0
+  velx0 = 0.5
+  vely0 = 0.1
+  slope = 15
+  
+  Prim(1) = dens0 + dens1 * 0.5*(1+(tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1)))
+  Prim(2) = velx0 * (tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1))
+  Prim(3) = vely0 * sin(2*PP_Pi*x(1)) !*(exp(-100*(coords(:,:,2)+0.5)**2) - exp(-100*(coords(:,:,2)-0.5)**2))
+  Prim(4) = 0.
+  Prim(5) = pres0
+  
+  CALL PrimToCons(prim,resu)
+  
 CASE(41) ! exact function, in 2D, rho=2+g(x,y) , rho v_1/2 =2+g(x,y) , rhoE =(2+g(x,y) )^2 = 4+4*g(x,y) + g(x,y)^2
          ! g(x,y) = A*sin(omega(x+y-1))
   Omega=PP_Pi*IniFrequency

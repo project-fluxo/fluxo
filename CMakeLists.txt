@@ -319,6 +319,9 @@ IF (FLUXO_SHOCKCAPTURE)
   OPTION(FLUXO_SHOCKCAP_ARTVISC2 "Use local physics-based artificial Viscosity shock capturing" OFF)
   
   IF(FLUXO_SHOCKCAP_ARTVISC2)
+    IF(FLUXO_DISCTYPE EQUAL 1)
+      MESSAGE(SEND_ERROR " Sorry, FLUXO_SHOCKCAP_ARTVISC2 can only be used with FLUXO_DISCTYPE=2 up to now.")
+    ENDIF()
     IF (NOT FLUXO_PARABOLIC)
       MESSAGE(SEND_ERROR " Activate FLUXO_PARABOLIC for ArtificialVisc shock capturing.")
     ENDIF()
@@ -337,7 +340,7 @@ IF (FLUXO_SHOCKCAPTURE)
   ENDIF()
   
   #### None selected?
-  IF((NOT FLUXO_SHOCKCAP_NFVSE) AND (NOT FLUXO_SHOCKCAP_ARTVISC))
+  IF((NOT FLUXO_SHOCKCAP_NFVSE) AND (NOT FLUXO_SHOCKCAP_ARTVISC) AND (NOT FLUXO_SHOCKCAP_ARTVISC2))
     MESSAGE(SEND_ERROR " No shock capturing method selected.")
   ENDIF()
   
