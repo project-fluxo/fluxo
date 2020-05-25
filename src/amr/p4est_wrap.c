@@ -1811,8 +1811,10 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
 
     p4est_coarsen_ext(p4est, recursive, Callbackorphans,
                       coarse_fn, NULL, replace_quads);
-    p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
+    p4est_balance_ext(p4est, P4EST_CONNECT_FULL, NULL,
                       replace_quads);
+    // p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
+    //                   replace_quads);
     p4est->user_pointer = NULL;
 
     return;//    return GetData(p4est);

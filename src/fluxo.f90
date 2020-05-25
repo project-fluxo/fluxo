@@ -24,7 +24,6 @@ USE MOD_Globals
 USE MOD_Commandline_Arguments
 USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
-USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
 USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
 USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
 USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
@@ -41,11 +40,14 @@ USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTi
 USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
+
+#if USE_AMR
 ! Added for AMR ->
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
 USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh
 USE MOD_AMR_tracking
 ! <-Added for AMR 
-
+#endif
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
@@ -71,7 +73,9 @@ CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
+#if USE_AMR
 CALL DefineParametersAMR()
+#endif
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
@@ -130,7 +134,9 @@ CALL InitMortar()
 CALL InitRestart()
 CALL InitOutput() 
 
+#if USE_AMR
 CALL InitAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#endif
 
 CALL InitMesh()
 
@@ -141,8 +147,9 @@ CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
 
-
+#if USE_AMR
 CALL ShockCapturingAMR()
+#endif
                                                 
 ! ALLOCATE(ElemToRefineAndCoarse(1:nElems))
 ! ElemToRefineAndCoarse = 0
@@ -169,8 +176,9 @@ SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec 
 SWRITE(UNIT_stdOut,'(132("="))')
 
 
-
+#if USE_AMR
 CALL InitData()
+#endif
 
 ! Run Simulation
 CALL TimeDisc()
@@ -190,7 +198,9 @@ CALL FinalizeTimeDisc()
 CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
+#if USE_AMR
 CALL FinalizeAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
+#endif
 CALL FinalizeMortar()
 ! Measure simulation duration
 Time=FLUXOTIME()

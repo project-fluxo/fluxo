@@ -152,8 +152,10 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
+#if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
 USE MOD_AMR_Vars            ,ONLY: UseAMR
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -192,17 +194,19 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
+#if USE_AMR
 DO ITER = 1,8
   IF (UseAMR) THEN 
-   ! doAMR = doAMR + 1;
-   ! IF (doAMR .EQ. 1) THEN
-     ! doAMR = 0;
-     CALL ShockCapturingAMR()
-     CALL InitData()
+    ! doAMR = doAMR + 1;
+    ! IF (doAMR .EQ. 1) THEN
+    ! doAMR = 0;
+    CALL ShockCapturingAMR()
+    CALL InitData()
     !  PRINT *, "ShockCapturingAMR()"
-   ! ENDIF
+    ! ENDIF
   ENDIF 
- ENDDO
+ENDDO
+#endif
 
 ! Write the state at time=0, i.e. the initial condition
 IF(nWriteData.GT.0) THEN
@@ -246,14 +250,17 @@ CalcTimeStart=FLUXOTIME()
 
 iter = 0
 DO
-  IF (UseAMR) THEN
-    doAMR = doAMR + 1;
-    IF (doAMR .EQ. 2) THEN
-      doAMR = 0;
-      CALL ShockCapturingAMR()
-    ENDIF
-   ENDIF
-  IF(nCalcTimestepMax.EQ.1)THEN
+#if USE_AMR
+
+! IF (UseAMR) THEN
+!   doAMR = doAMR + 1;
+!   IF (doAMR .EQ. 2) THEN
+!     doAMR = 0;
+!     CALL ShockCapturingAMR()
+!   ENDIF
+!  ENDIF
+#endif
+IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
     ! be careful, this is using an estimator, when to recompute the timestep

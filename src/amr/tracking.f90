@@ -62,18 +62,19 @@ CONTAINS
         REAL    :: eta_dof
             
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
-        ElemToRefineAndCoarse = 0;
-       
+        ElemToRefineAndCoarse = MinLevel;
+        IF (MPIRoot) ElemToRefineAndCoarse(1) = MaxLevel;
+
     !!! < ----- Commented for the production ----- >
     !     DO iElem = 1, nElems
     !         eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
-    !         ! PRINT *, "eta_dof = " , eta_dof
-    !         ! eta_min = -15.5
-    !         ! eta_max = -10.0
-    !         !eta_min = -8.
-    !         !eta_max = -6.99
-    !        !eta_min = 0.0001/250.
-    !         !eta_max = 0.1/100.
+    ! !         ! PRINT *, "eta_dof = " , eta_dof
+    ! !         ! eta_min = -15.5
+    ! !         ! eta_max = -10.0
+    ! !         !eta_min = -8.
+    ! !         !eta_max = -6.99
+    ! !        !eta_min = 0.0001/250.
+    ! !         !eta_max = 0.1/100.
     !         ! eps0 = 0.01
     !         IF (eta_dof .GE. RefineVal) THEN
     !             ElemToRefineAndCoarse(iElem) = MaxLevel
@@ -81,40 +82,42 @@ CONTAINS
     !         ELSE IF (eta_dof .LE. CoarseVal) THEN
     !             ElemToRefineAndCoarse(iElem) = -MinLevel - 1
     !         ELSE
-    !             ElemToRefineAndCoarse(iElem) = 0
+    !             ElemToRefineAndCoarse(iElem) = MinLevel
     !         END IF
     !    ENDDO
+    !!! < ----- Commented for the production ----- >
+
     !    CALL EXIT()
         ! IF (Count .EQ. 0 ) THEN
             ! COUNT = 1; 
-        DO iElem = 1,nElems
+        ! DO iElem = 1,nElems
 
-            ! ==== > StressTest
-            CALL RANDOM_NUMBER(R)
-            ! PRINT *, "R = ", R
-            If (R .LE. 0.2) THEN 
-                ElemToRefineAndCoarse(iElem) = MaxLevel  
-                ! PRINT *, "Refine = ", R       
-            ELSE
-                ElemToRefineAndCoarse(iElem) = -MinLevel - 1          
-                ! PRINT *, "Coarse = ", R       
-            ENDIF
-            ! ==== < StressTest
-            ! IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
-            !     (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
-            !     ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
-            !     (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
-            !     (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
-            !     ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
+        !     ! ==== > StressTest
+        !     ! CALL RANDOM_NUMBER(R)
+        !     ! ! PRINT *, "R = ", R
+        !     ! If (R .LE. 0.2) THEN 
+        !     !     ElemToRefineAndCoarse(iElem) = MaxLevel  
+        !     !     ! PRINT *, "Refine = ", R       
+        !     ! ELSE
+        !     !     ElemToRefineAndCoarse(iElem) = -MinLevel - 1          
+        !     !     ! PRINT *, "Coarse = ", R       
+        !     ! ENDIF
+        !     ! ==== < StressTest
+        !     ! IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
+        !     !     (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
+        !     !     ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
+        !     !     (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
+        !     !     (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
+        !     !     ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
                 
-            !         ElemToRefineAndCoarse(iElem) = MaxLevel          
-            !     ELSE 
-            !         ElemToRefineAndCoarse(iElem) = MinLevel          
-            !     ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
-            !     ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
-            !     ! CALL EXIT()
-            ! ENDIF
-        ENDDO
+        !     !         ElemToRefineAndCoarse(iElem) = MaxLevel          
+        !     !     ELSE 
+        !     !         ElemToRefineAndCoarse(iElem) = MinLevel          
+        !     !     ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
+        !     !     ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
+        !     !     ! CALL EXIT()
+        !     ! ENDIF
+        ! ENDDO
           ! IF (MPIRoot) THEN
             ! ElemToRefineAndCoarse(1) = MaxLevel
             ! ENDIF
