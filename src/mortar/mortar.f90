@@ -112,11 +112,9 @@ test2=1.5
 CALL GetNodesAndWeights(PP_N,NodeType,xi_GP,w_GP) !Gauss nodes and integration weights
 error=ABS(0.25*SUM((MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2))*w_GP)-1.)
 
-IF(error.GT. 100.*PP_RealTolerance) THEN
+IF(error.GT. 10.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
-    'problems in building Mortar',999,error)
-ELSE
-  SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
+    'problems in building Mortar 1',999,error)
 END IF
 
 ! freestream test
@@ -131,25 +129,35 @@ test2 = MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)
 error = SUM(ABS(0.5d0*test2-1.33d0))/REAL(PP_N+1)
 SWRITE(UNIT_StdOut,*)'ERROR project constant back to big side:',error
 
+IF(error.GT. 10.*PP_RealTolerance) THEN
+  CALL abort(__STAMP__,&
+    'problems in building Mortar 2',999,error)
+END IF
+
 CALL buildLegendreVdm(PP_N,xi_GP,Vdm_Leg,sVdm_Leg)
 test2 = 1.0d0
 test2(0) = -10.33d0
 error  = SUM(test2*w_GP)  !save mean value of big side
-Write(*,*)'big side',test2
-Write(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
-Write(*,*)'MV',SUM(test2*w_GP)
+SWRITE(*,*)'big side',test2
+SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+SWRITE(*,*)'MV',SUM(test2*w_GP)
 
 test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
 test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
 test2 = 0.5*(MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)) !project  back
-Write(*,*)'big side',test2
-Write(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
-Write(*,*)'MV',SUM(test2*w_GP)
+SWRITE(*,*)'big side',test2
+SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+SWRITE(*,*)'MV',SUM(test2*w_GP)
 
 error  = error - SUM(test2*w_GP)  !difference to initial mean value
-SWRITE(UNIT_StdOut,*)'ERROR  of mean value of polynomial, projected back to big side:',error
-STOP
+SWRITE(UNIT_StdOut,*)'Error of mean value of polynomial, projected back to big side:',error
 
+IF(error.GT. 10.*PP_RealTolerance) THEN
+  CALL abort(__STAMP__,&
+    'problems in building Mortar 3',999,error)
+ELSE
+  SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
+END IF
 
 MortarInitIsDone=.TRUE.
 END SUBROUTINE InitMortar

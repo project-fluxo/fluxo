@@ -43,6 +43,9 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
+#ifdef PP_EIGVAL
+USE MOD_EigenValues,       ONLY:DefineParametersEigenValues,InitEigenValues,FinalizeEigenValues
+#endif
 !IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
@@ -63,6 +66,9 @@ CALL DefineParametersMortar()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 CALL DefineParametersMesh()
+#ifdef PP_EIGVAL
+CALL DefineParametersEigenValues()
+#endif
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
 #if PARABOLIC
@@ -125,6 +131,9 @@ CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitBC()
+#ifdef PP_EIGVAL
+CALL InitEigenValues()
+#endif
 CALL InitDG()
 #if PARABOLIC
 CALL InitLifting()
@@ -152,6 +161,9 @@ CALL FinalizeAnalyze()
 CALL FinalizeLifting()
 #endif /*PARABOLIC*/
 CALL FinalizeDG()
+#ifdef PP_EIGVAL
+CALL FinalizeEigenValues()
+#endif
 CALL FinalizeEquation()
 CALL FinalizeBC()
 CALL FinalizeInterpolation()

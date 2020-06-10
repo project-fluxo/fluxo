@@ -130,6 +130,17 @@ IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   ENDIF()
 ENDIF()
 
+
+SET(FLUXO_BUILD_LAPACK "off" CACHE STRING "link with LAPACK, (off/on/MKL)")
+SET_PROPERTY(CACHE FLUXO_BUILD_LAPACK PROPERTY STRINGS off on MKL )
+
+SET(FLUXO_BUILD_EIGVAL  OFF  CACHE BOOL "switch on/off computation of eigenvalues of spatial operator at simulation start.")
+IF(FLUXO_BUILD_EIGVAL)
+  IF(FLUXO_BUILD_LAPACK STREQUAL "off")
+    MESSAGE(ERROR " Eigenvalue computation needs Lapack routines (FLUXO_BUILD_LAPACK)")
+  ENDIF()
+  ADD_DEFINITIONS(-DPP_EIGVAL=1)
+ENDIF()
 # Enable or disable unit tests
 #OPTION(FLUXO_UNITTESTS "Enable unit tests after build" ON)
 #MARK_AS_ADVANCED(FLUXO_UNITTESTS)
@@ -475,15 +486,17 @@ ENDIF()
 # =========================================================================
 # LAPACK/MKL library
 # =========================================================================
-# use Lapack/Blas for GNU
-#MESSAGE(STATUS "Using BLAS/Lapack library")
-#IF (FLUXO_BUILD_MKL)
-#  SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
-#ENDIF()
-#FIND_PACKAGE(LAPACK QUIET)
-#IF (LAPACK_FOUND)
-#  LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
-#ENDIF()
+IF(NOT (FLUXO_BUILD_LAPACK STREQUAL "off") )
+  # use Lapack/Blas for GNU
+  MESSAGE(STATUS "Using BLAS/Lapack library")
+  IF (FLUXO_BUILD_LAPACK STREQUAL "MKL" )
+    SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
+  ENDIF()
+  FIND_PACKAGE(LAPACK QUIET)
+  IF (LAPACK_FOUND)
+    LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
+  ENDIF()
+ENDIF() 
 
 # =========================================================================
 # MPI
@@ -557,7 +570,10 @@ IF (FLUXO_PARABOLIC)
   FILE(GLOB liftingF90     ./src/dg/${FLUXO_PARABOLIC_LIFTING}/*.f90)
   LIST(APPEND dgF90 ${liftingF90})
 ENDIF()
-
+IF (FLUXO_BUILD_EIGVAL)
+  FILE(GLOB eigF90     ./src/eigenvalues/*.f90)
+  LIST(APPEND fluxoF90 ${eigF90})
+ENDIF()
 
 # define libs
 ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${dgF90})
