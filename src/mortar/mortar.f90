@@ -21,6 +21,10 @@ MODULE MOD_Mortar
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
+INTERFACE DefineParametersMortar 
+  MODULE PROCEDURE DefineParametersMortar
+END INTERFACE
+
 INTERFACE InitMortar
   MODULE PROCEDURE InitMortar
 END INTERFACE
@@ -29,20 +33,33 @@ INTERFACE MortarBasis_BigToSmall
   MODULE PROCEDURE MortarBasis_BigToSmall
 END INTERFACE
 
-INTERFACE MortarBasis_SmallToBig
-!  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
-  MODULE PROCEDURE MortarBasis_SmallToBig_Projection
-END INTERFACE
+!INTERFACE MortarBasis_SmallToBig
+!!  MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
+!  MODULE PROCEDURE MortarBasis_SmallToBig_Projection
+!END INTERFACE
 
 INTERFACE FinalizeMortar
   MODULE PROCEDURE FinalizeMortar
 END INTERFACE
 
-PUBLIC::InitMortar,FinalizeMortar,MortarBasis_BigToSmall,MortarBasis_SmallToBig
+PUBLIC::DefineParametersMortar,InitMortar,FinalizeMortar,MortarBasis_BigToSmall!,MortarBasis_SmallToBig
 
 !==================================================================================================================================
 
 CONTAINS
+
+!==================================================================================================================================
+!> Define parameters 
+!==================================================================================================================================
+SUBROUTINE DefineParametersMortar()
+! MODULES
+USE MOD_Globals
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!==================================================================================================================================
+CALL prms%SetSection("Mortar")
+CALL prms%CreateIntOption(     'whichMortar',           "0: projection mortar, 1: collocation mortar. ")
+END SUBROUTINE DefineParametersMortar
 
 !==================================================================================================================================
 !> Basic Mortar initialization.
@@ -53,11 +70,15 @@ USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone,NodeType
+USE MOD_Basis,             ONLY: buildLegendreVdm 
 USE MOD_Mortar_Vars
+USE MOD_ReadInTools, ONLY: GETINT
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL                          :: error
+REAL                          :: error,dummy
+REAL,DIMENSION(0:PP_N,0:PP_N) :: Vdm_Leg,sVdm_Leg
 REAL,DIMENSION(0:PP_N)        :: test1,test2,xi_GP,w_GP
+INTEGER                       :: i,j,whichMortar
 !==================================================================================================================================
 IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
    CALL CollectiveStop(__STAMP__,&
@@ -70,7 +91,19 @@ ALLOCATE(M_0_2(0:PP_N,0:PP_N))
 ALLOCATE(M_1_0(0:PP_N,0:PP_N))
 ALLOCATE(M_2_0(0:PP_N,0:PP_N))
 CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,   M_0_2)
-CALL MortarBasis_SmallToBig(PP_N,NodeType,   M_1_0,   M_2_0)
+whichMortar = GETINT('whichMortar','0')
+SELECT CASE (whichMortar)
+CASE(0)
+  CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   M_1_0,   M_2_0)
+  SWRITE(UNIT_StdOut,'(A)')'Projection Mortar chosen.'
+CASE(1)
+  CALL MortarBasis_SmallToBig_Collocation(PP_N,NodeType,   M_1_0,   M_2_0)
+  SWRITE(UNIT_StdOut,'(A)')'Collocation Mortar chosen.'
+CASE DEFAULT
+  CALL abort(__STAMP__,&
+    'which mortar either 0 (projection) or 1 (collocation)')
+END SELECT
+  
 
 !> TODO: Make a unit test out of this one
 !Test mean value property 0.5*(0.5+1.5)=1.  !ONLY GAUSS
@@ -85,6 +118,38 @@ IF(error.GT. 100.*PP_RealTolerance) THEN
 ELSE
   SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
 END IF
+
+! freestream test
+test2 = 1.33d0
+test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
+error = SUM(ABS(test1-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'ERROR interpolate constant to mortar 1:',error
+test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
+error = SUM(ABS(test2-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'ERROR interpolate constant to mortar 2:',error
+test2 = MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)
+error = SUM(ABS(0.5d0*test2-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'ERROR project constant back to big side:',error
+
+CALL buildLegendreVdm(PP_N,xi_GP,Vdm_Leg,sVdm_Leg)
+test2 = 1.0d0
+test2(0) = -10.33d0
+error  = SUM(test2*w_GP)  !save mean value of big side
+Write(*,*)'big side',test2
+Write(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+Write(*,*)'MV',SUM(test2*w_GP)
+
+test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
+test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
+test2 = 0.5*(MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)) !project  back
+Write(*,*)'big side',test2
+Write(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+Write(*,*)'MV',SUM(test2*w_GP)
+
+error  = error - SUM(test2*w_GP)  !difference to initial mean value
+SWRITE(UNIT_StdOut,*)'ERROR  of mean value of polynomial, projected back to big side:',error
+STOP
+
 
 MortarInitIsDone=.TRUE.
 END SUBROUTINE InitMortar
@@ -171,6 +236,7 @@ END DO
 !            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
+
 END SUBROUTINE MortarBasis_SmallToBig_Collocation
 
 !==================================================================================================================================
@@ -198,6 +264,7 @@ REAL,DIMENSION(0:N_in,0:N_in) :: VGP,W,Vphi1,Vphi2,Vdm_Leg
 REAL,DIMENSION(0:N_in)        :: xi_In,xi_Gauss,w_Gauss  ! Gauss Nodes
 !==================================================================================================================================
 CALL GetNodesAndWeights(N_in,NodeType_In,xi_In)
+
 CALL GetNodesAndWeights(N_in,'GAUSS',xi_Gauss,w_Gauss) !Gauss nodes and integration weights
 
 !build projection operators M 1->0,M 2->0

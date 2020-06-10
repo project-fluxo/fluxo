@@ -25,7 +25,7 @@ USE MOD_Commandline_Arguments
 USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
-USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
+USE MOD_Mortar,            ONLY:DefineParametersMortar,InitMortar,FinalizeMortar
 USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
@@ -59,6 +59,7 @@ END IF
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
+CALL DefineParametersMortar()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 CALL DefineParametersMesh()
