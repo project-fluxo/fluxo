@@ -64,6 +64,7 @@ IMPLICIT NONE
 CALL prms%SetSection("Equation")
 CALL prms%CreateRealArrayOption('AdvVel',       "Advection velocity for advection part of LinAdv-Diff.")
 CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.","0.")
+CALL prms%CreateRealOption(     'upwind',       "=0.: central, =1.: upwind advective flux (real value).","1.")
 CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.","1.,1.,1.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
 #if (PP_DiscType==2)
@@ -107,6 +108,7 @@ doCalcSource=.TRUE.
 AdvVel             = GETREALARRAY('AdvVel',3)
 ! Read the diffusion constant from ini file
 DiffC             = GETREAL('DiffC','0.')
+upwind            = GETREAL('upwind','1.')
 IniWaveNumber     = GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 
 ! Read in boundary parameters

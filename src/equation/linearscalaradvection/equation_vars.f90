@@ -27,6 +27,7 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL             :: doCalcSource            !< logical to define if a source term (e.g. exactfunc) is added
 REAL                :: AdvVel(3)               !< Advection velocity
+REAL                :: upwind                  !< =0. central flux, =1. upwind flux
 REAL                :: DiffC                   !< Diffusion constant
 REAL                :: IniWavenumber(3)        !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 INTEGER             :: IniExactFunc            !< Exact Function for initialization
