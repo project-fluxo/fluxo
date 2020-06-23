@@ -121,13 +121,13 @@ END IF
 test2 = 1.33d0
 test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
 error = SUM(ABS(test1-1.33d0))/REAL(PP_N+1)
-SWRITE(UNIT_StdOut,*)'ERROR interpolate constant to mortar 1:',error
+SWRITE(UNIT_StdOut,*)'Error of interpolate constant to mortar 1:',error
 test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
 error = SUM(ABS(test2-1.33d0))/REAL(PP_N+1)
-SWRITE(UNIT_StdOut,*)'ERROR interpolate constant to mortar 2:',error
+SWRITE(UNIT_StdOut,*)'Error of interpolate constant to mortar 2:',error
 test2 = MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)
 error = SUM(ABS(0.5d0*test2-1.33d0))/REAL(PP_N+1)
-SWRITE(UNIT_StdOut,*)'ERROR project constant back to big side:',error
+SWRITE(UNIT_StdOut,*)'Error of project constant back to big side:',error
 
 IF(error.GT. 10.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
