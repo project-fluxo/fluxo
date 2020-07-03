@@ -71,19 +71,25 @@ USE MOD_Globals
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone,NodeType
 USE MOD_Basis,             ONLY: buildLegendreVdm 
+USE MOD_Mesh_Vars,         ONLY: nMortarSides
 USE MOD_Mortar_Vars
 USE MOD_ReadInTools, ONLY: GETINT
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL                          :: error,dummy
+REAL                          :: error
 REAL,DIMENSION(0:PP_N,0:PP_N) :: Vdm_Leg,sVdm_Leg
 REAL,DIMENSION(0:PP_N)        :: test1,test2,xi_GP,w_GP
-INTEGER                       :: i,j,whichMortar
+INTEGER                       :: whichMortar
 !==================================================================================================================================
 IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
    CALL CollectiveStop(__STAMP__,&
      'InitMortar not ready to be called or already called.')
 END IF
+!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
+ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
+#ifdef JESSE_MORTAR
+ALLOCATE(Ns_small(1:3   ,0:PP_N,0:PP_N,-2:4,nMortarSides))
+#endif /*JESSE_MORTAR*/
 
 ! DG interfaces
 ALLOCATE(M_0_1(0:PP_N,0:PP_N))
@@ -91,7 +97,12 @@ ALLOCATE(M_0_2(0:PP_N,0:PP_N))
 ALLOCATE(M_1_0(0:PP_N,0:PP_N))
 ALLOCATE(M_2_0(0:PP_N,0:PP_N))
 CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,   M_0_2)
+#ifdef JESSE_MORTAR
+whichMortar = 1  
+SWRITE(UNIT_StdOut,'(A)')"Compiled with Jesse's mortar,  Mortar set to collocation!"
+#else
 whichMortar = GETINT('whichMortar','0')
+#endif
 SELECT CASE (whichMortar)
 CASE(0)
   CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   M_1_0,   M_2_0)
@@ -316,6 +327,11 @@ SDEALLOCATE(M_0_1)
 SDEALLOCATE(M_0_2)
 SDEALLOCATE(M_1_0)
 SDEALLOCATE(M_2_0)
+SDEALLOCATE(U_small)
+#ifdef JESSE_MORTAR
+SDEALLOCATE(Ns_small)
+#endif /*JESSE_MORTAR*/
+
 END SUBROUTINE FinalizeMortar
 
 END MODULE MOD_Mortar

@@ -43,6 +43,7 @@ INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point 
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
 #endif /*PP_DiscType==2*/
 
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
 !==================================================================================================================================
 ABSTRACT INTERFACE
   PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,metric_L,metric_R,Fstar)

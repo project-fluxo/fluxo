@@ -25,6 +25,7 @@ USE MOD_Commandline_Arguments
 USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
+USE MOD_Metrics,           ONLY:CalcMetrics
 USE MOD_Mortar,            ONLY:DefineParametersMortar,InitMortar,FinalizeMortar
 USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
@@ -122,10 +123,11 @@ StartTime=FLUXOTIME()
 !
 ! Initialization
 CALL InitInterpolation()
-CALL InitMortar()
 CALL InitRestart()
 CALL InitOutput()
 CALL InitMesh()
+CALL InitMortar()
+CALL CalcMetrics() !must be after initMortar
 #if MPI
 CALL InitMPIvars()
 #endif

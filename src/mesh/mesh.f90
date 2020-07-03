@@ -95,7 +95,7 @@ USE MOD_Interpolation,      ONLY:GetVandermonde
 USE MOD_Mesh_ReadIn,        ONLY:readMesh
 USE MOD_Prepare_Mesh,       ONLY:setLocalSideIDs,fillMeshInfo
 USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR,GETREAL,GETINT
-USE MOD_Metrics,            ONLY:CalcMetrics
+!USE MOD_Metrics,            ONLY:CalcMetrics
 USE MOD_DebugMesh,          ONLY:writeDebugMesh
 USE MOD_Mappings,           ONLY:buildMappings
 #if MPI
@@ -258,10 +258,10 @@ ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 
 ! compute metrics using cross product instead of curl form (warning: no free stream preservation!)
 crossProductMetrics=GETLOGICAL('crossProductMetrics','.FALSE.')
-SWRITE(UNIT_stdOut,'(A)') "NOW CALLING calcMetrics..."
-CALL CalcMetrics()     ! DG metrics
 
-DEALLOCATE(NodeCoords)
+!SWRITE(UNIT_stdOut,'(A)') "NOW CALLING calcMetrics..."
+!CALL CalcMetrics()     ! DG metrics
+
 
 ! debugmesh: param specifies format to output, 0: no output, 1: tecplot ascii, 2: tecplot binary, 3: paraview binary
 CALL WriteDebugMesh(GETINT('debugmesh','0'))
@@ -299,6 +299,7 @@ SDEALLOCATE(Vdm_GLN_N)
 SDEALLOCATE(Vdm_N_GLN)
 SDEALLOCATE(sJ)
 SDEALLOCATE(detJac_Ref)
+SDEALLOCATE(NodeCoords)
 
 ! surface
 SDEALLOCATE(Face_xGP)

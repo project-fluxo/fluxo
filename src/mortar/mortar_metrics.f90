@@ -62,6 +62,10 @@ SUBROUTINE Mortar_CalcSurfMetrics(SideID,Nloc,Face_Ja,Face_xGP,&
 USE MOD_Globals
 USE MOD_Mortar,      ONLY: MortarBasis_BigToSmall
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
+#ifdef JESSE_MORTAR
+USE MOD_Mortar_Vars, ONLY: Ns_small
+USE MOD_Mesh_Vars,   ONLY: SideToElem,NormalDirs,NormalSigns
+#endif /*JESSE_MORTAR*/
 USE MOD_Interpolation_Vars,ONLY: NodeType
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -79,6 +83,10 @@ INTEGER  :: p,q,dir1,dir2,iNb,jNb,ind,SideIDMortar
 REAL     :: M_0_12(0:Nloc,0:Nloc,2),M_0_12_h(0:Nloc,0:Nloc,2)
 REAL     :: Mortar_Ja2(1:3,1:3,0:Nloc,0:Nloc)
 REAL     :: Mortar_xGP2 (  1:3,0:Nloc,0:Nloc)
+#ifdef JESSE_MORTAR
+INTEGER  :: iLocSide,NormalDir
+REAL     :: NormalSign 
+#endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 CALL MortarBasis_BigToSmall(Nloc,NodeType,M_0_12(:,:,1),M_0_12(:,:,2))
 ! ATTENTION: MortarBasis_BigToSmall computes the transposed matrices, which is useful when they are used
@@ -90,6 +98,15 @@ nbSideID=-1
 
 ! Surface metrics derived from big sides are only built for inner sides and MPI_MINE sides!
 SideIDMortar=MortarType(2,SideID)
+#ifdef JESSE_MORTAR
+iLocSide   = SideToElem(S2E_LOC_SIDE_ID,SideID)
+NormalDir  = NormalDirs(iLocSide)
+NormalSign = NormalSigns(iLocSide)
+#endif /*JESSE_MORTAR*/
+
+#ifdef JESSE_MORTAR
+   Ns_small(:,:,:,0,SideIDMortar) = NormalSign*Face_Ja(NormalDir,:,:,:) !big mortar metric
+#endif /*JESSE_MORTAR*/
 SELECT CASE(MortarType(1,SideID))
 CASE(1) !1->4
   !inb=1,jNb=1 > Nb=1
@@ -106,6 +123,9 @@ CASE(1) !1->4
         Mortar_xGP2(dir1,:,q)      =MATMUL(TRANSPOSE(M_0_12(  :,:,iNb)),Face_xGP(dir1,:,q))
       END DO !dir1=1,3
     END DO !q=0,Nloc
+#ifdef JESSE_MORTAR
+   Ns_small(:,:,:,iNb-3,SideIDMortar) = 2.*NormalSign*Mortar_Ja2(NormalDir,:,:,:) !revert 0.5 from M_0_12_h
+#endif /*JESSE_MORTAR*/
     !now in eta
     DO jNb=1,2
       ind=iNb+2*(jNb-1)
@@ -120,6 +140,9 @@ CASE(1) !1->4
           Mortar_xGP(dir1,p,:,ind)      =MATMUL(TRANSPOSE(M_0_12(  :,:,jNb)),Mortar_xGP2(dir1,p,:))
         END DO !dir1=1,3
       END DO !p=0,Nloc
+#ifdef JESSE_MORTAR
+      Ns_small(:,:,:,ind,SideIDMortar) = 4.*NormalSign*Mortar_Ja(NormalDir,:,:,:,ind) !revert 0.5*0.5 from twice M_0_12_h
+#endif /*JESSE_MORTAR*/
     END DO !jNb
   END DO !iNb
 
@@ -136,6 +159,9 @@ CASE(2) !1->2 in eta
         Mortar_xGP(dir1,p,:,jNb)      =MATMUL(TRANSPOSE(M_0_12(  :,:,jNb)),Face_xGP(dir1,p,:))
       END DO !dir1=1,3
     END DO !p=0,Nloc
+#ifdef JESSE_MORTAR
+   Ns_small(:,:,:,jNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,jNb) !revert 0.5 from M_0_12_h
+#endif /*JESSE_MORTAR*/
   END DO !jNb
 
 CASE(3) !1->2 in xi
@@ -151,6 +177,9 @@ CASE(3) !1->2 in xi
         Mortar_xGP(dir1,:,q,iNb)      =MATMUL(TRANSPOSE(M_0_12(  :,:,iNb)),Face_xGP(dir1,:,q))
       END DO !dir1=1,3
     END DO !q=0,Nloc
+#ifdef JESSE_MORTAR
+   Ns_small(:,:,:,iNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,iNb) !revert 0.5 from M_0_12_h
+#endif /*JESSE_MORTAR*/
   END DO !iNb
 
 END SELECT !MortarType

@@ -88,8 +88,8 @@ USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars
 #if (PP_DiscType==2)
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
-USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
 #endif /*PP_DiscType==2*/
+USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -133,6 +133,8 @@ CASE DEFAULT
          "volume flux not implemented")
 END SELECT
 #endif /*PP_DiscType==2*/
+
+MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT LINADV DONE!'
