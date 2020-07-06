@@ -281,7 +281,10 @@ SUBROUTINE InitBasisTrans(N_in,xGP)
 !> Initialize Vandermodematrix for basis transformation
 !===================================================================================================================================
 ! MODULES
-USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg, FilterMat
+USE MOD_ShockCapturing_Vars,ONLY:sVdm_Leg
+#if SHOCK_LOC_ARTVISC
+USE MOD_ShockCapturing_Vars,ONLY:FilterMat
+#endif /*SHOCK_LOC_ARTVISC*/
 USE MOD_Basis, ONLY :BuildLegendreVdm
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -299,17 +302,18 @@ real,DIMENSION(0:N_in,0:N_in)              :: Filter
 !  NODAL <--> MODAL
 ! Compute the 1D Vandermondematrix, needed to tranform the nodal basis into a modal (Legendre) basis
 ALLOCATE(sVdm_Leg(0:N_in,0:N_in))
-allocate(FilterMat(0:N_in,0:N_in))
 
 CALL BuildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
 
+#if SHOCK_LOC_ARTVISC
+allocate(FilterMat(0:N_in,0:N_in))
 ! Construct the filter with only two first modes
 Filter = 0.
 Filter(0,0) = 1.
 Filter(1,1) = 1.
 
 FilterMat = matmul(Vdm_Leg,matmul(Filter,sVdm_Leg))
-
+#endif /*SHOCK_LOC_ARTVISC*/
 
 END SUBROUTINE InitBasisTrans
 

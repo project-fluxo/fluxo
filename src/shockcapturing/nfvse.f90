@@ -55,10 +55,10 @@ contains
 !> Initializes the NFVSE module
 !===================================================================================================================================
   subroutine InitNFVSE()
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, sdxR, sdxL, rL, rR
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
-    use MOD_Interpolation_Vars , only: wGP
+    use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_ShockCapturing_Vars, only: alpha_old
     use MOD_DG_Vars            , only: D
     USE MOD_Globals,     ONLY: CROSS
@@ -71,6 +71,7 @@ contains
     real :: Metrics_gCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) eta metrics
     real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
     real, parameter :: half = 0.5d0
+    real :: sumWm1
     !--------------------------------------------------------------------------------------------------------------------------------
     
     ! Allocate storage
@@ -181,6 +182,33 @@ contains
     ! Compute the inverse of the quadrature weights (sub-cell dimensions)
     sWGP = 1.d0 / wGP
     
+    ! Compute variables for 2nd order FV
+    ! **********************************
+    
+    allocate ( sdxR(1:PP_N-1) )
+    allocate ( sdxL(1:PP_N-1) )
+    allocate ( rR  (1:PP_N-1) )
+    allocate ( rL  (1:PP_N-1) )
+    
+    sumWm1 = wGP(0) - 1.
+    do i=1, PP_N-1
+      ! dx calculation
+      ! --------------
+!#      ! Supposing cell-centered
+!#      sdxR(i) = 2.0/(wGP(i)+wGP(i+1))
+!#      sdxL(i) = 2.0/(wGP(i)+wGP(i-1))
+      
+      ! With nodes position
+      sdxR(i) = 1.0/(xGP(i+1)-xGP(i))
+      sdxL(i) = 1.0/(xGP(i)-xGP(i-1))
+      
+      ! r calculation
+      ! -------------
+      rL(i) = sumWm1 - xGP(i)
+      sumWm1 = sumWm1 + wGP(i)
+      rR(i) = sumWm1 - xGP(i)
+    end do
+    
 #if NFVSE_CORR
     allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
@@ -243,6 +271,12 @@ contains
                                                ftildeR, gtildeR, htildeR, iElem, &
 #endif /*NONCONS*/
                                                SubCellMetrics(iElem) )
+                                               
+!#      call Compute_FVFluxes_2ndOrder( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
+!##if NONCONS
+!#                                               ftildeR, gtildeR, htildeR, iElem, &
+!##endif /*NONCONS*/
+!#                                               SubCellMetrics(iElem) )
       
 !     Update Ut
 !     ---------
@@ -503,6 +537,380 @@ contains
 #endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes
+  
+!===================================================================================================================================
+!> Solves the inner Riemann problems and outputs a FV consistent flux
+!===================================================================================================================================
+  subroutine Compute_FVFluxes_2ndOrder(U, F , G , H , &
+#if NONCONS
+                                 FR, GR, HR, iElem, &
+#endif /*NONCONS*/
+                                              sCM )
+    use MOD_PreProc
+    use MOD_Riemann   , only: AdvRiemann
+    use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
+    use MOD_Interpolation_Vars , only: wGP
+#if NONCONS
+    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+#endif /*NONCONS*/
+    implicit none
+    !-arguments---------------------------------------------------------------
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
+#if NONCONS
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
+    integer                                        , intent(in)    :: iElem
+#endif /*NONCONS*/
+    type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
+    !-local-variables---------------------------------------------------------
+    integer  :: i,j,k
+    real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
+    real :: UL   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the left
+    real :: UR   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the right
+    real :: sigma(PP_nVar,0:PP_N,0:PP_N)
+    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+#if NONCONS
+    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    stop '2ns order not for noncons'
+#endif /*NONCONS*/
+    !-------------------------------------------------------------------------
+    
+!   *****************
+!   Initialize values
+!   *****************
+    
+    F   = 0.0
+    G   = 0.0
+    H   = 0.0
+#if NONCONS
+    FR  = 0.0
+    GR  = 0.0
+    HR  = 0.0
+#endif /*NONCONS*/
+    
+!   *********
+!   Xi-planes
+!   *********
+    F_  = 0.0
+    U_ = reshape(U , shape(U_), order = [1,4,2,3])
+    
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    UR(:,:,:,0) = U_(:,:,:,0) + (U_(:,:,:,1) - U_(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(U_(:,:,:,i+1)-U_(:,:,:,i)),sdxL(i)*(U_(:,:,:,i)-U_(:,:,:,i-1)))
+      
+      UR(:,:,:,i) = U_(:,:,:,i) + sigma * rR(i)
+      UL(:,:,:,i) = U_(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    UL(:,:,:,PP_N) = U_(:,:,:,PP_N) - (U_(:,:,:,PP_N) - U_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i),&
+                          sCM % xi   % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % xi   % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
+      end do       ; end do
+    end do ! i (xi planes)
+    
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
+#if NONCONS
+    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
+#endif /*NONCONS*/
+
+!   **********    
+!   Eta-planes
+!   **********
+    F_ = 0.0
+    U_ = reshape(U , shape(U_), order = [1,2,4,3])
+    
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    UR(:,:,:,0) = U_(:,:,:,0) + (U_(:,:,:,1) - U_(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(U_(:,:,:,i+1)-U_(:,:,:,i)),sdxL(i)*(U_(:,:,:,i)-U_(:,:,:,i-1)))
+      
+      UR(:,:,:,i) = U_(:,:,:,i) + sigma * rR(i)
+      UL(:,:,:,i) = U_(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    UL(:,:,:,PP_N) = U_(:,:,:,PP_N) - (U_(:,:,:,PP_N) - U_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
+                          sCM % eta  % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % eta  % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
+      end do       ; end do
+    end do ! i (eta planes)
+   
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
+#endif /*NONCONS*/
+    
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
+#if NONCONS
+    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
+#endif /*NONCONS*/
+
+!   ***********    
+!   Zeta-planes
+!   ***********
+
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    UR(:,:,:,0) = U(:,:,:,0) + (U(:,:,:,1) - U(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(U(:,:,:,i+1)-U(:,:,:,i)),sdxL(i)*(U(:,:,:,i)-U(:,:,:,i-1)))
+      
+      UR(:,:,:,i) = U(:,:,:,i) + sigma * rR(i)
+      UL(:,:,:,i) = U(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    UL(:,:,:,PP_N) = U(:,:,:,PP_N) - (U(:,:,:,PP_N) - U(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemann(H(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      HR(:,:,:,i) = H(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+                          U(:,:,:,i+1), U(:,:,:,i  ),&
+                          sCM % zeta % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          U(:,:,:,i  ), U(:,:,:,i+1),&
+                          sCM % zeta % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
+      end do       ; end do
+    end do ! i (zeta planes)
+    
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
+#endif /*NONCONS*/
+    
+  end subroutine Compute_FVFluxes_2ndOrder
+  
+  elemental real function minmod(a,b)
+    implicit none
+    !---------------------------
+    real, intent(in) :: a
+    real, intent(in) :: b
+    !---------------------------
+    
+    if (abs(a) < abs(b) .and. a*b > 0.0) then
+      minmod = a
+    else if (abs(b) < abs(a) .and. a*b > 0.0) then
+      minmod = b
+    else
+      minmod = 0.0
+    endif
+    
+  end function minmod
 !===================================================================================================================================
 !> Corrects the Solution after the Runge-Kutta stage
 !===================================================================================================================================

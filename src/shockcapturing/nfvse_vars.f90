@@ -20,6 +20,7 @@ module MOD_NFVSE_Vars
   
   private
   public :: SubCellMetrics, SubCellMetrics_t, sWGP, MPIRequest_alpha, Fsafe, Fblen
+  public :: sdxR, sdxL, rL, rR
   
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
@@ -52,6 +53,8 @@ module MOD_NFVSE_Vars
                                                                     !< (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
   real                      , allocatable :: Fsafe(:,:,:,:,:)
   real                      , allocatable :: Fblen(:,:,:,:,:)
+  real                      , allocatable :: sdxR(:), sdxL(:)       !< Inverse of subgrid sizes for reconstruction
+  real                      , allocatable :: rR(:), rL(:)
 !===================================================================================================================================
   contains
     elemental subroutine SubCellMetrics_construct(this,N)
