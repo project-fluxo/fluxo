@@ -123,9 +123,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
 
   CASE(2) !1->2 in eta
     U_small(:,:,:,1:2,iSide)=0.
-    ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-    !    U_tmp(iVar,p,:,1)  =  M1 * Uface_master(iVar,p,:,MortarSideID)
-    !    U_tmp(iVar,p,:,2)  =  M2 * Uface_master(iVar,p,:,MortarSideID)
     DO q=0,PP_N
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         DO l=0,PP_N
@@ -138,9 +135,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   CASE(3) !1->2 in xi
     U_small(:,:,:,1:2,iSide)=0.
     DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
-      ! The following p- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    U_tmp(iVar,:,q,1)  =  M1 * Uface_master(iVar,:,q,MortarSideID)
-      !    U_tmp(iVar,:,q,2)  =  M2 * Uface_master(iVar,:,q,MortarSideID)
       DO p=0,PP_N
         DO l=0,PP_N
           U_small(:,p,q,1,iSide)=U_small(:,p,q,1,iSide)+M_0_1(l,p)*Uface_master(:,l,q,MortarSideID)
@@ -360,8 +354,8 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         END DO !r
         DO q=0,PP_N !index big side 
           Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
-                                   + M_1_0_h(l,q)*(Flux_tp_l(:,q,1) - Flux_corr_l(:,1)) &
-                                   + M_2_0_h(l,q)*(Flux_tp_l(:,q,2) - Flux_corr_l(:,2))
+                                          + M_1_0_h(l,q)*(Flux_tp_l(:,q,1) - Flux_corr_l(:,1)) &
+                                          + M_2_0_h(l,q)*(Flux_tp_l(:,q,2) - Flux_corr_l(:,2))
         END DO !q=0,PP_N
       END DO !l=0,PP_N
     END DO !p=0,PP_N

@@ -87,8 +87,11 @@ IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
 END IF
 !index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
 ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
+U_small=-HUGE(1.)
 #ifdef JESSE_MORTAR
 ALLOCATE(Ns_small(1:3   ,0:PP_N,0:PP_N,-2:4,nMortarSides))
+Ns_small=-HUGE(1.)
+
 #endif /*JESSE_MORTAR*/
 
 ! DG interfaces

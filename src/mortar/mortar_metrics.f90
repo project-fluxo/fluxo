@@ -60,10 +60,11 @@ SUBROUTINE Mortar_CalcSurfMetrics(SideID,Nloc,Face_Ja,Face_xGP,&
                                   Mortar_Ja,Mortar_xGP,nbSideID)
 ! MODULES
 USE MOD_Globals
+USE MOD_Preproc
 USE MOD_Mortar,      ONLY: MortarBasis_BigToSmall
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 #ifdef JESSE_MORTAR
-USE MOD_Mortar_Vars, ONLY: Ns_small
+USE MOD_Mortar_Vars, ONLY: Ns_small !,M_0_1,M_0_2
 USE MOD_Mesh_Vars,   ONLY: SideToElem,NormalDirs,NormalSigns
 #endif /*JESSE_MORTAR*/
 USE MOD_Interpolation_Vars,ONLY: NodeType
@@ -84,7 +85,7 @@ REAL     :: M_0_12(0:Nloc,0:Nloc,2),M_0_12_h(0:Nloc,0:Nloc,2)
 REAL     :: Mortar_Ja2(1:3,1:3,0:Nloc,0:Nloc)
 REAL     :: Mortar_xGP2 (  1:3,0:Nloc,0:Nloc)
 #ifdef JESSE_MORTAR
-INTEGER  :: iLocSide,NormalDir
+INTEGER  :: iLocSide,NormalDir !,l
 REAL     :: NormalSign 
 #endif /*JESSE_MORTAR*/
 !==================================================================================================================================
@@ -99,13 +100,15 @@ nbSideID=-1
 ! Surface metrics derived from big sides are only built for inner sides and MPI_MINE sides!
 SideIDMortar=MortarType(2,SideID)
 #ifdef JESSE_MORTAR
+IF(Nloc.NE.PP_N) CALL abort(__STAMP__, &
+     'Nloc ne PP_N in mortar metrics')
 iLocSide   = SideToElem(S2E_LOC_SIDE_ID,SideID)
 NormalDir  = NormalDirs(iLocSide)
 NormalSign = NormalSigns(iLocSide)
 #endif /*JESSE_MORTAR*/
 
 #ifdef JESSE_MORTAR
-   Ns_small(:,:,:,0,SideIDMortar) = NormalSign*Face_Ja(NormalDir,:,:,:) !big mortar metric
+Ns_small(:,:,:,0,SideIDMortar) = NormalSign*Face_Ja(NormalDir,:,:,:) !big mortar metric
 #endif /*JESSE_MORTAR*/
 SELECT CASE(MortarType(1,SideID))
 CASE(1) !1->4
@@ -113,43 +116,69 @@ CASE(1) !1->4
   !inb=2,jNb=1 > Nb=2
   !inb=1,jNb=2 > Nb=3
   !inb=2,jNb=2 > Nb=4
-  !first in xi
+  !first in eta
   DO iNb=1,2
-    DO q=0,Nloc
+    DO p=0,Nloc
       DO dir1=1,3
         DO dir2=1,3
-          Mortar_Ja2(dir1,dir2,:,q)=MATMUL(M_0_12_h(:,:,iNb),Face_Ja(dir1,dir2,:,q))
+          Mortar_Ja2(dir1,dir2,p,:)=MATMUL(M_0_12_h(:,:,iNb),Face_Ja(dir1,dir2,p,:))
         END DO !dir2=1,3
-        Mortar_xGP2(dir1,:,q)      =MATMUL(TRANSPOSE(M_0_12(  :,:,iNb)),Face_xGP(dir1,:,q))
+        Mortar_xGP2(dir1,p,:)      =MATMUL(TRANSPOSE(M_0_12(  :,:,iNb)),Face_xGP(dir1,p,:))
       END DO !dir1=1,3
-    END DO !q=0,Nloc
+    END DO !p=0,Nloc
 #ifdef JESSE_MORTAR
    Ns_small(:,:,:,iNb-3,SideIDMortar) = 2.*NormalSign*Mortar_Ja2(NormalDir,:,:,:) !revert 0.5 from M_0_12_h
 #endif /*JESSE_MORTAR*/
-    !now in eta
+    !now in xi
     DO jNb=1,2
       ind=iNb+2*(jNb-1)
-      IF(MortarInfo(E2S_FLIP,ind,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
-      nbSideID(ind)=MortarInfo(E2S_SIDE_ID,ind,SideIDMortar)
+!      IF(MortarInfo(E2S_FLIP,ind,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
+      IF(.NOT.(MortarInfo(E2S_FLIP,ind,SideIDMortar).GT.0)) & !no slave sides (MPI)
+        nbSideID(ind)=MortarInfo(E2S_SIDE_ID,ind,SideIDMortar)
 
-      DO p=0,Nloc
+      DO q=0,Nloc
         DO dir1=1,3
           DO dir2=1,3
-            Mortar_Ja(dir1,dir2,p,:,ind)=MATMUL(M_0_12_h(:,:,jNb),Mortar_Ja2(dir1,dir2,p,:))
+            Mortar_Ja(dir1,dir2,:,q,ind)=MATMUL(M_0_12_h(:,:,jNb),Mortar_Ja2(dir1,dir2,:,q))
           END DO !dir2=1,3
-          Mortar_xGP(dir1,p,:,ind)      =MATMUL(TRANSPOSE(M_0_12(  :,:,jNb)),Mortar_xGP2(dir1,p,:))
+          Mortar_xGP(dir1,:,q,ind)      =MATMUL(TRANSPOSE(M_0_12(  :,:,jNb)),Mortar_xGP2(dir1,:,q))
         END DO !dir1=1,3
-      END DO !p=0,Nloc
+      END DO !q=0,Nloc
 #ifdef JESSE_MORTAR
       Ns_small(:,:,:,ind,SideIDMortar) = 4.*NormalSign*Mortar_Ja(NormalDir,:,:,:,ind) !revert 0.5*0.5 from twice M_0_12_h
 #endif /*JESSE_MORTAR*/
     END DO !jNb
   END DO !iNb
+!#ifdef JESSE_MORTAR
+!    Ns_small(:,:,:,-2:-1,SideIDMortar)=0.
+!    Ns_small(:,:,:,1:4,SideIDMortar)=0.
+!    !first  split 1 side into two, in eta direction
+!    DO q=0,PP_N
+!      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+!        DO l=0,PP_N
+!          Ns_small(:,p,q,1-3,SideIDMortar)=Ns_small(:,p,q,1-3,SideIDMortar)+M_0_1(l,q)*Ns_small(:,p,l,0,SideIDMortar)
+!          Ns_small(:,p,q,2-3,SideIDMortar)=Ns_small(:,p,q,2-3,SideIDMortar)+M_0_2(l,q)*Ns_small(:,p,l,0,SideIDMortar)
+!        END DO
+!      END DO
+!    END DO
+!    ! then split each side again into two, now in xi direction
+!    DO iNb=1,2
+!      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+!        DO p=0,PP_N
+!          DO l=0,PP_N
+!            Ns_small(:,p,q,1+2*(iNb-1),SideIDMortar)=Ns_small(:,p,q,1+2*(iNb-1),SideIDMortar)+M_0_1(l,p)*Ns_small(:,l,q,iNb-3,SideIDMortar)
+!            Ns_small(:,p,q,2+2*(iNb-1),SideIDMortar)=Ns_small(:,p,q,2+2*(iNb-1),SideIDMortar)+M_0_2(l,p)*Ns_small(:,l,q,iNb-3,SideIDMortar)
+!          END DO !l=1,PP_N
+!        END DO
+!      END DO 
+!    END DO !iNb=1,2
+!#endif /*JESSE_MORTAR*/
 
 CASE(2) !1->2 in eta
   DO jNb=1,2
-    IF(MortarInfo(E2S_FLIP,jNb,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
-    nbSideID(jNb)=MortarInfo(E2S_SIDE_ID,jNb,SideIDMortar)
+!    IF(MortarInfo(E2S_FLIP,jNb,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
+    IF(.NOT.(MortarInfo(E2S_FLIP,jNb,SideIDMortar).GT.0)) & !no slave sides (MPI)
+      nbSideID(jNb)=MortarInfo(E2S_SIDE_ID,jNb,SideIDMortar)
 
     DO p=0,Nloc
       DO dir1=1,3
@@ -160,14 +189,26 @@ CASE(2) !1->2 in eta
       END DO !dir1=1,3
     END DO !p=0,Nloc
 #ifdef JESSE_MORTAR
-   Ns_small(:,:,:,jNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,jNb) !revert 0.5 from M_0_12_h
+  Ns_small(:,:,:,jNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,jNb) !revert 0.5 from M_0_12_h
 #endif /*JESSE_MORTAR*/
   END DO !jNb
+!#ifdef JESSE_MORTAR
+!  Ns_small(:,:,:,1:2,SideIDMortar)=0.
+!  DO q=0,PP_N
+!    DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+!      DO l=0,PP_N
+!        Ns_small(:,p,q,1,SideIDMortar)=Ns_small(:,p,q,1,SideIDMortar)+M_0_1(l,q)*Ns_small(:,p,l,0,SideIDMortar)
+!        Ns_small(:,p,q,2,SideIDMortar)=Ns_small(:,p,q,2,SideIDMortar)+M_0_2(l,q)*Ns_small(:,p,l,0,SideIDMortar)
+!      END DO
+!    END DO
+!  END DO
+!#endif /*JESSE_MORTAR*/
 
 CASE(3) !1->2 in xi
   DO iNb=1,2
-    IF(MortarInfo(E2S_FLIP,iNb,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
-    nbSideID(iNb)=MortarInfo(E2S_SIDE_ID,iNb,SideIDMortar)
+!    IF(MortarInfo(E2S_FLIP,iNb,SideIDMortar).GT.0) CYCLE !no slave sides (MPI)
+    IF(.NOT.(MortarInfo(E2S_FLIP,iNb,SideIDMortar).GT.0)) & !no slave sides (MPI)
+      nbSideID(iNb)=MortarInfo(E2S_SIDE_ID,iNb,SideIDMortar)
 
     DO q=0,Nloc
       DO dir1=1,3
@@ -178,9 +219,20 @@ CASE(3) !1->2 in xi
       END DO !dir1=1,3
     END DO !q=0,Nloc
 #ifdef JESSE_MORTAR
-   Ns_small(:,:,:,iNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,iNb) !revert 0.5 from M_0_12_h
+    Ns_small(:,:,:,iNb,SideIDMortar) = 2.*NormalSign*Mortar_Ja(NormalDir,:,:,:,iNb) !revert 0.5 from M_0_12_h
 #endif /*JESSE_MORTAR*/
   END DO !iNb
+!#ifdef JESSE_MORTAR
+!  Ns_small(:,:,:,1:2,SideIDMortar)=0.
+!  DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
+!    DO p=0,PP_N
+!      DO l=0,PP_N
+!        Ns_small(:,p,q,1,SideIDMortar)=Ns_small(:,p,q,1,SideIDMortar)+M_0_1(l,p)*Ns_small(:,l,q,0,SideIDMortar)
+!        Ns_small(:,p,q,2,SideIDMortar)=Ns_small(:,p,q,2,SideIDMortar)+M_0_2(l,p)*Ns_small(:,l,q,0,SideIDMortar)
+!      END DO
+!    END DO
+!  END DO
+!#endif /*JESSE_MORTAR*/
 
 END SELECT !MortarType
 END SUBROUTINE Mortar_CalcSurfMetrics
