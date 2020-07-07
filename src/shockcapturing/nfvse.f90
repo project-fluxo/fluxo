@@ -266,17 +266,23 @@ contains
       
 !     Compute the finite volume fluxes
 !     --------------------------------
-      call Compute_FVFluxes( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
-#if NONCONS
-                                               ftildeR, gtildeR, htildeR, iElem, &
-#endif /*NONCONS*/
-                                               SubCellMetrics(iElem) )
+!#      call Compute_FVFluxes( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
+!##if NONCONS
+!#                                               ftildeR, gtildeR, htildeR, iElem, &
+!##endif /*NONCONS*/
+!#                                               SubCellMetrics(iElem) )
                                                
 !#      call Compute_FVFluxes_2ndOrder( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
 !##if NONCONS
 !#                                               ftildeR, gtildeR, htildeR, iElem, &
 !##endif /*NONCONS*/
 !#                                               SubCellMetrics(iElem) )
+      
+      call Compute_FVFluxes_TVD2ES( U(:,:,:,:,iElem), ftilde , gtilde , htilde , &
+#if NONCONS
+                                               ftildeR, gtildeR, htildeR, iElem, &
+#endif /*NONCONS*/
+                                               SubCellMetrics(iElem) )
       
 !     Update Ut
 !     ---------
@@ -894,7 +900,391 @@ contains
 #endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_2ndOrder
-  
+!===================================================================================================================================
+!> Solves the inner Riemann problems and outputs a FV consistent flux
+!===================================================================================================================================
+  subroutine Compute_FVFluxes_TVD2ES(U, F , G , H , &
+#if NONCONS
+                                 FR, GR, HR, iElem, &
+#endif /*NONCONS*/
+                                              sCM )
+    use MOD_PreProc
+    use MOD_Riemann   , only: AdvRiemannRecons
+    use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
+    use MOD_Interpolation_Vars , only: wGP
+    use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec
+    use MOD_DG_Vars           , only: nTotal_vol
+#if NONCONS
+    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+#endif /*NONCONS*/
+    implicit none
+    !-arguments---------------------------------------------------------------
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
+#if NONCONS
+    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
+    integer                                        , intent(in)    :: iElem
+#endif /*NONCONS*/
+    type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
+    !-local-variables---------------------------------------------------------
+    integer  :: i,j,k
+    real :: U_   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
+    real :: UL   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the left
+    real :: UR   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the right
+    real :: prim (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables
+    real :: prim_(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables after reshape
+    real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
+    real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
+    real :: sigma(PP_nVar,0:PP_N,0:PP_N)
+    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+#if NONCONS
+    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    stop '2ns order not for noncons'
+#endif /*NONCONS*/
+    !-------------------------------------------------------------------------
+    
+!   *****************
+!   Initialize values
+!   *****************
+    
+    F   = 0.0
+    G   = 0.0
+    H   = 0.0
+#if NONCONS
+    FR  = 0.0
+    GR  = 0.0
+    HR  = 0.0
+#endif /*NONCONS*/
+    
+    call ConsToPrimVec(nTotal_vol,prim,U)
+    
+!   *********
+!   Xi-planes
+!   *********
+    F_  = 0.0
+    prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
+    U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
+    primL = 0.0
+    primR = 0.0
+    
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
+      
+      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
+      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+    call PrimToConsVec(nTotal_vol,primL,UL)
+    call PrimToConsVec(nTotal_vol,primR,UR)
+
+!   Entropy fix: Fall to first order if entropy condition is not fulfilled  
+!   **********************************************************************
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i),&
+                          sCM % xi   % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % xi   % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
+      end do       ; end do
+    end do ! i (xi planes)
+    
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
+#endif /*NONCONS*/
+    
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
+#if NONCONS
+    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
+#endif /*NONCONS*/
+
+!   **********    
+!   Eta-planes
+!   **********
+    F_ = 0.0
+    prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
+    U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
+    primL = 0.0
+    primR = 0.0
+    
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
+      
+      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
+      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+    call PrimToConsVec(nTotal_vol,primL,UL)
+    call PrimToConsVec(nTotal_vol,primR,UR)
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
+                          sCM % eta  % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          sCM % eta  % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
+      end do       ; end do
+    end do ! i (eta planes)
+   
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
+#endif /*NONCONS*/
+    
+!   Reshape arrays back to original storage structure
+!   -------------------------------------------------
+    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
+#if NONCONS
+    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
+#endif /*NONCONS*/
+
+!   ***********    
+!   Zeta-planes
+!   ***********
+    primL = 0.0
+    primR = 0.0
+    
+!   Do the solution reconstruction
+!   ******************************
+    
+    ! First DOF
+    !----------
+    
+    ! Central scheme
+    primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+    
+    ! Left/right scheme
+!#    if (iElem == 1) then
+!#      UR(:,0) = U_e(:,0) + (U_e(:,1) - U_e(:,0))*wGP(0)/(wGP(0) - rL(1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U(:,PP_N,iElem-1)-U(:,PP_N-1,iElem-1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,1)-U_e(:,0)),(0.5/wGP(0))*(U_e(:,0)-U(:,PP_N-1,iElem-1)))  ! Version 2
+      
+!#      UR(:,0) = U_e(:,0) + sigma * wGP(0)
+!#    end if
+    
+    ! Middle DOFs
+    ! -----------
+    do i=1, PP_N-1
+      sigma = minmod(sdxR(i)*(prim(:,:,:,i+1)-prim(:,:,:,i)),sdxL(i)*(prim(:,:,:,i)-prim(:,:,:,i-1)))
+      
+      primR(:,:,:,i) = prim(:,:,:,i) + sigma * rR(i)
+      primL(:,:,:,i) = prim(:,:,:,i) + sigma * rL(i)
+    end do
+    
+    ! Last DOF
+    ! --------
+    
+    ! Central scheme
+    primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    
+    ! Left/right scheme
+!#    if (iElem == nElems) then
+!#      UL(:,PP_N) = U_e(:,PP_N) - (U_e(:,PP_N) - U_e(:,PP_N-1))*wGP(PP_N)/(wGP(PP_N) + rR(PP_N-1)) 
+!#    else
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U(:,0,iElem+1))) ! Version 1
+      
+!#      sigma = minmod((0.5/wGP(0))*(U_e(:,PP_N)-U_e(:,PP_N-1)),(0.5/wGP(0))*(U(:,1,iElem+1)-U_e(:,PP_N))) ! Version 2
+      
+!#      UL(:,PP_N) = U_e(:,PP_N) - sigma * wGP(0)
+!#    end if
+    
+    call PrimToConsVec(nTotal_vol,primL,UL)
+    call PrimToConsVec(nTotal_vol,primR,UR)
+    
+!   Fill left boundary if non-conservative terms are present
+!   --------------------------------------------------------
+#if NONCONS
+    FR_ = 0.0
+    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
+#endif /*NONCONS*/
+    
+!   Fill inner interfaces
+!   ---------------------
+    do i=0, PP_N-1
+      
+      call AdvRiemannRecons(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
+                   sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      HR(:,:,:,i) = H(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+                          U(:,:,:,i+1), U(:,:,:,i  ),&
+                          sCM % zeta % nv(:,:,:,i))
+      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          U(:,:,:,i  ), U(:,:,:,i+1),&
+                          sCM % zeta % nv(:,:,:,i))
+      
+      ! Scale right flux
+      do k=0, PP_N ; do j=0, PP_N
+        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
+      end do       ; end do
+    end do ! i (zeta planes)
+    
+!   Fill right boundary if non-conservative terms are present
+!   ---------------------------------------------------------
+#if NONCONS
+    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
+#endif /*NONCONS*/
+    
+  end subroutine Compute_FVFluxes_TVD2ES
+!  
   elemental real function minmod(a,b)
     implicit none
     !---------------------------
