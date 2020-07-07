@@ -146,7 +146,6 @@ USE MOD_PreProc
 USE MOD_EigenValues_Vars
 USE MOD_DG_vars           , ONLY: U
 USE MOD_Output_Vars       , ONLY: ProjectName
-USE MOD_Mesh_Vars         , ONLY: nElems
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -158,7 +157,7 @@ REAL,INTENT(IN)      :: dt
 REAL, INTENT(OUT)    :: dt_scale
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL                 :: maxReal,AbsImag_maxReal,minReal,AbsImag_minReal,minRealonaxis,AbsImag_minRealonaxis
+REAL                 :: maxReal,AbsImag_maxReal,minReal,AbsImag_minReal,minRealonaxis
 REAL                 :: maxAbsImag,Real_maxAbsImag
 REAL                 :: tS, tE
 REAL                 :: z
@@ -169,7 +168,6 @@ INTEGER              :: info
 REAL,ALLOCATABLE     :: RealPart(:)   !< all  eigenvalues (real part)
 REAL,ALLOCATABLE     :: ImagPart(:)   !< all  eigenvalues (imaginary part)
 REAL, ALLOCATABLE    :: Work(:)
-REAL                 ::U_tmp( 1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 
 INTEGER              :: i 
 LOGICAL              :: fullMat
@@ -436,10 +434,7 @@ REAL                 :: W(localDOF)
 REAL                 :: V(localDOF)
 
 INTEGER              :: i,j 
-INTEGER              :: norm_w_eps
 
-REAL                 :: EPS = 1.E-08
-REAL                 :: wdotv,norm_w 
 INTEGER              :: procDOF_MPI(1:nProcessors)
 INTEGER              :: offsetDOF(0:nProcessors)
 !===================================================================================================================================
