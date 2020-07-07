@@ -95,7 +95,7 @@ USE MOD_Interpolation,      ONLY:GetVandermonde
 USE MOD_Mesh_ReadIn,        ONLY:readMesh
 USE MOD_Prepare_Mesh,       ONLY:setLocalSideIDs,fillMeshInfo
 USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR,GETREAL,GETINT
-!USE MOD_Metrics,            ONLY:CalcMetrics
+USE MOD_Metrics,            ONLY:CalcMetrics
 USE MOD_DebugMesh,          ONLY:writeDebugMesh
 USE MOD_Mappings,           ONLY:buildMappings
 #if MPI
@@ -202,7 +202,7 @@ AnalyzeSide = 0
 
 !NOTE: nMortarSides=nMortarInnerSides+nMortarMPISides
 ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
-ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides)) ! [1]: 1: Neighbour sides, 2: Flip, [2]: small sides
+ALLOCATE(MortarInfo(MI_FLIP,0:4,nMortarSides)) ! [1]: 1: Neighbour sides, 2: Flip, [2]: small sides
 MortarType=-1
 MortarInfo=-1
 
@@ -259,8 +259,8 @@ ALLOCATE(      SurfElem(  0:PP_N,0:PP_N,1:nSides))
 ! compute metrics using cross product instead of curl form (warning: no free stream preservation!)
 crossProductMetrics=GETLOGICAL('crossProductMetrics','.FALSE.')
 
-!SWRITE(UNIT_stdOut,'(A)') "NOW CALLING calcMetrics..."
-!CALL CalcMetrics()     ! DG metrics
+SWRITE(UNIT_stdOut,'(A)') "NOW CALLING calcMetrics..."
+CALL CalcMetrics()     ! DG metrics
 
 
 ! debugmesh: param specifies format to output, 0: no output, 1: tecplot ascii, 2: tecplot binary, 3: paraview binary

@@ -255,6 +255,9 @@ USE MOD_Preproc
 USE MOD_Vector              ,ONLY: VNullify,V2D_M_V1D
 USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave
 USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
+#ifdef JESSE_MORTAR
+USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
+#endif
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
@@ -360,6 +363,10 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+
+#ifdef JESSE_MORTAR
+CALL  fill_delta_flux_jesse()
+#endif
 
 ! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)

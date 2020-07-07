@@ -25,6 +25,10 @@ INTERFACE DefineParametersMortar
   MODULE PROCEDURE DefineParametersMortar
 END INTERFACE
 
+INTERFACE InitMortarBase
+  MODULE PROCEDURE InitMortarBase
+END INTERFACE
+
 INTERFACE InitMortar
   MODULE PROCEDURE InitMortar
 END INTERFACE
@@ -42,7 +46,7 @@ INTERFACE FinalizeMortar
   MODULE PROCEDURE FinalizeMortar
 END INTERFACE
 
-PUBLIC::DefineParametersMortar,InitMortar,FinalizeMortar,MortarBasis_BigToSmall!,MortarBasis_SmallToBig
+PUBLIC::DefineParametersMortar,InitMortarBase,InitMortar,FinalizeMortar,MortarBasis_BigToSmall!,MortarBasis_SmallToBig
 
 !==================================================================================================================================
 
@@ -64,14 +68,13 @@ END SUBROUTINE DefineParametersMortar
 !==================================================================================================================================
 !> Basic Mortar initialization.
 !==================================================================================================================================
-SUBROUTINE InitMortar()
+SUBROUTINE InitMortarBase()
 ! MODULES
 USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone,NodeType
 USE MOD_Basis,             ONLY: buildLegendreVdm 
-USE MOD_Mesh_Vars,         ONLY: nMortarSides
 USE MOD_Mortar_Vars
 USE MOD_ReadInTools, ONLY: GETINT
 IMPLICIT NONE
@@ -86,20 +89,13 @@ IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
      'InitMortar not ready to be called or already called.')
 END IF
 !index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
-ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
-U_small=-HUGE(1.)
-#ifdef JESSE_MORTAR
-ALLOCATE(Ns_small(1:3   ,0:PP_N,0:PP_N,-2:4,nMortarSides))
-Ns_small=-HUGE(1.)
-
-#endif /*JESSE_MORTAR*/
-
 ! DG interfaces
-ALLOCATE(M_0_1(0:PP_N,0:PP_N))
-ALLOCATE(M_0_2(0:PP_N,0:PP_N))
-ALLOCATE(M_1_0(0:PP_N,0:PP_N))
-ALLOCATE(M_2_0(0:PP_N,0:PP_N))
-CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,   M_0_2)
+ALLOCATE(MInt(0:PP_N,0:PP_N,2))
+ALLOCATE(MInt_h(0:PP_N,0:PP_N,2))
+ALLOCATE(MProj(0:PP_N,0:PP_N,2))
+ALLOCATE(MProj_h(0:PP_N,0:PP_N,2))
+CALL MortarBasis_BigToSmall(PP_N,NodeType,   Mint(:,:,1),   Mint(:,:,2))
+MInt_h=0.5*MInt
 #ifdef JESSE_MORTAR
 whichMortar = 1  
 SWRITE(UNIT_StdOut,'(A)')"Compiled with Jesse's mortar,  Mortar set to collocation!"
@@ -108,16 +104,19 @@ whichMortar = GETINT('whichMortar','0')
 #endif
 SELECT CASE (whichMortar)
 CASE(0)
-  CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   M_1_0,   M_2_0)
+  CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   Mproj(:,:,1),   Mproj(:,:,2))
   SWRITE(UNIT_StdOut,'(A)')'Projection Mortar chosen.'
 CASE(1)
-  CALL MortarBasis_SmallToBig_Collocation(PP_N,NodeType,   M_1_0,   M_2_0)
+  CALL MortarBasis_SmallToBig_Collocation(PP_N,NodeType,  Mproj(:,:,1),   Mproj(:,:,2))
   SWRITE(UNIT_StdOut,'(A)')'Collocation Mortar chosen.'
 CASE DEFAULT
   CALL abort(__STAMP__,&
     'which mortar either 0 (projection) or 1 (collocation)')
 END SELECT
+Mproj_h=0.5*Mproj
   
+
+ASSOCIATE(M_0_1=>MInt(:,:,1),M_0_2=>Mint(:,:,2),M_1_0=>MProj(:,:,1),M_2_0=>Mproj(:,:,2))
 
 !> TODO: Make a unit test out of this one
 !Test mean value property 0.5*(0.5+1.5)=1.  !ONLY GAUSS
@@ -166,6 +165,8 @@ SWRITE(*,*)'MV',SUM(test2*w_GP)
 error  = error - SUM(test2*w_GP)  !difference to initial mean value
 SWRITE(UNIT_StdOut,*)'Error of mean value of polynomial, projected back to big side:',error
 
+END ASSOCIATE !M_0_1,M_0_2,M_1_0,M_2_0
+
 IF(error.GT. 10.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
     'problems in building Mortar 3',999,error)
@@ -173,9 +174,55 @@ ELSE
   SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
 END IF
 
+END SUBROUTINE InitMortarBase
+
+!==================================================================================================================================
+!> Basic Mortar initialization.
+!==================================================================================================================================
+SUBROUTINE InitMortar()
+! MODULES
+USE MOD_Preproc
+USE MOD_Globals
+USE MOD_Mesh_Vars,  ONLY: MeshInitIsDone,nMortarSides
+USE MOD_Mesh_Vars,  ONLY: MortarType,MortarInfo
+USE MOD_Mortar_Vars
+#ifdef JESSE_MORTAR
+USE MOD_Mesh_Vars,  ONLY: NormVec,SurfElem
+USE MOD_FillMortar, ONLY: InterpolateBigToSmall
+#endif /*JESSE_MORTAR*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+#ifdef JESSE_MORTAR
+INTEGER      :: doMPIsides,firstMortarSideID,lastMortarSideID
+INTEGER      :: MortarSideID,iSide
+REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
+#endif /*JESSE_MORTAR*/
+!==================================================================================================================================
+IF(MortarInitIsDone.OR.(.NOT.MeshInitIsDone))THEN
+   CALL CollectiveStop(__STAMP__,&
+     'InitMortar not ready to be called or already called.')
+END IF
+!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
+ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
+U_small=-HUGE(1.)
+
+#ifdef JESSE_MORTAR
+ALLOCATE(delta_flux_jesse(PP_nVar,0:PP_N,0:PP_N,nMortarSides)) 
+delta_flux_jesse=-HUGE(1.)
+
+ALLOCATE(Ns_small(1:3   ,0:PP_N,0:PP_N,-2:4,nMortarSides))
+Ns_small=-HUGE(1.)
+DO iSide=1,nMortarSides
+    MortarSideID=MortarInfo(MI_SIDEID,0,iSide)
+    Ns_loc(1,:,:)=NormVec(1,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    Ns_loc(2,:,:)=NormVec(2,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    Ns_loc(3,:,:)=NormVec(3,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    CALL InterpolateBigToSmall(3,MortarType(1,MortarSideID),Ns_loc,Ns_small(:,:,:,:,iSide))
+END DO !nMortarSides
+#endif /*JESSE_MORTAR*/
+
 MortarInitIsDone=.TRUE.
 END SUBROUTINE InitMortar
-
 
 !==================================================================================================================================
 !> Build 1D operators for non-conforming interfaces:
@@ -326,10 +373,10 @@ SUBROUTINE FinalizeMortar()
 USE MOD_Mortar_Vars
 IMPLICIT NONE
 !==================================================================================================================================
-SDEALLOCATE(M_0_1)
-SDEALLOCATE(M_0_2)
-SDEALLOCATE(M_1_0)
-SDEALLOCATE(M_2_0)
+SDEALLOCATE(Mint)
+SDEALLOCATE(Mint_h)
+SDEALLOCATE(Mproj)
+SDEALLOCATE(Mproj_h)
 SDEALLOCATE(U_small)
 #ifdef JESSE_MORTAR
 SDEALLOCATE(Ns_small)

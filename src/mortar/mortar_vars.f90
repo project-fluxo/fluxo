@@ -21,15 +21,21 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
-!> 1D-Mortar Operator: interpolation full interval 0: [-1,1] to left interval 1: [-1,0] and right intervall 2: [0,1]
-REAL,ALLOCATABLE,TARGET :: M_0_1(:,:),M_0_2(:,:)
-!> 1D-Mortar Operator: projection left interval 1: [-1,0] and right intervall 2: [0,1] to full intervall 0: [-1,1]
-REAL,ALLOCATABLE,TARGET :: M_1_0(:,:),M_2_0(:,:)
-LOGICAL                 :: MortarInitIsDone=.FALSE. !< marks whether mortar init routines are complete
-REAL,ALLOCATABLE        :: U_small(:,:,:,:,:)    !< interpolated solution for the big mortar side to small.
-                                                 !< two sides for 2-1 mortars, and 4+2 sides for  4-1 mortars
+
+REAL,ALLOCATABLE :: Mint(:,:,:)          !< 1D-Mortar Operator: interpolation full interval 0: [-1,1] to left interval 1: [-1,0] 
+                                         !< and right intervall 2: [0,1], size is (0:N,0:N,1:2), 
+                                        
+REAL,ALLOCATABLE :: Mint_h(:,:,:)        !< Mint*0.5
+REAL,ALLOCATABLE :: Mproj(:,:,:)         !< 1D-Mortar Operator: projection left interval 1: [-1,0] 
+                                         !< and right intervall 2: [0,1] to full intervall 0: [-1,1],size is (0:N,0:N,1:2)
+REAL,ALLOCATABLE :: Mproj_h(:,:,:)       !< Mproj*0.5
+REAL,ALLOCATABLE :: U_small(:,:,:,:,:)   !< interpolated solution for the big mortar side to small.
+                                         !< two sides for 2-1 mortars, and 4+2 sides for  4-1 mortars
 #ifdef JESSE_MORTAR
-REAL,ALLOCATABLE        :: Ns_small(:,:,:,:,:)    !< Ja normal of big face interpolated to small faces (scaled normal vector nvec*surfelem with factor 4 (4-1) or factor 2 (2-1).), also with intermediate solution for 4-1 mortar
+REAL,ALLOCATABLE :: delta_flux_jesse(:,:,:,:)  !< contribution of the two-point flux correction to the big mortar side 
+REAL,ALLOCATABLE :: Ns_small(:,:,:,:,:)  !< Ja normal of big face interpolated to small faces (scaled normal vector nvec*surfelem
+                                         !< with factor 4 (4-1) or factor 2 (2-1).), also with intermediate solution for 4-1 mortar
 #endif /*JESSE_MORTAR*/
+LOGICAL          :: MortarInitIsDone=.FALSE. !< marks whether mortar init routines are complete
 !==================================================================================================================================
 END MODULE MOD_Mortar_Vars

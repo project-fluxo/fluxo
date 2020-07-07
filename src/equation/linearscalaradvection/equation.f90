@@ -73,6 +73,7 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "0: Standard DG Flux"//&
                                               "1: standard DG Flux with metric dealiasing" &
                             ,"1")
+#endif /*PP_DiscType==2*/
 #ifdef JESSE_MORTAR
 CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in the mortar(Jesse):"//&
                                               "DG volume integral "//&
@@ -80,7 +81,6 @@ CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to 
                                               "1: standard DG Flux with metric dealiasing" &
                             ,"1")
 #endif /*JESSE_MORTAR*/
-#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 

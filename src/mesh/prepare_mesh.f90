@@ -650,6 +650,8 @@ DO iElem=1,nElems
                                   aSide%SideID.LE.lastMortarInnerSide)
       MortarType(1,aSide%SideID)=aSide%MortarType
       MortarType(2,aSide%SideID)=SideID
+      MortarInfo(MI_SIDEID,0,SideID)=aSide%SideID !points back to big mortar side
+      MortarInfo(MI_FLIP,0,SideID)=0
       DO iMortar=1,aSide%nMortars
         mSide=>aSide%MortarSide(iMortar)%sp
         MortarInfo(MI_SIDEID,iMortar,SideID)=mSide%SideID
