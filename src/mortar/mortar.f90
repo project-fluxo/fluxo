@@ -151,16 +151,16 @@ CALL buildLegendreVdm(PP_N,xi_GP,Vdm_Leg,sVdm_Leg)
 test2 = 1.0d0
 test2(0) = -10.33d0
 error  = SUM(test2*w_GP)  !save mean value of big side
-SWRITE(*,*)'big side',test2
-SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
-SWRITE(*,*)'MV',SUM(test2*w_GP)
+!SWRITE(*,*)'big side',test2
+!SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+!SWRITE(*,*)'MV',SUM(test2*w_GP)
 
 test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
 test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
 test2 = 0.5*(MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)) !project  back
-SWRITE(*,*)'big side',test2
-SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
-SWRITE(*,*)'MV',SUM(test2*w_GP)
+!SWRITE(*,*)'big side',test2
+!SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+!SWRITE(*,*)'MV',SUM(test2*w_GP)
 
 error  = error - SUM(test2*w_GP)  !difference to initial mean value
 SWRITE(UNIT_StdOut,*)'Error of mean value of polynomial, projected back to big side:',error
