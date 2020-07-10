@@ -117,7 +117,9 @@ INTERFACE LN_MEAN
    MODULE PROCEDURE LN_MEAN
 END INTERFACE
 
-
+INTERFACE EvalUaux1 
+   MODULE PROCEDURE EvalUaux1
+END INTERFACE
 #if (PP_DiscType==2)
 PUBLIC:: EvalAdvFluxAverage3D
 #endif /*PP_DiscType==2*/
@@ -143,7 +145,7 @@ PUBLIC:: ggfluxVec
 PUBLIC:: GassnerWintersWalchFlux
 PUBLIC:: GassnerWintersWalchFluxVec
 PUBLIC:: LN_MEAN
-
+PUBLIC:: EvalUaux1
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines, DEFAULT=-1: USE POINTER defined at runtime!
 #if PP_VolFlux==-1
@@ -266,15 +268,45 @@ REAL                :: srho,vel(1:3),v2
 !==================================================================================================================================
 DO i=1,nTotal_vol
   ! auxiliary variables
-  srho = 1./U_in(1,i) 
-  vel  = U_in(2:4,i)*srho
-  v2   = SUM(vel*vel)
-  Uaux(1  ,i) = srho
-  Uaux(2:4,i) = vel
-  Uaux(6  ,i) = v2
-  Uaux(5  ,i) = kappaM1*(U_in(5,i)-0.5*U_in(1,i)*v2)
+  Uaux(:,i) = EvalUaux1(U_in(:,i))
+  ! srho = 1./U_in(1,i) 
+  ! vel  = U_in(2:4,i)*srho
+  ! v2   = SUM(vel*vel)
+  ! Uaux(1  ,i) = srho
+  ! Uaux(2:4,i) = vel
+  ! Uaux(6  ,i) = v2
+  ! Uaux(5  ,i) = kappaM1*(U_in(5,i)-0.5*U_in(1,i)*v2)
 END DO ! i
 END SUBROUTINE EvalUaux
+
+PURE FUNCTION EvalUaux1(U_in) result(Uaux)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: U_in
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL    :: Uaux(nAuxVar)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i 
+REAL                :: srho,vel(1:3),v2
+!==================================================================================================================================
+
+  ! auxiliary variables
+  srho = 1./U_in(1) 
+  vel  = U_in(2:4)*srho
+  v2   = SUM(vel*vel)
+  Uaux(1  ) = srho
+  Uaux(2:4) = vel
+  Uaux(6  ) = v2
+  Uaux(5  ) = kappaM1*(U_in(5)-0.5*U_in(1)*v2)
+
+END FUNCTION EvalUaux1
 #endif /*PP_DiscType==2*/
 
 !==================================================================================================================================

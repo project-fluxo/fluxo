@@ -87,6 +87,11 @@ INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point 
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
+
+#ifdef JESSE_MORTAR
+INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 ABSTRACT INTERFACE
   SUBROUTINE i_sub_SolveRiemannProblem(F,U_LL,U_RR)
@@ -142,6 +147,10 @@ END INTERFACE
 
 INTERFACE ConsToEntropy
   MODULE PROCEDURE ConsToEntropy
+END INTERFACE
+
+INTERFACE EntropyToCons
+  MODULE PROCEDURE EntropyToCons
 END INTERFACE
 
 !INTERFACE ConsToEntropyVec
@@ -353,6 +362,53 @@ entropy(4)   =  rho_sp*w  ! 2*beta*v
 entropy(5)   = -rho_sp    !-2*beta
 END FUNCTION ConsToEntropy
 
+!==================================================================================================================================
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+PURE FUNCTION EntropyToCons(Entropy) RESULT(cons)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)             :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+!==================================================================================================================================
+! entropy(5)   = -rho_sp    !-2*beta
+rho_sp = - entropy(5)
+! entropy(2)   =  rho_sp*u  ! 2*beta*v
+! entropy(3)   =  rho_sp*v  ! 2*beta*v
+! entropy(4)   =  rho_sp*w  ! 2*beta*v
+u = entropy(2)/rho_sp
+v = entropy(3)/rho_sp
+w = entropy(4)/rho_sp
+
+v2s2   = 0.5*(u*u+v*v+w*w)
+! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+s = -1.*((entropy(1) + rho_sp*v2s2) / skappaM1) + kappa
+! s      = - LOG(rho_sp*(cons(1)**kappaM1))
+cons(1) = (exp(-s)/rho_sp)**(skappaM1)
+cons(2) = u * cons(1)
+cons(3) = v * cons(1)
+cons(4) = w * cons(1)
+! rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2))
+cons(5) = cons(1)/rho_sp/KappaM1 + cons(1)*v2s2
+
+! srho   = 1./cons(1)
+! u      = cons(2)*srho
+! v      = cons(3)*srho
+! w      = cons(4)*srho
+!s      = LOG(p) - kappa*LOG(cons(1))
+
+! Convert to entropy variables
+! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+
+END FUNCTION EntropyToCons
 
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)

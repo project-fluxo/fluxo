@@ -123,7 +123,7 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
                                               "DG volume integral "//&
                                               "  0: Standard DG"//&
-                                              "  1: Standard DG with metirc dealiasing"//&
+                                              "  1: Standard DG with metric dealiasing"//&
                                               "  2: Kennedy-Gruber"//&
                                               "  3: Ducros"//&
                                               "  4: Morinishi"//&
@@ -135,6 +135,22 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               " 10: EC Ismail and Roe" &
                                              ,"0")
 #endif /*PP_DiscType==2*/
+#ifdef JESSE_MORTAR
+CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
+                                              "DG volume integral "//&
+                                              "  0: Standard DG"//&
+                                              "  1: Standard DG with metric dealiasing"//&
+                                              "  2: Kennedy-Gruber"//&
+                                              "  3: Ducros"//&
+                                              "  4: Morinishi"//&
+                                              "  5: EC-KEP"//&
+                                              "  6: approx. EC-KEP"//&
+                                              "  7: approx. EC-KEP + press. aver."//&
+                                              "  8: Kenndy & Gruber (pirozolli version)"//&
+                                              "  9: Gassner Winter Walch"//&
+                                              " 10: EC Ismail and Roe" &
+                                             ,"1")
+#endif /*JESSE_MORTAR*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -414,6 +430,51 @@ CASE DEFAULT
          "volume flux not implemented")
 END SELECT
 #endif /*PP_DiscType==2*/
+
+#ifdef JESSE_MORTAR
+WhichMortarFlux = GETINT('MortarFlux','0')
+SELECT CASE(WhichVolumeFlux)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG'
+  MortarFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG with metirc dealiasing'
+  MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE(2)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Kennedy-Gruber'
+  MortarFluxAverageVec => KennedyAndGruberFluxVec1
+CASE(3)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Ducros'
+  MortarFluxAverageVec => DucrosFluxVec
+CASE(4)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Morinishi'
+  MortarFluxAverageVec => MorinishiFluxVec
+CASE(5)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: EC-KEP'
+  MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec
+CASE(6)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP'
+  MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec2
+CASE(7)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP + press. aver.'
+  MortarFluxAverageVec => ggFluxVec
+CASE(8)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Kenndy & Gruber (pirozolli version)'
+  MortarFluxAverageVec => KennedyAndGruberFluxVec2
+CASE(9)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Gassner Winter Walch'
+  MortarFluxAverageVec => GassnerWintersWalchFluxVec
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Two-Point EC Ismail and Roe'
+  MortarFluxAverageVec => TwoPointEntropyConservingFluxVec
+CASE DEFAULT
+  CALL ABORT(__STAMP__,&
+         "Mortar flux not implemented")
+END SELECT
+
+#endif /*JESSE_MORTAR*/
+
+
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'

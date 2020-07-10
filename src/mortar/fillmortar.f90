@@ -370,6 +370,9 @@ USE MOD_Mortar_Vars, ONLY: Mint,Mproj_h,U_small,Ns_small
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nMortarSides
 USE MOD_Equation_Vars,ONLY: MortarFluxAverageVec
 USE MOD_Mortar_Vars, ONLY: delta_flux_jesse !<<<<== is filled
+#ifdef navierstokes
+USE MOD_Flux_Average, ONLY: EvalUaux1 !<<<<== is filled
+#endif /*navierstokes*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -380,6 +383,7 @@ INTEGER      :: MortarSideID,iSide
 REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N)
 REAL         :: Flux_tp_l(PP_nVar,0:PP_N)
 REAL         :: Flux_corr_l(PP_nVar)
+
 !==================================================================================================================================
 
 delta_Flux_jesse(:,:,:,:)= 0. 
@@ -396,6 +400,10 @@ DO iSide=1,nMortarSides
           DO l=0,PP_N !index small side                       
             DO p=0,PP_N ! index big side                                  !<this is the intermediate side!>
               CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide), U_small(:,p,q,jNb-3,iSide), &
+#ifdef navierstokes
+                                  EvalUaux1(U_small(:,l,q,iNb+2*(jNb-1),iSide)), &
+                                  EvalUaux1( U_small(:,p,q,jNb-3,iSide)), &
+#endif /*navierstokes*/
                                         Ns_small(:,l,q,iNb+2*(jNb-1),iSide),Ns_small(:,p,q,jNb-3,iSide),Flux_tp_l(:,p))
             END DO
             Flux_corr_l(:)=0.
@@ -416,6 +424,10 @@ DO iSide=1,nMortarSides
         DO l=0,PP_N !index small side                      
           DO q=0,PP_N  !index big side                         !<this is the big side>
             CALL MortarFluxAverageVec( U_small(:,p,l,jNb-3,iSide), U_small(:,p,q,0,iSide), &
+#ifdef navierstokes
+                                  EvalUaux1(U_small(:,p,l,jNb-3,iSide)), &
+                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+#endif /*navierstokes*/
                                       Ns_small(:,p,l,jNb-3,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
           END DO
           Flux_corr_l(:)=0.
@@ -437,6 +449,10 @@ DO iSide=1,nMortarSides
         DO l=0,PP_N !index small side                      
           DO q=0,PP_N  !index big side                         !<this is the big side>
             CALL MortarFluxAverageVec( U_small(:,p,l,jNb,iSide), U_small(:,p,q,0,iSide), &
+#ifdef navierstokes
+                                  EvalUaux1(U_small(:,p,l,jNb,iSide)), &
+                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+#endif /*navierstokes*/
                                       Ns_small(:,p,l,jNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
           END DO
           Flux_corr_l(:)=0.
@@ -457,6 +473,10 @@ DO iSide=1,nMortarSides
         DO l=0,PP_N !index small side                       !<this is the big side!>
           DO p=0,PP_N ! index big side 
             CALL MortarFluxAverageVec( U_small(:,l,q,iNb,iSide), U_small(:,p,q,0,iSide), &
+#ifdef navierstokes
+                                  EvalUaux1(U_small(:,l,q,iNb,iSide)), &
+                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+#endif /*navierstokes*/
                                       Ns_small(:,l,q,iNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
           END DO
           Flux_corr_l(:)=0.
