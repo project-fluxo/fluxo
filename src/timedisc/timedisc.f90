@@ -95,6 +95,8 @@ CASE('LSERKW2')
   TimeStep=>TimeStepByLSERKW2
 CASE('LSERKK3')
   TimeStep=>TimeStepByLSERKK3
+case('SSPRK2')
+  TimeStep=>TimeStepBySSPRK2
 END SELECT
 
 IF(TimeDiscInitIsDone)THEN
@@ -502,8 +504,57 @@ END DO
 CurrentStage=1
 
 END SUBROUTINE TimeStepByLSERKK3
-
-
+!===================================================================================================================================
+!> Strong-Stability-Preserving Runge-Kutta integration: 2 register version
+!> See: Spiteri, R. J., & Ruuth, S. J. (2002). "A new class of optimal high-order strong-stability-preserving time discretization 
+!>                                              methods". SIAM Journal on Numerical Analysis, 40(2), 469-491.
+!> This procedure takes the current time t, the time step dt and the solution at
+!> the current time U(t) and returns the solution at the next time level.
+!> -> ATTENION: Only works for the SSPRK4-5
+!===================================================================================================================================
+subroutine TimeStepBySSPRK2(t)
+  use MOD_PreProc
+  use MOD_Vector
+  use MOD_TimeDisc_Vars, only: dt,nRKStages,CurrentStage, RKa, RKb, RKc, RKd, RKe
+  use MOD_DG_Vars      , only: U, Ut, nTotalU
+  use MOD_MESH_Vars    , only: nElems
+  use MOD_DG           , only: DGTimeDerivative
+  implicit none
+  !-arguments----------------------------------
+  real, intent(in) :: t
+  !-local-variables----------------------------
+  real    :: r0(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! Register 0
+  real    :: r1(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! Register 1
+  real    :: b_dt(1:nRKStages)
+  real    :: tStage
+  integer :: iStage
+  !--------------------------------------------
+  
+  call VCopy(nTotalU,r0,U)    !r0=U
+  b_dt=RKb*dt
+  
+  ! First stage
+  CurrentStage = 1
+  tStage=t
+  CALL DGTimeDerivative(tStage)
+  U = U + Ut*b_dt(1)
+  
+  do iStage=2, nRKStages
+    CurrentStage = iStage
+    tStage=t+dt*RKc(iStage)
+    CALL DGTimeDerivative(tStage)
+    
+    U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
+    
+    select case(iStage)
+    case(2) ; r1 = U*RKe(iStage)
+    case(3) ; r1 = r1 + U*RKe(iStage)
+    case(4) ; r1 = r1 + dt*Ut*RKe(iStage)
+    case(5) ; U  = U + r1 
+    end select
+  end do
+  
+end subroutine TimeStepBySSPRK2
 !===================================================================================================================================
 !> Scaling of the CFL number, from paper GASSNER, KOPRIVA, "A comparision of the Gauss and Gauss-Lobatto
 !> Discontinuous Galerkin Spectral Element Method for Wave Propagation Problems" .
