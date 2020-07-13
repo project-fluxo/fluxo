@@ -84,6 +84,7 @@ CONTAINS
 SUBROUTINE DefineParametersShockCapturing()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms
+use MOD_NFVSE       ,only: DefineParametersNFVSE
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("ShockCapturing")
@@ -95,6 +96,9 @@ CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be
                                               "  4: Kinetic Energy"&
                                              ,"3")
 CALL prms%CreateRealOption(     "ShockCorrFactor",  " The correction factor for NFVSE")
+
+call DefineParametersNFVSE()
+
 END SUBROUTINE DefineParametersShockCapturing
 
 SUBROUTINE InitShockCapturing()
@@ -529,6 +533,8 @@ subroutine CalcBlendingCoefficient(U)
   ! Local variables
   real ::  eta(nElems)
   !---------------------------------------------------------------------------------------------------------------------------------
+  
+!#  alpha = 0.5
   
   ! Shock indicator
   call ShockSensor_PerssonPeraire(U,eta)

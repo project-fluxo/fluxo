@@ -20,7 +20,8 @@ module MOD_NFVSE_Vars
   
   private
   public :: SubCellMetrics, SubCellMetrics_t, sWGP, MPIRequest_alpha, Fsafe, Fblen
-  public :: sdxR, sdxL, rL, rR
+  public :: sdxR, sdxL, rL, rR, U_ext 
+  public :: Compute_FVFluxes, SubFVMethod
   
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
@@ -47,14 +48,53 @@ module MOD_NFVSE_Vars
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Variables
 !-----------------------------------------------------------------------------------------------------------------------------------
+  
+! General
+! -------
   type(SubCellMetrics_t)    , allocatable :: SubCellMetrics(:)      !< Metric terms for the native sub-cell finite volumes
   real                      , allocatable :: sWGP(:)                !< Inverse of the Gauss quadrature weights
   integer                   , allocatable :: MPIRequest_alpha(:,:)  !< MPI request for the transfer of the blending coefficient
                                                                     !< (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
+! For the positivity limiter
+! --------------------------
   real                      , allocatable :: Fsafe(:,:,:,:,:)
   real                      , allocatable :: Fblen(:,:,:,:,:)
+  
+! For the FV method
+! -----------------
+  integer                                    :: SubFVMethod
+  procedure(i_sub_Compute_FVFluxes), pointer :: Compute_FVFluxes => null()
+  
+! For the reconstruction procedure
+! --------------------------------
   real                      , allocatable :: sdxR(:), sdxL(:)       !< Inverse of subgrid sizes for reconstruction
   real                      , allocatable :: rR(:), rL(:)
+  real                      , allocatable :: U_ext(:,:,:,:,:)       !< External solution for reconstruction on boundaries (PP_nVar,0:N,0:N,locside,iElem)
+  
+!-----------------------------------------------------------------------------------------------------------------------------------
+! Interfaces
+!-----------------------------------------------------------------------------------------------------------------------------------
+  abstract interface
+    subroutine i_sub_Compute_FVFluxes (U, F , G , H , &
+#if NONCONS
+                                          FR, GR, HR, &
+#endif /*NONCONS*/
+                                          sCM, iElem )
+      use MOD_PreProc
+      import SubCellMetrics_t
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
+      real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
+      real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
+#if NONCONS
+      real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
+      real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
+#endif /*NONCONS*/
+      type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
+      integer                                        , intent(in)    :: iElem
+    end subroutine i_sub_Compute_FVFluxes
+  end interface
 !===================================================================================================================================
   contains
     elemental subroutine SubCellMetrics_construct(this,N)

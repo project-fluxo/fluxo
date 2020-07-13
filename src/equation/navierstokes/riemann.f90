@@ -67,7 +67,7 @@ INTERFACE RiemannSolver_ECKEP_LLF
   MODULE PROCEDURE RiemannSolver_ECKEP_LLF
 END INTERFACE
 
-PUBLIC:: Riemann, AdvRiemann
+PUBLIC:: Riemann, AdvRiemann, AdvRiemannRecons
 PUBLIC:: RiemannSolverCentral
 PUBLIC:: RiemannSolverByRusanov
 PUBLIC:: RiemannSolverByHLL
@@ -189,7 +189,7 @@ REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 INTEGER                                       :: i,j,iVar
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 !==================================================================================================================================
-! Momentum has to be rotatet using the normal system individual for each
+! Momentum has to be rotated using the normal system individual for each
 ! Gauss point i,j
 DO j=0,PP_N
   DO i=0,PP_N
@@ -224,7 +224,88 @@ DO j=0,PP_N
 END DO ! j
 
 END SUBROUTINE AdvRiemann
+!==================================================================================================================================
+!> Advective Riemann solver
+!==================================================================================================================================
+SUBROUTINE AdvRiemannRecons(F,U_L,U_R,UL_r,UR_r,nv,t1,t2)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
+USE MOD_Flux_Average
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_L(     PP_nVar,0:PP_N,0:PP_N) !<  left state on face, not rotated
+REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face, not rotated
+REAL,INTENT(IN) :: UL_r(    PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: UR_r(    PP_nVar,0:PP_N,0:PP_N) !< right state on face
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                                       :: i,j,iVar
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL_r,U_RR_r
+!==================================================================================================================================
+! Momentum has to be rotated using the normal system individual for each
+! Gauss point i,j
+DO j=0,PP_N
+  DO i=0,PP_N
+!   First the mean states
+!   ---------------------
+    !LEFT
+    U_LL(1,i,j)=U_L(1,i,j)
+    ! rotate momentum
+    U_LL(2,i,j)=SUM(U_L(2:4,i,j)*nv(:,i,j))
+    U_LL(3,i,j)=SUM(U_L(2:4,i,j)*t1(:,i,j))
+    U_LL(4,i,j)=SUM(U_L(2:4,i,j)*t2(:,i,j))
+    U_LL(5,i,j)=U_L(5,i,j)
+    !right
+    U_RR(1,i,j)=U_R(1,i,j)
+    ! rotate momentum
+    U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
+    U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
+    U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
+    U_RR(5,i,j)=U_R(5,i,j)
+    
+!   Now the reconstructed states
+!   ----------------------------
+    !LEFT
+    U_LL_r(1,i,j)=UL_r(1,i,j)
+    ! rotate momentum
+    U_LL_r(2,i,j)=SUM(UL_r(2:4,i,j)*nv(:,i,j))
+    U_LL_r(3,i,j)=SUM(UL_r(2:4,i,j)*t1(:,i,j))
+    U_LL_r(4,i,j)=SUM(UL_r(2:4,i,j)*t2(:,i,j))
+    U_LL_r(5,i,j)=UL_r(5,i,j)
+    !right
+    U_RR_r(1,i,j)=UR_r(1,i,j)
+    ! rotate momentum
+    U_RR_r(2,i,j)=SUM(UR_r(2:4,i,j)*nv(:,i,j))
+    U_RR_r(3,i,j)=SUM(UR_r(2:4,i,j)*t1(:,i,j))
+    U_RR_r(4,i,j)=SUM(UR_r(2:4,i,j)*t2(:,i,j))
+    U_RR_r(5,i,j)=UR_r(5,i,j)
+  END DO ! i 
+END DO ! j
 
+stop 'no ES routines for reconstructed values'
+!#CALL SolveRiemannProblem(F,U_LL_r,U_RR_r)
+
+
+! Back Rotate the normal flux into Cartesian direction
+DO j=0,PP_N
+  DO i=0,PP_N
+    F(2:4,i,j)= nv(:,i,j)*F(2,i,j) &
+               +t1(:,i,j)*F(3,i,j) &
+               +t2(:,i,j)*F(4,i,j)
+  END DO ! i
+END DO ! j
+
+END SUBROUTINE AdvRiemannRecons
 !==================================================================================================================================
 !> Central / Average Euler flux
 !==================================================================================================================================

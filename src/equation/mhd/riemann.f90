@@ -285,9 +285,9 @@ DO j = 0,PP_N
     ConsR_r(6) = SUM(UR_r(6:8,i,j)*nv(:,i,j))
     ConsR_r(7) = SUM(UR_r(6:8,i,j)*t1(:,i,j))
     ConsR_r(8) = SUM(UR_r(6:8,i,j)*t2(:,i,j))
-
+    
     CALL EntropyStable9WaveFluxRecons(ConsL(:),ConsR(:),ConsL_r(:),ConsR_r(:),F(:,i,j))
-
+    
     ! Back Rotate the normal flux into Cartesian direction
     F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
                  + t1(:,i,j)*F(3,i,j) &
