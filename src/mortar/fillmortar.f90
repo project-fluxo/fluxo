@@ -210,6 +210,98 @@ END SELECT ! mortarType(SideID)
 END SUBROUTINE InterpolateBigToSmall
 
 !==================================================================================================================================
+!> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
+!> with Entropy
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
+!>
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>
+!==================================================================================================================================
+SUBROUTINE InterpolateBigToSmallEntropy(ndim1,whichMortarType,BigCons,SmallCons)
+  ! MODULES
+  USE MOD_Preproc
+  USE MOD_Mortar_Vars, ONLY: Mint
+  USE MOD_Equation_Vars, ONLY: ConsToEntropy
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT/OUTPUT VARIABLES
+  INTEGER, INTENT(IN)  :: ndim1  !< size of first dimension of array
+  INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
+  REAL,INTENT(IN)      :: BigCons(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
+  REAL,INTENT(INOUT)   :: smallCons(1:ndim1,0:PP_N,0:PP_N,-2:4)
+                                                      !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
+                                                      !< 2-1 mortar: sol. on big (0) and small (1:2)
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
+  INTEGER      :: p,q,l,iNb,jNb
+  REAL         :: Big(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
+  REAL         :: small(1:ndim1,0:PP_N,0:PP_N,-2:4)
+  !==================================================================================================================================
+  CALL ConsToEntropyVec(BigCons, Big)
+  small(:,:,:,0)=Big(:,:,:) !save big mortar solution, too
+  
+  SELECT CASE(WhichMortarType)
+  CASE(1) !1->4
+    !first  split 1 side into two, in eta direction
+    DO jNb=1,2
+      small(:,:,:,jNb-3)=0.
+      DO q=0,PP_N
+        DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+          DO l=0,PP_N
+            small(:,p,q,jNb-3)=small(:,p,q,jNb-3) +MInt(l,q,jNb)*Big(:,p,l)
+          END DO
+        END DO
+      END DO
+      ! then split each side again into two, now in xi direction
+      DO iNb=1,2
+        small(:,:,:,iNb+2*(jNb-1))=0.
+        DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+          DO p=0,PP_N
+            DO l=0,PP_N
+              small(:,p,q,iNb+2*(jNb-1))=small(:,p,q,iNb+2*(jNb-1)) +MInt(l,p,iNb)*small(:,l,q,jNb-3)
+            END DO !l=1,PP_N
+          END DO
+        END DO 
+      END DO !iNb=1,2
+    END DO !jNb=1,2
+  
+  CASE(2) !1->2 in eta
+    DO jNb=1,2
+      small(:,:,:,jNb)=0.
+      DO q=0,PP_N
+        DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+          DO l=0,PP_N
+            small(:,p,q,jNb)=small(:,p,q,jNb) +MInt(l,q,jNb)*Big(:,p,l)
+          END DO
+        END DO
+      END DO
+    END DO !jNb=1,2
+  
+  CASE(3) !1->2 in xi
+    DO iNb=1,2
+      small(:,:,:,iNb)=0.
+      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
+        DO p=0,PP_N
+          DO l=0,PP_N
+            small(:,p,q,iNb)=small(:,p,q,iNb) +MInt(l,p,iNb)*Big(:,l,q)
+          END DO
+        END DO
+      END DO
+    END DO !iNb=1,2
+  END SELECT ! mortarType(SideID)
+  
+  CALL EntropyToConsVec(small, SmallCons)
+
+  END SUBROUTINE InterpolateBigToSmallEntropy
+
+!==================================================================================================================================
 !>  Fills master side from small non-conforming sides, using 1D projection operators Mproj(:,:,1:2)
 !>
 !> This routine is used to project the numerical flux at the small sides of the nonconforming interface to the corresponding large
@@ -401,6 +493,7 @@ DO iSide=1,nMortarSides
             DO p=0,PP_N ! index big side                                  !<this is the intermediate side!>
               CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide), U_small(:,p,q,jNb-3,iSide), &
 #ifdef navierstokes
+!linearscalaradvection
                                   EvalUaux1(U_small(:,l,q,iNb+2*(jNb-1),iSide)), &
                                   EvalUaux1( U_small(:,p,q,jNb-3,iSide)), &
 #endif /*navierstokes*/
