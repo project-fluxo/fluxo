@@ -396,7 +396,7 @@ CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with metirc dealiasing'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with metric dealiasing'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Kennedy-Gruber'
@@ -795,6 +795,14 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
     du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
     prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
   END IF
+  CALL PrimToCons(prim,resu)
+CASE(14) ! Kelvin Helmhots instability
+  prim(1) = 1. + 0.5 * 1.0 * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05))     !  density
+  prim(2) = 1. * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05) - 1.)     !  density
+  prim(3) = 0.01 * sin(2*PP_Pi * x(1)) * (exp(-1*(x(2) - 0.5)**2/0.2/0.2) + exp(-1*(x(2) - 1.5)**2/0.2/0.2)) 
+  prim(4) = 0.
+  prim(5)   = 10.
+  ! print *, "prim = ", prim
   CALL PrimToCons(prim,resu)
 END SELECT ! ExactFunction
 

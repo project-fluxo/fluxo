@@ -244,58 +244,120 @@ DO iVar=1,PP_nVar
 END DO
 END SUBROUTINE RiemannSolverByRusanov
 
-
-
 !==================================================================================================================================
 !> HLL Riemann solver
 !==================================================================================================================================
 SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
-!MODULES
-USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:kappa,kappaM1
-USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
-!----------------------------------------------------------------------------------------------------------------------------------
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-!----------------------------------------------------------------------------------------------------------------------------------
-REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
-REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES                                                                                                               !
-INTEGER :: i,j
-REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
-REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
-REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
-!==================================================================================================================================
-CALL EvalEulerFlux1D(U_LL,F_L)
-CALL EvalEulerFlux1D(U_RR,F_R)
-DO j=0,PP_N
-  DO i=0,PP_N
-    sRho_L=1./U_LL(1,i,j)
-    sRho_R=1./U_RR(1,i,j)
-    Vel_L =U_LL(2:4,i,j)*sRho_L
-    Vel_R =U_RR(2:4,i,j)*sRho_R
-    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
-    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
-    Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
-    Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
-    ! positive supersonic speed
-    IF(Ssl .GE. 0.)THEN
-      F(:,i,j)=F_L(:,i,j)
-    ! negative supersonic speed
-    ELSEIF(Ssr .LE. 0.)THEN
-      F(:,i,j)=F_R(:,i,j)
-    ! subsonic case
-    ELSE
-      F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR*(U_RR(:,i,j)-U_LL(:,i,j)))/(ssR-ssL)
-    END IF ! subsonic case
-  END DO ! i 
-END DO ! j
-END SUBROUTINE RiemannSolverByHLL
+  !MODULES
+  USE MOD_PreProc
+  USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+  USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+  !----------------------------------------------------------------------------------------------------------------------------------
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT VARIABLES
+  !----------------------------------------------------------------------------------------------------------------------------------
+  REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+  REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! OUTPUT VARIABLES
+  REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES                                                                                                               !
+  INTEGER :: i,j
+  REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
+  REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, HTilde, vTilde, aTilde
+  REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+  !==================================================================================================================================
+  CALL EvalEulerFlux1D(U_LL,F_L)
+  CALL EvalEulerFlux1D(U_RR,F_R)
+  DO j=0,PP_N
+    DO i=0,PP_N
+      sRho_L=1./U_LL(1,i,j)
+      sRho_R=1./U_RR(1,i,j)
+      Vel_L =U_LL(2:4,i,j)*sRho_L
+      Vel_R =U_RR(2:4,i,j)*sRho_R
+      p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+      p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+  !   
+  !   Davis (not recommended according to Toro)
+  !   -----------------------------------------
+  !~     Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
+  !~     Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+  !
+  !   Davis and Einfeldt
+  !   ------------------
+      !! enthalpy
+      H_L = (U_LL(5,i,j) + p_L)/U_LL(1,i,j)
+      H_R = (U_RR(5,i,j) + p_R)/U_RR(1,i,j)    !! Roe averages
+      HTilde = (SQRT(U_LL(1,i,j))*H_L      + SQRT(U_RR(1,i,j))*H_R     )/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+      vTilde = (SQRT(U_LL(1,i,j))*Vel_L(1) + SQRT(U_RR(1,i,j))*Vel_R(1))/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))    
+      aTilde = SQRT((kappa-1.)*(HTilde - 0.5*vTilde**2))    
+      Ssl = vTilde - aTilde
+      Ssr = vTilde + aTilde    ! positive supersonic speed
+      IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+        F(:,i,j)=F_L(:,i,j)
+      ! negative supersonic speed
+      ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+        F(:,i,j)=F_R(:,i,j)
+      ! subsonic case
+      ELSE
+        F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR*(U_RR(:,i,j)-U_LL(:,i,j)))/(ssR-ssL)
+      END IF ! subsonic case
+    END DO ! i 
+  END DO ! j
+  END SUBROUTINE RiemannSolverByHLL
+
+! !==================================================================================================================================
+! !> HLL Riemann solver
+! !==================================================================================================================================
+! SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
+! !MODULES
+! USE MOD_PreProc
+! USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+! USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+! !----------------------------------------------------------------------------------------------------------------------------------
+! IMPLICIT NONE
+! !----------------------------------------------------------------------------------------------------------------------------------
+! ! INPUT VARIABLES
+! !----------------------------------------------------------------------------------------------------------------------------------
+! REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+! REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+! !----------------------------------------------------------------------------------------------------------------------------------
+! ! OUTPUT VARIABLES
+! REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+! !----------------------------------------------------------------------------------------------------------------------------------
+! ! LOCAL VARIABLES                                                                                                               !
+! INTEGER :: i,j
+! REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
+! REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+! REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+! !==================================================================================================================================
+! CALL EvalEulerFlux1D(U_LL,F_L)
+! CALL EvalEulerFlux1D(U_RR,F_R)
+! DO j=0,PP_N
+!   DO i=0,PP_N
+!     sRho_L=1./U_LL(1,i,j)
+!     sRho_R=1./U_RR(1,i,j)
+!     Vel_L =U_LL(2:4,i,j)*sRho_L
+!     Vel_R =U_RR(2:4,i,j)*sRho_R
+!     p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+!     p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+!     Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
+!     Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+!     ! positive supersonic speed
+!     IF(Ssl .GE. 0.)THEN
+!       F(:,i,j)=F_L(:,i,j)
+!     ! negative supersonic speed
+!     ELSEIF(Ssr .LE. 0.)THEN
+!       F(:,i,j)=F_R(:,i,j)
+!     ! subsonic case
+!     ELSE
+!       F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR*(U_RR(:,i,j)-U_LL(:,i,j)))/(ssR-ssL)
+!     END IF ! subsonic case
+!   END DO ! i 
+! END DO ! j
+! END SUBROUTINE RiemannSolverByHLL
 
 
 !==================================================================================================================================
