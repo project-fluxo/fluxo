@@ -36,5 +36,7 @@ INTEGER                      :: outputFormat=0        !< File format for visuali
 INTEGER                      :: ASCIIOutputFormat=0   !< File format for ASCII output. 0: CSV, 1: Tecplot
 LOGICAL                      :: OutputInitIsDone=.FALSE.  !< marks whether output routines have been initialized
 LOGICAL                      :: doPrintStatusLine     !< flag indicating if status line should be printed
+integer                         :: nOutVars              !< Default number of output variables for visualize routine
+character(LEN=255), allocatable :: strvarnames_tmp(:)   !< Default variable names for visualize routine
 !==================================================================================================================================
 END MODULE MOD_Output_Vars

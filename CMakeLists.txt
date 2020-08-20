@@ -83,6 +83,7 @@ OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 
+OPTION(FLUXO_SHOCKCAPTURE "Enable shock capturing for non-linear equations" OFF)
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "linearscalaradvection" CACHE STRING
@@ -157,6 +158,9 @@ ENDIF()
 IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
   SET(EQNSYSNAME_FOUND true )
   ADD_DEFINITIONS(-DPP_nVar=1 -Dlinearscalaradvection)
+  IF(FLUXO_SHOCKCAPTURE)
+    MESSAGE(SEND_ERROR " Do not use shock capturing with linear advection equation!")
+  ENDIF()
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
@@ -172,6 +176,10 @@ IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   IF(FLUXO_EQN_ANISO_HEAT)
     ADD_DEFINITIONS(-DPP_ANISO_HEAT=1)
   ENDIF()
+  IF(FLUXO_SHOCKCAPTURE)
+    MESSAGE(SEND_ERROR " Shock capturing is not yet implemented for the MHD equations")
+  ENDIF()
+
 ELSE()
   UNSET(FLUXO_EQN_GLM CACHE ) # if not mhd
   UNSET(FLUXO_EQN_ANISO_HEAT CACHE ) #if not mhd
@@ -182,6 +190,9 @@ IF(FLUXO_EQNSYSNAME STREQUAL "maxwell")
   ADD_DEFINITIONS(-DPP_nVar=8 -Dmaxwell)
   IF (FLUXO_PARABOLIC)
     MESSAGE(SEND_ERROR " Do not use parabolic flag with maxwell equation system!")
+  ENDIF()
+  IF(FLUXO_SHOCKCAPTURE)
+    MESSAGE(SEND_ERROR " Do not use shock capturing with the Maxwell equations!")
   ENDIF()
 ENDIF()
 
@@ -231,6 +242,43 @@ ELSE()
   ADD_DEFINITIONS(-DPARABOLIC=0)
 ENDIF()
 
+# =========================================================================
+# Shock capturing settings
+# =========================================================================
+ 
+IF (FLUXO_SHOCKCAPTURE)
+  ADD_DEFINITIONS(-DSHOCKCAPTURE=1)
+  
+  OPTION(FLUXO_SHOCKCAP_NFVSE "Use NFVSE for shock capturing" ON)
+  
+  IF(FLUXO_SHOCKCAP_NFVSE)
+    ADD_DEFINITIONS(-DSHOCK_NFVSE=1)
+  ENDIF()
+  
+  #### None selected?
+  IF((NOT FLUXO_SHOCKCAP_NFVSE))
+    MESSAGE(SEND_ERROR " No shock capturing method selected.")
+  ENDIF()
+  
+  #### Set the shock capturing indicator
+  SET(FLUXO_SHOCKINDICATOR "custom" CACHE STRING "indicator used for shock capturing, custom/dens/pres/ptde/vmbm: custom: variable indicator /density/pressure/pressuretimesdensity/kinplusmagEnergy.")
+  SET_PROPERTY(CACHE FLUXO_SHOCKINDICATOR PROPERTY STRINGS custom dens pres ptde vmbm)
+  IF(FLUXO_SHOCKINDICATOR STREQUAL "custom")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=0)  
+  ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "dens")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=1)
+  ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "pres")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=2)
+  ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "ptde")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=3)
+  ELSEIF(FLUXO_SHOCKINDICATOR STREQUAL "vmbm")
+    ADD_DEFINITIONS(-DPP_Indicator_Var=4)
+  ENDIF()
+ELSE()
+  #if no shock capturing
+  UNSET(FLUXO_SHOCKINDICATOR CACHE )
+  ADD_DEFINITIONS(-DSHOCKCAPTURE=0)
+ENDIF()
 
 
 # =========================================================================
@@ -487,7 +535,8 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/output/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
-                           ./src/timedisc/*.f90            )
+                           ./src/timedisc/*.f90            
+                           ./src/shockcapturing/*.f90   )
 
 
 

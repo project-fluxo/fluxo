@@ -225,6 +225,7 @@ INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N),N_loc(1:3,1:3)
 REAL                                 :: Prim(1:8),ar,br
 REAL                                 :: U_loc(PP_nVar)
+real                                 :: pres, a, normalMachNo
 #if PARABOLIC
 REAL                                 :: BCGradMat(1:3,1:3)
 REAL                                 :: Fd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
@@ -441,12 +442,8 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          ! get pressure from refstate
+          ! Get inner state
           U_loc = U_Master(:,p,q,SideID)
-          CALL ConsToPrim(Prim(1:5),U_loc)
-          Prim(5) = RefStatePrim(BCState,5)
-          ! U_loc contains now the state with pressure from outside (refstate)
-          CALL PrimToCons(Prim(1:5),U_loc(:))
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
@@ -457,6 +454,17 @@ DO iBC=1,nBCs
           U_Face_loc(2,p,q)= SUM(U_loc(2:4)*N_loc(:,1))
           U_Face_loc(3,p,q)= SUM(U_loc(2:4)*N_loc(:,2))
           U_Face_loc(4,p,q)= SUM(U_loc(2:4)*N_loc(:,3))
+          
+          ! get pressure from refstate if subsonic
+          pres = KappaM1*( U_loc(5) - 0.5 *(U_loc(2)**2 + U_loc(3)**2 + U_loc(4)**2)/U_loc(1) )
+          a    = sqrt(Kappa*pres/U_loc(1))
+          normalMachNo = ABS(U_Face_loc(2,p,q)/(a*U_loc(1)))
+          if (normalMachNo<=1) then
+            CALL ConsToPrim(Prim(1:5),U_Face_loc(:,p,q))
+            Prim(5) = RefStatePrim(BCState,5)
+            ! U_loc contains now the state with pressure from outside (refstate)
+            CALL PrimToCons(Prim(1:5),U_Face_loc(:,p,q))
+          end if
 #if PARABOLIC
           ! for diffusion, we use the rotational invariance of the diffusion fluxes
           !   for this, we need to transform the gradients into the normal system (see GG Diss for details)
@@ -562,6 +570,7 @@ INTEGER                              :: iBC,iSide,p,q,SideID
 INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: ar,br,N_loc(1:3,1:3),Prim(8)
 REAL                                 :: U_loc(PP_nVar)
+real                                 :: a, normalMachNo, normalVel, pres
 !==================================================================================================================================
 DO iBC=1,nBCs
   IF(nBCByType(iBC).LE.0) CYCLE
@@ -694,10 +703,26 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          U_Loc = U_Master(:,p,q,SideID)
-          CALL ConsToPrim(Prim(1:5),U_Loc)
-          Prim(5) = RefStatePrim(BCState,5)
-          CALL PrimToCons(Prim(1:5),U_Loc)
+          ! Get inner state
+          U_loc = U_Master(:,p,q,SideID)
+          ! local normal system
+          N_loc(:,1) = NormVec( :,p,q,SideID)
+          N_loc(:,2) = TangVec1(:,p,q,SideID)
+          N_loc(:,3) = TangVec2(:,p,q,SideID)
+          ! transform state into normal system
+          normalVel = SUM(U_loc(2:4)*N_loc(:,1))/U_loc(1)
+          
+          ! get pressure from refstate if subsonic
+          pres = KappaM1*( U_loc(5) - 0.5 *(U_loc(2)**2 + U_loc(3)**2 + U_loc(4)**2)/U_loc(1) )
+          a    = sqrt(Kappa*pres/U_loc(1))
+          normalMachNo = ABS(normalVel/a)
+          if (normalMachNo<=1) then
+            CALL ConsToPrim(Prim(1:5),U_loc)
+            Prim(5) = RefStatePrim(BCState,5)
+            ! U_loc contains now the state with pressure from outside (refstate)
+            CALL PrimToCons(Prim(1:5),U_loc)
+          end if
+          
           Flux(:,p,q,SideID) = U_Loc
         END DO ! p
       END DO ! q

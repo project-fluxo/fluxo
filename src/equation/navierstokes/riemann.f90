@@ -60,6 +60,7 @@ INTERFACE RiemannSolver_ECKEP_LLF
 END INTERFACE
 
 PUBLIC:: Riemann
+PUBLIC:: AdvRiemann
 PUBLIC:: RiemannSolverByRusanov
 PUBLIC:: RiemannSolverByHLLC
 PUBLIC:: RiemannSolverByRoe
@@ -84,7 +85,6 @@ SUBROUTINE Riemann(F,U_L,U_R, &
                    nv,t1,t2)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
 USE MOD_Flux_Average
 #if PARABOLIC
 USE MOD_Flux            ,ONLY:EvalDiffFlux3D    ! and the NSE diffusion fluxes in all directions to approximate the numerical flux
@@ -111,11 +111,53 @@ REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of f
 REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-INTEGER                                       :: i,j,iVar
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 #if PARABOLIC
+INTEGER                                       :: iVar
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: g_L,g_R,k_L,k_R,j_L,j_R
 #endif
+!==================================================================================================================================
+
+call AdvRiemann(F,U_L,U_R,nv,t1,t2)
+
+#if PARABOLIC
+!! Don#t forget the diffusion contribution, my young padawan
+!! Compute NSE Diffusion flux in cartesian coordinates
+CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)
+CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R,gradUx_R,gradUy_R,gradUz_R)
+!
+! !BR1/BR2 uses arithmetic mean of the fluxes
+DO iVar=2,PP_nVar
+  F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:)) &
+                               +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:)) &
+                               +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:)))
+END DO
+#endif /* PARABOLIC */
+END SUBROUTINE Riemann
+
+!==================================================================================================================================
+!> Advective Riemann solver
+!==================================================================================================================================
+SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
+USE MOD_Flux_Average
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_L(     PP_nVar,0:PP_N,0:PP_N) !<  left state on face, not rotated
+REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face, not rotated
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                                       :: i,j
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 !==================================================================================================================================
 ! Momentum has to be rotatet using the normal system individual for each
 ! Gauss point i,j
@@ -150,23 +192,8 @@ DO j=0,PP_N
                +t2(:,i,j)*F(4,i,j)
   END DO ! i
 END DO ! j
-#if PARABOLIC
-!! Don#t forget the diffusion contribution, my young padawan
-!! Compute NSE Diffusion flux in cartesian coordinates
-CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)
-CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R,gradUx_R,gradUy_R,gradUz_R)
-!
-! !BR1/BR2 uses arithmetic mean of the fluxes
-DO iVar=2,PP_nVar
-  F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:)) &
-                               +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:)) &
-                               +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:)))
-END DO
-#endif /* PARABOLIC */
-END SUBROUTINE Riemann
 
-
-
+END SUBROUTINE AdvRiemann
 !==================================================================================================================================
 !> Rusanov / lax-Friedrichs Riemann solver
 !==================================================================================================================================

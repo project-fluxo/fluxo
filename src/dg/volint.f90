@@ -28,17 +28,14 @@ PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Private Part --------------------------------------------------------------------------------------------------------------------
 ! Public Part ---------------------------------------------------------------------------------------------------------------------
-INTERFACE VolInt
 #if (PP_DiscType==1)
-  MODULE PROCEDURE VolInt_weakForm
+PUBLIC::VolInt_weakForm
 #elif (PP_DiscType==2)
-  MODULE PROCEDURE VolInt_SplitForm
-  !new optimized version, using CARTESIANFLUX preproc flag for cartesian meshes, other versions are still here, see below
-  !MODULE PROCEDURE VolInt_SplitForm3 
-#endif /*PP_DiscType*/
-END INTERFACE
-
-PUBLIC::VolInt
+PUBLIC::VolInt_adv_SplitForm
+#if PARABOLIC
+PUBLIC::VolInt_visc
+#endif /*PARABOLIC*/
+#endif /*(PP_DiscType)*/
 !==================================================================================================================================
 
 
@@ -94,16 +91,12 @@ END SUBROUTINE VolInt_weakForm
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut=0. and is updated with the volume flux derivatives
 !==================================================================================================================================
-SUBROUTINE VolInt_SplitForm(Ut)
+SUBROUTINE VolInt_adv_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:DvolSurf
 USE MOD_Mesh_Vars ,ONLY:nElems
-#if PARABOLIC
-USE MOD_Flux      ,ONLY:EvalDiffFluxTilde3D
-USE MOD_DG_Vars   ,ONLY:D_Hat
-#endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -116,32 +109,13 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-#if PARABOLIC
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
-#endif /*PARABOLIC*/
 INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalEulerFluxAverage3D(iElem,ftilde,gtilde,htilde)
-#if PARABOLIC
-  !compute Diffusion flux contribution of 
-  CALL EvalDiffFluxTilde3D(iElem,ftildeDiff,gtildeDiff,htildeDiff)
-  ! Update the time derivative with the spatial derivatives of the transformed fluxes
-  ! euler fluxes in flux differencing form: strong, but surface parts included 
-  ! diffusion fluxes are accouted in the standard weak form
-  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    DO l=0,PP_N
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf(i,l)*  ftilde(:,l,i,j,k)  &
-                                            + Dvolsurf(j,l)*  gtilde(:,l,i,j,k)  &
-                                            + Dvolsurf(k,l)*  htilde(:,l,i,j,k)  &
-                                            +    D_Hat(i,l)*ftildeDiff(:,l,j,k)  &
-                                            +    D_Hat(j,l)*gtildeDiff(:,i,l,k)  &
-                                            +    D_Hat(k,l)*htildeDiff(:,i,j,l)
-    END DO ! l
-  END DO; END DO; END DO ! i,j,k
-#else  
+  
   !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
@@ -151,10 +125,52 @@ DO iElem=1,nElems
                                             + Dvolsurf(k,l)*htilde(:,l,i,j,k)
     END DO ! l
   END DO; END DO; END DO ! i,j,k
-#endif /*PARABOLIC*/
 END DO ! iElem
-END SUBROUTINE VolInt_SplitForm
+END SUBROUTINE VolInt_adv_SplitForm
 
+#if PARABOLIC
+!==================================================================================================================================
+!> Computes the volume integral using flux differencing 
+!> Attention 1: 1/J(i,j,k) is not yet accounted for
+!> Attention 2: input Ut=0. and is updated with the volume flux derivatives
+!==================================================================================================================================
+SUBROUTINE VolInt_visc(Ut)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+USE MOD_PreProc
+USE MOD_DG_Vars      ,ONLY:D_Hat_T
+USE MOD_Flux         ,ONLY:EvalDiffFluxTilde3D
+USE MOD_Mesh_Vars    ,ONLY:nElems
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT)                                :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+!< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+#if PARABOLIC
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftildeDiff,gtildeDiff,htildeDiff !transformed diffusion fluxes
+#endif /*PARABOLIC*/
+INTEGER                                           :: i,j,k,l,iElem
+!==================================================================================================================================
+
+DO iElem=1,nElems
+  !compute Diffusion flux contribution of 
+  CALL EvalDiffFluxTilde3D(iElem, ftildeDiff,gtildeDiff,htildeDiff)
+  ! Update the time derivative with the spatial derivatives of the transformed fluxes
+  ! euler fluxes in flux differencing form: strong, but surface parts included 
+  ! diffusion fluxes are accouted in the standard weak form
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    DO l=0,PP_N
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) +    D_Hat_T(l,i)*ftildeDiff(:,l,j,k)  &
+                                            +    D_Hat_T(l,j)*gtildeDiff(:,i,l,k)  &
+                                            +    D_Hat_T(l,k)*htildeDiff(:,i,j,l)
+    END DO ! l
+  END DO; END DO; END DO ! i,j,k
+END DO ! iElem
+END SUBROUTINE VolInt_visc
+#endif /*PARABOLIC*/
 
 !==================================================================================================================================
 !> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  

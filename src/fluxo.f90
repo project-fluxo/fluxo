@@ -34,6 +34,9 @@ USE MOD_MPI,               ONLY:DefineParametersMPI,InitMPI
 #if MPI
 USE MOD_MPI,               ONLY:InitMPIvars,FinalizeMPI
 #endif
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
+#endif /*SHOCKCAPTURE*/
 USE MOD_ReadInTools,       ONLY:prms,IgnoredParameters,PrintDefaultParameterFile,FinalizeParameters
 USE MOD_StringTools,       ONLY:STRICMP
 USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTimeDisc,TimeDisc
@@ -67,6 +70,9 @@ CALL DefineParametersTestcase()
 #if PARABOLIC
 CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
+#if SHOCKCAPTURE
+CALL DefineParametersShockCapturing()
+#endif /*SHOCKCAPTURE*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
@@ -132,6 +138,9 @@ CALL InitTimeDisc()
 CALL Restart()
 CALL InitAnalyze()
 CALL InitTestcase()
+#if SHOCKCAPTURE
+CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
 ! initialization finished
 CALL IgnoredParameters()
 !
@@ -159,6 +168,9 @@ CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
 CALL FinalizeMortar()
+#if SHOCKCAPTURE
+CALL FinalizeShockCapturing()
+#endif /*SHOCKCAPTURE*/
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()

@@ -236,7 +236,14 @@ USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
-USE MOD_VolInt              ,ONLY: VolInt
+#if (PP_DiscType==1)
+USE MOD_VolInt              ,ONLY: VolInt_weakForm
+#elif (PP_DiscType==2)
+USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#if PARABOLIC
+USE MOD_VolInt              ,ONLY: VolInt_visc
+#endif /*PARABOLIC*/
+#endif /*(PP_DiscType)*/
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -247,6 +254,10 @@ USE MOD_Equation            ,ONLY: CalcSource
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 #endif /*PARABOLIC*/
+#if SHOCK_NFVSE
+use MOD_NFVSE               ,only: VolInt_NFVSE
+use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
+#endif /*SHOCK_NFVSE*/
 #if MPI
 USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
@@ -279,10 +290,19 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
+! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
+#if SHOCK_NFVSE
+call CalcBlendingCoefficient(U)
+#endif /*SHOCK_NFVSE*/
+
 ! for all remaining sides (buffer routine for latency hiding!)
 !!write(*,*)'u in dgtimederivative', U
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
+
+#if PP_DiscType==2
+CALL VolInt_adv_SplitForm(Ut)
+#endif /*PP_DiscType==2*/
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
@@ -293,6 +313,11 @@ CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
 #endif
 
+! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
+#if SHOCK_NFVSE
+call VolInt_NFVSE(Ut)
+#endif /*SHOCK_NFVSE*/
+
 #if PARABOLIC
 ! Lifting 
 ! Compute the gradients using Lifting (BR1 scheme,BR2 scheme ...)
@@ -301,8 +326,13 @@ CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
+#if PP_DiscType==1
 CALL VolInt(Ut)
-
+#elif PP_DiscType==2
+#  if PARABOLIC
+CALL VolInt_visc(Ut)
+#  endif /*PARABOLIC*/
+#endif
 
 #if PARABOLIC && MPI
 ! Complete send / receive for gradUx, gradUy, gradUz, started in the lifting routines
