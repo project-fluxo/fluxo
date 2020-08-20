@@ -307,12 +307,7 @@ ELSE
   strvarnames_tmp(1:PP_nVar)=StrVarnames
 END IF
 #else
-!default
-IF(PRESENT(StrVarNames_opt))THEN
-  strvarnames_tmp(1:PP_nVar)=StrVarnames_opt
-ELSE
-  strvarnames_tmp(1:PP_nVar)=StrVarnames
-END IF
+strvarnames_tmp(1:PP_nVar)=StrVarnames
 #endif
 
 ALLOCATE(U_NVisu(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems))

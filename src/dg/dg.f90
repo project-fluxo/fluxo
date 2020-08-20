@@ -327,7 +327,7 @@ CALL Lifting(tIn)
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
 #if PP_DiscType==1
-CALL VolInt(Ut)
+CALL VolInt_weakForm(Ut)
 #elif PP_DiscType==2
 #  if PARABOLIC
 CALL VolInt_visc(Ut)
