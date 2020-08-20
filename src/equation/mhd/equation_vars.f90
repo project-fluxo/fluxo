@@ -112,6 +112,10 @@ INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point 
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
+#ifdef JESSE_MORTAR
+INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 ABSTRACT INTERFACE
   SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)

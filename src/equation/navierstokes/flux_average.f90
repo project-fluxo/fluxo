@@ -283,7 +283,7 @@ PURE FUNCTION EvalUaux1(U_in) result(Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
+! USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
