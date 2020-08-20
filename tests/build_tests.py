@@ -1025,22 +1025,52 @@ for  vvv  in range(0,len(volfluxes)):
      if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                             stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TEST=[]
+TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-12" ])
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-   pname="build_navierstokes_type1_GL_nopara_TC_angmom"
-   print( "caseID: %d name: %s" % (caseID,pname) )
-
-   options=[]; options.extend(globopts) ; options.extend(baseopts)
-   options.extend([
-             "CMAKE_BUILD_TYPE"       ,"Debug"
-            ,"FLUXO_DISCTYPE"         ,"1"
-            ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
-            ,"FLUXO_PARABOLIC"        ,"OFF"
-            ,"FLUXO_TESTCASE"         ,"ns_angularmomentum"
-           ])
-   
-   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
-                          stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
+  pname="build_navierstokes_type2_nopara_SC"
+  print( "caseID: %d name: %s" % (caseID,pname) )
+  
+  options=[]; options.extend(globopts) ; options.extend(baseopts)
+  options.extend([
+            "CMAKE_BUILD_TYPE"       ,"Release"
+           ,"FLUXO_DISCTYPE"         ,"2"
+           ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ,"FLUXO_PARABOLIC"        ,"OFF"
+           ,"FLUXO_TESTCASE"         ,"default"
+           ,"FLUXO_SHOCKCAPTURE"     ,"ON"
+           ,"FLUXO_SHOCKCAP_NFVSE"   ,"ON"
+           ,"FLUXO_SHOCKINDICATOR"   ,"custom"
+          ])
+  
+  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                         stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+  pname="build_navierstokes_type2_br1_entr_vars_SC"
+  print( "caseID: %d name: %s" % (caseID,pname) )
+  
+  options=[]; options.extend(globopts) ; options.extend(baseopts)
+  options.extend([
+            "CMAKE_BUILD_TYPE"       ,"Release"
+           ,"FLUXO_DISCTYPE"         ,"2"
+           ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ,"FLUXO_PARABOLIC"        ,"ON"
+           ,"FLUXO_PARABOLIC_LIFTING","br1"
+           ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
+           ,"FLUXO_TESTCASE"         ,"default"
+           ,"FLUXO_SHOCKCAPTURE"     ,"ON"
+           ,"FLUXO_SHOCKCAP_NFVSE"   ,"ON"
+           ,"FLUXO_SHOCKINDICATOR"   ,"dens"
+          ])
+  
+  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                         stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
 
 #============================================================================
 #FINAL ERROR HANDLING:
