@@ -34,6 +34,7 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)  !< data for steady state boundary conditions
 INTEGER,ALLOCATABLE :: nBCByType(:)     !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)    !< SideIDs for BC types
+REAL                :: R                !< Gas constant
 #if PARABOLIC
 REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navier-stokes ANYMORE!!!!
 REAL                :: eta              !< Current resistivity
@@ -41,7 +42,6 @@ REAL                :: etasmu_0         !< =eta/mu0
 REAL                :: Pr               !< Prandtl number
 REAL                :: KappasPr         !< =kappa/Pr
 REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
-REAL                :: R                !< Gas constant
 #  ifdef PP_ANISO_HEAT
 REAL                :: kperp            !< perpendicular (to magnetic field) heat diffusion coefficient
 REAL                :: kpar             !< parallel (to magnetic field) heat diffusion coeffcient 

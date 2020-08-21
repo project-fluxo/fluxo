@@ -163,6 +163,7 @@ sKappaP1 =1./(KappaP1)
 mu_0    =GETREAL('mu_0','1.')
 smu_0  = 1./(mu_0)
 s2mu_0  =0.5*smu_0
+R        =GETREAL('R','287.058')
 #if PARABOLIC
 !resistivity
 eta    =GETREAL('eta','0.') 
@@ -171,7 +172,6 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
-R        =GETREAL('R','287.058')
 KappasPr =Kappa/Pr
 !heat diffusion coefficients 
 #ifdef PP_ANISO_HEAT
