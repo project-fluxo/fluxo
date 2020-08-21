@@ -31,6 +31,9 @@ SAVE
 LOGICAL              :: doCalcBulkVelocity
 LOGICAL              :: doCalcWallVelocity
 LOGICAL              :: doCalcBodyForces
+logical             :: doCalcEntropy
+
+REAL                 :: Entropy
 
 ! Variables for the specific analyze routines
 ! WallVelocity

@@ -63,6 +63,8 @@ CALL prms%CreateLogicalOption('CalcBulkVelocity',"Set true to compute mean veloc
                                                 , '.FALSE.')
 CALL prms%CreateLogicalOption('CalcWallVelocity', "Set true to compute min/max/mean velocity at each wall boundary separately"   &
                                                 , '.FALSE.')
+CALL prms%CreateLogicalOption('CalcEntropy', "Set true to compute the integrated entropy"&
+           , '.FALSE.')
 END SUBROUTINE DefineParametersAnalyzeEquation
 
 !==================================================================================================================================
@@ -87,6 +89,7 @@ INTEGER  :: i
 doCalcBodyForces    =GETLOGICAL('CalcBodyForces','.FALSE.')
 doCalcBulkVelocity  =GETLOGICAL('CalcBulkVelocity','.FALSE.')
 doCalcWallVelocity  =GETLOGICAL('CalcWallVelocity','.FALSE.')
+doCalcEntropy       = GETLOGICAL('CalcEntropy'   ,'.FALSE.')
 
 ! Initialize eval routines
 IF(doCalcWallVelocity) ALLOCATE(meanV(nBCs),maxV(nBCs),minV(nBCs))
@@ -119,6 +122,12 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
       A2F_VarNames(A2F_iVar)='"WallVel_'//TRIM(BoundaryName(i))//'_max"'
     END DO !i=1,nBCs
   END IF !doCalcEnergy
+  IF(doCalcEntropy)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"Entropy"'
+    A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"dSdU_Ut"'
+  END IF !doCalcEntropy
 END IF !MPIroot & doAnalyzeToFile
 END SUBROUTINE InitAnalyzeEquation
 
@@ -146,6 +155,7 @@ CHARACTER(LEN=40)               :: formatStr
 REAL                            :: Fv(3),Fp(3),BodyForce(3) ! Viscous force, pressure force and surface area, resulting body force
 REAL                            :: bulkVel(3),bulkDensity,bulkMom(3)
 INTEGER                         :: i
+REAL                            :: tmp(1),dSdU_Ut 
 !==================================================================================================================================
 ! Attention: during the initialization phase no face data / gradients available!
 IF(ABS(Time-RestartTime) .GT. 1.E-12) THEN
@@ -210,6 +220,24 @@ IF(ABS(Time-RestartTime) .GT. 1.E-12) THEN
   END IF  !(doCalcWallVelocity)
 END IF
 !
+IF(doCalcEntropy)THEN
+  tmp(1)=Entropy
+  CALL CalcEntropy(Entropy,dSdU_Ut)
+  IF(MPIroot) THEN
+    WRITE(formatStr,'(A)')'(A21,ES21.12)'
+    WRITE(UNIT_StdOut,formatStr)  ' Entropy      : ',Entropy
+    IF((time-RestartTime).GE.Analyze_dt)THEN
+      WRITE(UNIT_StdOut,formatStr)' dEntropy/dt  : ',(Entropy-tmp(1))/Analyze_dt
+    END IF !time>Analyze_dt
+    WRITE(UNIT_StdOut,formatStr)  ' dSdU*Ut         : ',dSdU_Ut
+    IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=Entropy
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=dSdU_Ut
+    END IF !doAnalyzeToFile
+  END IF !MPIroot
+END IF !doCalcEntropy
 END SUBROUTINE AnalyzeEquation
 
 
@@ -516,6 +544,61 @@ Fv=-Fv  ! Change direction to get the force acting on the wall
 END SUBROUTINE CalcViscousForce
 #endif /*PARABOLIC*/
 
+!==================================================================================================================================
+!> Calculates  Entropy over whole domain Entropy=-rho*s/(kappa-1), s=ln(p rho^(-kappa))=ln(p)-kappa*ln(rho) 
+!> and integral of q^T*Ut, which is the semi-discrete entropy update
+!==================================================================================================================================
+SUBROUTINE CalcEntropy(Entropy,dSdU_Ut)
+! MODULES
+USE MOD_Globals
+USE MOD_PreProc
+USE MOD_Analyze_Vars,       ONLY: wGPVol
+USE MOD_Mesh_Vars,          ONLY: sJ,nElems
+USE MOD_DG_Vars,            ONLY: U,Ut
+USE MOD_Equation_Vars,      ONLY: kappa,sKappaM1,ConsToPrim,ConsToEntropy
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)            :: Entropy !< Entropy
+REAL,INTENT(OUT)            :: dSdU_Ut !< dS/dU * U_t
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                     :: iElem,i,j,k
+REAL                        :: ent_loc,prim(PP_nVar),dSdU(PP_nVar)
+#if MPI
+REAL                        :: box(2)
+#endif 
+!==================================================================================================================================
+Entropy=0.
+dSdU_Ut=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    CALL ConsToPrim(prim,U(:,i,j,k,iElem))
+    ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
+    Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+    call ConsToEntropy(dSdU(:),U(:,i,j,k,iElem))
+    ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
+    dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
+
+#if MPI
+box(1) = Entropy
+box(2) = dSdU_Ut
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,box,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  Entropy = box(1)
+  dSdU_Ut = box(2)
+ELSE
+  CALL MPI_REDUCE(Box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+#endif /*MPI*/
+Entropy=Entropy*sKappaM1
+
+
+END SUBROUTINE CalcEntropy
 
 !==================================================================================================================================
 !> Finalizes variables necessary for analyse subroutines
