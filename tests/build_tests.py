@@ -1027,7 +1027,7 @@ for  vvv  in range(0,len(volfluxes)):
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TEST=[]
-TEST.extend(["freestream","parameter_freestream_navierstokes.ini", "1.0e-12" ])
+TEST.extend(["freestream","parameter_freestream_navierstokes_SC.ini", "1.0e-12" ])
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 caseID=caseID+1

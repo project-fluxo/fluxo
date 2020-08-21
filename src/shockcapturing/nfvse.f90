@@ -21,8 +21,8 @@ module MOD_NFVSE
   implicit none
 !==================================================================================================================================
 !> Computes the spatial operator using Native Finite Volume Sub-Elements (NFVSE)
-!> Based on: Hennemann et al. (2020). "Entropy stable shock capturing for the discontinuous galerkin spectral element
-!>                                     method with native finite volume sub elements"
+!> Based on: Hennemann et al. (2020). "A provably entropy stable subcell shock capturing approach for high order split form 
+!>                                     DG for the compressible Euler Equations"
 !> Attention 1: The current strategy is to perform the operations on "inner faces". This can be improved, but the Riemann solver 
 !>              routines have to be adapted
 !==================================================================================================================================

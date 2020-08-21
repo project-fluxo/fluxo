@@ -39,13 +39,22 @@ INTERFACE FinalizeShockCapturing
 END INTERFACE
 
 abstract interface
+  ! Interface for the indicator
   pure subroutine i_sub_GetIndicator(U,ind)
     real, intent(in)  :: U(PP_nVar)
     real, intent(out) :: ind
   end subroutine i_sub_GetIndicator
+  ! Interface for the Blending coefficient subroutine
+  subroutine i_sub_CalcBlendingCoefficient(U)
+    use MOD_PreProc
+    use MOD_Mesh_Vars          , only: nElems
+    real, intent(in)  :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+  end subroutine i_sub_CalcBlendingCoefficient
 end interface
 
-procedure(i_sub_GetIndicator), pointer :: CustomIndicator
+! Routines that can be pointed
+procedure(i_sub_GetIndicator)           , pointer :: CustomIndicator => null()
+procedure(i_sub_CalcBlendingCoefficient), pointer :: CalcBlendingCoefficient => null()
 
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
@@ -84,7 +93,8 @@ CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be
                                               "  1: Density"//&
                                               "  2: Pressure"//&
                                               "  3: Density times Pressure"//&
-                                              "  4: Kinetic Energy"&
+                                              "  4: Kinetic Energy"//&
+                                              "  5: Randomly assign the blending coefficients"&
                                              ,"3")
 
 END SUBROUTINE DefineParametersShockCapturing
@@ -147,6 +157,8 @@ whichIndicator = GETINT('ShockIndicator','3')
 #else
 whichIndicator = PP_Indicator_Var
 #endif
+
+CalcBlendingCoefficient => CalcBlendingCoefficient_indicator ! Default
 select case (whichIndicator)
   case(1)
     CustomIndicator => GetDensity
@@ -160,6 +172,9 @@ select case (whichIndicator)
   case(4)
     CustomIndicator => GetKinEnergy
     SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
+  case(5)
+    CalcBlendingCoefficient => CalcBlendingCoefficient_random ! Override CalcBlendingCoefficient
+    SWRITE(UNIT_StdOut,'(A)') '    USING RANDOM BLENDING COEFFICIENTS!'
 end select
 
 if (isMortarMesh) then
@@ -210,7 +225,7 @@ END SUBROUTINE InitBasisTrans
 !> -> This routine computes the sensor, makes the correction (with alpha_min and alpha_max), and sends the information with MPI
 !> -> No propagation is done yet (MPI informationmust be received).
 !===================================================================================================================================
-subroutine CalcBlendingCoefficient(U)
+subroutine CalcBlendingCoefficient_indicator(U)
   use MOD_PreProc
   use MOD_ShockCapturing_Vars
   use MOD_Mesh_Vars          , only: nElems
@@ -238,7 +253,31 @@ subroutine CalcBlendingCoefficient(U)
   
   call ProlongBlendingCoeffToFaces()
   
-end subroutine CalcBlendingCoefficient
+end subroutine CalcBlendingCoefficient_indicator
+!===================================================================================================================================
+!> This routine selects the blending coefficient randomly (and sends it with MPI)
+!===================================================================================================================================
+subroutine CalcBlendingCoefficient_random(U)
+  use MOD_PreProc
+  use MOD_ShockCapturing_Vars
+  use MOD_Mesh_Vars          , only: nElems
+  use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces
+  implicit none
+  ! Arguments
+  !---------------------------------------------------------------------------------------------------------------------------------
+  real,dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems), intent(in)  :: U
+  !---------------------------------------------------------------------------------------------------------------------------------
+  ! Local variables
+  real ::  eta(nElems)
+  integer :: eID
+  !---------------------------------------------------------------------------------------------------------------------------------
+  
+  do eID=1, nElems
+    call RANDOM_NUMBER(alpha(eID))
+  end do
+  
+  call ProlongBlendingCoeffToFaces()
+end subroutine CalcBlendingCoefficient_random
 #endif /*SHOCK_NFVSE*/
 
 !============================================================================================================================
