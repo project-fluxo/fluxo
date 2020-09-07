@@ -59,24 +59,32 @@ contains
     use MOD_ReadInTools,  only: prms
     implicit none
     
-    CALL prms%CreateIntOption(     "SubFVMethod",  " Specifies subcell Finite-Volume method to be used "//&
+    CALL prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used "//&
                                               "  1: 1st order FV"//&
                                               "  2: 2nd order TVD method (not ES)"//&
                                               "  3: '2nd' order TVD-ES method"&
                                              ,"1")
-    
+    call prms%CreateRealOption    (      "alpha_max", "Maximum value for the blending coefficient", "0.5")
+    call prms%CreateRealOption    (      "alpha_min", "Minimum value for the blending coefficient (below this, alpha=0)", "0.01")
+    call prms%CreateRealOption    ("SpacePropFactor", "Space propagation factor", "0.5")
+    call prms%CreateIntOption     ("SpacePropSweeps", "Number of space propagation sweeps (MPI-optimized only for 0 or 1)", "1")
+    call prms%CreateRealOption    (  "TimeRelFactor", "Time relaxation factor", "0.0")
+    call prms%CreateLogicalOption("ReconsBoundaries", "Use a reconstruction procedure on boundary subcells.. Only for SubFVMethod=1/2","F")
+   
   end subroutine DefineParametersNFVSE
 !===================================================================================================================================
 !> Initializes the NFVSE module
 !===================================================================================================================================
   subroutine InitNFVSE()
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes, SubFVMethod
-    use MOD_ReadInTools        , only: GETINT
+    USE MOD_Globals
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes, SubFVMethod, ReconsBoundaries, MPIRequest_Umaster
+    use MOD_NFVSE_Vars         , only: SpacePropFactor, SpacePropSweeps, TimeRelFactor
+    use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
     use MOD_NFVSE_Vars         , only: U_ext, sdxR, sdxL, rL, rR
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
     use MOD_Interpolation_Vars , only: wGP, xGP
-    use MOD_ShockCapturing_Vars, only: alpha_old
+    use MOD_ShockCapturing_Vars, only: alpha_old, alpha_max, alpha_min
     use MOD_DG_Vars            , only: D
     USE MOD_Globals,     ONLY: CROSS
     implicit none
@@ -91,7 +99,20 @@ contains
     real :: sumWm1
     !--------------------------------------------------------------------------------------------------------------------------------
     
-    SubFVMethod = GETINT('SubFVMethod','1')
+    ! Get parameters
+    ! --------------
+    
+    alpha_max        = GETREAL   ('alpha_max','0.5')
+    alpha_min        = GETREAL   ('alpha_min','0.01')
+    SubFVMethod      = GETINT    ('SubFVMethod','1')
+    ReconsBoundaries = GETLOGICAL('ReconsBoundaries','F')
+    SpacePropFactor  = GETREAL   ('SpacePropFactor','0.5')
+    SpacePropSweeps  = GETINT    ('SpacePropSweeps','0.5')
+    TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.5')
+    
+    ! Initialize everything
+    ! ---------------------
+    
     select case(SubFVMethod)
       case(1) ; Compute_FVFluxes => Compute_FVFluxes_1st_Order
       case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
@@ -240,6 +261,10 @@ contains
     
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
+    
+    if (ReconsBoundaries) then
+      allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
+    end if
 #endif
   end subroutine InitNFVSE
   
@@ -254,10 +279,14 @@ contains
     use MOD_PreProc
     use MOD_DG_Vars            , only: U
     use MOD_Mesh_Vars          , only: nElems
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps
     use MOD_ShockCapturing_Vars, only: alpha, alpha_max
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff
+#if MPI
+    use MOD_MPI                , only: FinishExchangeMPIData
+    use MOD_MPI_Vars           , only: nNbProcs
+#endif /*MPI*/
     ! IMPLICIT VARIABLE HANDLING
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
@@ -279,10 +308,15 @@ contains
     integer                                         :: i,j,k,iElem
     !===============================================================================================================================
     
-    call PropagateBlendingCoeff()
+    if (SpacePropSweeps > 0) call PropagateBlendingCoeff()
     
     !if reconstruction:
-!#    call Get_externalU()
+    if (ReconsBoundaries) then
+#if MPI
+      call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
+#endif /*MPI*/
+      call Get_externalU()
+    end if
     
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
@@ -568,7 +602,7 @@ contains
     use MOD_PreProc
     use MOD_Riemann   , only: AdvRiemann
     use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext
+    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries
     use MOD_DG_Vars   , only: nTotal_vol
     use MOD_Equation_Vars, only: ConsToPrimVec,PrimToConsVec
     use MOD_Interpolation_Vars , only: wGP
@@ -620,9 +654,8 @@ contains
 #endif /*NONCONS*/
     
     call ConsToPrimVec(nTotal_vol,prim,U)
-!#    prim = U
     
-!#    call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
+    if (ReconsBoundaries) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
     
 !   *********
 !   Xi-planes
@@ -639,12 +672,14 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-!#    primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
+      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
     ! Middle DOFs
     ! -----------
@@ -658,17 +693,17 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-!#    UL = primL
-!#    UR = primR
     
 !   Fill left boundary if non-conservative terms are present
 !   --------------------------------------------------------
@@ -736,12 +771,14 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-!#    primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
+      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
     ! Middle DOFs
     ! -----------
@@ -755,17 +792,17 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-!#    UL = primL
-!#    UR = primR
     
 !   Fill left boundary if non-conservative terms are present
 !   --------------------------------------------------------
@@ -831,12 +868,14 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-!#    primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
+      primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
     ! Middle DOFs
     ! -----------
@@ -850,17 +889,17 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-!#    UL = primL
-!#    UR = primR
     
 !   Fill left boundary if non-conservative terms are present
 !   --------------------------------------------------------
@@ -918,7 +957,7 @@ contains
     use MOD_PreProc
     use MOD_Riemann   , only: AdvRiemannRecons
     use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext
+    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries
     use MOD_Interpolation_Vars , only: wGP
     use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec
     use MOD_DG_Vars           , only: nTotal_vol
@@ -970,7 +1009,7 @@ contains
 #endif /*NONCONS*/
     
     call ConsToPrimVec(nTotal_vol,prim,U)
-!#    call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
+    if (ReconsBoundaries) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
     
 !   *********
 !   Xi-planes
@@ -987,12 +1026,15 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
+      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-!#    primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
     
     ! Middle DOFs
     ! -----------
@@ -1006,12 +1048,14 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1031,8 +1075,7 @@ contains
     do i=0, PP_N-1
       
       call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
+                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i) )
 #if NONCONS
       ! Copy conservative part
       FR_(:,:,:,i) = F_(:,:,:,i)
@@ -1085,12 +1128,14 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-!#    primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
+      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
     ! Middle DOFs
     ! -----------
@@ -1104,12 +1149,14 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1127,7 +1174,6 @@ contains
       
       call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
                    sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
 #if NONCONS
       ! Copy conservative part
       FR_(:,:,:,i) = F_(:,:,:,i)
@@ -1177,12 +1223,14 @@ contains
     ! First DOF
     !----------
     
-    ! Central scheme
-    primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-!#    primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
+      primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    else
+      ! Central scheme
+      primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+    end if
     
     ! Middle DOFs
     ! -----------
@@ -1196,12 +1244,14 @@ contains
     ! Last DOF
     ! --------
     
-    ! Central scheme
-    primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    
-!#    ! v3
-!#    sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-!#    primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
+    if (ReconsBoundaries) then
+      ! v3
+      sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
+      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
+    else
+      ! Central scheme
+      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+    end if
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1219,7 +1269,6 @@ contains
       
       call AdvRiemannRecons(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
                    sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
 #if NONCONS
       ! Copy conservative part
       HR(:,:,:,i) = H(:,:,:,i)

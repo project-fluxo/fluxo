@@ -1232,6 +1232,30 @@ CASE(109) ! Geophysics application: Flow through sphere
     
   CALL PrimToCons(Prim,Resu)
 
+CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
+
+  Prim = 0. 
+  
+  ! Density variation with z
+  r = sqrt(x(3)**2+x(2)**2)
+  if (r <= 12.) then ! Io's plasma torus
+    Prim(1) = 1.
+  elseif (r <= 16.) then ! Transition zone between the torus and the low-density plasma
+    Prim(1) = -0.225*r+3.7
+  elseif (r <= 33.) then ! Low-density zone
+    Prim(1) = 0.1
+  else  ! Jovial ionosphere
+    Prim(1) = 1.6583*r - 54.625
+!#    Prim(1) = 0.1
+  end if
+  
+  Prim(2)=1.
+  Prim(5)=0.148984037940128
+  Prim(6)=0.373469788265899
+  Prim(7)=-1.19510332245088
+  Prim(8)=-3.60398345676592
+    
+  CALL PrimToCons(Prim,Resu)
 
 !CASE(666) ! random initialization for velocity and B field, only works with GNU
 !  prim =  0.
@@ -1335,6 +1359,7 @@ USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
 USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
 USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
 USE MOD_Equation_Vars, ONLY:doCalcSource
+use MOD_Equation_Vars, only:s2mu_0
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
@@ -1506,9 +1531,27 @@ CASE(109) ! Geophysics plasma flow through sphere
         Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
       END DO; END DO; END DO ! i,j,k
     END IF
+    
   END DO
 
-
+CASE(110) ! Geophysics plasma flow through sphere (tilted B_field)
+  tau_max=127.719298245614
+  DO iElem=1,nElems
+    ! New continuous application of the source term!
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (r > 1.) then
+        h = 150.0/1820.0
+        tau = tau_max*EXP((1.0-r)/h)
+      else
+        tau = tau_max
+      end if
+      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem) !! OLD WRONG
+!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- 2*tau* ( U(5,i,j,k,iElem) - 0.5*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW (wrong)
+      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+    END DO; END DO; END DO ! i,j,k
+  END DO
 
 
 CASE DEFAULT

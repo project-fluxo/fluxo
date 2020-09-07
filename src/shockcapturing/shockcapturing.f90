@@ -96,6 +96,11 @@ CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be
                                               "  4: Kinetic Energy"&
                                              ,"3")
 CALL prms%CreateRealOption(     "ShockCorrFactor",  " The correction factor for NFVSE")
+CALL prms%CreateIntOption(     "ModalThreshold",  " Threshold to be used for the indicator "//&
+                                              "  1: 0.5 * 10.0 ** (-1.8 * (PP_N+1)**0.25)"//&
+                                              "  2: 0.5 * 10.0 ** (-1.8 * PP_N**0.25)"&
+                                             ,"1")
+
 
 call DefineParametersNFVSE()
 
@@ -139,6 +144,11 @@ IF (PP_N.LT.2) THEN
   CALL abort(__STAMP__,'Polynomial Degree too small for Shock Capturing!',999,999.)
   RETURN
 END IF
+
+SWRITE(UNIT_StdOut,'(132("-"))')
+SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
+
+ModalThreshold = GETINT('ModalThreshold',"1")
 
 nu_max = 0.
 
@@ -188,16 +198,15 @@ alpha        = 0.d0
 alpha_Master = 0.d0
 alpha_Slave  = 0.d0
 
-
-!~ threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N + 1)**4)      ! Old Sebastian: This is almost cero ALWAYS
-!~ threshold = 0.5d0 * (PP_N + 1)**(-1.8d0 * 4)               ! Mine
-threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N + 1.d0)**0.25d0) ! New Sebastian
+select case (ModalThreshold)
+  case(1) ; threshold = 0.5d0 * 10.d0 ** (-1.8d0 * (PP_N+1.)**0.25d0) ! Sebastian's thresold (Euler paper)
+  case(2) ; threshold = 0.5 * 10.0 ** (-1.8 * PP_N**0.25) ! New threshold (MHD paper)
+end select
 
 call InitNFVSE()
+
 #endif /*SHOCK_NFVSE*/
 
-SWRITE(UNIT_StdOut,'(132("-"))')
-SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 CALL InitBasisTrans(PP_N,xGP)
 
 #if PP_Indicator_Var==0
@@ -524,7 +533,16 @@ subroutine CalcBlendingCoefficient(U)
   use MOD_PreProc
   use MOD_ShockCapturing_Vars
   use MOD_Mesh_Vars          , only: nElems
-  use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces
+  use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
+  use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor
+  ! For reconstruction on boundaries
+#if MPI
+  use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
+  use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster
+  use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
+  USE MOD_MPI_Vars
+  use MOD_DG_Vars            , only: U_master
+#endif /*MPI*/
   implicit none
   ! Arguments
   !---------------------------------------------------------------------------------------------------------------------------------
@@ -532,24 +550,46 @@ subroutine CalcBlendingCoefficient(U)
   !---------------------------------------------------------------------------------------------------------------------------------
   ! Local variables
   real ::  eta(nElems)
+  integer :: eID, sweep
   !---------------------------------------------------------------------------------------------------------------------------------
   
-!#  alpha = 0.5
+  ! If we do reconstruction on boundaries, we need to send the U_master
+#if MPI
+  if (ReconsBoundaries) then
+    ! receive the master
+    call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
+    
+    ! Send the master
+    call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,2),SendID=1) 
+  end if
+#endif /*MPI*/
   
   ! Shock indicator
   call ShockSensor_PerssonPeraire(U,eta)
   
   ! Compute and correct alpha
-  alpha = 1.d0 / (1 + exp(-sharpness * (eta - threshold)/threshold ))
-  
+  do eID=1, nElems
+    alpha(eID) = max(TimeRelFactor*alpha(eID), 1.0 / (1.0 + exp(-sharpness * (eta(eID) - threshold)/threshold )) )
+  end do
+
   where (alpha < alpha_min)
-    alpha = 0.d0
+    alpha = 0.0
   elsewhere (alpha >= alpha_max)
     alpha = alpha_max
   end where
   
-  call ProlongBlendingCoeffToFaces()
-  
+  if (SpacePropSweeps > 0) then
+    ! Do first sweep (MPI-optimized)
+    call ProlongBlendingCoeffToFaces()
+    
+    ! Do remaining sweeps (overhead in MPI communication)
+    do sweep=2, SpacePropSweeps
+      call PropagateBlendingCoeff()
+      call ProlongBlendingCoeffToFaces()
+    end do
+  end if
 end subroutine CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 !============================================================================================================================

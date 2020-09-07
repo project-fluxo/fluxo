@@ -22,6 +22,8 @@ module MOD_NFVSE_Vars
   public :: SubCellMetrics, SubCellMetrics_t, sWGP, MPIRequest_alpha, Fsafe, Fblen
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
+  public :: ReconsBoundaries, MPIRequest_Umaster
+  public :: SpacePropFactor, SpacePropSweeps, TimeRelFactor
   
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
@@ -64,13 +66,20 @@ module MOD_NFVSE_Vars
 ! -----------------
   integer                                    :: SubFVMethod
   procedure(i_sub_Compute_FVFluxes), pointer :: Compute_FVFluxes => null()
-  
+
+! Space propagation and time relaxation
+  real              :: SpacePropFactor  ! Space propagation factor 
+  real              :: TimeRelFactor    ! Time relaxation factor 
+  integer           :: SpacePropSweeps  ! Number of space propagation sweeps
+
 ! For the reconstruction procedure
 ! --------------------------------
   real                      , allocatable :: sdxR(:), sdxL(:)       !< Inverse of subgrid sizes for reconstruction
   real                      , allocatable :: rR(:), rL(:)
   real                      , allocatable :: U_ext(:,:,:,:,:)       !< External solution for reconstruction on boundaries (PP_nVar,0:N,0:N,locside,iElem)
+  integer                   , allocatable :: MPIRequest_Umaster(:,:)
   
+  logical                                 :: ReconsBoundaries = .FALSE.
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Interfaces
 !-----------------------------------------------------------------------------------------------------------------------------------

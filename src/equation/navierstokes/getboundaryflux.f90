@@ -480,7 +480,7 @@ DO iBC=1,nBCs
           pres = KappaM1*( U_loc(5) - 0.5 *(U_loc(2)**2 + U_loc(3)**2 + U_loc(4)**2)/U_loc(1) )
           a    = sqrt(Kappa*p/U_loc(1))
           normalMachNo = ABS(U_Face_loc(2,p,q)/(a*U_loc(1)))
-          if (normalMachNo<=1) then
+          if (normalMachNo<=1.0) then
             CALL ConsToPrim(Prim(1:5),U_Face_loc(:,p,q))
             Prim(5) = RefStatePrim(BCState,5)
             ! U_loc contains now the state with pressure from outside (refstate)

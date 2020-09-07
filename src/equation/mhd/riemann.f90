@@ -189,6 +189,7 @@ REAL             :: ConsL(1:PP_nVar)
 REAL             :: ConsR(1:PP_nVar)
 INTEGER          :: i,j
 !==================================================================================================================================
+
 DO j = 0,PP_N
   DO i = 0,PP_N
     !rotate fields
@@ -1404,20 +1405,15 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL            :: sbetaLN,beta_R,beta_L,betaAvg
-REAL            :: srho_L,srho_R,rhoLN,srhoLN,rhoAvg
+REAL            :: srho_L,srho_R,rhoLN
 REAL            :: B2_L,B2_R,B2Avg
-REAL            :: u2_L,u2_R,u2Avg,uAvg2
-REAL            :: pTilde,p_L,p_R,pAvg,pLN
-REAL            :: phi,LambdaMax
-REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
+REAL            :: u2_L,u2_R,u2Avg
+REAL            :: pTilde,p_L,p_R,pAvg
 REAL            :: u_L(3),u_R(3)
 REAL            :: BAvg(3),uAvg(3)
 REAL            :: u1_B2Avg,uB_Avg
-REAL            :: Hmatrix(5,5),tau,Eavg
 REAL            :: V_jump(PP_nVar)
-REAL		:: Dmatrix(PP_nVar,PP_nVar),Tmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
-REAL		:: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
-REAL 		:: psiSplus,psiSminus,psiFplus,psiFminus 
+REAL		:: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 #ifdef PP_GLM
 REAL            :: psiAvg
 #endif
@@ -1493,9 +1489,39 @@ V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
 V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
+    
+    call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
+    
+    RT = TRANSPOSE(Rmatrix)
+
+    ! Compute entropy-stable fluxes
+    Fstar = Fstar - 0.5*MATMUL(MATMUL(Rmatrix,MATMUL(Dmatrix,RT)),V_jump)
 
 
-    ! MHD waves selective dissipation
+END ASSOCIATE 
+END SUBROUTINE EntropyStable9WaveFlux
+
+pure subroutine DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
+                                                  p_L,p_R,rho_L,rho_R,u_L,u_R)
+  USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1
+#ifdef PP_GLM
+  USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+  implicit none
+  !-arguments-----------------------------------------------
+  real, intent(out) :: Dmatrix(PP_nVar,PP_nVar)
+  real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
+  real, intent(in)  :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
+  real, intent(in)  :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3)
+  !-local-variables-----------------------------------------
+  real    :: Tmatrix(PP_nVar,PP_nVar)
+  REAL		:: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
+  REAL 		:: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN, u2Avg
+  real    :: LambdaMax, phi
+  !---------------------------------------------------------
+  
+  ! MHD waves selective dissipation
 
     ! Compute additional averages
     rhoAvg = 0.5*(rho_L + rho_R)
@@ -1567,17 +1593,17 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
     ! Derigs et al. (2018), (4.63)
     psiSplus =  0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
-                alphas*rhoLN*aLN*aLN/kappaM1 + alphas*cs*rhoLN*uAvg(1) + &
+                alphas*rhoLN*aLN*aLN*skappaM1 + alphas*cs*rhoLN*uAvg(1) + &
                 alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
     psiSminus = 0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
-                alphas*rhoLN*aLN*aLN/kappaM1 - alphas*cs*rhoLN*uAvg(1) - &
+                alphas*rhoLN*aLN*aLN*skappaM1 - alphas*cs*rhoLN*uAvg(1) - &
                 alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
 
     psiFplus =  0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
-                alphaf*rhoLN*aLN*aLN/kappaM1 + alphaf*cf*rhoLN*uAvg(1) - &
+                alphaf*rhoLN*aLN*aLN*skappaM1 + alphaf*cf*rhoLN*uAvg(1) - &
                 alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
     psiFminus = 0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
-                alphaf*rhoLN*aLN*aLN/kappaM1 - alphaf*cf*rhoLN*uAvg(1) + &
+                alphaf*rhoLN*aLN*aLN*skappaM1 - alphaf*cf*rhoLN*uAvg(1) + &
                 alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
 
     ! + fast magnetoacoustic wave
@@ -1687,7 +1713,8 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
                       alphas*abeta*beta2A*SQRT(rhoLN), &
                       alphas*abeta*beta3A*SQRT(rhoLN), &
                       0.0 /)
-
+    
+    ! A blend of the 9waves solver and LLF
       phi = sqrt(ABS(1.0-(p_R*rho_R/(p_L*rho_L)))/(1.0+(p_R*rho_R/(p_L*rho_L))))
       LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
       Dmatrix = 0.0
@@ -1700,18 +1727,32 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
       Dmatrix(7,7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
       Dmatrix(8,8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
       Dmatrix(9,9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
-
-!      Dmatrix = 0.0
-!      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
-!      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
-!      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
-!      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
-!      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
-!      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
-!      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
-!      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
-!      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
-
+      
+    ! Pure 9waves solver (no LLF)
+!#      Dmatrix = 0.0
+!#      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
+!#      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
+!#      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
+!#      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
+!#      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
+!#      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
+!#      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
+!#      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
+!#      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
+    
+    ! LLF solver
+!#      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
+!#      Dmatrix = 0.0
+!#      Dmatrix(1,1) = LambdaMax
+!#      Dmatrix(2,2) = LambdaMax
+!#      Dmatrix(3,3) = LambdaMax
+!#      Dmatrix(4,4) = LambdaMax
+!#      Dmatrix(5,5) = LambdaMax
+!#      Dmatrix(6,6) = LambdaMax
+!#      Dmatrix(7,7) = LambdaMax
+!#      Dmatrix(8,8) = LambdaMax
+!#      Dmatrix(9,9) = LambdaMax
+    
     ! Diagonal scaling matrix as described in Winters et al., eq. (4.15)
     Tmatrix = 0.0
     Tmatrix(1,1) = 0.5/kappa/rhoLN ! + f
@@ -1726,14 +1767,8 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
     ! Scale D matrix
     Dmatrix = MATMUL(Dmatrix, Tmatrix)
-    RT = TRANSPOSE(Rmatrix)
-
-    ! Compute entropy-stable fluxes
-    Fstar = Fstar - 0.5*MATMUL(MATMUL(Rmatrix,MATMUL(Dmatrix,RT)),V_jump)
-
-
-END ASSOCIATE 
-END SUBROUTINE EntropyStable9WaveFlux
+  
+end subroutine DissipationMatrices_9WaveESSolver
 
 SUBROUTINE EntropyStable9WaveFluxRecons(UL,UR,UL_r,UR_r,Fstar)
 !==================================================================================================================================
@@ -1761,26 +1796,26 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR_r     !< right state (reconstructed)
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL            :: sbetaLN,beta_R,beta_L,betaAvg
-REAL            :: srho_L,srho_R,rhoLN,srhoLN,rhoAvg
-REAL            :: B2_L,B2_R,B2Avg
-REAL            :: u2_L,u2_R,u2Avg,uAvg2
-REAL            :: pTilde,p_L,p_R,pAvg,pLN
-REAL            :: phi,LambdaMax
-REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
-REAL            :: u_L(3),u_R(3)
-REAL            :: BAvg(3),uAvg(3)
-REAL            :: u1_B2Avg,uB_Avg
-REAL            :: Hmatrix(5,5),tau,Eavg
-REAL            :: V_jump(PP_nVar), V_jump_r(PP_nVar)
-REAL		:: Dmatrix(PP_nVar,PP_nVar),Tmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
-REAL		:: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
-REAL 		:: psiSplus,psiSminus,psiFplus,psiFminus 
-real :: srho_L_r,srho_R_r, u_L_r(3), u_R_r(3), u2_L_r, u2_R_r, B2_L_r, B2_R_r, p_L_r, p_R_r, beta_L_r, beta_R_r
-real :: RT_Vjump(PP_nVar), RT_Vjump_r(PP_nVar)
+REAL            :: sbetaLN,betaAvg,rhoLN,pAvg,BAvg(3),uAvg(3)
 #ifdef PP_GLM
 REAL            :: psiAvg
 #endif
+REAL            :: B2_L,B2_R,B2Avg,beta_R,beta_L
+REAL            :: u2_L,u2_R,u2Avg,srho_L,srho_R
+REAL            :: pTilde,p_L,p_R
+REAL            :: u_L(3),u_R(3)
+REAL            :: u1_B2Avg,uB_Avg
+REAL            :: V_jump(PP_nVar), V_jump_r(PP_nVar)
+REAL		:: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+! Reconstructed values
+real :: srho_L_r,srho_R_r, u_L_r(3), u_R_r(3), u2_L_r, u2_R_r, B2_L_r, B2_R_r, p_L_r, p_R_r, beta_L_r, beta_R_r
+real :: RT_Vjump(PP_nVar), RT_Vjump_r(PP_nVar)
+!#! Reconstructed means:
+!#real :: Dmatrix_r(PP_nVar,PP_nVar),Rmatrix_r(PP_nVar,PP_nVar),RT_r(PP_nVar,PP_nVar)
+!#REAL            :: sbetaLN_r,betaAvg_r,rhoLN_r,pAvg_r,BAvg_r(3),uAvg_r(3)
+!##ifdef PP_GLM
+!#REAL            :: psiAvg_r
+!##endif
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
@@ -1809,11 +1844,11 @@ beta_L = 0.5*rho_L/p_L
 beta_R = 0.5*rho_R/P_R
 
 ! Get the averages for the numerical flux
+u2Avg      = 0.5 * (u2_L + u2_R)
 
 rhoLN      = LN_MEAN( rho_L, rho_R)
 sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
 uAvg       = 0.5 * ( u_L +  u_R)
-u2Avg      = 0.5 * (u2_L + u2_R)
 BAvg       = 0.5 * ( B_L +  B_R)
 B2Avg      = 0.5 * (B2_L + B2_R)
 u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
@@ -1854,16 +1889,17 @@ V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
-! Jump in entropy vars of the reconstructed solution
-ASSOCIATE(  rho_L_r =>   UL_r(1),  rho_R_r =>   UR_r(1), &
+! Reconstructed solution
+!***********************
+ASSOCIATE(  rho_L_r => UL_r(1)  ,  rho_R_r => UR_r(1), &
            rhoU_L_r => UL_r(2:4), rhoU_R_r => UR_r(2:4), &
 #ifdef PP_GLM
               E_L_r => UL_r(5)-0.5*smu_0*UL_r(9)**2, E_R_r =>UR_r(5)-0.5*smu_0*UR_r(9)**2, &
-!#            psi_L =>UL(9)   ,  psi_R =>UR(9), &
+            psi_L_r => UL_r(9)  ,  psi_R_r => UR_r(9), &
 #else
-              E_L_r => UL_r  (5)   ,    E_R_r => UR_r  (5), &
+              E_L_r => UL_r(5)  ,  E_R_r   => UR_r(5), &
 #endif
-              B_L_r => UL_r(6:8),    B_R_r => UR_r(6:8)  )
+              B_L_r => UL_r(6:8),  B_R_r   => UR_r(6:8)  )
 
 srho_L_r = 1./ rho_L_r
 srho_R_r = 1./ rho_R_r
@@ -1881,260 +1917,70 @@ p_R_r    = kappaM1*(E_R_r - 0.5*(rho_R_r*u2_R_r+smu_0*B2_R_r))
 beta_L_r = 0.5*rho_L_r/p_L_r
 beta_R_r = 0.5*rho_R_r/P_R_r
 
+! Jump in reconstructed sol
+
 V_jump_r(1)         = (kappa*(LOG(rho_R_r*srho_L_r))-LOG(p_R_r/p_L_r))*skappaM1 &
                          - (beta_R_r*u2_R_r         -beta_L_r*u2_L_r  )  
 V_jump_r(2:4)       =  2.0*(beta_R_r*u_R_r(:)       -beta_L_r*u_L_r(:))        ! 2*beta*v
 V_jump_r(5)         = -2.0*(beta_R_r                -beta_L_r     )        !-2*beta
 V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) ! 2*beta*B
-
-end associate
-
-    ! MHD waves selective dissipation
-
-    ! Compute additional averages
-    rhoAvg = 0.5*(rho_L + rho_R)
-    pLN = 0.5*rhoLN*sbetaLN
-    u2Avg = u_L(1)*u_R(1) + u_L(2)*u_R(2) + u_L(3)*u_R(3)
-    srhoLN = 1./rhoLN
-    aA = SQRT(kappa*pAvg/rhoLN)
-    aLN = SQRT(kappa*pLN/rhoLN)
-    abeta = SQRT(0.5*kappa/betaAvg)
-    bb1A = BAvg(1)/SQRT(rhoLN)
-    bb2A = BAvg(2)/SQRT(rhoLN)
-    bb3A = BAvg(3)/SQRT(rhoLN)
-    bbA = SQRT(bb1A*bb1A + bb2A*bb2A + bb3A*bb3A)
-    aabbA = aA*aA + bbA*bbA
-
-    ! Alfven speed
-    ! Derigs et al. (2018), (4.63)
-    ca = ABS(bb1A)
-
-    ! Control round-off errors
-    xx = aabbA*aabbA - 4.0*aA*aA*bb1A*bb1A
-    if(xx .lt. 0.0) xx = 0.0
-    xxx = aabbA + SQRT(xx)
-
-    ! Fast magnetoacoustic speed
-    ! Derigs et al. (2018), (4.63)
-    cf = SQRT(0.5 * xxx)
-
-    ! Control round-off errors
-    xxx = aabbA - SQRT(xx)
-    if(xxx .lt. 0.0) xxx = 0.0
-
-    ! Slow magnetoacoustic speed
-    ! Derigs et al. (2018), (4.63)
-    cs = SQRT(0.5 * xxx)
-
-    bperpA = SQRT(bb2A*bb2A + bb3A*bb3A)
-    ! In case of very small bperpA, the values of betaA_{2,3}
-    ! are indeterminable so we make them pairwise orthogonal
-    ! Derigs et al. (2018), (4.63)
-    if(bperpA .gt. 1.0E-14) then
-      beta2A = bb2A/bperpA
-      beta3A = bb3A/bperpA
-    else
-      bperpA = 0.0
-      beta2A = 1.0/sqrt(2.0)
-      beta3A = 1.0/sqrt(2.0)
-    endif
-
-    ! Avoid negative round-off errors when computing alphaf (auxiliary variable)
-    xx = 0.0
-    if((cf*cf-cs*cs) .gt. 0.0) xx = (aA*aA-cs*cs)/(cf*cf-cs*cs)
-    if(xx .gt. 0.0) then
-      alphaf = SQRT(xx)
-    else
-      alphaf = 0.0
-    end if
-
-    ! Avoid negative round-off errors when computing alphas (auxiliary variable)
-    xx = 0.0
-    if((cf*cf-cs*cs) .gt. 0.0) xx = (cf*cf-aA*aA)/(cf*cf-cs*cs)
-    if(xx .gt. 0.0) then
-      alphas = SQRT(xx)
-    else
-      alphas = 0.0
-    end if
-
-    sgnb1 = sign(1.,bb1A)
-
-    ! Derigs et al. (2018), (4.63)
-    psiSplus =  0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
-                alphas*rhoLN*aLN*aLN/kappaM1 + alphas*cs*rhoLN*uAvg(1) + &
-                alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
-    psiSminus = 0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
-                alphas*rhoLN*aLN*aLN/kappaM1 - alphas*cs*rhoLN*uAvg(1) - &
-                alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
-
-    psiFplus =  0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
-                alphaf*rhoLN*aLN*aLN/kappaM1 + alphaf*cf*rhoLN*uAvg(1) - &
-                alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
-    psiFminus = 0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
-                alphaf*rhoLN*aLN*aLN/kappaM1 - alphaf*cf*rhoLN*uAvg(1) + &
-                alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
-
-    ! + fast magnetoacoustic wave
-    ! Derigs et al. (2018), (4.68)
-    Rmatrix(:,1) = (/ alphaf*rhoLN, &
-                      alphaf*rhoLN*(uAvg(1) + cf), &
-                      rhoLN*(alphaf*uAvg(2) - alphas*cs*beta2A*sgnb1), &
-                      rhoLN*(alphaf*uAvg(3) - alphas*cs*beta3A*sgnb1), &
-                      psiFplus, &
-                      0.0, &
-                      alphas*abeta*beta2A*SQRT(rhoLN), &
-                      alphas*abeta*beta3A*SQRT(rhoLN), &
-                      0.0 /)
-
-    ! + Alfven wave
-    ! Derigs et al. (2018), (4.67)
-    Rmatrix(:,2) = (/ 0.0, &
-                      0.0,  &
-                      rhoLN*SQRT(rhoAvg)*beta3A, &
-                      -rhoLN*SQRT(rhoAvg)*beta2A, &
-                      -rhoLN*SQRT(rhoAvg)*(beta2A*uAvg(3) - beta3A*uAvg(2)), &
-                      0.0, &
-                      -rhoLN*beta3A, &
-                      rhoLN*beta2A, &
-                      0.0 /)
-
-    ! + slow magnetoacoustic wave
-    ! Derigs et al. (2018), (4.69)
-    Rmatrix(:,3) = (/ alphas*rhoLN, &
-                      alphas*rhoLN*(uAvg(1) + cs), &
-                      rhoLN*(alphas*uAvg(2) + alphaf*cf*beta2A*sgnb1), &
-                      rhoLN*(alphas*uAvg(3) + alphaf*cf*beta3A*sgnb1), &
-                      psiSplus, &
-                      0.0, &
-                      -alphaf*abeta*beta2A*SQRT(rhoLN), &
-                      -alphaf*abeta*beta3A*SQRT(rhoLN), &
-                      0.0 /)
-
-    ! + GLM wave
-    ! Dergs et al. (2018), eq. (4.65)
-    Rmatrix(:,4) = (/ 0.0, &
-                      0.0, &
-                      0.0, &
-                      0.0, &
-                      BAvg(1) + psiAvg, &
-                      1.0, &
-                      0.0, &
-                      0.0, &
-                      1.0 /)
-
-    ! Entropy wave
-    ! Derigs et al. (2018), (4.66)
-    Rmatrix(:,5) = (/ 1.0, &
-                      uAvg(1), &
-                      uAvg(2), &
-                      uAvg(3), &
-                      0.5*u2Avg, &
-                      0.0, &
-                      0.0, &
-                      0.0, &
-                      0.0 /)
-
-    ! - GLM wave
-    ! Dergs et al. (2018), eq. (4.65)
-    Rmatrix(:,6) = (/ 0.0, &
-                      0.0, &
-                      0.0, &
-                      0.0, &
-                      BAvg(1) - psiAvg, &
-                      1.0, &
-                      0.0, &
-                      0.0, &
-                      -1.0 /)
-
-    ! - slow magnetoacoustic wave
-    ! Derigs et al. (2018), (4.69)
-    Rmatrix(:,7) = (/ alphas*rhoLN, &
-                      alphas*rhoLN*(uAvg(1) - cs), &
-                      rhoLN*(alphas*uAvg(2) - alphaf*cf*beta2A*sgnb1), &
-                      rhoLN*(alphas*uAvg(3) - alphaf*cf*beta3A*sgnb1), &
-                      psiSminus, &
-                      0.0, &
-                      -alphaf*abeta*beta2A*SQRT(rhoLN), &
-                      -alphaf*abeta*beta3A*SQRT(rhoLN), &
-                      0.0 /)
-
-    ! - Alfven wave
-    ! Derigs et al. (2018), (4.67)
-    Rmatrix(:,8) = (/ 0.0, &
-                      0.0, &
-                      -rhoLN*SQRT(rhoAvg)*beta3A, &
-                      rhoLN*SQRT(rhoAvg)*beta2A, &
-                      rhoLN*SQRT(rhoAvg)*(beta2A*uAvg(3) - beta3A*uAvg(2)), &
-                      0.0, &
-                      -rhoLN*beta3A, &
-                      rhoLN*beta2A, &
-                      0.0 /)
-
-    ! - fast magnetoacoustic wave
-    ! Derigs et al. (2018), (4.68)
-    Rmatrix(:,9) = (/ alphaf*rhoLN, &
-                      alphaf*rhoLN*(uAvg(1) - cf), &
-                      rhoLN*(alphaf*uAvg(2) + alphas*cs*beta2A*sgnb1), &
-                      rhoLN*(alphaf*uAvg(3) + alphas*cs*beta3A*sgnb1), &
-                      psiFminus, &
-                      0.0, &
-                      alphas*abeta*beta2A*SQRT(rhoLN), &
-                      alphas*abeta*beta3A*SQRT(rhoLN), &
-                      0.0 /)
-
-      phi = sqrt(ABS(1.0-(p_R*rho_R/(p_L*rho_L)))/(1.0+(p_R*rho_R/(p_L*rho_L))))
-      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
-      Dmatrix = 0.0
-      Dmatrix(1,1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
-      Dmatrix(2,2) = (1.-phi)*ABS( uAvg(1) + ca ) + phi*LambdaMax
-      Dmatrix(3,3) = (1.-phi)*ABS( uAvg(1) + cs ) + phi*LambdaMax
-      Dmatrix(4,4) = (1.-phi)*ABS( uAvg(1) + GLM_ch ) + phi*LambdaMax
-      Dmatrix(5,5) = (1.-phi)*ABS( uAvg(1)      ) + phi*LambdaMax
-      Dmatrix(6,6) = (1.-phi)*ABS( uAvg(1) - GLM_ch ) + phi*LambdaMax
-      Dmatrix(7,7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
-      Dmatrix(8,8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
-      Dmatrix(9,9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
-
-!      Dmatrix = 0.0
-!      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
-!      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
-!      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
-!      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
-!      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
-!      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
-!      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
-!      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
-!      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
-
-    ! Diagonal scaling matrix as described in Winters et al., eq. (4.15)
-    Tmatrix = 0.0
-    Tmatrix(1,1) = 0.5/kappa/rhoLN ! + f
-    Tmatrix(2,2) = 0.25/betaAvg/rhoLN/rhoLN ! + a
-    Tmatrix(3,3) = Tmatrix(1,1) ! + s
-    Tmatrix(4,4) = 0.25 / betaAvg ! + GLM
-    Tmatrix(5,5) = rhoLN*kappaM1/kappa ! E
-    Tmatrix(6,6) = Tmatrix(4,4) ! - GLM
-    Tmatrix(7,7) = Tmatrix(1,1) ! - s
-    Tmatrix(8,8) = Tmatrix(2,2) ! - a
-    Tmatrix(9,9) = Tmatrix(1,1) ! - f
-
-    ! Scale D matrix
-    Dmatrix = MATMUL(Dmatrix, Tmatrix)
+    
+    !    (1) R and T matrix from reconstructed state .... This does not seem to work very well (the method falls to first order almost always!!)
+    !    -------------------------------------------
+      
+!#    ! mean values in reconstructed sol
+!#    sbetaLN_r    = 1./LN_MEAN(beta_L_r,beta_R_r)
+!#    betaAvg_r    = 0.5 * (beta_L_r + beta_R_r)
+!#    rhoLN_r      = LN_MEAN( rho_L_r, rho_R_r)
+!#    pAvg_r       = 0.5*(rho_L_r+rho_R_r)/(beta_L_r+beta_R_r) !rhoMEAN/(2*betaMEAN) 
+!#    BAvg_r       = 0.5 * ( B_L_r +  B_R_r)
+!#    uAvg_r       = 0.5 * ( u_L_r +  u_R_r)
+!#    #ifdef PP_GLM
+!#    psiAvg_r     = 0.5*(psi_L_r+psi_R_r)
+!#    #endif
+    
+!#    ! Get dissipation matrices for reconstructed state
+!#    call DissipationMatrices_9WaveESSolver(Dmatrix_r,Rmatrix_r,sbetaLN_r,betaAvg_r,rhoLN_r,BAvg_r,uAvg_r,pAvg_r,psiAvg_r,&
+!#                                           p_L_r,p_R_r,rho_L_r,rho_R_r,u_L_r, u_R_r)
+!#    RT_r = TRANSPOSE(Rmatrix_r)
+    
+!#    RT_Vjump   = matmul(RT_r,V_jump)
+!#    RT_Vjump_r = matmul(RT_r,V_jump_r)
+    
+!#    if ( any(RT_Vjump*RT_Vjump_r < 1.e-10) ) then
+!#      call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+!#                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
+!#      RT = TRANSPOSE(Rmatrix)
+      
+!#      RT_Vjump   = matmul(RT,V_jump)
+      
+!#      ! Compute entropy-stable fluxes
+!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump))
+!#    else
+!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix_r,MATMUL(Dmatrix_r,RT_Vjump_r))
+!#    end if
+    
+    !   (2) R and T matrix from nodal values
+!   --------------------------------
+    call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
     RT = TRANSPOSE(Rmatrix)
     
     RT_Vjump   = matmul(RT,V_jump)
     RT_Vjump_r = matmul(RT,V_jump_r)
     
-    if ( any(RT_Vjump*RT_Vjump_r < 0.) ) then
-      V_jump_r = V_jump
+    if ( any(RT_Vjump*RT_Vjump_r < -1.e-10) ) then
+      ! Compute entropy-stable fluxes
+      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump))
+    else
+      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump_r))
     end if
-    
-    ! Compute entropy-stable fluxes
-    Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump_r))
 
-
+end associate
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFluxRecons
+
+
 #endif
 
 END MODULE MOD_Riemann

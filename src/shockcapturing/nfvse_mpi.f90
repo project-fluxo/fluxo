@@ -53,9 +53,11 @@ contains
   subroutine PropagateBlendingCoeff()
     use MOD_ShockCapturing_Vars, only: alpha, alpha_Master, alpha_Slave
     use MOD_Mesh_Vars          , only: firstSlaveSide, LastSlaveSide, SideToElem
-    use MOD_NFVSE_Vars         , only: MPIRequest_alpha
+    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, SpacePropFactor
+#if MPI
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_MPI                , only: FinishExchangeMPIData
+#endif /*MPI*/
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     integer :: sideID, ElemID, nbElemID
@@ -69,7 +71,7 @@ contains
     do sideID=firstSlaveSide, lastSlaveSide
       
       minAlpha = max( alpha_Master(sideID), alpha_Slave(sideID) )
-      minAlpha = 0.5 * minAlpha
+      minAlpha = SpacePropFactor * minAlpha
       
       ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
 

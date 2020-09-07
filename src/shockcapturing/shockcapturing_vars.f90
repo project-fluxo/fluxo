@@ -52,9 +52,10 @@ real, allocatable :: alpha_old(:)                         !< Element-wise blendi
 real, allocatable :: alpha_Master(:)                      !< Blending function on master sides
 real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides
 real              :: threshold
-real              :: beta              ! Limiting factor for NFVSE correction
-real, parameter   :: alpha_max = 0.5   ! Maximum blending factor
-real, parameter   :: alpha_min = 0.001 ! Minimum blending factor
+real              :: beta             ! Limiting factor for NFVSE correction
+real              :: alpha_max        ! Maximum blending factor
+real              :: alpha_min        ! Minimum blending factor
+integer           :: ModalThreshold
 real, parameter   :: sharpness = log((1.d0-1.d-4)/1.d-4)
 
 !===================================================================================================================================
