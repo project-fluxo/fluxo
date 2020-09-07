@@ -81,12 +81,13 @@ contains
     use MOD_NFVSE_Vars         , only: SpacePropFactor, SpacePropSweeps, TimeRelFactor
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
     use MOD_NFVSE_Vars         , only: U_ext, sdxR, sdxL, rL, rR
-    use MOD_MPI_Vars           , only: nNbProcs
     use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
     use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_ShockCapturing_Vars, only: alpha_old, alpha_max, alpha_min
     use MOD_DG_Vars            , only: D
-    USE MOD_Globals,     ONLY: CROSS
+#if MPI
+    use MOD_MPI_Vars           , only: nNbProcs
+#endif /*MPI*/
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES 

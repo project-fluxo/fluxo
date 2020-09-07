@@ -228,6 +228,7 @@ END SUBROUTINE AdvRiemann
 !> Advective Riemann solver with reconstructed states
 !==================================================================================================================================
 SUBROUTINE AdvRiemannRecons(F,UL,UR,UL_r,UR_r,nv,t1,t2)
+use MOD_Globals
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
 IMPLICIT NONE
@@ -286,9 +287,12 @@ DO j = 0,PP_N
     ConsR_r(6) = SUM(UR_r(6:8,i,j)*nv(:,i,j))
     ConsR_r(7) = SUM(UR_r(6:8,i,j)*t1(:,i,j))
     ConsR_r(8) = SUM(UR_r(6:8,i,j)*t2(:,i,j))
-    
+#if PP_GLM
     CALL EntropyStable9WaveFluxRecons(ConsL(:),ConsR(:),ConsL_r(:),ConsR_r(:),F(:,i,j))
-    
+#else
+    call abort(__STAMP__,'AdvRiemannRecons is only implemented for the 9waves Riemann solver (GLM)',999,999.)
+    RETURN
+#endif /*PP_GLM*/
     ! Back Rotate the normal flux into Cartesian direction
     F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
                  + t1(:,i,j)*F(3,i,j) &
