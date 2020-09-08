@@ -95,12 +95,16 @@ CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be
                                               "  3: Density times Pressure"//&
                                               "  4: Kinetic Energy"&
                                              ,"3")
-CALL prms%CreateRealOption(     "ShockCorrFactor",  " The correction factor for NFVSE")
+
 CALL prms%CreateIntOption(     "ModalThreshold",  " Threshold to be used for the indicator "//&
                                               "  1: 0.5 * 10.0 ** (-1.8 * (PP_N+1)**0.25)"//&
                                               "  2: 0.5 * 10.0 ** (-1.8 * PP_N**0.25)"&
                                              ,"1")
 
+#if NFVSE_CORR
+CALL prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
+CALL prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
+#endif /*NFVSE_CORR*/
 
 call DefineParametersNFVSE()
 
@@ -234,8 +238,9 @@ if (isMortarMesh) then
 end if
 
 #if NFVSE_CORR
-beta = GETREAL('ShockCorrFactor','0.1')
-SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with beta=', beta
+PositCorrFactor = GETREAL('PositCorrFactor','0.1')
+PositMaxIter = GETINT('PositMaxIter','10')
+SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
 #endif /*NFVSE_CORR*/
 
 ShockCapturingInitIsDone = .TRUE.

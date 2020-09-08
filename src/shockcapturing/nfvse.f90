@@ -108,8 +108,8 @@ contains
     SubFVMethod      = GETINT    ('SubFVMethod','1')
     ReconsBoundaries = GETLOGICAL('ReconsBoundaries','F')
     SpacePropFactor  = GETREAL   ('SpacePropFactor','0.5')
-    SpacePropSweeps  = GETINT    ('SpacePropSweeps','0.5')
-    TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.5')
+    SpacePropSweeps  = GETINT    ('SpacePropSweeps','1')
+    TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.0')
     
     ! Initialize everything
     ! ---------------------
@@ -1392,159 +1392,115 @@ contains
     
   end subroutine Get_externalU
 !===================================================================================================================================
-!> Corrects the Solution after the Runge-Kutta stage
+!> Corrects U and Ut after the Runge-Kutta stage
 !===================================================================================================================================
 #if NFVSE_CORR
-  subroutine Apply_NFVSE_Correction(U,t,dt)
-    use MOD_ShockCapturing_Vars, only: alpha, alpha_max, beta, alpha_old
+  subroutine Apply_NFVSE_Correction(U,Ut,t,dt)
+    use MOD_ShockCapturing_Vars, only: alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: KappaM1, Kappa
+    use MOD_Equation_Vars      , only: sKappaM1
     use MOD_Mesh_Vars          , only: sJ
     use MOD_NFVSE_MPI
     USE MOD_Globals
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
     real,intent(in)    :: t                                         !< Current time (in time step!)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real    :: Usafe(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real    :: a   ! a  = beta * rho_safe - rho
-    real    :: ap  ! ap = (beta * p_safe   - p) / (kappa-1)
-    real    :: p   (nElems), pres, lowest_psafe, lowest_pres, lowest_rhosafe, lowest_rho
+    real, parameter :: eps = 1.e-8
+    real    :: Usafe        (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
+    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Finite Volume Ut minus DG Ut
+    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
+    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
+    real    :: pres
     real    :: corr, corr1
     real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_max for an element
     real    :: alphadiff
     real    :: alphacont  !container for alpha
-    real    :: a_max, sdt
-    real :: pprev, rhoprev
-    real :: max_pdev, pdev
-    real :: minS, minSm, maxS, maxSm, ent
-    real, parameter :: eps = 1.e-8
-    integer :: a_loc(3), ijkl(4)
-    integer :: corrElems(nElems)
-    integer :: numCorrElems
+    real    :: sdt
     integer :: eID
     integer :: i,j,k
-    integer :: fID
     integer :: iter
-    integer, parameter :: MAX_ITER = 5
     !--------------------------------------------------------
     
-    numCorrElems = 0
-    corrElems = 0
+!   Some definitions
+!   ****************
     alpha_old = alpha 
     sdt = 1./dt
     
-    !<debug
-!#    p = huge(1.)
-!#    minS  = huge(1.)
-!#    minSm = huge(1.)
-!#    maxS  =-huge(1.)
-!#    maxSm =-huge(1.)
-!#    do eID=1, nElems
-!#      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-!#        call GetPressure(U(:,i,j,k,eID),pres)
-!#        p(eID) = min(p(eID),pres)
-!#        ent = log(pres) - Kappa * log(U(1,i,j,k,eID))
-!#        minS = min (minS, ent)
-!#        maxS = max (maxS, ent)
-!#        ent = -ent * U(1,i,j,k,eID) / KappaM1
-!#        minSm = min (minSm, ent)
-!#        maxSm = max (maxSm, ent)
-!#      end do       ; end do       ; end do ! i,j,k
-!#    end do
-!#    pprev = minval(p)
-!#    rhoprev = minval(U(1,:,:,:,:))
-!~     print*, '####################'
-!~     print*, '### Gonna correct?' !, rhoprev, pprev, minS, minSm, maxS, maxSm
-    !debug>
-!
-!   First do the easy density correction (with the hope that it solves the problem)
-!   *******************************************************************************
-
+!   Iterate over the elements
+!   *************************
     do eID=1, nElems
-      ! Check if it makes sense correcting
+      
+!     ----------------------------------
+!     Check if it makes sense correcting
+!     ----------------------------------
       alphadiff = alpha(eID) - alpha_max
       if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
       
-      ! Compute a (density correction)
-      alphadiff = 1./alphadiff
-      corr = 0.
-      
-!#      !<debug
-!#      lowest_psafe = huge(1.)
-!#      lowest_pres = huge(1.)
-!#      lowest_rhosafe = huge(1.)
-!#      !debug>
-      
-      !
-      ! Get Usafe for each point of the element
+!     ----------------------------------------------------------
+!     Get Usafe for each point of the element and check validity
+!     ----------------------------------------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        ! Density correction
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID))
+        
+        ! Compute Fsafe-Fblend
+        Fsafe_m_Fblen(:,i,j,k) = ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID)) ! Account for the sign change and the Jacobian division
+        
+        ! Compute Usafe
+        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
+        
+        ! Check if this is a valid state
+        call GetPressure(Usafe(:,i,j,k),p_safe(i,j,k))
+        if (p_safe(i,j,k) < 0.) then
+          print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
+          stop
+        end if
+        if (Usafe(1,i,j,k) < 0.) then
+          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
+          stop
+        end if
       end do       ; end do       ; end do ! i,j,k
       
-      do iter=1, MAX_ITER
-        ! Compute corrections
+      ! Compute F_FV-F_DG
+      FFV_m_FDG = -Fsafe_m_Fblen/alphadiff
+      
+!     ----------------------------
+!     Iterate to get a valid state
+!     ----------------------------
+      do iter=1, PositMaxIter
+        corr = -eps ! Safe initialization
+        
+!       Compute correction factors
+!       --------------------------
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           
-          ! Density
-          a = (beta * Usafe(1,i,j,k) - U(1,i,j,k,eID))
-          if (a > 0.) then ! This DOF doesn't need correction
-            corr1 = (Fblen(1,i,j,k,eID) - Fsafe(1,i,j,k,eID)) * alphadiff * (-sJ(i,j,k,eID))
-            corr1 = a / corr1
-            if (corr1 > corr) then
-              corr = corr1
-              a_loc = [i,j,k]
-            end if
-  !~           corr = max(corr,corr1)
+          ! Density correction
+          a = (PositCorrFactor * Usafe(1,i,j,k) - U(1,i,j,k,eID))
+          if (a > 0.) then ! This DOF needs a correction
+            corr1 = a / FFV_m_FDG(1,i,j,k)
+            corr = max(corr,corr1)
           end if
           
-          !<<<Initial pressure correction
+          ! Pressure correction
           call GetPressure(U(:,i,j,k,eID),pres)
-          call GetPressure(Usafe(:,i,j,k),p_safe(i,j,k))
-          if (p_safe(i,j,k) < 0.) then
-            print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
-            stop
-          end if
-          if (Usafe(1,i,j,k) < 0.) then
-            print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
-            stop
-          end if
-          ap = (beta * p_safe(i,j,k) - pres) / KappaM1
-          if (ap > 0.) then
-            corr1 = (Fblen(5,i,j,k,eID) - Fsafe(5,i,j,k,eID)) * alphadiff * (-sJ(i,j,k,eID))
-            corr1 = ap / corr1
-            if (corr1 > corr) then
-              corr = corr1
-              a_loc = [i,j,k]
-            end if
-          end if
-          !Initial pressure correction>>>
           
-  !#        !<debug
-  !#!~         call GetPressure(U(:,i,j,k,eID),pres)
-  !#        lowest_pres = min ( lowest_pres, pres)
-  !#        lowest_psafe = min (lowest_psafe,p_safe(i,j,k))
-  !#        lowest_rhosafe = min ( lowest_rhosafe, Usafe(1,i,j,k))
-  !#        !debug>
+          ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
+          if (ap > 0.) then
+            corr1 = ap / FFV_m_FDG(5,i,j,k)
+            corr = max(corr,corr1)
+          end if
+          
         end do       ; end do       ; end do ! i,j,k
+        
       
-      lowest_rho = minval (U(1,:,:,:,eID))
-      
-      ! If the correction is positive, perform it
+!       Do the correction if needed
+!       ---------------------------
         if ( corr > 0. ) then
-  !#        !<debug
-  !#        print*, '####################'
-  !#        print*, '### CORRECTING', rhoprev, pprev
-  !#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
-  !#        print*, '---'
-  !#        print*, '* s', p_safe(a_loc(1),a_loc(2),a_loc(3)), Usafe(1,a_loc(1),a_loc(2),a_loc(3))
-  !#        print*, '* _', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
-  !#        !debug>
           
           ! Change the alpha for output
           alphacont  = alpha(eID)
@@ -1558,56 +1514,24 @@ contains
           
           ! Correct!
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          U(:,i,j,k,eID) = U(:,i,j,k,eID) + corr * (Fblen(:,i,j,k,eID) - Fsafe(:,i,j,k,eID)) * (-sJ(i,j,k,eID)) / (alpha_old(eID) - alpha_max)
+            ! Correct U
+            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+            ! Correct Ut
+            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
           end do       ; end do       ; enddo
-  !#        !<debug
-  !#        call GetPressure(U(:,a_loc(1),a_loc(2),a_loc(3),eID),pres)
-  !#        print*, '*af', pres, U(1,a_loc(1),a_loc(2),a_loc(3),eID)
-  !#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-  !#          call GetPressure(U(:,i,j,k,eID),pres)
-  !#          if(pres           +eps < beta *  p_safe(i,j,k)) print*, 'WARNING: p  is too low', i, j, k, pres,  beta * p_safe(i,j,k)
-  !#          if(U(1,i,j,k,eID) +eps < beta * Usafe(1,i,j,k)) print*, 'WARNING:rho is too low', i, j, k, U(1,i,j,k,eID), beta * Usafe(1,i,j,k)
-  !#        end do       ; end do       ; end do ! i,j,k
-  !#        !debug>
           
-          numCorrElems = numCorrElems + 1
-          corrElems(numCorrElems) = eID + offsetElem
-          
-  !#        print*, 'el ', eID + offsetElem, alpha_old(eID), alpha(eID)
-  !#        print*, '  s', lowest_psafe, lowest_rhosafe
-  !#        print*, '  _', lowest_pres, lowest_rho
-          
-  !#        lowest_pres = huge(1.)
-  !#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-  !#          call GetPressure(U(:,i,j,k,eID),pres)
-  !#          lowest_pres = min ( lowest_pres, pres)
-  !#        end do       ; end do       ; end do ! i,j,k
-  !#        print*, ' af', lowest_pres, minval(U(1,:,:,:,eID))
         else
           exit
         end if
       
       end do !iter
+      
+      if (iter > PositMaxIter) then
+        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' iterations. Elem: ', eID + offsetElem
+      end if
+      
     end do !eID
     
-!#    ! Debug
-!#    if (numCorrElems > 0) then
-!#      p = huge(1.)
-!#      do eID=1, nElems
-!#        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-!#          call GetPressure(U(:,i,j,k,eID),pres)
-!#          p(eID) = min(p(eID),pres)
-!#        end do       ; end do       ; end do ! i,j,k
-!#        if (eID == 3254) then
-!#          print*, 'el 3254. rho, p:', minval(U(1,:,:,:,3254)),p(3254)
-!#        end if
-!#      end do
-!#      WRITE(UNIT_StdOut,'(A,ES16.7,a,ES16.7)') '-->Corrected alphas!! at t=', t, 'dt_rk=', dt
-!#      print*, 'new: rho_min, p_min=', minval(U(1,:,:,:,:)), minval(p)
-!#      print*, 'old: rho_min, p_min=', rhoprev, pprev
-!#      print*, 'minloc:  rho, p     ', minloc(U(1,:,:,:,:)), minloc(p)
-!#      print*, corrElems(1:numCorrElems)
-!#    end if
   end subroutine Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================

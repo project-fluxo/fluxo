@@ -416,7 +416,7 @@ CALL MakeSolutionPositive(U)
 CALL CalcArtificialViscosity(U)
 #endif /*SHOCK_ARTVISC*/
 #if NFVSE_CORR
-call Apply_NFVSE_Correction(U,t,b_dt(1))
+call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
 #endif /*NFVSE_CORR*/
 
 ! Following steps
@@ -430,7 +430,7 @@ DO iStage=2,nRKStages
   CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,t,b_dt(iStage))
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
 #endif /*NFVSE_CORR*/
 END DO
 CurrentStage=1
@@ -519,6 +519,9 @@ subroutine TimeStepBySSPRK2(t)
   use MOD_DG_Vars      , only: U, Ut, nTotalU
   use MOD_MESH_Vars    , only: nElems
   use MOD_DG           , only: DGTimeDerivative
+#if NFVSE_CORR
+  use MOD_NFVSE        , only: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
   implicit none
   !-arguments----------------------------------
   real, intent(in) :: t
@@ -536,23 +539,42 @@ subroutine TimeStepBySSPRK2(t)
   ! First stage
   CurrentStage = 1
   tStage=t
-  CALL DGTimeDerivative(tStage)
+  CALL DGTimeDerivative(tStage) ! Computes Ut
   U = U + Ut*b_dt(1)
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+#endif /*NFVSE_CORR*/
   
-  do iStage=2, nRKStages
+  do iStage=2, nRKStages-1
     CurrentStage = iStage
     tStage=t+dt*RKc(iStage)
-    CALL DGTimeDerivative(tStage)
+    CALL DGTimeDerivative(tStage) ! Computes Ut
     
     U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
+    
+#if NFVSE_CORR
+    call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+#endif /*NFVSE_CORR*/
     
     select case(iStage)
     case(2) ; r1 = U*RKe(iStage)
     case(3) ; r1 = r1 + U*RKe(iStage)
     case(4) ; r1 = r1 + dt*Ut*RKe(iStage)
-    case(5) ; U  = U + r1 
     end select
+
   end do
+  
+  ! Last stage
+  CurrentStage = nRKStages
+  tStage=t+dt*RKc(nRKStages)
+  CALL DGTimeDerivative(tStage) ! Computes Ut
+  
+  U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
+  
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+#endif /*NFVSE_CORR*/
+  
   
 end subroutine TimeStepBySSPRK2
 !===================================================================================================================================

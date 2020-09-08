@@ -108,14 +108,10 @@ CASE('ketchesonrk4-20','ketchesonrk4-18')
   TimeDiscType='LSERKK3'
 #if NFVSE_CORR
   CALL CollectiveStop(__STAMP__,&
-                      'NFVSE correction is only implemented for LSERKW2 methods')
+                      'NFVSE correction is only implemented for LSERKW2 methods and ssprk4-5')
 #endif
 case('ssprk4-5')
   TimeDiscType='SSPRK2'
-#if NFVSE_CORR
-  CALL CollectiveStop(__STAMP__,&
-                      'NFVSE correction is only implemented for LSERKW2 methods')
-#endif
 CASE DEFAULT
   CALL CollectiveStop(__STAMP__,&
                       'Unknown method of time discretization: '//TRIM(TimeDiscMethod))
@@ -150,7 +146,7 @@ CASE('ssprk4-5')
   RKb(1:nRKStages) = (/ 0.39175222700392, 0.36841059262959, 0.25189177424738, 0.54497475021237, 0.22600748319395 /)
   ! The c coefficients (that multiply dt)
   RKc(2:nRKStages) = (/ 0.39175222700392, 0.58607968896779, 0.47454236302687, 0.93501063100924 /)
-  ! The coefficients that multiply U of tha last stage
+  ! The coefficients that multiply U of the last stage
   RKd(2:nRKStages) = (/ 0.55562950593266, 0.37989814861460, 0.82192004589227, 0.34833675773694 /)
   ! The extra coeffs
   RKe(2:4)         = (/ 0.51723167208978, 0.12759831133288, 0.08460416338212 /)
