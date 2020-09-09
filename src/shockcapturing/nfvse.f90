@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -20,8 +21,8 @@ module MOD_NFVSE
   implicit none
 !==================================================================================================================================
 !> Computes the spatial operator using Native Finite Volume Sub-Elements (NFVSE)
-!> Based on: Hennemann and Gassner (2020). "Entropy stable shock capturing for the discontinuous galerkin spectral element
-!>                                          method with native finite volume sub elements"
+!> Based on: Hennemann et al. (2020). "A provably entropy stable subcell shock capturing approach for high order split form 
+!>                                     DG for the compressible Euler Equations"
 !> Attention 1: The current strategy is to perform the operations on "inner faces". This can be improved, but the Riemann solver 
 !>              routines have to be adapted
 !==================================================================================================================================
