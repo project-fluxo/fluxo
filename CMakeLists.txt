@@ -105,7 +105,7 @@ OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 #OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
-OPTION(FLUXO_AMR        "Compile and build with p4est / AMR support" ON)
+OPTION(FLUXO_AMR        "Compile and build with p4est / AMR support" OFF)
 OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 SET(   FLUXO_EQNSYSNAME "navierstokes" CACHE STRING
