@@ -77,7 +77,7 @@ REAL                         :: TimeStepConv, TimeStepVisc,TimeStepViscElem
 REAL                         :: maxLambda1,maxLambda2,maxLambda3
 #if PARABOLIC
 REAL                         :: maxLambda_v1,maxLambda_v2,maxLambda_v3
-REAL                         :: muX,KappasPr_max,mu_eff
+REAL                         :: muX,KappasPr_max
 #endif /*PARABOLIC*/
 #if MPI
 REAL                         :: buf(3)
@@ -131,11 +131,11 @@ DO iElem=1,nElems
         muX=sRho*KappasPr_max*mu0*(srho*p/R)**ExpoPow ! compute vsicosity using the power-law
 #endif /*PP_VISC*/
 #if SHOCK_ARTVISC  || SHOCK_LOC_ARTVISC
-        mu_eff = muX + nu_max
+        muX = muX + nu_max
 #endif /*SHOCK_ARTVISC  || SHOCK_LOC_ARTVISC*/
-        MaxLambda_v1=MAX(MaxLambda_v1,mu_eff*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        MaxLambda_v2=MAX(MaxLambda_v2,mu_eff*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
-        MaxLambda_v3=MAX(MaxLambda_v3,mu_eff*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        MaxLambda_v1=MAX(MaxLambda_v1,muX*(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        MaxLambda_v2=MAX(MaxLambda_v2,muX*(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
+        MaxLambda_v3=MAX(MaxLambda_v3,muX*(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2)))
 #endif /* PARABOLIC*/
       END DO ! i
     END DO ! j
