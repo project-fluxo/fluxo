@@ -58,6 +58,7 @@ CONTAINS
     SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING INDICATOR...'
     CALL InitBasisTrans(PP_N,xGP)
   
+#if navierstokes || mhd
     whichIndicator = GETINT('ShockIndicatorAMR','1')
     select case (whichIndicator)
       case(1)
@@ -73,7 +74,7 @@ CONTAINS
         CustomIndicator => GetKinEnergy
         SWRITE(UNIT_StdOut,'(A)') '    USING KINTETIC ENERGY AS SHOCK INDICATOR!'
     end select
-    
+#endif /*navierstokes || mhd*/
     if (isMortarMesh) then
       SWRITE(UNIT_stdOut,'(A)')' WARNING: Shock capturing coefficients are not transferred correctly across mortars!'
     end if
@@ -175,7 +176,7 @@ END FUNCTION ShockSensor_PerssonPeraire
 
   
 
-
+#if navierstokes || mhd
 
 !============================================================================================================================
 !============================================================================================================================
@@ -243,6 +244,6 @@ kinen = SUM(U(2:4)*U(2:4))/U(1)
 kinen = kinen + s2mu_0*SUM(U(6:8)*U(6:8))
 #endif /*mhd*/
 end subroutine GetKinEnergy
-
+#endif /*navierstokes || mhd*/
 
 END MODULE MOD_Indicators
