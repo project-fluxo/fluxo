@@ -252,13 +252,13 @@ iter = 0
 DO
 #if USE_AMR
 
-! IF (UseAMR) THEN
-!   doAMR = doAMR + 1;
-!   IF (doAMR .EQ. 2) THEN
-!     doAMR = 0;
-!     CALL ShockCapturingAMR()
-!   ENDIF
-!  ENDIF
+IF (UseAMR) THEN
+  doAMR = doAMR + 1;
+  IF (doAMR .EQ. 2) THEN
+    doAMR = 0;
+    CALL ShockCapturingAMR()
+  ENDIF
+ENDIF
 #endif
 IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)

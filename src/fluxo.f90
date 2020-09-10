@@ -175,11 +175,6 @@ SWRITE(UNIT_stdOut,'(132("="))')
 SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' INITIALIZATION DONE! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
 
-
-#if USE_AMR
-CALL InitData()
-#endif
-
 ! Run Simulation
 CALL TimeDisc()
 
