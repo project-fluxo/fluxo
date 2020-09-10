@@ -4,11 +4,6 @@
 # NOTE: use minimum CMake version required by tools/libs (Paraview, HDF5, FFTW)
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5.1)
 # Policies (see https://cmake.org/cmake/help/v3.13/manual/cmake-policies.7.html)
-# TODO: Remove the following old policies and fix the file instead!
-IF ("${CMAKE_VERSION}" VERSION_GREATER 3.0.0)
-  cmake_policy (SET CMP0045 OLD)
-  cmake_policy (SET CMP0046 OLD)
-ENDIF()
 # VERSION_GREATER_EQUAL is incompatible with CMAKE versions < 3.7
 IF(NOT(${CMAKE_VERSION} VERSION_LESS "3.6.0"))
   SET(GITSHALLOW "GIT_SHALLOW ON")
@@ -21,25 +16,6 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
 INCLUDE(ExternalProject)
 INCLUDE(CMakeDependentOption)
-
-
-# =========================================================================
-# Check whether we are using Git ssh or https
-# =========================================================================
-EXECUTE_PROCESS(COMMAND git ls-remote --get-url OUTPUT_VARIABLE GIT_ORIGIN)
-STRING(FIND "${GIT_ORIGIN}" "git@" USESSH)
-IF(USESSH EQUAL 0)
-  SET(FLUXO_DLPATH "git@github.com:project-fluxo")
-ELSE()
-  SET(FLUXO_DLPATH "https://github.com/project-fluxo")
-ENDIF()
-SET (HDF5DOWNLOAD https://bitbucket.hdfgroup.org/scm/hdffv/hdf5.git )
-SET (HDF5TAG "hdf5-1_10_1" CACHE STRING "HDF5 version tag")
-SET (P4ESTDOWNLOAD https://github.com/cburstedde/p4est.git )
-
-# SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
-SET (P4ESTSHA "7752b1e12b596663667d5949aa922e805a42b9b6" CACHE STRING "P4EST commit SHA")
-
 
 # =========================================================================
 # Detect machine environments
@@ -125,7 +101,7 @@ SET_PROPERTY(CACHE FLUXO_TESTCASE PROPERTY STRINGS ${TESTCASES})
 SET(FLUXO_POLYNOMIAL_DEGREE "N" CACHE STRING 
                         "N: compile with variable polynomial degree. 1,2,...: fix polynomial degree (untested).")
 ADD_DEFINITIONS(-DPP_N=${FLUXO_POLYNOMIAL_DEGREE})
-MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
+#MARK_AS_ADVANCED(FLUXO_POLYNOMIAL_DEGREE)
 
 SET(_BUILD_FLUXO_POST  OFF  CACHE BOOL "switch to also build the fluxo_post executable (reads a collection of states and calls analyze).")
 
@@ -155,8 +131,9 @@ ENDIF()
 
 IF(FLUXO_AMR)
   ADD_DEFINITIONS(-DUSE_AMR=1)
-  CMAKE_DEPENDENT_OPTION(FLUXO_BUILD_P4EST "Build p4est library" ON "FLUXO_AMR" OFF)
+  SET(FLUXO_BUILD_P4EST  OFF  CACHE BOOL "Build p4est library.")
 ELSE()
+  UNSET(FLUXO_BUILD_P4EST CACHE ) # if not mhd
   ADD_DEFINITIONS(-DUSE_AMR=0)
 ENDIF()
 
@@ -442,6 +419,9 @@ MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
 
 IF(FLUXO_AMR)
   IF(FLUXO_BUILD_P4EST)
+    SET (P4ESTDOWNLOAD https://github.com/cburstedde/p4est.git )
+    # SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
+    SET (P4ESTSHA "7752b1e12b596663667d5949aa922e805a42b9b6" CACHE STRING "P4EST commit SHA")
     SET(FLUXO_P4EST_DLDIR ${FLUXO_EXTERNAL_LIB_DIR}/P4EST)
     SET(FLUXO_P4EST_DIR  ${FLUXO_P4EST_DLDIR}/build)
     IF (NOT EXISTS "${FLUXO_P4EST_DIR}/lib/libp4est.a")
@@ -461,10 +441,23 @@ IF(FLUXO_AMR)
     ENDIF()
     UNSET(P4EST_LIBRARIES)
     UNSET(P4EST_INCLUDE_DIRS)
-    LIST(APPEND P4EST_LIBRARIES    ${FLUXO_P4EST_DIR}/lib/libp4est.a; ${FLUXO_P4EST_DIR}/lib/libsc.a)
+    LIST(APPEND P4EST_LIBRARIES    ${FLUXO_P4EST_DIR}/lib/libp4est.so; ${FLUXO_P4EST_DIR}/lib/libsc.so)
     LIST(APPEND P4EST_INCLUDE_DIRS ${FLUXO_P4EST_DIR}/include )
+    LIST(APPEND SELFBUILTEXTERNALS P4EST)
   ELSE()
-    FIND_PACKAGE(p4est)
+    UNSET(P4ESTDOWNLOAD CACHE)
+    UNSET(P4ESTSHA CACHE)
+    IF(DEFINED ENV{p4est_DIR})
+      SET(p4est_DIR $ENV{p4est_DIR} CACHE STRING "Installation directory of p4est")
+    ENDIF()
+    IF(p4est_DIR)
+      UNSET(P4EST_LIBRARIES)
+      UNSET(P4EST_INCLUDE_DIRS)
+      LIST(APPEND P4EST_LIBRARIES    ${p4est_DIR}/lib/libp4est.so; ${p4est_DIR}/lib/libsc.so)
+      LIST(APPEND P4EST_INCLUDE_DIRS ${p4est_DIR}/include )
+    ELSE()
+      FIND_PACKAGE(p4est)
+    ENDIF()
   ENDIF()
   
   INCLUDE_DIRECTORIES(${P4EST_INCLUDE_DIRS})
@@ -645,7 +638,6 @@ ENDIF()
 
 
 # define libs
-# ADD_LIBRARY(fluxolibF90 OBJECT ${dgF90})
 LIST(APPEND fluxoF90 ${dgF90})
 
 IF (FLUXO_AMR)
@@ -680,7 +672,6 @@ ENDIF()
 
 # define libs
 ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} )
-ADD_DEPENDENCIES(fluxolibF90 HDF5)
 
 SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS}) 
 #ADD_LIBRARY(userblocklib OBJECT ./src/output/read_userblock.c)
@@ -692,7 +683,7 @@ SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS
 LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibF90>)
 IF (fluxoC)
   ADD_LIBRARY(fluxolibC OBJECT ${fluxoC} )
-  ADD_DEPENDENCIES(fluxolibC HDF5 P4EST)
+  ##ADD_DEPENDENCIES(fluxolibC HDF5 P4EST)
   SET_TARGET_PROPERTIES(fluxolibC PROPERTIES COMPILE_FLAGS "-fPIC") # TODO: add C default flags
   LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibC>)
 ENDIF()
@@ -707,8 +698,9 @@ IF(SELFBUILTEXTERNALS)
 ENDIF()
 
 add_exec(fluxo ./src/fluxo.f90)
-# ADD_DEPENDENCIES(fluxo fluxolib HDF5)
-ADD_DEPENDENCIES(fluxo ${fluxodeps} ${INTERNALLIBS})
+
+ADD_DEPENDENCIES(fluxo fluxolib ${INTERNALLIBS})
+##ADD_DEPENDENCIES(fluxo ${fluxodeps} ${INTERNALLIBS})
 
 IF (_BUILD_FLUXO_POST)
   add_exec(fluxo_post ./src/fluxo_post.f90)
