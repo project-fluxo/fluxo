@@ -881,13 +881,16 @@ savef_data_destroy(p4est_savef_data_t *p4est_savef_data) {
 };
 
 void save_p4est(p4est_t *p4est, char in[]) {
-    printf("save p4est!! %d \n", p4est->local_num_quadrants);
+    // int a = strtrim(in);
+    // printf("save p4est!! \n%s!\n", in);//p4est->local_num_quadrants);
+    // printf("save p4est!! \n%p \n", p4est);//p4est->local_num_quadrants);
+    // char a[] = "12345";
     p4est_save_ext(in, p4est, 0, 0);
-
+    // exit(0);
     return;
 };
 
-p4est_t *load_p4est(int mpicomm1, char in[]) {
+p4est_t *load_p4est(int mpicomm1, char *in) {
 
     p8est_connectivity_t **conn;
     p4est_t *p4est;

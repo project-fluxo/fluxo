@@ -154,8 +154,9 @@ USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 #if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
-USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel
+USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR
 
+USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -166,7 +167,10 @@ REAL                         :: dt_Min,dt_MinOld,dtAnalyze,dtEnd,tStart
 INTEGER(KIND=8)              :: iter,iter_loc
 REAL                         :: iterTimeStart,CalcTimeStart,CalcTimeEnd
 INTEGER                      :: TimeArray(8)              !< Array for system time
-INTEGER                      :: errType,nCalcTimestep,writeCounter, doAMR
+INTEGER                      :: errType,nCalcTimestep,writeCounter
+#if USE_AMR
+INTEGER                      :: doAMR, writeCounterAMR
+#endif /*USE_AMR*/
 LOGICAL                      :: doAnalyze,doFinalize
 LOGICAL                      :: firstWCTcheck=.TRUE.
 !==================================================================================================================================
@@ -206,18 +210,30 @@ DO ITER = 1,MaxLevel
     ! ENDIF
   ENDIF 
 ENDDO
-#endif
+#endif /*USE_AMR*/
 
 ! Write the state at time=0, i.e. the initial condition
 IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
   CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
-  
-END IF
+#if USE_AMR
+  IF (UseAMR) THEN
+    IF(nWriteDataAMR .GT. 0) THEN
+      CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+        !Write Mesh and AMR to file
+    ENDIF
+  ENDIF
+#endif /*USE_AMR*/
+END IF 
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
+
+#if USE_AMR
+writeCounterAMR = 0
+doAMR = 0
+#endif /*USE_AMR*/
 
 iter=0
 iter_loc=0
@@ -243,7 +259,6 @@ IF(MPIroot)THEN
   WRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 END IF ! MPIroot
 
-doAMR = 0
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
@@ -260,7 +275,7 @@ IF (UseAMR) THEN
     CALL ShockCapturingAMR()
   ENDIF
 ENDIF
-#endif
+#endif /*USE_AMR*/
 IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
@@ -363,7 +378,15 @@ IF(nCalcTimestepMax.EQ.1)THEN
         CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
         writeCounter=0
         tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
-
+#if USE_AMR
+        IF (UseAMR) THEN
+          writeCounterAMR = writeCounter + 1
+          IF((writeCounterAMR .EQ. nWriteDataAMR).OR.doFinalize)THEN
+            CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+            writeCounterAMR = 0
+          ENDIF
+        ENDIF
+#endif /* USE_AMR */
       END IF
     END IF
 

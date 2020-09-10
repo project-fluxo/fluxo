@@ -30,6 +30,9 @@ INTERFACE InitAMR_Connectivity
   MODULE PROCEDURE InitAMR_Connectivity
 END INTERFACE
 
+INTERFACE WriteStateAMR
+  MODULE PROCEDURE WriteStateAMR
+END INTERFACE
 
 INTERFACE FinalizeAMR
   MODULE PROCEDURE FinalizeAMR
@@ -49,7 +52,7 @@ END INTERFACE
 
 PUBLIC::InitAMR, SaveMesh
 PUBLIC::FinalizeAMR
-
+PUBLIC :: WriteStateAMR
 !==================================================================================================================================
 PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
@@ -85,6 +88,9 @@ SUBROUTINE DefineParametersAMR()
  
  CALL prms%CreateIntOption(  'MinLevel',       "Minimum refinment level of the forest", "0")
  CALL prms%CreateIntOption(  'MaxLevel',       "Maximum refinemen level ", "0")
+ CALL prms%CreateIntOption(  'nWriteDataAMR',     "Interval as multiple of nWriteData at which Mesh and p4est files"//&
+                                                  "(_mesh.h5 and .p4est) are written.",&
+                                                  '1')
 END SUBROUTINE DefineParametersAMR
 
 
@@ -127,14 +133,14 @@ SUBROUTINE InitAMR()
     IF (UseAMR) THEN
       p4estFile = GETSTR('p4estFile')
     ELSE
-      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
+      SWRITE(UNIT_stdOut,'(A)') ' AMR cannot be used! Set UseAMR to FALSE!'
       RETURN;
     ENDIF
     MinLevel = GetINT('MinLevel',"0")
     MaxLevel = GetINT('MaxLevel',"0")
     RefineVal = GetReal('RefineVal',"0.")
     CoarseVal = GetREal('CoarseVal',"0.")
-
+    nWriteDataAMR = GetINT('nWriteDataAMR',"1")
     CALL InitIndicator()
 
     RET=P4EST_INIT(MPI_COMM_WORLD); 
@@ -185,7 +191,44 @@ SUBROUTINE InitAMR_Connectivity()
   
 END SUBROUTINE InitAMR_Connectivity
 
-
+!==================================================================================================================================
+!> write mesh and p4est files to the 
+!==================================================================================================================================
+SUBROUTINE WriteStateAMR(OutputTime,isErrorFile)
+  ! MODULES
+  USE MOD_PreProc
+  USE MOD_Globals
+  ! USE MOD_DG_Vars      ,ONLY: U
+  ! USE MOD_Equation_Vars,ONLY: StrVarNames
+  USE MOD_Mesh_Vars    ,ONLY: MeshFile
+  USE MOD_Output_Vars  ,ONLY: ProjectName
+  USE MOD_P4EST         ,ONLY: SaveP4est
+  ! IMPLICIT VARIABLE HANDLING
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT VARIABLES
+  REAL,INTENT(IN)                :: OutputTime   !< simulation time when output is performed
+  LOGICAL,INTENT(IN)             :: isErrorFile  !< indicate whether an error file is written in case of a crashed simulation
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! OUTPUT VARIABLES
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
+  CHARACTER(LEN=255)             :: FileType
+  CHARACTER(LEN=255)             :: FileNameAMRMesh ! Mesh File
+  CHARACTER(LEN=255)             :: FileNameP !P4est File
+  
+  !==================================================================================================================================
+  IF(isErrorFile) THEN
+    FileType='ERROR_State'
+  ELSE
+    FileType='State'
+  END IF
+  FileNameAMRMesh=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'_mesh.h5'
+  FileNameP=  TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.p4est'
+  CALL SaveMesh(FileNameAMRMesh)
+  CALL SaveP4est(FileNameP)
+  END SUBROUTINE WriteStateAMR
+  
 
 !==================================================================================================================================
 !>  The main SUBROUTINE used for Coarse/Refine Mesh.
@@ -897,7 +940,7 @@ SUBROUTINE SaveMesh(FileString)
   ! DEbug
   USE MOD_Mesh_vars,           ONLY: ElemToSide, SideToElem, nSides,MortarType, MortarInfo
   !EndDebug
-  USE MOD_Globals,                only: myrank,nProcessors, MPIRoot
+  USE MOD_Globals,             only: myrank,nProcessors, MPIRoot, UNIT_stdOut
   USE MOD_IO_HDF5
   USE MOD_HDF5_Output,            only: WriteHeader, WriteAttribute, WriteArray, GatheredWriteArray
   USE MOD_DG_Vars,            ONLY: U
@@ -938,6 +981,12 @@ SUBROUTINE SaveMesh(FileString)
 
   
   IF (.NOT. UseAMR) RETURN;
+
+  IF(MPIRoot)THEN
+    WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE MESH TO _MESH.H5 FILE: '
+    WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileString)
+    ! GETTIME(StartT)
+  END IF
 
   mpisize = nProcessors
   DATAPtr=SaveMeshP4(p4est_ptr)

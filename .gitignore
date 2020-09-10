@@ -41,6 +41,7 @@ doc/ford/out
 *State*
 *vtu
 *_mesh.h5
+*.p4est
 *.pvd
 *.pvsm
 *.dat

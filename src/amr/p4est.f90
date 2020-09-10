@@ -265,6 +265,7 @@ CONTAINS
 
 
     SUBROUTINE SaveP4est(FileString)
+        USE MOD_Globals
         USE MOD_AMR_vars, ONLY : P4EST_PTR, CONNECTIVITY_PTR
         USE, INTRINSIC :: ISO_C_BINDING
         IMPLICIT NONE
@@ -273,14 +274,21 @@ CONTAINS
         CHARACTER(LEN = *), INTENT(IN) :: FileString !< (IN) mesh filename
         !----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        CHARACTER(LEN = 10, KIND = C_CHAR) :: DIGIT_STRING = '123456789' // C_NULL_CHAR
+        CHARACTER(LEN = 255, KIND = C_CHAR) :: SAVE_STRING = '123456789' // C_NULL_CHAR
         ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
-        DIGIT_STRING = FileString // C_NULL_CHAR
-        CALL SaveP4(P4EST_PTR, DIGIT_STRING);
+        SAVE_STRING = (FileString // C_NULL_CHAR)
+        ! PRINT *, TRIM(DIGIT_STRING), "n"
+        IF(MPIRoot)THEN
+            WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE FOREST TO P4EST FILE: '
+            WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(SAVE_STRING)
+            ! GETTIME(StartT)
+        END IF
+        CALL SaveP4(P4EST_PTR, TRIM(SAVE_STRING));
     END SUBROUTINE SaveP4est
 
 
     SUBROUTINE LoadP4est(FileString)
+        USE MOD_Globals
         USE MOD_AMR_vars, ONLY : P4EST_PTR, CONNECTIVITY_PTR
         USE, INTRINSIC :: ISO_C_BINDING
         IMPLICIT NONE
@@ -289,7 +297,7 @@ CONTAINS
         CHARACTER(LEN = *), INTENT(IN) :: FileString !< (IN) mesh filename
         !----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        CHARACTER(LEN = 10, KIND = C_CHAR) :: DIGIT_STRING = '123456789' // C_NULL_CHAR
+        CHARACTER(LEN = 255, KIND = C_CHAR) :: DIGIT_STRING = '123456789' // C_NULL_CHAR
         ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
         DIGIT_STRING = FileString // C_NULL_CHAR
         P4EST_PTR = LoadP4(MPI_COMM_WORLD, DIGIT_STRING);

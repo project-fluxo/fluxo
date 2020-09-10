@@ -146,18 +146,9 @@ CALL InitMPIvars()
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
-
-#if USE_AMR
-CALL ShockCapturingAMR()
-#endif
-                                                
-! ALLOCATE(ElemToRefineAndCoarse(1:nElems))
-! ElemToRefineAndCoarse = 0
-! ElemToRefineAndCoarse(1) = 1
-
-! CALL RunAMR(ElemToRefineAndCoarse) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-! DEALLOCATE(ElemToRefineAndCoarse)
+! #if USE_AMR
+! ! CALL ShockCapturingAMR()
+! #endif
 
 #if PARABOLIC
 CALL InitLifting()

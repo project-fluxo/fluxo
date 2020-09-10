@@ -64,8 +64,9 @@ CONTAINS
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = MinLevel;
         IF (MPIRoot) ElemToRefineAndCoarse(1) = MaxLevel;
-
     !! < ----- Commented for the production ----- >
+
+
          DO iElem = 1, nElems
              eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
      !         ! PRINT *, "eta_dof = " , eta_dof
@@ -123,6 +124,8 @@ CONTAINS
             ! ENDIF
         ! ENDIF
         ! CALL EXIT()
+      
+
         CALL RunAMR(ElemToRefineAndCoarse);
         ! IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
         !     COUNT = 1; 
