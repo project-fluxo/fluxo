@@ -154,7 +154,8 @@ USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 #if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
-USE MOD_AMR_Vars            ,ONLY: UseAMR
+USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel
+
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -195,14 +196,13 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
 #if USE_AMR
-DO ITER = 1,8
+DO ITER = 1,MaxLevel
   IF (UseAMR) THEN 
     ! doAMR = doAMR + 1;
     ! IF (doAMR .EQ. 1) THEN
     ! doAMR = 0;
     CALL ShockCapturingAMR()
     CALL InitData()
-    !  PRINT *, "ShockCapturingAMR()"
     ! ENDIF
   ENDIF 
 ENDDO
@@ -213,6 +213,7 @@ IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
   CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+  
 END IF
 
 ! No computation needed if tEnd=tStart!
@@ -362,6 +363,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
         CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
         writeCounter=0
         tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+
       END IF
     END IF
 
