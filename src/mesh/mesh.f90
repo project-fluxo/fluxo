@@ -122,7 +122,10 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MESH...'
 
 ! prepare pointer structure (get nElems, etc.)
-MeshFile = GETSTR('MeshFile')
+! MeshFile = GETSTR('MeshFile')
+IF (ICHAR(Meshfile(1:1))==0) THEN !MeshFile not defined in AMR
+  MeshFile = GETSTR('MeshFile')
+ENDIF
 validMesh = ISVALIDMESHFILE(MeshFile)
 IF(.NOT.validMesh) &
     CALL CollectiveStop(__STAMP__,'ERROR - Mesh file not a valid HDF5 mesh.')

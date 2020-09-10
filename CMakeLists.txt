@@ -17,8 +17,6 @@ SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
 INCLUDE(ExternalProject)
 INCLUDE(CMakeDependentOption)
 
-
-
 # =========================================================================
 # Detect machine environments
 # =========================================================================
@@ -44,7 +42,7 @@ ENDIF()
 # Project definitions and output paths
 # =========================================================================
 PROJECT(Fluxo)
-ENABLE_LANGUAGE(Fortran)
+ENABLE_LANGUAGE(Fortran  C CXX)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 SET(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
@@ -83,11 +81,13 @@ OPTION(FLUXO_BUILD_MPI "Compile SINGLE or MPI version" ON)
 #OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
+OPTION(FLUXO_AMR        "Compile and build with p4est / AMR support" OFF)
+OPTION(FLUXO_PARABOLIC "Enable parabolic terms of equation-system" OFF)
 
 OPTION(FLUXO_SHOCKCAPTURE "Enable shock capturing for non-linear equations" OFF)
 OPTION(FLUXO_POSITIVITYPRES "Enable positivity preservation for non-linear equations" OFF)
 
-SET(   FLUXO_EQNSYSNAME "mhd" CACHE STRING
+SET(   FLUXO_EQNSYSNAME "navierstokes" CACHE STRING
                         "Choice of equation system (lienarscalaradvection/navierstokes/mhd/maxwell)" )
 SET_PROPERTY(CACHE FLUXO_EQNSYSNAME PROPERTY STRINGS ${EQNSYSTEMS})
 
@@ -130,6 +130,14 @@ IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   IF(FLUXO_DISCTYPE EQUAL 2)
     MESSAGE(SEND_ERROR " Split form discretization (DiscType=2) + Gauss nodes is not possible! Choose either DiscType=2 + Gauss-Lob., or DiscType=1 + Gauss / Gauss-Lob. ")
   ENDIF()
+ENDIF()
+
+IF(FLUXO_AMR)
+  ADD_DEFINITIONS(-DUSE_AMR=1)
+  SET(FLUXO_BUILD_P4EST  ON  CACHE BOOL "Build p4est library.")
+ELSE()
+  UNSET(FLUXO_BUILD_P4EST CACHE ) # if not mhd
+  ADD_DEFINITIONS(-DUSE_AMR=0)
 ENDIF()
 
 # Enable or disable unit tests
@@ -377,7 +385,7 @@ ENDIF()
 # =========================================================================
 # make sure that the default is a RELEASE
 IF (NOT CMAKE_BUILD_TYPE)
-  SET (CMAKE_BUILD_TYPE Release CACHE STRING
+  SET (CMAKE_BUILD_TYPE Debug CACHE STRING
       "Choose the type of build, options are: Debug / Release / Profile."
       FORCE)
   SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release Profile)
@@ -460,17 +468,86 @@ ENDIF()
 # =========================================================================
 # Add the libraries
 # =========================================================================
-
-IF(FLUXO_BUILD_HDF5)
-  IF(FLUXO_BUILD_MPI)
-    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
-  ELSE()
-    SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
-  ENDIF()
+IF(FLUXO_BUILD_MPI)
+  SET(FLUXO_FC  ${MPI_Fortran_COMPILER})
+  SET(FLUXO_CC  ${MPI_C_COMPILER})
+  SET(FLUXO_CXX ${MPI_CXX_COMPILER})
 ELSE()
-  UNSET(FLUXO_EXTERNAL_LIB_DIR CACHE ) 
+  SET(FLUXO_FC  ${CMAKE_Fortran_COMPILER})
+  SET(FLUXO_CC  ${CMAKE_C_COMPILER} )
+  SET(FLUXO_CXX ${CMAKE_CXX_COMPILER} )
+ENDIF()
+SET(FLUXO_COMPILERS FC=${FLUXO_FC} CC=${FLUXO_CC} CXX=${FLUXO_CXX})
+
+
+# IF(FLUXO_BUILD_MPI)
+#   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+# ELSE()
+#   SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
+# ENDIF()
+# MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
+
+IF(FLUXO_BUILD_MPI)
+  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID}-MPI)
+ELSE()
+  SET(FLUXO_EXTERNAL_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/share/${CMAKE_Fortran_COMPILER_ID})
 ENDIF()
 MARK_AS_ADVANCED(FLUXO_EXTERNAL_LIB_DIR)
+
+
+# =========================================================================
+# p4est library
+# =========================================================================
+
+IF(FLUXO_AMR)
+  IF(FLUXO_BUILD_P4EST)
+    SET (P4ESTDOWNLOAD https://github.com/cburstedde/p4est.git )
+    # SET (P4ESTSHA "7ce0525ffcd3f9cd0f5834604434b1d9b4e1ba57" CACHE STRING "P4EST commit SHA")
+    SET (P4ESTSHA "7752b1e12b596663667d5949aa922e805a42b9b6" CACHE STRING "P4EST commit SHA")
+    SET(FLUXO_P4EST_DLDIR ${FLUXO_EXTERNAL_LIB_DIR}/P4EST)
+    SET(FLUXO_P4EST_DIR  ${FLUXO_P4EST_DLDIR}/build)
+    IF (NOT EXISTS "${FLUXO_P4EST_DIR}/lib/libp4est.so")
+      IF(FLUXO_BUILD_MPI)
+        SET(FLUXO_P4ESTPARALLEL --enable-mpi)
+      ELSE()
+        UNSET(FLUXO_P4ESTPARALLEL)
+      ENDIF()
+      ExternalProject_Add(P4EST
+        GIT_REPOSITORY ${P4ESTDOWNLOAD}
+        GIT_TAG ${P4ESTTAG}
+        PREFIX ${FLUXO_P4EST_DIR}
+        UPDATE_COMMAND "${FLUXO_P4EST_DIR}/src/P4EST/bootstrap"
+        CONFIGURE_COMMAND ${FLUXO_COMPILERS} ${FLUXO_P4EST_DIR}/src/P4EST/configure --prefix=${FLUXO_P4EST_DIR} --with-pic ${FLUXO_P4ESTPARALLEL}
+        BUILD_COMMAND ${MAKE}
+      )
+      LIST(APPEND SELFBUILTEXTERNALS P4EST)
+    ENDIF()
+    UNSET(P4EST_LIBRARIES)
+    UNSET(P4EST_INCLUDE_DIRS)
+    LIST(APPEND P4EST_LIBRARIES    ${FLUXO_P4EST_DIR}/lib/libp4est.so; ${FLUXO_P4EST_DIR}/lib/libsc.so)
+    LIST(APPEND P4EST_INCLUDE_DIRS ${FLUXO_P4EST_DIR}/include )
+  ELSE()
+    UNSET(P4ESTDOWNLOAD CACHE)
+    UNSET(P4ESTSHA CACHE)
+    
+    IF(DEFINED ENV{p4est_DIR})
+      SET(p4est_DIR $ENV{p4est_DIR} CACHE STRING "Installation directory of p4est")
+    ELSEIF(EXISTS "${FLUXO_EXTERNAL_LIB_DIR}/P4EST/build/lib/libp4est.so")
+      SET(p4est_DIR ${FLUXO_EXTERNAL_LIB_DIR}/P4EST/build CACHE STRING "Installation directory of p4est")
+    ENDIF()
+    IF(p4est_DIR)
+      UNSET(P4EST_LIBRARIES)
+      UNSET(P4EST_INCLUDE_DIRS)
+      LIST(APPEND P4EST_LIBRARIES    ${p4est_DIR}/lib/libp4est.so; ${p4est_DIR}/lib/libsc.so)
+      LIST(APPEND P4EST_INCLUDE_DIRS ${p4est_DIR}/include )
+    ELSE()
+      FIND_PACKAGE(p4est)
+    ENDIF()
+  ENDIF()
+  
+  INCLUDE_DIRECTORIES(${P4EST_INCLUDE_DIRS})
+  LIST(APPEND linkedlibs ${P4EST_LIBRARIES} -ldl)
+ENDIF()
 
 # =========================================================================
 # HDF5 library
@@ -634,6 +711,7 @@ FILE(GLOB_RECURSE fluxoF90 ./src/globals/*.f90
                            ./src/mortar/*.f90
                            ./src/mesh/*.f90
                            ./src/timedisc/*.f90   
+                           ./src/indicators/*.f90
                            ./src/shockcapturing/*.f90   
        			   ./src/positivitypreservation/*.f90  )
 
@@ -647,20 +725,71 @@ ENDIF()
 
 
 # define libs
-ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} ${dgF90})
+LIST(APPEND fluxoF90 ${dgF90})
 
+IF (FLUXO_AMR)
+  INCLUDE_DIRECTORIES(./src/amr/)
+  FILE(GLOB_RECURSE amrF90 ./src/amr/*.f90)
+  FILE(GLOB_RECURSE amrC   ./src/amr/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/globals/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/globals/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/analyze/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/analyze/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/interpolation/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/interpolation/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/mpi/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/mpi/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/p4est/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/p4est/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/refine/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/refine/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/io_hdf5/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/io_hdf5/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/mesh/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/mesh/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/output/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/output/*.c)
+#  FILE(GLOB amrF90 ./src/amr/hopest/readintools/*.f90)
+#  FILE(GLOB amrC   ./src/amr/hopest/readintools/*.c)
+  LIST(APPEND fluxoF90 ${amrF90})
+  LIST(APPEND fluxoC   ${amrC})
+ENDIF()
+
+# define libs
+ADD_LIBRARY(fluxolibF90 OBJECT ${fluxoF90} )
 
 SET_TARGET_PROPERTIES(fluxolibF90 PROPERTIES COMPILE_FLAGS ${FLUXO_COMPILE_FLAGS}) 
 #ADD_LIBRARY(userblocklib OBJECT ./src/output/read_userblock.c)
 #SET_TARGET_PROPERTIES(userblocklib PROPERTIES LINKER_LANGUAGE C)
 #ADD_LIBRARY(fluxolib STATIC $<TARGET_OBJECTS:fluxolibF90> $<TARGET_OBJECTS:userblocklib>)
-ADD_LIBRARY(fluxolib STATIC $<TARGET_OBJECTS:fluxolibF90> )
+
+# ADD_LIBRARY(fluxolib STATIC $<TARGET_OBJECTS:fluxolibF90> )
+# ADD_DEPENDENCIES(fluxolibF90 HDF5)
+LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibF90>)
+IF (fluxoC)
+  ADD_LIBRARY(fluxolibC OBJECT ${fluxoC} )
+  ##ADD_DEPENDENCIES(fluxolibC HDF5 P4EST)
+  SET_TARGET_PROPERTIES(fluxolibC PROPERTIES COMPILE_FLAGS "-fPIC") # TODO: add C default flags
+  LIST(APPEND fluxoobj $<TARGET_OBJECTS:fluxolibC>)
+ENDIF()
+ADD_LIBRARY(fluxolib STATIC ${fluxoobj})
+LIST(APPEND fluxodeps fluxolib HDF5)
+IF (FLUXO_AMR)
+  LIST(APPEND fluxodeps P4EST)
+ENDIF()
+
 IF(SELFBUILTEXTERNALS)
   ADD_DEPENDENCIES(fluxolibF90 ${SELFBUILTEXTERNALS})
+  ADD_DEPENDENCIES(fluxolib ${SELFBUILTEXTERNALS})
+  ADD_DEPENDENCIES(fluxolibC ${SELFBUILTEXTERNALS})
 ENDIF()
 
 add_exec(fluxo ./src/fluxo.f90)
+
 ADD_DEPENDENCIES(fluxo fluxolib ${INTERNALLIBS})
+##ADD_DEPENDENCIES(fluxo ${fluxodeps} ${INTERNALLIBS})
 
 IF (_BUILD_FLUXO_POST)
   add_exec(fluxo_post ./src/fluxo_post.f90)

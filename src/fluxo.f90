@@ -40,6 +40,14 @@ USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTi
 USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
+
+#if USE_AMR
+! Added for AMR ->
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
+USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh
+USE MOD_AMR_tracking
+! <-Added for AMR 
+#endif
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
@@ -49,11 +57,15 @@ USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturin
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY:DefineParametersPositivityPreservation,InitPositivityPreservation,FinalizePositivityPreservation
 #endif /*POSITIVITYPRES*/
-!IMPLICIT NONE
+IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
-!!==================================================================================================================================
+!==================================================================================================================================
+! Added for AMR ->
+
+! <-Added for AMR 
+
 CALL InitMPI()
 CALL ParseCommandlineArguments()
 ! Check if the number of arguments is correct
@@ -67,6 +79,9 @@ CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
+#if USE_AMR
+CALL DefineParametersAMR()
+#endif
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
@@ -129,14 +144,33 @@ StartTime=FLUXOTIME()
 CALL InitInterpolation()
 CALL InitMortar()
 CALL InitRestart()
-CALL InitOutput()
+CALL InitOutput() 
+
+#if USE_AMR
+CALL InitAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#endif
+
 CALL InitMesh()
+
 #if MPI
 CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
+
+#if USE_AMR
+CALL ShockCapturingAMR()
+#endif
+                                                
+! ALLOCATE(ElemToRefineAndCoarse(1:nElems))
+! ElemToRefineAndCoarse = 0
+! ElemToRefineAndCoarse(1) = 1
+
+! CALL RunAMR(ElemToRefineAndCoarse) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! DEALLOCATE(ElemToRefineAndCoarse)
+
 #if PARABOLIC
 CALL InitLifting()
 #endif /*PARABOLIC*/
@@ -153,7 +187,7 @@ CALL InitPositivityPreservation()
 
 ! initialization finished
 CALL IgnoredParameters()
-!
+
 ! Measure init duration
 Time=FLUXOTIME()
 SWRITE(UNIT_stdOut,'(132("="))')
@@ -163,12 +197,13 @@ SWRITE(UNIT_stdOut,'(132("="))')
 ! Run Simulation
 CALL TimeDisc()
 
-!Finalize
+
 CALL FinalizeOutput()
 CALL FinalizeAnalyze()
 #if PARABOLIC
 CALL FinalizeLifting()
 #endif /*PARABOLIC*/
+
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeBC()
@@ -177,6 +212,9 @@ CALL FinalizeTimeDisc()
 CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
+#if USE_AMR
+CALL FinalizeAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
+#endif
 CALL FinalizeMortar()
 #if SHOCKCAPTURE
 CALL FinalizeShockCapturing()
@@ -194,6 +232,6 @@ IF(iError .NE. 0) STOP 'MPI finalize error'
 CALL FinalizeMPI()
 #endif
 SWRITE(UNIT_stdOut,'(132("="))')
-SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' FLUXO FINISHED! [',Time-StartTime,' sec ]'
+SWRITE(UNIT_stdOut,'(A,F15.2,A)') ' FLUXO FINISHED! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
 END PROGRAM Fluxo

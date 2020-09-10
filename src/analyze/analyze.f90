@@ -472,7 +472,7 @@ END SUBROUTINE CalcErrorNorms
 
 
 !==================================================================================================================================
-!> Calculates bulk velocities over whole domain
+!> Calculates bulk quantities over whole domain
 !==================================================================================================================================
 SUBROUTINE CalcBulk(Bulk,Bulk_t,maxabs_Ut)
 ! MODULES

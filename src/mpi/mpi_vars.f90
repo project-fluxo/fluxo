@@ -37,16 +37,16 @@ INTEGER             :: DataSizeSide             !< datasize of one face, =PP_nVa
 
 INTEGER             :: SideID_start,SideID_end
 INTEGER             :: nNbProcs                 !< number of neighbor procs, is set in ReadMesh
-INTEGER,ALLOCATABLE :: NbProc(:)                !< list of neighbor procs; allocated from 1:nNbProcs, is set in ReadMesh
-INTEGER,ALLOCATABLE :: nMPISides_Proc(:)        !< number of mpisides for all neighbor procs, is set in ReadMesh
-INTEGER,ALLOCATABLE :: nMPISides_MINE_Proc(:)   !< number of MINE mpisides for all neighbor procs, is set in setLocalSideIDs
+INTEGER,ALLOCATABLE, TARGET :: NbProc(:)                !< list of neighbor procs; allocated from 1:nNbProcs, is set in ReadMesh
+INTEGER,ALLOCATABLE, TARGET :: nMPISides_Proc(:)        !< number of mpisides for all neighbor procs, is set in ReadMesh
+INTEGER,ALLOCATABLE, TARGET :: nMPISides_MINE_Proc(:)   !< number of MINE mpisides for all neighbor procs, is set in setLocalSideIDs
                                                 !< (prepare_mesh.f90)
-INTEGER,ALLOCATABLE :: nMPISides_YOUR_Proc(:)   !< number of YOUR mpisides for all neighbor procs, is set in setLocalSideIDs
+INTEGER,ALLOCATABLE, TARGET :: nMPISides_YOUR_Proc(:)   !< number of YOUR mpisides for all neighbor procs, is set in setLocalSideIDs
                                                 !< (prepare_mesh.f90)
 
-INTEGER,ALLOCATABLE :: offsetMPISides_MINE(:)   !< gives position of send/recv block in *_MINE arrays,allocated from 0:nNbProcs, is
+INTEGER,ALLOCATABLE, TARGET :: offsetMPISides_MINE(:)   !< gives position of send/recv block in *_MINE arrays,allocated from 0:nNbProcs, is
                                                 !< set in setLocalSideIDs (prepare_mesh.f90)
-INTEGER,ALLOCATABLE :: offsetMPISides_YOUR(:)   !< gives position of send/recv block in *_YOUR arrays,allocated from 0:nNbProcs,
+INTEGER,ALLOCATABLE, TARGET :: offsetMPISides_YOUR(:)   !< gives position of send/recv block in *_YOUR arrays,allocated from 0:nNbProcs,
                                                 !< is set in setLocalSideIDs (prepare_mesh.f90)
 INTEGER,ALLOCATABLE :: offsetElemMPI(:)         !< gives offsetposotion of elements of all procs, allocated from 1:nProcessors set
                                                 !< in ReadMesh

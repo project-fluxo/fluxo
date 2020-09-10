@@ -281,6 +281,7 @@ USE MOD_Testcase_Vars       ,ONLY: doTCSource
 USE MOD_Testcase_Source     ,ONLY: TestcaseSource
 USE MOD_Equation_Vars       ,ONLY: doCalcSource
 USE MOD_Equation            ,ONLY: CalcSource
+!
 #if PARABOLIC
 USE MOD_Lifting             ,ONLY: Lifting
 #endif /*PARABOLIC*/
@@ -386,7 +387,6 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
 
-! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
 
 ! add inner and BC side surface contibutions to time derivative 
@@ -397,7 +397,9 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
 
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
-CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
+! #ifdef navierstokes
+ CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
+! #endif
 
 ! update time derivative with contribution of MPI sides 
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)

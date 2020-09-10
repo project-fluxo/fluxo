@@ -1,0 +1,100 @@
+#include "defines.h"
+
+!==================================================================================================================================
+!> Routines that perform the projection operation between nonconforming interfaces using the operators set up in module
+!> mortar
+!> 
+!> Contains the routines to
+!> - interpolate the solution at the large sides to the small ones, which are used for flux computation
+!> - project the flux from the small sides back to the large ones
+!==================================================================================================================================
+MODULE MOD_AMR_Interpolation
+    IMPLICIT NONE
+    PRIVATE
+
+INTERFACE Refine
+  MODULE PROCEDURE Refine
+END INTERFACE
+
+INTERFACE Coarse
+  MODULE PROCEDURE Coarse
+END INTERFACE
+
+PUBLIC::Coarse,Refine
+
+CONTAINS
+
+SUBROUTINE Refine(Unew, Uold,Elem_xGPnew,Elem_xGPold) 
+    ! MODULES
+    USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
+
+    IMPLICIT NONE
+    REAL, INTENT(INOUT)          :: Unew(:,:,:,:,:),Elem_xGPnew(:,:,:,:,:)
+    REAL, INTENT(IN)             :: Uold(:,:,:,:,:),Elem_xGPold(:,:,:,:,:)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+    REAL         :: U_tmp2( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:2)
+    REAL         :: U_tmp4( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:4)
+    REAL         :: U_tmp8( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:8)
+    INTEGER      :: o,p,q,l
+    REAL,POINTER :: M1(:,:),M2(:,:)
+!==================================================================================================================================
+    M1=>M_0_1 !interpolation from (-1,1) -> (-1,0) 
+    M2=>M_0_2 !interpolation from (-1,1) -> (0,1) 
+    sizenew=size(Unew(1,1,1,1,:))
+    sizeold=size(Uold(1,1,1,1,:))
+    DO o=0,PP_N
+      DO q=0,PP_N
+        DO p=0,PP_N ! for every xi-layer perform operation in eta-direction 
+          U_tmp2(:,p,q,1)=                  M1(0,q)*Uold(:,p,0,o,MortarSideID)
+          U_tmp2(:,p,q,2)=                  M2(0,q)*Uold(:,p,0,o,MortarSideID)
+          DO l=1,PP_N
+            U_tmp2(:,p,q,1)=U_tmp2(:,p,q,1)+M1(l,q)*Uold(:,p,l,o,MortarSideID)
+            U_tmp2(:,p,q,2)=U_tmp2(:,p,q,2)+M2(l,q)*Uold(:,p,l,o,MortarSideID)
+          END DO
+        END DO
+      END DO
+    END DO
+    
+    DO o=0,PP_N
+        DO q=0,PP_N
+          DO p=0,PP_N ! for every xi-layer perform operation in eta-direction 
+            U_tmp2(:,p,q,1)=                  M1(0,q)*Uold(:,p,0,o,MortarSideID)
+            U_tmp2(:,p,q,2)=                  M2(0,q)*Uold(:,p,0,o,MortarSideID)
+            DO l=1,PP_N
+              U_tmp2(:,p,q,1)=U_tmp2(:,p,q,1)+M1(l,q)*Uold(:,p,l,o,MortarSideID)
+              U_tmp2(:,p,q,2)=U_tmp2(:,p,q,2)+M2(l,q)*Uold(:,p,l,o,MortarSideID)
+            END DO
+          END DO
+        END DO
+      END DO
+    
+      DO o=0,PP_N
+        DO q=0,PP_N
+          DO p=0,PP_N ! for every xi-layer perform operation in eta-direction 
+            U_tmp2(:,p,q,1)=                  M1(0,q)*Uold(:,p,0,o,MortarSideID)
+            U_tmp2(:,p,q,2)=                  M2(0,q)*Uold(:,p,0,o,MortarSideID)
+            DO l=1,PP_N
+              U_tmp2(:,p,q,1)=U_tmp2(:,p,q,1)+M1(l,q)*Uold(:,p,l,o,MortarSideID)
+              U_tmp2(:,p,q,2)=U_tmp2(:,p,q,2)+M2(l,q)*Uold(:,p,l,o,MortarSideID)
+            END DO
+          END DO
+        END DO
+      END DO
+      
+END SUBROUTINE Refine
+
+SUBROUTINE Coarse(Unew, Uold,Elem_xGPnew,Elem_xGPold) 
+
+    IMPLICIT NONE
+    REAL, INTENT(INOUT)          :: Unew(:,:,:,:,:),Elem_xGPnew(:,:,:,:,:)
+    REAL, INTENT(IN)             :: Uold(:,:,:,:,:),Elem_xGPold(:,:,:,:,:)
+
+    REAL         :: U_tmp2( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:2)
+    REAL         :: U_tmp4( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:4)
+    REAL         :: U_tmp8( PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:8)
+
+END SUBROUTINE Coarse
+
+
+END MODULE MOD_AMR_Interpolation

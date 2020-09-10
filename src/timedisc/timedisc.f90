@@ -160,6 +160,10 @@ USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
+#if USE_AMR
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
+USE MOD_AMR_Vars            ,ONLY: UseAMR
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -169,7 +173,7 @@ REAL                         :: dt_Min,dt_MinOld,dtAnalyze,dtEnd,tStart
 INTEGER(KIND=8)              :: iter,iter_loc
 REAL                         :: iterTimeStart,CalcTimeStart,CalcTimeEnd
 INTEGER                      :: TimeArray(8)              !< Array for system time
-INTEGER                      :: errType,nCalcTimestep,writeCounter
+INTEGER                      :: errType,nCalcTimestep,writeCounter, doAMR
 LOGICAL                      :: doAnalyze,doFinalize
 LOGICAL                      :: firstWCTcheck=.TRUE.
 !==================================================================================================================================
@@ -206,13 +210,25 @@ CALL CalcArtificialViscosity(U)
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
-
+#if USE_AMR
+DO ITER = 1,8
+  IF (UseAMR) THEN 
+    ! doAMR = doAMR + 1;
+    ! IF (doAMR .EQ. 1) THEN
+    ! doAMR = 0;
+    CALL ShockCapturingAMR()
+    CALL InitData()
+    !  PRINT *, "ShockCapturingAMR()"
+    ! ENDIF
+  ENDIF 
+ENDDO
+#endif
 
 ! Write the state at time=0, i.e. the initial condition
 IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
-  CALL Visualize(t,U)
+  CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
 END IF
 
 ! No computation needed if tEnd=tStart!
@@ -242,13 +258,25 @@ IF(MPIroot)THEN
   WRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 END IF ! MPIroot
 
-
+doAMR = 0
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
-IterTimeStart=CalcTimeStart !not changed
+
+
+iter = 0
 DO
-  IF(nCalcTimestepMax.EQ.1)THEN
+#if USE_AMR
+
+IF (UseAMR) THEN
+  doAMR = doAMR + 1;
+  IF (doAMR .EQ. 2) THEN
+    doAMR = 0;
+    CALL ShockCapturingAMR()
+  ENDIF
+ENDIF
+#endif
+IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
     ! be careful, this is using an estimator, when to recompute the timestep
@@ -260,7 +288,7 @@ DO
     nCalcTimestep=nCalcTimestep-1
   END IF !nCalcTimeStepMax <>1
   IF(errType.NE.0)THEN !error in time step computation
-    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
+!    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
     CALL abort(__STAMP__,&
    'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
   END IF
@@ -281,12 +309,13 @@ DO
   IF(doTCpreTimeStep) CALL CalcPreTimeStep(t,dt)
 
 
-  !CALL PrintStatusLine(t,dt,tStart,tEnd)
+  CALL PrintStatusLine(t,dt,tStart,tEnd)
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !Perform Timestep using a global time stepping routine, attention: only RK3 has time dependent BC
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   CALL TimeStep(t)
 
+  
   iter=iter+1
   iter_loc=iter_loc+1
   t=t+dt
