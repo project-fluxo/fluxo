@@ -16,6 +16,7 @@ SAVE
 CHARACTER(LEN=255)          :: p4estFile          ! name of hdf5 meshfile (write with ending .h5!)
 LOGICAL                     :: UseAMR
 LOGICAL                     :: AMRInitIsDone
+LOGICAL                     :: p4estFileExist
 INTEGER                     :: MaxLevel             ! Loaded from .ini file
 INTEGER                     :: MinLevel             ! Loaded from .ini file
 INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file

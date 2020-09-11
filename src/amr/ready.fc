@@ -95,7 +95,8 @@ int p4est_init_f(int mpicomm1) {
     // mpicomm = sc_MPI_COMM_WORLD;
     mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C
     // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
-
+    //  printf("mpicomm!!! %d \n",mpicomm);
+    
     // printf("mpicomm = %d, size = %d \n", mpicomm, sizeof(mpicomm));
     // fflush(stdout);
     /* These functions are optional.  If called they store the MPI rank as a
@@ -103,8 +104,10 @@ int p4est_init_f(int mpicomm1) {
    * from processor zero.  Here we turn off most of the logging; see sc.h. */
     // sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR sc.h. */
     sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
-    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
+    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , C_LP_ERROR
+
     p4est_init(NULL, SC_LP_ERROR); //SC_LP_SILENT , SC_LP_ERROR
+   
     return 0;
 }
 

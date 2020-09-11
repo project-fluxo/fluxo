@@ -247,25 +247,12 @@ END IF
 IF(ALLOCATED(offsetElemMPI)) DEALLOCATE(offsetElemMPI)
 ALLOCATE(offsetElemMPI(0:nProcessors))
 offsetElemMPI=0
-! #if USE_AMR 
+
 #if USE_AMR
 IF (UseAMR) THEN
   CALL p4estSetMPIData()
 ELSE
-  ! #else /*USE_AMR*/
-  nElems=nGlobalElems/nProcessors
-  iElem=nGlobalElems-nElems*nProcessors
-  DO iProc=0,nProcessors-1
-    offsetElemMPI(iProc)=nElems*iProc+MIN(iProc,iElem)
-  END DO
-  offsetElemMPI(nProcessors)=nGlobalElems
-  !local nElems and offset
-  nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
-  offsetElem=offsetElemMPI(myRank)
-  LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
-ENDIF
-#else 
-! #else /*USE_AMR*/
+#endif/*USE_AMR*/
   nElems=nGlobalElems/nProcessors
   iElem=nGlobalElems-nElems*nProcessors
   DO iProc=0,nProcessors-1
@@ -277,7 +264,9 @@ ENDIF
   offsetElem=offsetElemMPI(myRank)
   LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
 
-#endif
+#if USE_AMR
+ ENDIF
+#endif/*USE_AMR*/
 
 
 #else /* MPI */
@@ -577,6 +566,7 @@ LOGWRITE(*,'(A22,I8)')'nInnerSides:',nInnerSides
 LOGWRITE(*,'(A22,I8)')'nMPISides:',nMPISides
 LOGWRITE(*,*)'-------------------------------------------------------'
  !now MPI sides
+! TODO: Check nMortarSides
 #if MPI
 nNBProcs=0
 DO iProc=0,nProcessors-1

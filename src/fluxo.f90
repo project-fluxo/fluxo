@@ -44,7 +44,8 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 #if USE_AMR
 ! Added for AMR ->
 USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
-USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh
+USE MOD_AMR,                ONLY: RunAMR,LoadBalancingAMR, SaveMesh
+USE MOD_P4EST,              ONLY: LoadP4est, SaveP4est
 USE MOD_AMR_tracking
 ! <-Added for AMR 
 #endif
@@ -135,9 +136,8 @@ CALL InitRestart()
 CALL InitOutput() 
 
 #if USE_AMR
-CALL InitAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+CALL InitAMR()
 #endif
-
 CALL InitMesh()
 
 #if MPI

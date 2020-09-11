@@ -128,29 +128,38 @@ SUBROUTINE InitAMR()
     SWRITE(UNIT_stdOut,'(A)') ' INIT AMR...'
 
     ! CALL p4_initvars(IntSize)
+ 
 
     UseAMR = GETLOGICAL('UseAMR','.FALSE.')
     IF (UseAMR) THEN
       p4estFile = GETSTR('p4estFile')
     ELSE
-      SWRITE(UNIT_stdOut,'(A)') ' AMR cannot be used! Set UseAMR to FALSE!'
+      SWRITE(UNIT_stdOut,'(A)') ' AMR is not used'
       RETURN;
     ENDIF
+    p4estFileExist = CheckP4estFileExist(p4estFile)
     MinLevel = GetINT('MinLevel',"0")
     MaxLevel = GetINT('MaxLevel',"0")
     RefineVal = GetReal('RefineVal',"0.")
     CoarseVal = GetREal('CoarseVal',"0.")
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
+    
     CALL InitIndicator()
-
     RET=P4EST_INIT(MPI_COMM_WORLD); 
-
-
+    
+    IF  (p4estFileExist) THEN
+      CALL LoadP4est(p4estFile)
+      PRINT *, "P4est File Exist!"
+      CALL EXIT()
+    ELSE
+      CALL InitAMR_Connectivity()
+      CALL InitAMR_P4est()
+    ENDIF
+    
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
     SWRITE(UNIT_StdOut,'(132("-"))')
-    CALL InitAMR_Connectivity()
-    CALL InitAMR_P4est()
+    
   
 END SUBROUTINE InitAMR
 
@@ -180,7 +189,7 @@ SUBROUTINE InitAMR_Connectivity()
    ! MeshFile = GETSTR('MeshFile')
    
    CONN_OWNER=0;
-     CALL InitMesh()
+    CALL InitMesh()
    ! Create Connectivity
    CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
    CALL ReadMeshFromHDF5(MeshFile)
@@ -198,9 +207,6 @@ SUBROUTINE WriteStateAMR(OutputTime,isErrorFile)
   ! MODULES
   USE MOD_PreProc
   USE MOD_Globals
-  ! USE MOD_DG_Vars      ,ONLY: U
-  ! USE MOD_Equation_Vars,ONLY: StrVarNames
-  USE MOD_Mesh_Vars    ,ONLY: MeshFile
   USE MOD_Output_Vars  ,ONLY: ProjectName
   USE MOD_P4EST         ,ONLY: SaveP4est
   ! IMPLICIT VARIABLE HANDLING
@@ -229,6 +235,17 @@ SUBROUTINE WriteStateAMR(OutputTime,isErrorFile)
   CALL SaveP4est(FileNameP)
   END SUBROUTINE WriteStateAMR
   
+LOGICAL FUNCTION CheckP4estFileExist(FileString)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+CHARACTER(LEN=*),INTENT(IN)  :: FileString !< (IN) mesh filename
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+inquire( file=trim(FileString), exist=CheckP4estFileExist )
+END FUNCTION CheckP4estFileExist
 
 !==================================================================================================================================
 !>  The main SUBROUTINE used for Coarse/Refine Mesh.
@@ -1032,8 +1049,9 @@ SUBROUTINE SaveMesh(FileString)
     CALL WriteAttribute(File_ID,'nUniqueSides',1,IntScalar=OffsetSideMPI(mpisize))
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
-    
-    DimsM=(/6, nGlobalElems/)
+    CALL WriteAttribute(File_ID,'isMortarMesh',1,IntScalar=1)
+
+     DimsM=(/6, nGlobalElems/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)
     HDF5DataType=H5T_NATIVE_INTEGER
     CALL H5DCREATE_F(File_ID,'ElemInfo', HDF5DataType, FileSpace, DSet_ID, iError)

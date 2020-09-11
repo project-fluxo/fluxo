@@ -881,34 +881,31 @@ savef_data_destroy(p4est_savef_data_t *p4est_savef_data) {
 };
 
 void save_p4est(p4est_t *p4est, char in[]) {
-    // int a = strtrim(in);
     // printf("save p4est!! \n%s!\n", in);//p4est->local_num_quadrants);
-    // printf("save p4est!! \n%p \n", p4est);//p4est->local_num_quadrants);
-    // char a[] = "12345";
     p4est_save_ext(in, p4est, 0, 0);
-    // exit(0);
     return;
 };
 
 p4est_t *load_p4est(int mpicomm1, char *in) {
 
-    p8est_connectivity_t **conn;
+    p8est_connectivity_t *conn;
     p4est_t *p4est;
-    static sc_MPI_Comm mpicomm;
+    sc_MPI_Comm mpicomm;
     mpicomm = MPI_Comm_f2c(mpicomm1);
-
+   
 
     p4est = p8est_load_ext(in,      //const char *filename,
                            mpicomm, //sc_MPI_Comm mpicomm,
                            0,       //size_t data_size,
                            0,       //int load_data,
                            1,       //int autopartition,
-                           1,       //int broadcasthead,
+                           0,       //int broadcasthead,
                            NULL,    //void *user_pointer,
-                           conn);   //p8est_connectivity_t * *connectivity);
-    p4est->connectivity = *conn;
-    printf("Load p4est!! %d \n", p4est->connectivity->num_trees);
-
+                           &conn);   //p8est_connectivity_t * *connectivity);
+    
+    p4est->connectivity = conn;
+    // printf("Connectivity!! %d \n", p4est->connectivity->num_trees);
+    // exit(0);
     return p4est;
 };
 

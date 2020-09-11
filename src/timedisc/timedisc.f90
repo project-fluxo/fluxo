@@ -380,7 +380,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
         tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
 #if USE_AMR
         IF (UseAMR) THEN
-          writeCounterAMR = writeCounter + 1
+          writeCounterAMR = writeCounterAMR + 1
           IF((writeCounterAMR .EQ. nWriteDataAMR).OR.doFinalize)THEN
             CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
             writeCounterAMR = 0

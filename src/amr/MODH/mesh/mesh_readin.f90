@@ -130,6 +130,9 @@ CONTAINS
         ! MODULES
         USE MOD_Globals
         USE MOD_HDF5_Input
+#if USE_AMR
+        USE MOD_AMR_Vars,           ONLY: p4estFileExist, UseAMR
+#endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
         USE MOD_Mesh_Vars, ONLY : nElems, Ngeo
@@ -144,7 +147,7 @@ CONTAINS
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
         LOGICAL :: isMesh
-        INTEGER :: NGEO1, nGlobalTrees1, color, key, NEWCOMM
+        INTEGER :: NGEO1, nGlobalTrees1, color, key, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
         IF(.NOT.isMesh) CALL abort(__STAMP__, &
@@ -152,17 +155,24 @@ CONTAINS
 
         ! print *, "READ IN PROGRESS"
         !Create a Communicator with MPI root processor
-        key = myrank
-        ! IF (MPIRoot) THEN
+            
 
-        ! color=0
-        ! ELSE
-        ! color=MPI_Undefined
-        ! ENDIF
-        ! CALL MPI_COMM_SPLIT(MPI_COMM_WORLD, color, key, NEWCOMM, IERROR)
+       
+       
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
+
+#if USE_AMR
+          iMortar = 0
+          CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+          IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
+            ! Error, we can't Run AMR on Mortar Mesh without p4est file
+            CALL CollectiveStop(__STAMP__,&
+             "Error, we cannot use AMR on Mortar Mesh without p4est file.")
+          ENDIF
+#endif /*USE_AMR*/
+
         nGlobalTrees = nGlobalTrees1
         nElems = nGlobalTrees1
         nGeo = Ngeo1
