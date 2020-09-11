@@ -115,7 +115,7 @@ INTEGER           :: iElem,i,j,k
 #if USE_AMR
 INTEGER           :: iMortar
 #endif /*USE_AMR*/
-LOGICAL           :: validMesh
+LOGICAL           :: validMesh, dsExists
 INTEGER           :: firstMasterSide     !< lower side ID of array U_master/gradUx_master...
 INTEGER           :: lastMasterSide      !< upper side ID of array U_master/gradUx_master...
 !==================================================================================================================================
@@ -143,7 +143,12 @@ CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
 
 IF (UseAMR) THEN
   iMortar = 0
-  CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+  dsExists = .FALSE.
+  CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
+  IF(dsExists)&
+    CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+  isMortarMesh=(iMortar.EQ.1)
+
   IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
     ! Error, we can't Run AMR on Mortar Mesh without p4est file
     CALL CollectiveStop(__STAMP__,&

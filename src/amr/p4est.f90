@@ -297,13 +297,19 @@ CONTAINS
         CHARACTER(LEN = *), INTENT(IN) :: FileString !< (IN) mesh filename
         !----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        CHARACTER(LEN = 255, KIND = C_CHAR) :: DIGIT_STRING = '123456789' // C_NULL_CHAR
+        CHARACTER(LEN = 255, KIND = C_CHAR) :: FileName = '123456789' // C_NULL_CHAR
         ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
-        DIGIT_STRING = TRIM(FileString) // C_NULL_CHAR
+        FileName = TRIM(FileString) // C_NULL_CHAR
+        IF(MPIRoot)THEN
+            WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' READ FOREST FROM P4EST FILE: '
+            WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileString)
+            ! GETTIME(StartT)
+        END IF
         ! print *, "myrank =", myRank, TRIM(DIGIT_STRING)
-        P4EST_PTR = LoadP4(MPI_COMM_WORLD, TRIM(DIGIT_STRING));
+        P4EST_PTR = LoadP4(MPI_COMM_WORLD, TRIM(FileName));
         
         CONNECTIVITY_PTR = GetConnectivity(P4EST_PTR)
+
         RETURN
 
         !write(*,"(Z32)")  CONNECTIVITY_PTR

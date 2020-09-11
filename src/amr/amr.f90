@@ -148,10 +148,18 @@ SUBROUTINE InitAMR()
     RET=P4EST_INIT(MPI_COMM_WORLD); 
     
     IF  (p4estFileExist) THEN
+      
+      IF(MPIRoot)THEN
+        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'HAS BEEN FOUND THE P4EST FILE: '
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(p4estFile)
+      END IF
       CALL LoadP4est(p4estFile)
-      PRINT *, "P4est File Exist and is loaded"
-      ! CALL EXIT()
     ELSE
+      IF(MPIRoot)THEN
+        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'THE P4EST FILE HAS NOT BEEN FOUND : '
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(p4estFile)
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')'CREATE THE FOREST'
+      END IF
       CALL InitAMR_Connectivity()
       CALL InitAMR_P4est()
     ENDIF
@@ -990,6 +998,7 @@ SUBROUTINE SaveMesh(FileString)
   REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:), Vdm_GLN_EQN(:,:)
   REAL,ALLOCATABLE               :: Vdm_N_GLN(    :   ,:)
   REAL,ALLOCATABLE                :: XGL_N(      :,  :,:,:)          ! mapping X(xi) P\in N
+
   ! REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
   ! CHARACTER(LEN=255)             :: MeshFile255
   !============================================================================================================================
@@ -1049,6 +1058,7 @@ SUBROUTINE SaveMesh(FileString)
     CALL WriteAttribute(File_ID,'nUniqueSides',1,IntScalar=OffsetSideMPI(mpisize))
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
+    
     CALL WriteAttribute(File_ID,'isMortarMesh',1,IntScalar=1)
 
      DimsM=(/6, nGlobalElems/)

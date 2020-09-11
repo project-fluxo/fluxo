@@ -135,7 +135,7 @@ CONTAINS
 #endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
-        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo
+        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo, isMortarMesh
         ! USE MODH_Mesh,     ONLY: SetCurvedInfo
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
@@ -146,7 +146,7 @@ CONTAINS
         ! OUTPUT VARIABLES
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        LOGICAL :: isMesh
+        LOGICAL :: isMesh, dsExists
         INTEGER :: NGEO1, nGlobalTrees1, color, key, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
@@ -165,7 +165,12 @@ CONTAINS
 
 #if USE_AMR
           iMortar = 0
-          CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+          dsExists = .FALSE.
+          CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
+          IF(dsExists)&
+                CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+          isMortarMesh=(iMortar.EQ.1)
+          
           IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
             ! Error, we can't Run AMR on Mortar Mesh without p4est file
             CALL CollectiveStop(__STAMP__,&
