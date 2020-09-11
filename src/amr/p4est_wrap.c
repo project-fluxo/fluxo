@@ -4,7 +4,6 @@
 #include "ready.fc"
 #include "optimisation.c"
 #include "p8est_communication.h"
-
 //#define NON_OPTIMIZED //Optimized Variant not ready yet
 
 //#ifndef NON_OPTIMIZED
@@ -1790,6 +1789,8 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
     // Refine And Coarse
     p4est->user_pointer = ElemToRC;
 // #ifndef NON_OPTIMIZED
+   
+
     p4est_iterate(p4est,                           /* the forest */
                   NULL,                            /* the ghost layer May be LAter!!! */
                   NULL,                            /* the synchronized ghost data */
@@ -1808,7 +1809,7 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
     p4est_refine_ext(p4est, recursive, allowed_level,
                      refine_fn, NULL,
                      replace_quads);
-
+                     
     p4est_coarsen_ext(p4est, recursive, Callbackorphans,
                       coarse_fn, NULL, replace_quads);
     p4est_balance_ext(p4est, P4EST_CONNECT_FULL, NULL,
@@ -1816,6 +1817,7 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
     // p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
     //                   replace_quads);
     p4est->user_pointer = NULL;
+    fflush(stdout);
 
     return;//    return GetData(p4est);
 }

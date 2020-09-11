@@ -197,7 +197,7 @@ INTERFACE
 
     FUNCTION GetConnectivity(P4EST) BIND(C, NAME = 'GetConnectivity')
         IMPORT :: C_PTR
-        TYPE(C_PTR) :: P4EST
+        TYPE(C_PTR), VALUE :: P4EST
         TYPE(C_PTR) :: GetConnectivity
     END FUNCTION GetConnectivity
     !This is from Hopest!
@@ -299,12 +299,12 @@ CONTAINS
         ! LOCAL VARIABLES
         CHARACTER(LEN = 255, KIND = C_CHAR) :: DIGIT_STRING = '123456789' // C_NULL_CHAR
         ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
-        DIGIT_STRING = FileString // C_NULL_CHAR
-
+        DIGIT_STRING = TRIM(FileString) // C_NULL_CHAR
+        ! print *, "myrank =", myRank, TRIM(DIGIT_STRING)
         P4EST_PTR = LoadP4(MPI_COMM_WORLD, TRIM(DIGIT_STRING));
-        RETURN
-
+        
         CONNECTIVITY_PTR = GetConnectivity(P4EST_PTR)
+        RETURN
 
         !write(*,"(Z32)")  CONNECTIVITY_PTR
     END SUBROUTINE LoadP4est

@@ -266,8 +266,8 @@ CalcTimeStart=FLUXOTIME()
 
 iter = 0
 DO
-#if USE_AMR
 
+#if USE_AMR
 IF (UseAMR) THEN
   doAMR = doAMR + 1;
   IF (doAMR .EQ. 2) THEN
@@ -276,6 +276,7 @@ IF (UseAMR) THEN
   ENDIF
 ENDIF
 #endif /*USE_AMR*/
+
 IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE

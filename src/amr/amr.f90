@@ -149,8 +149,8 @@ SUBROUTINE InitAMR()
     
     IF  (p4estFileExist) THEN
       CALL LoadP4est(p4estFile)
-      PRINT *, "P4est File Exist!"
-      CALL EXIT()
+      PRINT *, "P4est File Exist and is loaded"
+      ! CALL EXIT()
     ELSE
       CALL InitAMR_Connectivity()
       CALL InitAMR_P4est()
