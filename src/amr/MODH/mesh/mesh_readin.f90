@@ -131,7 +131,7 @@ CONTAINS
         USE MOD_Globals
         USE MOD_HDF5_Input
 #if USE_AMR
-        USE MOD_AMR_Vars,           ONLY: p4estFileExist, UseAMR
+        USE MOD_AMR_Vars,           ONLY: p4estFileExist
 #endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
@@ -147,7 +147,7 @@ CONTAINS
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
         LOGICAL :: isMesh, dsExists
-        INTEGER :: NGEO1, nGlobalTrees1, color, key, iMortar
+        INTEGER :: NGEO1, nGlobalTrees1, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
         IF(.NOT.isMesh) CALL abort(__STAMP__, &
@@ -232,7 +232,7 @@ CONTAINS
         INTEGER :: BCindex
         INTEGER :: iElem, iTree, ElemID, iNode
         INTEGER :: iLocSide, iSide
-        INTEGER :: nPeriodicSides, nSideIDs
+        INTEGER :: nSideIDs
         INTEGER :: C2V(3, 8) ! Volume to 1D corner node mapping
         INTEGER, ALLOCATABLE :: ElemInfo(:, :), SideInfo(:, :), GlobalNodeIDs(:, :, :, :)
         LOGICAL :: oriented, fileExists, doConnection

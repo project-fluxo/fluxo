@@ -40,11 +40,10 @@ CONTAINS
     SUBROUTINE ShockCapturingAMR()
         !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
         USE MOD_PreProc
-        USE MOD_Globals,                ONLY : MPIroot, myrank
+        USE MOD_Globals,                ONLY : MPIroot
         USE MOD_DG_Vars,                ONLY : U
         USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
-        USE MOD_Mesh_Vars,              ONLY : nElems, Elem_xGP, nGlobalElems
-        USE MOD_Interpolation_Vars,     ONLY : xGP
+        USE MOD_Mesh_Vars,              ONLY : nElems
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
         USE MOD_Indicators,             ONLY : ShockSensor_PerssonPeraire
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
@@ -54,8 +53,7 @@ CONTAINS
         !Local variables
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
         INTEGER :: iElem
-        REAL :: R
-       
+         
         ! REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
         ! REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
         ! INTEGER :: iXMax(3), iXMin(3),i,j,k
@@ -141,15 +139,14 @@ CONTAINS
     SUBROUTINE InitData()
         USE MOD_PreProc
         USE MOD_DG_Vars, ONLY : U
-        USE MOD_Mesh_Vars, ONLY : Elem_xGP, nElems
-        USE MOD_Equation_Vars, ONLY : kappam1, skappam1, PrimToCons,skappa, kappa, IniExactFunc
-        USE MOD_Equation, ONLY : ExactFunc, FillIni
+
+        USE MOD_Equation_Vars, ONLY :IniExactFunc
+        USE MOD_Equation, ONLY : FillIni
         USE MOD_Restart_Vars, only: DoRestart
         USE MOD_AMR, ONLY : RunAMR
         IMPLICIT NONE
-        INTEGER :: iElem, i, j, k, PP, nVar, Iter, l
-        REAL :: X0, Y0, X, Y, Rho, Ux, Vy, F, OMEGA, R, S, MachInf, Beta, alfa, PInf, Tinf, sigma, P, Prim(5)
-        REAL :: Mejecta, SigmaEjecta, Eblast, SigmaBlast
+
+
         
         if (.not. DoRestart) call FillIni(IniExactFunc,U)
         

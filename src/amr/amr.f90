@@ -264,10 +264,11 @@ END FUNCTION CheckP4estFileExist
 
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
-  USE MOD_Analyze_Vars,        ONLY: ElemVol
+  USE MOD_PreProc,            ONLY: PP_N
+  USE MOD_Analyze_Vars,       ONLY: ElemVol
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
-  USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
+  USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem
   USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
   USE MOD_P4est,              ONLY: FillElemsChanges, GetNElems
   USE MOD_Metrics,            ONLY: CalcMetrics
@@ -277,9 +278,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems!, firstMortarInnerSide, lastMortarInnerSide
   USE MOD_MPI_Vars,           ONLY: NbProc , nMPISides_MINE_Proc, nMPISides_YOUR_Proc, offsetMPISides_YOUR, offsetMPISides_MINE 
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
-  USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs, offsetElemMPI
+  USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
-  USE MOD_Mesh_Vars,          ONLY: nMPISides_MINE, nMPISides_YOUR,nGlobalElems, firstMPISide_YOUR, firstMPISide_MINE,firstMortarMPISide
+  USE MOD_Mesh_Vars,          ONLY: nGlobalElems
 #if PARABOLIC
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
@@ -289,21 +290,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
  
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-  INTEGER :: PP, Ie, nVar;
+  INTEGER :: Ie
   TYPE(C_PTR) :: DataPtr;
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
-  INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, doLBalance
+  INTEGER :: i,iElem, nMortarSides, NGeoRef
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
  
-  nVar=size(U(:,1,1,1,1))
-  PP=size(U(1,:,1,1,1))-1
-
-  PP_N=PP
   
   nElemsOld = nElems;
   nSidesOld = nSides
@@ -330,8 +327,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ! PRINT *, size(ChangeElem(1,:))
 
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
-    ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
+    ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+    ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
     iElem=0;
     !  DO iElem=1,FortranData%nElems
      DO 
@@ -384,7 +381,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
-      DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
+      SDEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
     ENDIF
     FortranData%nNbProc = C_LOC(NbProc)
   
@@ -498,7 +495,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
-  PP_N=PP
+
 
   ! Reallocate Arrays if the nElems was changed
   IF (nElemsOld .NE. nElems) THEN
@@ -701,12 +698,13 @@ SUBROUTINE InterpolateCoarseRefine(Unew, Uold,Elem_xGPnew,Elem_xGPold)
     USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
     USE MOD_Interpolation,      ONLY: GetVandermonde
     USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
+    USE MOD_PreProc,            ONLY: PP_N
 
     IMPLICIT NONE
     REAL, INTENT(INOUT)          :: Unew(:,:,:,:,:),Elem_xGPnew(:,:,:,:,:)
     REAL, INTENT(IN)             :: Uold(:,:,:,:,:),Elem_xGPold(:,:,:,:,:)
     INTEGER                      :: SizeNew, SizeOld
-    INTEGER                      :: i,PP_N, nVar_local
+    INTEGER                      :: i,PP_nVar_local
     REAL,ALLOCATABLE                :: Unew_big(:,:,:,:,:),Elem_xGP_big(:,:,:,:,:)
     REAL,ALLOCATABLE                :: Vdm_fromSmalltoBig(:,:),Vdm_FromNVisu_toNodeType(:,:)
     ! REAL,ALLOCATABLE                :: Unew_big(:,:,:,:,:) , Elem_xGP_big(:,:,:,:,:)
@@ -716,8 +714,8 @@ SUBROUTINE InterpolateCoarseRefine(Unew, Uold,Elem_xGPnew,Elem_xGPold)
     sizeold=size(Uold(1,1,1,1,:))
 
 
-    nVar_local=size(Unew(:,1,1,1,1))
-    PP_N=size(Unew(1,:,1,1,1))-1
+    PP_nVar_local=size(Unew(:,1,1,1,1))
+
     
     !     ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
     !     ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
@@ -730,7 +728,7 @@ SUBROUTINE InterpolateCoarseRefine(Unew, Uold,Elem_xGPnew,Elem_xGPold)
         ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
         ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
 
-    !   print *, "Size!!!!!!!11 U old ", nVar_local
+    !   print *, "Size!!!!!!!11 U old ", PP_nVar_local
         CALL GetVandermonde(PP_N, NodeType, 2*PP_N,      NodeTypeVISU, Vdm_fromSmallToBig)
         CALL GetVandermonde(PP_N, NodeTypeVISU, PP_N,      NodeType, Vdm_FromNVisu_toNodeType)
 
@@ -844,13 +842,14 @@ SUBROUTINE LoadBalancingAMR()
   USE MOD_AMR_Vars
   USE MOD_P4EST
   USE MOD_DG_Vars,            ONLY: U
-  USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
+  USE MOD_Mesh_Vars,          ONLY: Elem_xGP
+  USE MOD_PreProc,            ONLY: PP_N
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  INTEGER :: PP, nVar
+
   !============================================================================================================================
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
   
@@ -861,8 +860,8 @@ SUBROUTINE LoadBalancingAMR()
   
   BalanceData%DataSize = sizeof(U(:,:,:,:,1))
   BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
-  PP = size(U(1,:,0,0,1))-1
-  nVar = size(U(:,0,0,0,1))
+
+
   
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
@@ -873,9 +872,9 @@ SUBROUTINE LoadBalancingAMR()
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
  
-  ALLOCATE(U_New(PP_nVar,0:PP,0:PP,0:PP,BalanceData%nElems))
+  ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
-  ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,BalanceData%nElems))
+  ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
  
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
  
@@ -903,7 +902,7 @@ END SUBROUTINE LoadBalancingAMR
 ! IMPLICIT NONE
 
 ! REAL,POINTER :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-! INTEGER :: DataSize, nElemsNew, PP, nVar
+! INTEGER :: DataSize, nElemsNew, PP_N, PP_nVar
 ! ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
 ! ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
 ! ! REAL, POINTER :: UP(:,:,:,:,:)
@@ -916,10 +915,10 @@ END SUBROUTINE LoadBalancingAMR
 ! ENDIF
 ! ! UP=>U
 ! ! Elem_xGPP=>Elem_xGP
-! BalanceData%nVar = size(U(:,0,0,0,1))
-! BalanceData%PP = size(U(1,:,0,0,1))-1
-! nVar = BalanceData%nVar
-! PP = BalanceData%PP
+! BalanceData%PP_nVar = size(U(:,0,0,0,1))
+! BalanceData%PP_N = size(U(1,:,0,0,1))-1
+! PP_nVar = BalanceData%PP_nVar
+! PP_N = BalanceData%PP_N
 ! BalanceData%nElems = size(U(1,0,0,0,:))
 ! BalanceData%DataSize=INT(sizeof(U(:,:,:,:,1)) + sizeof(Elem_xGP(:,:,:,:,1)))
 
@@ -931,15 +930,15 @@ END SUBROUTINE LoadBalancingAMR
 
 ! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
 ! nElemsNew=BalanceData%nElems;
-! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
-! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
+! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[PP_nVar,PP_N+1,PP_N+1,PP_N+1,nElemsNew])
+! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP_N+1,PP_N+1,PP_N+1,nElemsNew])
 ! SDEALLOCATE(Elem_xGP)
 ! SDEALLOCATE(U)
-! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
-! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+! ALLOCATE(Elem_xGP(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew))
+! Elem_xGP(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew) = Elem_xGP_New(1:3,1:PP_N+1,1:PP_N+1,1:PP_N+1,1:nElemsNew)
 
-! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
-! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+! ALLOCATE(U(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew))
+! U(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew) = U_new(1:PP_nVar,1:PP_N+1,1:PP_N+1,1:PP_N+1,1:nElemsNew)
 
 ! CALL free_balance_memory(C_LOC(BalanceData))
 
@@ -961,17 +960,15 @@ SUBROUTINE SaveMesh(FileString)
   ! MODULES
   USE MOD_AMR_Vars
   USE MOD_P4EST
+  USE MOD_PreProc,            ONLY: PP_N
   USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP
-  ! DEbug
-  USE MOD_Mesh_vars,           ONLY: ElemToSide, SideToElem, nSides,MortarType, MortarInfo
-  !EndDebug
   USE MOD_Globals,             only: myrank,nProcessors, MPIRoot, UNIT_stdOut
   USE MOD_IO_HDF5
   USE MOD_HDF5_Output,            only: WriteHeader, WriteAttribute, WriteArray, GatheredWriteArray
-  USE MOD_DG_Vars,            ONLY: U
-  USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU, NodeTypeGL
+  USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
   USE MOD_Interpolation,      ONLY: GetVandermonde
   USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
+
   ! USE MOD_Mesh_Vars,           ONLY:Vdm_GLN_N
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
@@ -988,16 +985,13 @@ SUBROUTINE SaveMesh(FileString)
   INTEGER          :: iElem, nIndexSide, mpisize, FirstElemInd, LastElemInd, nLocalIndSides, nGlobalIndSides, OffsetIndSides
   CHARACTER(LEN=255)             :: FileName,TypeString
   INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
-  INTEGER(HSIZE_T)               :: Dimsf(5)
   INTEGER(HSIZE_T)               :: DimsM(2)
   CHARACTER(LEN=255), ALLOCATABLE:: BCNames(:)
-  INTEGER, ALLOCATABLE           :: BCMapping(:),BCType(:,:)
-  INTEGER                        :: offset = 0, PP, i,j,k, index
+  INTEGER, ALLOCATABLE           :: BCType(:,:)
+  INTEGER                        :: i,j,k, index
   REAL,ALLOCATABLE               :: NodeCoords(:,:)
   REAL,ALLOCATABLE               :: NodeCoordsTMP(:,:,:,:)
-  REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:), Vdm_GLN_EQN(:,:)
-  REAL,ALLOCATABLE               :: Vdm_N_GLN(    :   ,:)
-  REAL,ALLOCATABLE                :: XGL_N(      :,  :,:,:)          ! mapping X(xi) P\in N
+  REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:)
 
   ! REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
   ! CHARACTER(LEN=255)             :: MeshFile255
@@ -1038,11 +1032,11 @@ SUBROUTINE SaveMesh(FileString)
 
   ElInfoF(3,:) = ElInfoF(3,:) + OffsetSideArrIndexMPI(Myrank)
   ElInfoF(4,:) = ElInfoF(4,:) + OffsetSideArrIndexMPI(Myrank)
-  ! IF(nVar_Avg.GT.0)THEN
+  ! IF(PP_nVar_Avg.GT.0)THEN
   ! FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_TimeAvg',OutputTime))//'.h5'
 ! 1. Create Mesh file
   !Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
-  PP = size(U(1,:,1,1,1))-1
+
   IF(MPIRoot)THEN
    ! Create file
    FileName=TRIM(FileString)//'.h5'
@@ -1051,10 +1045,10 @@ SUBROUTINE SaveMesh(FileString)
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
     ! CALL WriteHeader(TRIM(TypeString),File_ID)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
-    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=PP)
+    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=PP_N)
     CALL WriteAttribute(File_ID,'nElems',1,IntScalar=nGlobalElems)
     CALL WriteAttribute(File_ID,'nSides',1,IntScalar=OffsetSideArrIndexMPI(mpisize))
-    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(PP+1)*(PP+1)*(PP+1))
+    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1))
     CALL WriteAttribute(File_ID,'nUniqueSides',1,IntScalar=OffsetSideMPI(mpisize))
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
@@ -1079,7 +1073,7 @@ SUBROUTINE SaveMesh(FileString)
 
 
     ! ALLOCATE(NodeCoords)
-    DimsM=(/3, nGlobalElems*(PP+1)*(PP+1)*(PP+1)/)
+    DimsM=(/3, nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)
     HDF5DataType=H5T_NATIVE_DOUBLE
     CALL H5DCREATE_F(File_ID,'NodeCoords', HDF5DataType, FileSpace, DSet_ID, iError)
@@ -1088,7 +1082,7 @@ SUBROUTINE SaveMesh(FileString)
     CALL H5SCLOSE_F(FileSpace, iError)  
 
     ! CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=5)
-  !   CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',nVar_Avg,PP_N,VarNamesAvg,MeshFileName,OutputTime,FutureTime)
+  !   CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',PP_nVar_Avg,PP_N,VarNamesAvg,MeshFileName,OutputTime,FutureTime)
   !   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
   !   CALL WriteAttribute(File_ID,'AvgTime',1,RealScalar=dtAvg)
 
@@ -1145,11 +1139,11 @@ SUBROUTINE SaveMesh(FileString)
   ! CALL CloseDataFile()
 
 DO iElem = 1, nElems
-  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(PP+1)*(PP+1)*(PP+1)
-  ElInfoF(6,iElem) = (iElem + offsetElem)*(PP+1)*(PP+1)*(PP+1)
+  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(PP_N+1)*(PP_N+1)*(PP_N+1)
+  ElInfoF(6,iElem) = (iElem + offsetElem)*(PP_N+1)*(PP_N+1)*(PP_N+1)
 ENDDO
 
-IF (PP .EQ. 1) THEN
+IF (PP_N .EQ. 1) THEN
   ElInfoF(1,:)=108
 ENDIF
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
@@ -1173,31 +1167,31 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         offset=    (/0   ,OffsetIndSides  /),&
                         collective=.TRUE.,IntArray=SiInfoF)
 
-ALLOCATE(NodeCoords(3,nElems*(PP+1)*(PP+1)*(PP+1)))
-ALLOCATE(NodeCoordsTMP(3,0:PP,0:PP,0:PP))
-ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP,0:PP))
-! ALLOCATE(Vdm_GLN_EQN(0:PP,0:PP))
-! ALLOCATE(Vdm_N_GLN(0:PP,0:PP))
-! ALLOCATE(XGL_N(3,  0:PP,0:PP,0:PP))          
+ALLOCATE(NodeCoords(3,nElems*(PP_N+1)*(PP_N+1)*(PP_N+1)))
+ALLOCATE(NodeCoordsTMP(3,0:PP_N,0:PP_N,0:PP_N))
+ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP_N,0:PP_N))
+! ALLOCATE(Vdm_GLN_EQN(0:PP_N,0:PP_N))
+! ALLOCATE(Vdm_N_GLN(0:PP_N,0:PP_N))
+! ALLOCATE(XGL_N(3,  0:PP_N,0:PP_N,0:PP_N))          
     
     ! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
-! CALL GetVandermonde(    PP   ,NodeTypeGL , PP    ,NodeTypeVISU, Vdm_GLN_EQN , modal=.FALSE.)
+! CALL GetVandermonde(    PP_N   ,NodeTypeGL , PP_N    ,NodeTypeVISU, Vdm_GLN_EQN , modal=.FALSE.)
 
-! CALL GetVandermonde(    PP   ,NodeType , PP    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
+! CALL GetVandermonde(    PP_N   ,NodeType , PP_N    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
 
-CALL GetVandermonde(PP, NodeType, PP,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
+CALL GetVandermonde(PP_N, NodeType, PP_N,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
     
 
 index = 1
 ! print *, "index = ", index
 DO iElem=1,nElems
  
-  CALL ChangeBasis3D(3,PP,PP,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP,PP,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP,PP,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
-  DO k=0,PP
-    DO j=0,PP
-      DO i=0,PP
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
+  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
+  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
+  DO k=0,PP_N
+    DO j=0,PP_N
+      DO i=0,PP_N
 
         NodeCoords(:,index) = NodeCoordsTMP(:,i,j,k)
         index = index + 1
@@ -1207,9 +1201,9 @@ DO iElem=1,nElems
 ENDDO
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         DataSetName='NodeCoords', rank=2,  &
-                        nValGlobal=(/3,nGlobalElems*(PP+1)*(PP+1)*(PP+1)/),&
-                        nVal=      (/3,nElems*(PP+1)*(PP+1)*(PP+1)/),&
-                        offset=    (/0   ,offSetElem*(PP+1)*(PP+1)*(PP+1)/),&
+                        nValGlobal=(/3,nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
+                        nVal=      (/3,nElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
+                        offset=    (/0   ,offSetElem*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
                         collective=.TRUE.,RealArray=NodeCoords)
 
 SDEALLOCATE(NodeCoords)
