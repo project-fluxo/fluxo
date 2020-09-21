@@ -757,7 +757,7 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
     p4est->user_pointer = NULL;
     p4est_savef_data->nLocalSides = nLocalSides;
     //  2. Count Global Number of Sides (Array[mpisize])
-    p4est_savef_data->OffsetSideMPI = (int *) malloc(p4est->mpisize * sizeof(int));
+    p4est_savef_data->OffsetSideMPI = (int *) malloc((p4est->mpisize + 1) * sizeof(int));
     p4est->user_pointer = p4est_savef_data;
     count_parallel_sides(p4est);
     p4est->user_pointer = NULL;
@@ -829,7 +829,7 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
                   NULL);
 
 
-    p4est_savef_data->OffsetSideArrIndexMPI = (int *) malloc(p4est->mpisize * sizeof(int));
+    p4est_savef_data->OffsetSideArrIndexMPI = (int *) malloc((p4est->mpisize + 1) * sizeof(int));
     p4est_savef_data->nSidesArrIndex = p4est_savef_data->ElemInfo[(p4est->local_num_quadrants - 1) * 6 + (4 - 1)];
 
     p4est->user_pointer = (void *) p4est_savef_data;
