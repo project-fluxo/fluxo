@@ -139,7 +139,7 @@ CONTAINS
         USE MOD_PreProc
         USE MOD_DG_Vars, ONLY : U
         USE MOD_Mesh_Vars, ONLY : Elem_xGP, nElems
-        USE MOD_Equation_Vars, ONLY : kappam1, skappam1, PrimToCons,skappa, kappa, IniExactFunc
+        USE MOD_Equation_Vars, ONLY :  IniExactFunc
         USE MOD_Equation, ONLY : ExactFunc, FillIni
         USE MOD_Restart_Vars, only: DoRestart
         USE MOD_AMR, ONLY : RunAMR

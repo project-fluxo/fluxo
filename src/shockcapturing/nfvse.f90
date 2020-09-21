@@ -49,6 +49,7 @@ module MOD_NFVSE
   private
   public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE
   public :: DefineParametersNFVSE
+  public :: InitNFVSEAfterAdaptation
 #if NFVSE_CORR
   public :: Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
@@ -100,7 +101,7 @@ contains
     real, parameter :: half = 0.5d0
     real :: sumWm1
     !--------------------------------------------------------------------------------------------------------------------------------
-    
+     SDEALLOCATE(SubCellMetrics)
     ! Get parameters
     ! --------------
     
@@ -122,10 +123,72 @@ contains
     end select
     
     ! Allocate storage
+    allocate ( sWGP(0:PP_N) )
+    
     allocate ( SubCellMetrics(nElems) )
     call SubCellMetrics % construct(PP_N)
     
-    allocate ( sWGP(0:PP_N) )
+    call ComputeSubcellMetrics()
+    
+    ! Compute the inverse of the quadrature weights (sub-cell dimensions)
+    sWGP = 1.d0 / wGP
+    
+    ! Compute variables for 2nd order FV
+    ! **********************************
+    select case(SubFVMethod)
+    case(2,3)
+      allocate ( U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems) )
+      allocate ( sdxR(1:PP_N-1) )
+      allocate ( sdxL(1:PP_N-1) )
+      allocate ( rR  (1:PP_N-1) )
+      allocate ( rL  (1:PP_N-1) )
+      
+      sumWm1 = wGP(0) - 1.
+      do i=1, PP_N-1
+        ! dx calculation (with nodes position)
+        ! ------------------------------------
+        
+        sdxR(i) = 1.0/(xGP(i+1)-xGP(i))
+        sdxL(i) = 1.0/(xGP(i)-xGP(i-1))
+        
+        ! r calculation
+        ! -------------
+        rL(i) = sumWm1 - xGP(i)
+        sumWm1 = sumWm1 + wGP(i)
+        rR(i) = sumWm1 - xGP(i)
+      end do
+    end select
+#if NFVSE_CORR
+    allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+    allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+    allocate ( alpha_old(nElems) )
+    alpha_old = 0.
+#endif /*NFVSE_CORR*/
+    
+#if MPI
+    allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
+    
+    if (ReconsBoundaries) then
+      allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
+    end if
+#endif
+  end subroutine InitNFVSE
+!===================================================================================================================================
+!> Computes the subcell metrics for one element
+!===================================================================================================================================
+  subroutine ComputeSubcellMetrics()
+    USE MOD_Globals
+    use MOD_NFVSE_Vars         , only: SubCellMetrics
+    use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+    use MOD_Interpolation_Vars , only: wGP
+    use MOD_DG_Vars            , only: D
+    implicit none
+    !-local-variables-----------------------------
+    integer :: iElem, i, j, k,l,m         !DOF counters
+    real :: Metrics_fCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) xi metrics
+    real :: Metrics_gCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) eta metrics
+    real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
+    !---------------------------------------------
     
     ! Compute inner normal and tangent vectors
     do iElem=1, nElems
@@ -226,50 +289,27 @@ contains
       
     end do !iElem
     
-    ! Compute the inverse of the quadrature weights (sub-cell dimensions)
-    sWGP = 1.d0 / wGP
+  end subroutine ComputeSubcellMetrics
+!===================================================================================================================================
+!> Reinitializes all variables that need reinitialization after the h-adaptation
+!===================================================================================================================================
+  subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
+    USE MOD_Globals
+    use MOD_NFVSE_Vars         , only: SubCellMetrics
+    use MOD_Mesh_Vars          , only: nElems
+    implicit none
+    !-arguments-----------------------------------
+    integer, intent(in) :: ChangeElem(8,nElems)
+    integer, intent(in) :: nElemsOld
+    !---------------------------------------------
     
-    ! Compute variables for 2nd order FV
-    ! **********************************
-    select case(SubFVMethod)
-    case(2,3)
-      allocate ( U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems) )
-      allocate ( sdxR(1:PP_N-1) )
-      allocate ( sdxL(1:PP_N-1) )
-      allocate ( rR  (1:PP_N-1) )
-      allocate ( rL  (1:PP_N-1) )
-      
-      sumWm1 = wGP(0) - 1.
-      do i=1, PP_N-1
-        ! dx calculation (with nodes position)
-        ! ------------------------------------
-        
-        sdxR(i) = 1.0/(xGP(i+1)-xGP(i))
-        sdxL(i) = 1.0/(xGP(i)-xGP(i-1))
-        
-        ! r calculation
-        ! -------------
-        rL(i) = sumWm1 - xGP(i)
-        sumWm1 = sumWm1 + wGP(i)
-        rR(i) = sumWm1 - xGP(i)
-      end do
-    end select
-#if NFVSE_CORR
-    allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( alpha_old(nElems) )
-    alpha_old = 0.
-#endif /*NFVSE_CORR*/
+    ! Reallocate storage if needed
+    SDEALLOCATE(SubCellMetrics)
+    allocate ( SubCellMetrics(nElems) )
+    call SubCellMetrics % construct(PP_N)
     
-#if MPI
-    allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
-    
-    if (ReconsBoundaries) then
-      allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
-    end if
-#endif
-  end subroutine InitNFVSE
-  
+    call ComputeSubcellMetrics()
+  end subroutine InitNFVSEAfterAdaptation
 !===================================================================================================================================
 !> Computes the "volume integral": Spatial contribution to Ut by the subcell finite volumes
 !> Attention 1: 1/J(i,j,k) is not yet accounted for

@@ -478,7 +478,7 @@ DO iBC=1,nBCs
           
           ! get pressure from refstate if subsonic
           pres = KappaM1*( U_loc(5) - 0.5 *(U_loc(2)**2 + U_loc(3)**2 + U_loc(4)**2)/U_loc(1) )
-          a    = sqrt(Kappa*p/U_loc(1))
+          a    = sqrt(Kappa*pres/U_loc(1))
           normalMachNo = ABS(U_Face_loc(2,p,q)/(a*U_loc(1)))
           if (normalMachNo<=1.0) then
             CALL ConsToPrim(Prim(1:5),U_Face_loc(:,p,q))

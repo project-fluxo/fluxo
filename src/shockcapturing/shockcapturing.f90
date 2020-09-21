@@ -71,6 +71,7 @@ public :: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 PUBLIC :: FinalizeShockCapturing
 public :: GetPressure ! TODO: Move this to equation
+public :: InitShockCapturingAfterAdapt
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines
 #if PP_Indicator_Var==0
@@ -150,6 +151,10 @@ integer :: i,j,k    ! DOF counters
 integer :: eID      ! Element counter
 real    :: conMetrics(3,3)  ! Contravariant metric tensor in each element
 !============================================================================================================================
+SDEALLOCATE(alpha)
+SDEALLOCATE(alpha_Master)
+SDEALLOCATE(alpha_Slave)
+
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
   SWRITE(*,*) "InitShockCapturing not ready to be called or already called."
   RETURN
@@ -262,6 +267,45 @@ ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitShockCapturing
+!===================================================================================================================================
+!> Reinitializes all variables that need reinitialization after the h-adaptation
+!> ATTENTION: At the moment only for NFVSE
+!===================================================================================================================================
+SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld)
+  use MOD_NFVSE               , only: InitNFVSEAfterAdaptation
+  use MOD_NFVSE_Vars          , only: TimeRelFactor
+  USE MOD_ShockCapturing_Vars
+  USE MOD_ReadInTools
+  USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide
+  implicit none
+  !-arguments-----------------------------------
+  integer, intent(in) :: ChangeElem(8,nElems)
+  integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld
+  !-local-variables-----------------------------
+  integer          :: eID
+  real,allocatable,target :: alphaNew(:)
+  !---------------------------------------------
+  
+#if SHOCK_NFVSE
+  
+! Reallocate storage
+! ------------------
+  SDEALLOCATE(alpha_Master)
+  allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
+  SDEALLOCATE(alpha_Slave)
+  allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
+  SDEALLOCATE(alpha)
+  allocate(alpha(nElems))
+  
+! Initialize values
+! -----------------
+  alpha_Master = 0.0
+  alpha_Slave  = 0.0
+  alpha = 0.0
+  
+  call InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
+#endif /*SHOCK_NFVSE*/
+END SUBROUTINE InitShockCapturingAfterAdapt
 
 !============================================================================================================================
 !> Smallest eigenvalue for symmetric 3x3 matrix (move to some other place...)

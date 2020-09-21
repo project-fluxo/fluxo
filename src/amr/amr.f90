@@ -196,7 +196,7 @@ END SUBROUTINE InitAMR_Connectivity
 
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
-  USE MOD_Analyze_Vars,        ONLY: ElemVol
+  USE MOD_Analyze_Vars,       ONLY: ElemVol
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
@@ -216,6 +216,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
 #endif /* PARABOLIC */
+#if SHOCKCAPTURE
+  use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
+#endif /*SHOCKCAPTURE*/
   USE, INTRINSIC :: ISO_C_BINDING
 ! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
@@ -566,6 +569,10 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
 
   CALL CalcMetrics((/0/))
+  
+#if SHOCKCAPTURE
+  call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld)
+#endif /*SHOCKCAPTURE*/
 
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
