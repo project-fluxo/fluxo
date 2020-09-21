@@ -47,6 +47,7 @@ CONTAINS
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
         USE MOD_Indicators,             ONLY : ShockSensor_PerssonPeraire
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
+        USE MOD_P4EST,                  ONLY: SaveP4est
         ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE
         ! SAVE
@@ -84,10 +85,8 @@ CONTAINS
                  ElemToRefineAndCoarse(iElem) = MinLevel
              END IF
         ENDDO
-      
-    !! < ----- Commented for the production ----- >
+        !! < ----- Commented for the production ----- >
 
-    !    CALL EXIT()
         ! IF (Count .EQ. 0 ) THEN
             ! COUNT = 1; 
         ! DO iElem = 1,nElems
@@ -123,7 +122,8 @@ CONTAINS
             ! ENDIF
         ! ENDIF
         ! CALL EXIT()
-      
+        ! ElemToRefineAndCoarse(1) = 1 
+
         CALL RunAMR(ElemToRefineAndCoarse);
         ! IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
         !     COUNT = 1; 
@@ -131,7 +131,11 @@ CONTAINS
         !     IF (MPIRoot) PRINT *, "InitData"
         ! ENDIF
         Deallocate(ElemToRefineAndCoarse)
-      
+    !     PRINT *, "REFINED"
+    !     CALL SaveMesh("new_mesh.h5")
+    !     Call SaveP4est("new.p4est")
+
+    !    CALL EXIT()
        
 
     END SUBROUTINE ShockCapturingAMR
