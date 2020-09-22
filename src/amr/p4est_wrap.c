@@ -2129,6 +2129,11 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
     // printf("data->Elem_xGP_old= %p \n", data->U_old);
     p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 10, data->U_new, data->U_old,
                          data->DataSize);
+#if SHOCK_NFVSE
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 10, data->Alpha_new, data->Alpha_old,
+                         sizeof(double));
+#endif /*SHOCK_NFVSE*/
+
     //  printf("data->GPSize= %d \n", data->GPSize);
     // int a = MPI_Barrier(p4est->mpicomm);
     p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 2, data->Elem_xGP_new,

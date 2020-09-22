@@ -784,11 +784,14 @@ SUBROUTINE LoadBalancingAMR()
   USE MOD_P4EST
   USE MOD_DG_Vars,            ONLY: U
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
+#if SHOCK_NFVSE
+  use MOD_ShockCapturing_Vars, only: alpha
+#endif /*SHOCK_NFVSE*/
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
-  REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
+  REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:), Alpha_New(:)
   INTEGER :: PP, nVar
   !============================================================================================================================
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
@@ -805,8 +808,9 @@ SUBROUTINE LoadBalancingAMR()
   
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
-  
-  
+#if SHOCK_NFVSE
+  BalanceData%AlphaOld_Ptr = C_LOC(alpha)
+#endif /*SHOCK_NFVSE*/
   
   
   
@@ -815,13 +819,20 @@ SUBROUTINE LoadBalancingAMR()
   ALLOCATE(U_New(PP_nVar,0:PP,0:PP,0:PP,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
   ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,BalanceData%nElems))
- 
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
+  
+#if SHOCK_NFVSE
+  ALLOCATE(Alpha_New(BalanceData%nElems))
+  BalanceData%AlphaNew_Ptr = C_LOC(Alpha_New)
+#endif /*SHOCK_NFVSE*/
  
   CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
 
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
+#if SHOCK_NFVSE
+  CALL MOVE_ALLOC(Alpha_New, alpha)
+#endif /*SHOCK_NFVSE*/
   CALL p4est_ResetElementNumber(P4EST_PTR)
   
   ! CALL RunAMR()

@@ -292,6 +292,7 @@ contains
   end subroutine ComputeSubcellMetrics
 !===================================================================================================================================
 !> Reinitializes all variables that need reinitialization after the h-adaptation
+!> ATTENTION: The subcell metrics are always recomputed, as the metrics of the high-order DG elements
 !===================================================================================================================================
   subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
     USE MOD_Globals
@@ -304,9 +305,11 @@ contains
     !---------------------------------------------
     
     ! Reallocate storage if needed
-    SDEALLOCATE(SubCellMetrics)
-    allocate ( SubCellMetrics(nElems) )
-    call SubCellMetrics % construct(PP_N)
+    if (nElems /= nElemsOld) then
+      SDEALLOCATE(SubCellMetrics)
+      allocate ( SubCellMetrics(nElems) )
+      call SubCellMetrics % construct(PP_N)
+    end if
     
     call ComputeSubcellMetrics()
   end subroutine InitNFVSEAfterAdaptation

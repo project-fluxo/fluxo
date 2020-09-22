@@ -84,6 +84,10 @@ TYPE p4est_balance_datav2
     TYPE(C_PTR) ::  ElemxGPold_Ptr; ! old Array ElemxGP
     TYPE(C_PTR) ::  Unew_Ptr; !new U
     TYPE(C_PTR) ::  Uold_Ptr; !old U 
+#if SHOCK_NFVSE
+    TYPE(C_PTR) ::  AlphaNew_Ptr; !new U
+    TYPE(C_PTR) ::  AlphaOld_Ptr; !old U 
+#endif /*SHOCK_NFVSE*/
 END TYPE p4est_balance_datav2
 
 TYPE p4est_mpi_data

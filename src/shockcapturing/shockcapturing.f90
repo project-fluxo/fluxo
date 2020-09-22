@@ -290,18 +290,43 @@ SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlav
   
 ! Reallocate storage
 ! ------------------
-  SDEALLOCATE(alpha_Master)
-  allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
-  SDEALLOCATE(alpha_Slave)
-  allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
-  SDEALLOCATE(alpha)
-  allocate(alpha(nElems))
+  
+  if ( (firstSlaveSide .ne. firstSlaveSideOld) .or. (LastSlaveSide .ne. LastSlaveSideOld) ) then
+    SDEALLOCATE(alpha_Master)
+    allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
+    SDEALLOCATE(alpha_Slave)
+    allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
+  end if
   
 ! Initialize values
 ! -----------------
   alpha_Master = 0.0
   alpha_Slave  = 0.0
-  alpha = 0.0
+  
+  if (TimeRelFactor < alpha_min/alpha_max) then
+    ! The time relaxation has no effect, alpha can be set to 0
+    if (nElems /= nElemsOld) then
+      SDEALLOCATE(alpha)
+      allocate(alpha(nElems))
+    end if
+    alpha = 0.0
+  else
+    allocate ( alphaNew(nElems) )
+    ! Set with old values
+    do eID=1, nElems
+      if (ChangeElem(1,eID) < 0) then
+        ! refinement
+        alphaNew(eID) = alpha(-ChangeElem(1,eID))
+      elseif (ChangeElem(2,eID) > 0) then
+        ! coarsening
+        alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
+      else
+        ! simple reasignment
+        alphaNew(eID) = alpha(ChangeElem(1,eID))
+      endif
+    end do
+    call move_alloc(alphaNew,alpha)
+  end if
   
   call InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
 #endif /*SHOCK_NFVSE*/

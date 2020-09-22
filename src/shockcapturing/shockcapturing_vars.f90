@@ -48,7 +48,7 @@ real, allocatable :: sigmamin_Mh   (:,:,:,:)   ! Minimum eigenvalue of Möller's
 #endif /*SHOCK_LOC_ARTVISC*/
 
 ! For NFVSE
-real, allocatable :: alpha(:)                             !< Element-wise blending function (modified every time Ut is computed)
+real, allocatable, target :: alpha(:)                             !< Element-wise blending function (modified every time Ut is computed)
 real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
 real, allocatable :: alpha_Master(:)                      !< Blending function on master sides
 real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides

@@ -158,7 +158,9 @@ CALL InitMPIvars()
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
-
+#if SHOCKCAPTURE
+CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
 #if USE_AMR
 CALL ShockCapturingAMR()
 #endif
@@ -178,9 +180,7 @@ CALL InitTimeDisc()
 CALL Restart()
 CALL InitAnalyze()
 CALL InitTestcase()
-#if SHOCKCAPTURE
-CALL InitShockCapturing()
-#endif /*SHOCKCAPTURE*/
+
 #if POSITIVITYPRES
 CALL InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
