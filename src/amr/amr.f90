@@ -961,7 +961,7 @@ SUBROUTINE SaveMesh(FileString)
   USE MOD_AMR_Vars
   USE MOD_P4EST
   USE MOD_PreProc,            ONLY: PP_N
-  USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP
+  USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP, NGeo
   USE MOD_Globals,             only: myrank,nProcessors, MPIRoot, UNIT_stdOut
   USE MOD_IO_HDF5
   USE MOD_HDF5_Output,            only: WriteHeader, WriteAttribute, WriteArray, GatheredWriteArray
@@ -992,12 +992,15 @@ SUBROUTINE SaveMesh(FileString)
   REAL,ALLOCATABLE               :: NodeCoords(:,:)
   REAL,ALLOCATABLE               :: NodeCoordsTMP(:,:,:,:)
   REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:)
+  integer                        :: NGeo_new
 
   ! REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
   ! CHARACTER(LEN=255)             :: MeshFile255
   !============================================================================================================================
   ! 
-
+  
+  ! Set NGeo of the mesh to save
+  NGeo_new = min(PP_N,NGeo)
 
   
   IF (.NOT. UseAMR) RETURN;
@@ -1045,10 +1048,10 @@ SUBROUTINE SaveMesh(FileString)
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
     ! CALL WriteHeader(TRIM(TypeString),File_ID)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
-    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=PP_N)
+    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=NGeo_new)
     CALL WriteAttribute(File_ID,'nElems',1,IntScalar=nGlobalElems)
     CALL WriteAttribute(File_ID,'nSides',1,IntScalar=OffsetSideArrIndexMPI(mpisize))
-    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1))
+    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1))
     CALL WriteAttribute(File_ID,'nUniqueSides',1,IntScalar=OffsetSideMPI(mpisize))
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
@@ -1073,7 +1076,7 @@ SUBROUTINE SaveMesh(FileString)
 
 
     ! ALLOCATE(NodeCoords)
-    DimsM=(/3, nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/)
+    DimsM=(/3, nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)
     HDF5DataType=H5T_NATIVE_DOUBLE
     CALL H5DCREATE_F(File_ID,'NodeCoords', HDF5DataType, FileSpace, DSet_ID, iError)
@@ -1139,11 +1142,11 @@ SUBROUTINE SaveMesh(FileString)
   ! CALL CloseDataFile()
 
 DO iElem = 1, nElems
-  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(PP_N+1)*(PP_N+1)*(PP_N+1)
-  ElInfoF(6,iElem) = (iElem + offsetElem)*(PP_N+1)*(PP_N+1)*(PP_N+1)
+  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)
+  ElInfoF(6,iElem) = (iElem + offsetElem)*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)
 ENDDO
 
-IF (PP_N .EQ. 1) THEN
+IF (NGeo_new .EQ. 1) THEN
   ElInfoF(1,:)=108
 ENDIF
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
@@ -1167,9 +1170,9 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         offset=    (/0   ,OffsetIndSides  /),&
                         collective=.TRUE.,IntArray=SiInfoF)
 
-ALLOCATE(NodeCoords(3,nElems*(PP_N+1)*(PP_N+1)*(PP_N+1)))
-ALLOCATE(NodeCoordsTMP(3,0:PP_N,0:PP_N,0:PP_N))
-ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP_N,0:PP_N))
+ALLOCATE(NodeCoords(3,nElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)))
+ALLOCATE(NodeCoordsTMP(3,0:NGeo_new,0:NGeo_new,0:NGeo_new))
+ALLOCATE(Vdm_FromNodeType_toNVisu(0:NGeo_new,0:PP_N))
 ! ALLOCATE(Vdm_GLN_EQN(0:PP_N,0:PP_N))
 ! ALLOCATE(Vdm_N_GLN(0:PP_N,0:PP_N))
 ! ALLOCATE(XGL_N(3,  0:PP_N,0:PP_N,0:PP_N))          
@@ -1179,19 +1182,19 @@ ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP_N,0:PP_N))
 
 ! CALL GetVandermonde(    PP_N   ,NodeType , PP_N    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
 
-CALL GetVandermonde(PP_N, NodeType, PP_N,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
+CALL GetVandermonde(PP_N, NodeType, NGeo_new,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
     
 
 index = 1
 ! print *, "index = ", index
 DO iElem=1,nElems
  
-  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
+  CALL ChangeBasis3D(3,PP_N,NGeo_new,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
   ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
   ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
-  DO k=0,PP_N
-    DO j=0,PP_N
-      DO i=0,PP_N
+  DO k=0,NGeo_new
+    DO j=0,NGeo_new
+      DO i=0,NGeo_new
 
         NodeCoords(:,index) = NodeCoordsTMP(:,i,j,k)
         index = index + 1
@@ -1201,9 +1204,9 @@ DO iElem=1,nElems
 ENDDO
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         DataSetName='NodeCoords', rank=2,  &
-                        nValGlobal=(/3,nGlobalElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
-                        nVal=      (/3,nElems*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
-                        offset=    (/0   ,offSetElem*(PP_N+1)*(PP_N+1)*(PP_N+1)/),&
+                        nValGlobal=(/3,nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
+                        nVal=      (/3,nElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
+                        offset=    (/0   ,offSetElem*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
                         collective=.TRUE.,RealArray=NodeCoords)
 
 SDEALLOCATE(NodeCoords)
