@@ -128,7 +128,7 @@ USE MOD_Globals
 USE MOD_PreProc
 USE MOD_ShockCapturing_Vars
 USE MOD_ReadInTools
-USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh
+USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh, firstMortarInnerSide
 USE MOD_Interpolation_Vars,ONLY:xGP,InterpolationInitIsDone
 #if SHOCK_NFVSE
 use MOD_NFVSE             , only: InitNFVSE
@@ -211,7 +211,7 @@ end do !eID
 
 #if SHOCK_NFVSE
 allocate ( alpha(nElems) )
-allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
+allocate ( alpha_Master(firstMortarInnerSide:nSides ) )
 allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
 alpha        = 0.d0
 alpha_Master = 0.d0
@@ -271,16 +271,16 @@ END SUBROUTINE InitShockCapturing
 !> Reinitializes all variables that need reinitialization after the h-adaptation
 !> ATTENTION: At the moment only for NFVSE
 !===================================================================================================================================
-SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld)
+SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
   use MOD_NFVSE               , only: InitNFVSEAfterAdaptation
   use MOD_NFVSE_Vars          , only: TimeRelFactor
   USE MOD_ShockCapturing_Vars
   USE MOD_ReadInTools
-  USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide
+  USE MOD_Mesh_Vars         ,ONLY: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
   implicit none
   !-arguments-----------------------------------
   integer, intent(in) :: ChangeElem(8,nElems)
-  integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld
+  integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld
   !-local-variables-----------------------------
   integer          :: eID
   real,allocatable,target :: alphaNew(:)
@@ -291,9 +291,11 @@ SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlav
 ! Reallocate storage
 ! ------------------
   
-  if ( (firstSlaveSide .ne. firstSlaveSideOld) .or. (LastSlaveSide .ne. LastSlaveSideOld) ) then
+  if ( (firstMortarInnerSideOld .ne. firstMortarInnerSide) .or. (nSides .ne. nSidesOld) ) then
     SDEALLOCATE(alpha_Master)
-    allocate ( alpha_Master(firstSlaveSide:LastSlaveSide) ) ! Only allocating on slave sides (no BCs needed, and mortars not considered yet -TODO!)
+    allocate ( alpha_Master(firstMortarInnerSide:nSides ) )
+  end if
+  if ( (firstSlaveSide .ne. firstSlaveSideOld) .or. (LastSlaveSide .ne. LastSlaveSideOld) ) then
     SDEALLOCATE(alpha_Slave)
     allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
   end if

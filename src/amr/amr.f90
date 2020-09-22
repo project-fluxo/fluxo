@@ -206,7 +206,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
-  USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems!, firstMortarInnerSide, lastMortarInnerSide
+  USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
   USE MOD_MPI_Vars,           ONLY: NbProc , nMPISides_MINE_Proc, nMPISides_YOUR_Proc, offsetMPISides_YOUR, offsetMPISides_MINE 
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs, offsetElemMPI
@@ -229,7 +229,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
-  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, doLBalance
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld, doLBalance
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -244,6 +244,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   nSidesOld = nSides
   LastSlaveSideOld = LastSlaveSide;
   firstSlaveSideOld = firstSlaveSide;
+  firstMortarInnerSideOld = firstMortarInnerSide
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
     CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
   ENDIF 
@@ -571,7 +572,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   CALL CalcMetrics((/0/))
   
 #if SHOCKCAPTURE
-  call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld)
+  call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
 
   call free_data_memory(DataPtr)
