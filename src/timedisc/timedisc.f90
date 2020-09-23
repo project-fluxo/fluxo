@@ -156,7 +156,7 @@ USE MOD_DG_Vars             ,ONLY: U
 USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
 USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR, nDoAMR
 
-USE MOD_AMR                 ,ONLY: WriteStateAMR
+USE MOD_AMR                 ,ONLY: WriteStateAMR, InitialAMRRefinement
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -199,17 +199,10 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
+
+! Impose initial AMR refinement
 #if USE_AMR
-DO ITER = 1,MaxLevel
-  IF (UseAMR) THEN 
-    ! doAMR = doAMR + 1;
-    ! IF (doAMR .EQ. 1) THEN
-    ! doAMR = 0;
-    CALL ShockCapturingAMR()
-    CALL InitData()
-    ! ENDIF
-  ENDIF 
-ENDDO
+call InitialAMRRefinement()
 #endif /*USE_AMR*/
 
 ! Write the state at time=0, i.e. the initial condition

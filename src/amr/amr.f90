@@ -58,6 +58,7 @@ PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
 PUBLIC::DefineParametersAMR
 PUBLIC::LoadBalancingAMR
+PUBLIC::InitialAMRRefinement
 ! PUBLIC::LoadBalancingAMRold
 ! INTEGER :: COUNT =0 
 CONTAINS
@@ -93,6 +94,10 @@ SUBROUTINE DefineParametersAMR()
                                                   '1')
  CALL prms%CreateIntOption(  'nDoAMR'       ,     "Time-step interval to call the AMR routines.",&
                                                   '1')
+ CALL prms%CreateIntOption(  'InitialRefinement', "Initial refinement to be used "//&
+                                                  "  0: Use the custom indicator"//&
+                                                  "  1: Refine the elements in the sphere with r=0.2",&
+                                                  '0')
 END SUBROUTINE DefineParametersAMR
 
 
@@ -146,6 +151,7 @@ SUBROUTINE InitAMR()
     CoarseVal = GetREal('CoarseVal',"0.")
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
     nDoAMR = GetINT('nDoAMR',"1")
+    InitialRefinement = GETINT('InitialRefinement','0')
     
     CALL InitIndicator()
     RET=P4EST_INIT(MPI_COMM_WORLD); 
@@ -173,6 +179,67 @@ SUBROUTINE InitAMR()
     
   
 END SUBROUTINE InitAMR
+
+subroutine InitialAMRRefinement()
+  USE MOD_PreProc     , only: PP_N
+  use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel
+  use MOD_AMR_tracking, only: ShockCapturingAMR, InitData
+  use MOD_Mesh_Vars   , only: nElems, Elem_xGP
+  implicit none
+  !-local-variables-----------------------------------------
+  real    :: r
+  logical :: RefineElem
+  integer :: iter
+  integer :: iElem, i,j,k
+  integer, allocatable :: ElemToRefineAndCoarse(:)
+  !---------------------------------------------------------
+  
+  if (.not. UseAMR) return
+  
+  select case (InitialRefinement)  
+    case default ! Use the default indicator up to max-level
+      do iter = 1,MaxLevel
+        call ShockCapturingAMR()
+        call InitData()
+      end do
+    
+    case(1) ! Refine any element containing a node in the spherewith radius r=0.2 to the MaxLevel
+      do iter = 1,MaxLevel
+        allocate (ElemToRefineAndCoarse(1:nElems))!
+        
+        ! Fill ElemToRefineAndCoarse
+        ! --------------------------
+        do iElem=1, nElems  
+          ! Check if the element has a node on the desired region
+          RefineElem = .FALSE.
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            r = sqrt(sum(Elem_xGP(:,i,j,k,iElem)**2))
+            if (r <= 0.2) then
+              RefineElem = .TRUE.
+              exit ; exit ; exit
+            end if
+          end do       ; end do       ; end do
+          
+          ! Set that element for refinement
+          if (RefineElem) then
+            ElemToRefineAndCoarse(iElem) = MaxLevel
+          else
+            ElemToRefineAndCoarse(iElem) = MinLevel
+          end if
+          
+        end do
+        
+        ! Refine
+        ! ------
+        CALL RunAMR(ElemToRefineAndCoarse)
+        
+        deallocate (ElemToRefineAndCoarse)
+      end do
+      call InitData()
+  end select
+  
+
+end subroutine
 
 !==================================================================================================================================
 !> Routine creating and 
