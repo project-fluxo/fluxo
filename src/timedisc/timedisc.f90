@@ -154,7 +154,7 @@ USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 #if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
-USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR
+USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR, nDoAMR
 
 USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
@@ -270,7 +270,7 @@ DO
 #if USE_AMR
 IF (UseAMR) THEN
   doAMR = doAMR + 1;
-  IF (doAMR .EQ. 2) THEN
+  IF (doAMR .EQ. nDoAMR) THEN
     doAMR = 0;
     CALL ShockCapturingAMR()
   ENDIF

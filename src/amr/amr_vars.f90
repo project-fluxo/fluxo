@@ -20,6 +20,7 @@ LOGICAL                     :: p4estFileExist
 INTEGER                     :: MaxLevel             ! Loaded from .ini file
 INTEGER                     :: MinLevel             ! Loaded from .ini file
 INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
+INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures

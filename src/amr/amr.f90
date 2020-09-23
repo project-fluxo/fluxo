@@ -91,6 +91,8 @@ SUBROUTINE DefineParametersAMR()
  CALL prms%CreateIntOption(  'nWriteDataAMR',     "Interval as multiple of nWriteData at which Mesh and p4est files"//&
                                                   "(_mesh.h5 and .p4est) are written.",&
                                                   '1')
+ CALL prms%CreateIntOption(  'nDoAMR'       ,     "Time-step interval to call the AMR routines.",&
+                                                  '1')
 END SUBROUTINE DefineParametersAMR
 
 
@@ -143,6 +145,7 @@ SUBROUTINE InitAMR()
     RefineVal = GetReal('RefineVal',"0.")
     CoarseVal = GetREal('CoarseVal',"0.")
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
+    nDoAMR = GetINT('nDoAMR',"1")
     
     CALL InitIndicator()
     RET=P4EST_INIT(MPI_COMM_WORLD); 
