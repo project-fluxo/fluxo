@@ -1042,6 +1042,31 @@ if(cases[0]==0 or (caseID in cases)) :
    if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                           stage=args.stage , run_test=TEST , mpi_procs = args.procs , err=builderr )
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+TEST=[]
+TEST.extend(["freestream","parameter_freestream_navierstokes_p4est.ini", "1.0e-12" ])
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+  pname="build_navierstokes_p4est"
+  print( "caseID: %d name: %s" % (caseID,pname) )
+  
+  options=[]; options.extend(globopts) ; options.extend(baseopts)
+  options.extend([
+            "CMAKE_BUILD_TYPE"       ,"Release"
+           ,"FLUXO_DISCTYPE"         ,"2"
+           ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ,"FLUXO_PARABOLIC"        ,"OFF"
+           ,"FLUXO_TESTCASE"         ,"default"
+           ,"FLUXO_AMR"              ,"ON"
+           # #,"FLUXO_BUILD_P4EST"      ,"OFF"
+          ])
+  
+  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                         stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 #============================================================================
 #FINAL ERROR HANDLING:
 #============================================================================

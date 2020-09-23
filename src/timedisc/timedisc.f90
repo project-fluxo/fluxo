@@ -153,10 +153,10 @@ USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
 #if USE_AMR
-USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData,InitialAMRRefinement
 USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR, nDoAMR
 
-USE MOD_AMR                 ,ONLY: WriteStateAMR, InitialAMRRefinement
+USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
