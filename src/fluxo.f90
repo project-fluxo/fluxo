@@ -43,10 +43,7 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 
 #if USE_AMR
 ! Added for AMR ->
-USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
-USE MOD_AMR,                ONLY: RunAMR,LoadBalancingAMR, SaveMesh
-USE MOD_P4EST,              ONLY: LoadP4est, SaveP4est
-USE MOD_AMR_tracking
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR
 ! <-Added for AMR 
 #endif
 #if PARABOLIC
