@@ -30,6 +30,9 @@ INTERFACE InitAMR_Connectivity
   MODULE PROCEDURE InitAMR_Connectivity
 END INTERFACE
 
+INTERFACE WriteStateAMR
+  MODULE PROCEDURE WriteStateAMR
+END INTERFACE
 
 INTERFACE FinalizeAMR
   MODULE PROCEDURE FinalizeAMR
@@ -49,7 +52,7 @@ END INTERFACE
 
 PUBLIC::InitAMR, SaveMesh
 PUBLIC::FinalizeAMR
-
+PUBLIC :: WriteStateAMR
 !==================================================================================================================================
 PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
@@ -85,6 +88,15 @@ SUBROUTINE DefineParametersAMR()
  
  CALL prms%CreateIntOption(  'MinLevel',       "Minimum refinment level of the forest", "0")
  CALL prms%CreateIntOption(  'MaxLevel',       "Maximum refinemen level ", "0")
+ CALL prms%CreateIntOption(  'nWriteDataAMR',     "Interval as multiple of nWriteData at which Mesh and p4est files"//&
+                                                  "(_mesh.h5 and .p4est) are written.",&
+                                                  '1')
+ CALL prms%CreateIntOption(  'nDoAMR'       ,     "Time-step interval to call the AMR routines.",&
+                                                  '1')
+ CALL prms%CreateIntOption(  'InitialRefinement', "Initial refinement to be used "//&
+                                                  "  0: Use the custom indicator"//&
+                                                  "  1: Refine the elements in the sphere with r=0.2",&
+                                                  '0')
 END SUBROUTINE DefineParametersAMR
 
 
@@ -103,6 +115,9 @@ SUBROUTINE InitAMR()
     USE MOD_P4EST
     USE MOD_ReadInTools         ,ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
     USE MOD_Indicators          ,ONLY: InitIndicator
+    use MOD_Interpolation_Vars  ,only: NodeType
+    use MOD_Basis               ,only: InitializeVandermonde
+    use MOD_Interpolation       ,only: GetNodesAndWeights
     ! USE MOD_P4EST_Binding, ONLY: p4_initvars
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
@@ -110,6 +125,7 @@ SUBROUTINE InitAMR()
     ! INPUT/OUTPUT VARIABLES
     !----------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES
+    real :: xi_In(0:PP_N),w_in(0:PP_N),wBary_In(0:PP_N)
     !==================================================================================================================================
     INTEGER RET
 
@@ -122,29 +138,67 @@ SUBROUTINE InitAMR()
     SWRITE(UNIT_stdOut,'(A)') ' INIT AMR...'
 
     ! CALL p4_initvars(IntSize)
+ 
 
     UseAMR = GETLOGICAL('UseAMR','.FALSE.')
     IF (UseAMR) THEN
       p4estFile = GETSTR('p4estFile')
     ELSE
-      SWRITE(UNIT_stdOut,'(A)') ' AMR will not be used! UseAMR set to FALSE'
+      SWRITE(UNIT_stdOut,'(A)') ' AMR is not used'
       RETURN;
     ENDIF
+    p4estFileExist = CheckP4estFileExist(trim(p4estFile))
     MinLevel = GetINT('MinLevel',"0")
     MaxLevel = GetINT('MaxLevel',"0")
     RefineVal = GetReal('RefineVal',"0.")
     CoarseVal = GetREal('CoarseVal',"0.")
-
+    nWriteDataAMR = GetINT('nWriteDataAMR',"1")
+    nDoAMR = GetINT('nDoAMR',"1")
+    InitialRefinement = GETINT('InitialRefinement','0')
+    
     CALL InitIndicator()
-
     RET=P4EST_INIT(MPI_COMM_WORLD); 
-
-
+    
+    IF  (p4estFileExist) THEN
+      
+      IF(MPIRoot)THEN
+        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'HAS BEEN FOUND THE P4EST FILE: '
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(p4estFile)
+      END IF
+      CALL LoadP4est(trim(p4estFile))
+    ELSE
+      IF(MPIRoot)THEN
+        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'THE P4EST FILE HAS NOT BEEN FOUND : '
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(p4estFile)
+        WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')'CREATE THE FOREST'
+      END IF
+      CALL InitAMR_Connectivity()
+      CALL InitAMR_P4est()
+    ENDIF
+    
+    ! Refinement and coarsening interpolation operators
+    ! -------------------------------------------------
+    CALL GetNodesAndWeights(PP_N,NodeType,xi_In,wIP=w_in,wIPBary=wBary_In)
+    
+    ! Refinement operators (ATTENTION: we use the TRANSPOSED Vandermonde matrices since the refinement rouines can be called with these matrices AND with the Mortar matrices, which are transposed)
+    allocate (Vdm_Interp_0_1_T(0:PP_N,0:PP_N), Vdm_Interp_0_2_T(0:PP_N,0:PP_N))
+    
+    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In-1.),Vdm_Interp_0_1_T)
+    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In+1.),Vdm_Interp_0_2_T)
+    Vdm_Interp_0_1_T = transpose(Vdm_Interp_0_1_T)
+    Vdm_Interp_0_2_T = transpose(Vdm_Interp_0_2_T)
+    
+    ! Coarsening operators
+    N_2 = PP_N/2
+    allocate( Vdm_Interp_1_0(0:N_2,0:PP_N),Vdm_Interp_2_0(N_2+1:PP_N,0:PP_N) ) ! Temporary
+    
+    CALL InitializeVandermonde(PP_N,N_2              ,wBary_In,xi_In,2.0*xi_In(0    :N_2 )+1.,Vdm_Interp_1_0)
+    CALL InitializeVandermonde(PP_N,N_2-mod(PP_N+1,2),wBary_In,xi_In,2.0*xi_In(N_2+1:PP_N)-1.,Vdm_Interp_2_0)
+        
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
     SWRITE(UNIT_StdOut,'(132("-"))')
-    CALL InitAMR_Connectivity()
-    CALL InitAMR_P4est()
+    
   
 END SUBROUTINE InitAMR
 
@@ -174,7 +228,7 @@ SUBROUTINE InitAMR_Connectivity()
    ! MeshFile = GETSTR('MeshFile')
    
    CONN_OWNER=0;
-     CALL InitMesh()
+    CALL InitMesh()
    ! Create Connectivity
    CALL ReadMeshHeader(MeshFile)   ! read mesh header file including BCs
    CALL ReadMeshFromHDF5(MeshFile)
@@ -185,7 +239,52 @@ SUBROUTINE InitAMR_Connectivity()
   
 END SUBROUTINE InitAMR_Connectivity
 
-
+!==================================================================================================================================
+!> write mesh and p4est files to the 
+!==================================================================================================================================
+SUBROUTINE WriteStateAMR(OutputTime,isErrorFile)
+  ! MODULES
+  USE MOD_PreProc
+  USE MOD_Globals
+  USE MOD_Output_Vars  ,ONLY: ProjectName
+  USE MOD_P4EST         ,ONLY: SaveP4est
+  ! IMPLICIT VARIABLE HANDLING
+  IMPLICIT NONE
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! INPUT VARIABLES
+  REAL,INTENT(IN)                :: OutputTime   !< simulation time when output is performed
+  LOGICAL,INTENT(IN)             :: isErrorFile  !< indicate whether an error file is written in case of a crashed simulation
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! OUTPUT VARIABLES
+  !----------------------------------------------------------------------------------------------------------------------------------
+  ! LOCAL VARIABLES
+  CHARACTER(LEN=255)             :: FileType
+  CHARACTER(LEN=255)             :: FileNameAMRMesh ! Mesh File
+  CHARACTER(LEN=255)             :: FileNameP !P4est File
+  
+  !==================================================================================================================================
+  IF(isErrorFile) THEN
+    FileType='ERROR_State'
+  ELSE
+    FileType='State'
+  END IF
+  FileNameAMRMesh=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'_mesh.h5'
+  FileNameP=  TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileType),OutputTime))//'.p4est'
+  CALL SaveMesh(FileNameAMRMesh)
+  CALL SaveP4est(FileNameP)
+  END SUBROUTINE WriteStateAMR
+  
+LOGICAL FUNCTION CheckP4estFileExist(FileString)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+CHARACTER(LEN=*),INTENT(IN)  :: FileString !< (IN) mesh filename
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+inquire( file=trim(FileString), exist=CheckP4estFileExist )
+END FUNCTION CheckP4estFileExist
 
 !==================================================================================================================================
 !>  The main SUBROUTINE used for Coarse/Refine Mesh.
@@ -196,10 +295,11 @@ END SUBROUTINE InitAMR_Connectivity
 
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
+  USE MOD_PreProc,            ONLY: PP_N
   USE MOD_Analyze_Vars,       ONLY: ElemVol
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
-  USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem, nBCs
+  USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem
   USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
   USE MOD_P4est,              ONLY: FillElemsChanges, GetNElems
   USE MOD_Metrics,            ONLY: CalcMetrics
@@ -209,9 +309,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
   USE MOD_MPI_Vars,           ONLY: NbProc , nMPISides_MINE_Proc, nMPISides_YOUR_Proc, offsetMPISides_YOUR, offsetMPISides_MINE 
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
-  USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs, offsetElemMPI
+  USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
-  USE MOD_Mesh_Vars,          ONLY: nMPISides_MINE, nMPISides_YOUR,nGlobalElems, firstMPISide_YOUR, firstMPISide_MINE,firstMortarMPISide
+  USE MOD_Mesh_Vars,          ONLY: nGlobalElems
+  use MOD_Mortar_Vars,        only: M_0_1,M_0_2
+  use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
+  use MOD_Output, only: Visualize
 #if PARABOLIC
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
@@ -222,23 +325,19 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE, INTRINSIC :: ISO_C_BINDING
 ! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
- 
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
-  INTEGER :: PP, Ie, nVar;
+  INTEGER :: Ie
   TYPE(C_PTR) :: DataPtr;
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
-  INTEGER :: i,j,iElem, PP_N, nMortarSides, NGeoRef
+  INTEGER :: i,j,k,iElem, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld, doLBalance
+  integer, allocatable :: ElemWasCoarsened(:)
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
  
-  nVar=size(U(:,1,1,1,1))
-  PP=size(U(1,:,1,1,1))-1
-
-  PP_N=PP
   
   nElemsOld = nElems;
   nSidesOld = nSides
@@ -264,52 +363,50 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   ! CALL C_F_POINTER(DataPtr, FortranData)
   ! PRINT *, size(ChangeElem(1,:))
-
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,FortranData%nElems))
-    ALLOCATE(U_New(nVar,0:PP,0:PP,0:PP,FortranData%nElems))
+    ALLOCATE(Elem_xGP_New(3      ,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+    ALLOCATE(U_New       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+    allocate(ElemWasCoarsened(FortranData%nElems) )
+    ElemWasCoarsened = 0
     iElem=0;
     !  DO iElem=1,FortranData%nElems
-     DO 
-     iElem=iElem+1;
-     IF (iElem .GT. FortranData%nElems) EXIT
-       i=1;
-       Ie= ChangeElem(i,iElem);
-       IF (Ie .LT. 0) THEN
-         !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-         ! contains the number of child element 
-         CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem+7), &
-                                      U(:,:,:,:,-Ie:-Ie),&
-                                      Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                      Elem_xGP(:,:,:,:,-Ie:-Ie))
-         !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
-         iElem=iElem+7;
-       ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-        !  This is COARSE. Array ChangeElem(:,iElem) Contains 
-        !  8 Element which must be COARSED to the new number iElem
-         CALL InterpolateCoarseRefine(U_new(:,:,:,:,iElem:iElem), &
-                                      U(:,:,:,:,ChangeElem(:,iElem)),&
-                                      Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                      Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
-       ELSE
-         IF (iE .LE. 0) THEN
-         print *, "Error, iE = 0!, iElem = ", ielem
-         CALL EXIT()
-       ENDIF
-       ! This is simple case of renumeration of Elements
-       Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-       U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-     ENDIF
-             
-     END DO
+    DO 
+      iElem=iElem+1;
+      IF (iElem .GT. FortranData%nElems) EXIT
+        i=1;
+        Ie= ChangeElem(i,iElem);
+        IF (Ie .LT. 0) THEN
+          !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+          ! contains the number of child element 
+          call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
+          call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
+          iElem=iElem+7;
+        ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+          !  This is COARSE. Array ChangeElem(:,iElem) Contains 
+          !  8 Element which must be COARSED to the new number iElem
+          ElemWasCoarsened(iElem) = 1
+          call InterpolateCoords_Coarsening( Elem_xGP_New(:,:,:,:,iElem),&
+                                             Elem_xGP    (:,:,:,:,ChangeElem(:,iElem)) )
+          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,ChangeElem(:,iElem)))
+        ELSE
+          IF (iE .LE. 0) THEN
+            print *, "Error, iE = 0!, iElem = ", ielem
+            CALL EXIT()
+          ENDIF
+          ! This is simple case of renumeration of Elements
+          Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+          U_New       (:,:,:,:,iElem)= U       (:,:,:,:,Ie)
+      ENDIF
+    END DO
       CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
       CALL MOVE_ALLOC(U_New, U)
    ENDIF
+
   !  doLBalance = doLBalance + 1
   !  IF (doLBalance .EQ. 1) THEN
   !     doLBalance = 0;
       ! IF (doLBalance .EQ. 0) 
-      CALL LoadBalancingAMR()
+      CALL LoadBalancingAMR(ElemWasCoarsened)
         IF (MPIRoot) THEN
           print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
         ENDIF
@@ -320,7 +417,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
-      DEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
+      SDEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
     ENDIF
     FortranData%nNbProc = C_LOC(NbProc)
   
@@ -434,12 +531,12 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
-  PP_N=PP
+
 
   ! Reallocate Arrays if the nElems was changed
   IF (nElemsOld .NE. nElems) THEN
     SDEALLOCATE(Ut); ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
-
+    Ut = 0.0
     SDEALLOCATE(Metrics_fTilde); ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
     SDEALLOCATE(Metrics_gTilde); ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
@@ -571,12 +668,24 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
   CALL CalcMetrics((/0/))
   
+  IF (PRESENT(ElemToRefineAndCoarse)) THEN
+    ! Scale coarsened elements
+    do iElem=1, nElems
+      if ( ElemWasCoarsened(iElem)>0 ) then
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          U(:,i,j,k,iElem) = U(:,i,j,k,iElem) * sJ(i,j,k,iElem)
+        end do       ; end do       ; end do
+      end if
+    end do
+  END IF ! PRESENT(ElemToRefineAndCoarse)
+  
 #if SHOCKCAPTURE
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
-
+  
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
+  deallocate(ElemWasCoarsened)
   NULLIFY(MInfo)
   NULLIFY(nBCsF)
 END SUBROUTINE RunAMR
@@ -634,166 +743,154 @@ END SUBROUTINE RunAMR
         offsetElem  = offsetElemMPI(myrank)
         
     END SUBROUTINE RecalculateParameters
-
-
-SUBROUTINE InterpolateCoarseRefine(Unew, Uold,Elem_xGPnew,Elem_xGPold)
-    ! Enumerate the cells number as in P4est
-    USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
-    USE MOD_Interpolation,      ONLY: GetVandermonde
-    USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
-
-    IMPLICIT NONE
-    REAL, INTENT(INOUT)          :: Unew(:,:,:,:,:),Elem_xGPnew(:,:,:,:,:)
-    REAL, INTENT(IN)             :: Uold(:,:,:,:,:),Elem_xGPold(:,:,:,:,:)
-    INTEGER                      :: SizeNew, SizeOld
-    INTEGER                      :: i,PP_N, nVar_local
-    REAL,ALLOCATABLE                :: Unew_big(:,:,:,:,:),Elem_xGP_big(:,:,:,:,:)
-    REAL,ALLOCATABLE                :: Vdm_fromSmalltoBig(:,:),Vdm_FromNVisu_toNodeType(:,:)
-    ! REAL,ALLOCATABLE                :: Unew_big(:,:,:,:,:) , Elem_xGP_big(:,:,:,:,:)
-    REAL,ALLOCATABLE                :: Vdm_fromBigtoSmall(:,:),Vdm_FromNodeType_toNVisu(:,:)
-
-    sizenew=size(Unew(1,1,1,1,:))
-    sizeold=size(Uold(1,1,1,1,:))
-
-
-    nVar_local=size(Unew(:,1,1,1,1))
-    PP_N=size(Unew(1,:,1,1,1))-1
+!===================================================================================================================================
+!> Does an L2 projection of the solution from 8 elements to 1
+!> ATTENTION: The projected solution must be scaled with the Jacobians because the projection integrals are evaluated on the fine and coarse elements
+!===================================================================================================================================
+  subroutine ProjectSolution_Coarsening(Unew, Uold, sJold)
+    use MOD_PreProc     , only: PP_N
+    use MOD_Mortar_Vars , only: M_1_0,M_2_0
+    implicit none
+    !-arguments-----------------------------------------------
+    real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)    :: Uold(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
+    real, intent(in)    :: sJold       (0:PP_N,0:PP_N,0:PP_N,8)
+    !-local-variables-----------------------------------------
+    integer :: l,m,s,p,q,r
+    real :: JUold(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
+    !---------------------------------------------------------
     
-    !     ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
-    !     ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
-
-    IF ((sizenew .EQ. 1 .AND. sizeold .EQ. 8) .OR. (sizenew .EQ.  8 .AND. sizeold .EQ. 1)) THEN
-      IF (sizenew > sizeold) THEN
-      !This is refine
-
-
-        ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
-        ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
-
-    !   print *, "Size!!!!!!!11 U old ", nVar_local
-        CALL GetVandermonde(PP_N, NodeType, 2*PP_N,      NodeTypeVISU, Vdm_fromSmallToBig)
-        CALL GetVandermonde(PP_N, NodeTypeVISU, PP_N,      NodeType, Vdm_FromNVisu_toNodeType)
-
-        ALLOCATE(Unew_big(PP_nVar,0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        Unew_big=0
-        CALL ChangeBasis3D(PP_nVar,PP_N,2*PP_N,Vdm_fromSmallToBig,Uold(:,:,:,:,1),Unew_big(:,:,:,:,1))
-
-        !Map the data from Big Cell into the 8 small cells
-        i=2*PP_N
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,0:PP_N,0:PP_N,0:PP_N,1),Unew(:,:,:,:,1))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,PP_N:i,0:PP_N,0:PP_N,1),Unew(:,:,:,:,2))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,PP_N:i,PP_N:i,0:PP_N,1),Unew(:,:,:,:,4))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,0:PP_N,PP_N:i,0:PP_N,1),Unew(:,:,:,:,3))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,0:PP_N,0:PP_N,PP_N:i,1),Unew(:,:,:,:,5))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,PP_N:i,0:PP_N,PP_N:i,1),Unew(:,:,:,:,6))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,PP_N:i,PP_N:i,PP_N:i,1),Unew(:,:,:,:,8))
-        CALL ChangeBasis3D(PP_nVar,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Unew_big(:,0:PP_N,PP_N:i,PP_N:i,1),Unew(:,:,:,:,7))
-
-
-        DEALLOCATE(Unew_big)
-        ALLOCATE(Elem_xGP_big(size(Elem_xGPnew(:,1,1,1,1)),0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        !Add interpolation of this elements
-
-
-        !CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,Elem_xGP(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
-        CALL ChangeBasis3D(3,PP_N,2*PP_N,Vdm_fromSmallToBig,Elem_xGPold(:,:,:,:,1),Elem_xGP_big(:,:,:,:,1))
-
-
-
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,0:PP_N,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,1))! Octant%Elems(1)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,0:PP_N,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,2))! Octant%Elems(2)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,PP_N:i,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,4))! Octant%Elems(3)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,PP_N:i,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,3))! Octant%Elems(4)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,0:PP_N,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,5))! Octant%Elems(5)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,0:PP_N,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,6))! Octant%Elems(6)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,PP_N:i,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,8))! Octant%Elems(7)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,PP_N:i,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,7))! Octant%Elems(8)%ElemID))
-
-        !~
-        DEALLOCATE(Elem_xGP_big)
-        DEALLOCATE(Vdm_fromSmalltoBig)
-        DEALLOCATE(Vdm_FromNVisu_toNodeType)
-
-
-      ELSE
-      !This is Coarse
-  
-        ALLOCATE(Vdm_fromBigtoSmall(0:PP_N,0:2*PP_N))
-        ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP_N,0:PP_N))
-         
-        CALL GetVandermonde(2*PP_N, NodeTypeVISU, PP_N, NodeType,      Vdm_fromBigToSmall)
-        CALL GetVandermonde(PP_N,      NodeType,PP_N, NodeTypeVISU,  Vdm_FromNodeType_toNVisu)
-
-
-        ALLOCATE(Unew_big(PP_nVar,0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        Unew_big=0
-        i=2*PP_N  
-
-      
-
-        CALL ChangeBasis3D(PP_nVar ,PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,1), Unew_big(:,0:PP_N,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,2), Unew_big(:,PP_N:i,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,4), Unew_big(:,PP_N:i,PP_N:i,0:PP_N,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,3), Unew_big(:,0:PP_N,PP_N:i,0:PP_N,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,5), Unew_big(:,0:PP_N,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,6), Unew_big(:,PP_N:i,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(PP_nVar, PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,8), Unew_big(:,PP_N:i,PP_N:i,PP_N:i,1))
-        CALL ChangeBasis3D(PP_nVar ,PP_N, PP_N, Vdm_FromNodeType_toNVisu, Uold(:,:,:,:,7), Unew_big(:,0:PP_N,PP_N:i,PP_N:i,1))
-        
-        CALL ChangeBasis3D(PP_nVar,2*PP_N,PP_N,Vdm_fromBigToSmall,Unew_big(:,:,:,:,1),Unew(:,:,:,:,1))
-        
-        DEALLOCATE(Unew_big)
-        ALLOCATE(Elem_xGP_big(size(Elem_xGPnew(:,1,1,1,1)),0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        !Add interpolation of this elements
-        
-     
-        
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,1),Elem_xGP_big(1:3,0:PP_N,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,2),Elem_xGP_big(1:3,PP_N:i,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,4),Elem_xGP_big(1:3,PP_N:i,PP_N:i,0:PP_N,1))  
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,3),Elem_xGP_big(1:3,0:PP_N,PP_N:i,0:PP_N,1))  
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,5),Elem_xGP_big(1:3,0:PP_N,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,6),Elem_xGP_big(1:3,PP_N:i,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,8),Elem_xGP_big(1:3,PP_N:i,PP_N:i,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,7),Elem_xGP_big(1:3,0:PP_N,PP_N:i,PP_N:i,1))
-        
-        CALL ChangeBasis3D(3,2*PP_N,PP_N,Vdm_fromBigtoSmall,Elem_xGP_big(:,:,:,:,1),Elem_xGPnew(:,:,:,:,1))
-        !~     
-        DEALLOCATE(Elem_xGP_big)
-        DEALLOCATE(Vdm_fromBigtoSmall)
-        DEALLOCATE(Vdm_FromNodeType_toNVisu)
-
-      ENDIF  !if (sizenew > sizeold) THEN
-    ELSE 
-      !There is an Error !!!
-      print*, "Error in =InterpolateCoarseRefine= the number of cells not 1 to 8 or 8 to 1"
-    ENDIF
-
-  
-
-    END SUBROUTINE InterpolateCoarseRefine
-
-
+    ! Scale U with the Jacobian
+    do r=1, 8 ; do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+      JUold(:,l,m,s,r) = Uold(:,l,m,s,r) / sJold(l,m,s,r)
+    end do       ; end do       ; end do       ; end do
+    
+    ! Project to new (big) element (The scaling with the new Jacobian is missing)
+    Unew = 0.0
+    do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
+      do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,1) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,2) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,3) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,4) &
+                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,5) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,6) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,7) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,8) 
+      end do       ; end do       ; end do
+    end do       ; end do       ; end do
+    
+  end subroutine ProjectSolution_Coarsening
+!===================================================================================================================================
+!> Projects a field from 1 element to 8. Can be used for
+!>  1. Solution (L2 projection): The projected solution DOES NOT HAVE to be scaled with the Jacobians because the projection 
+!>                               integrals are evaluated only on the fine elements
+!>  2. Coordinates: Using the interpolation matrices
+!===================================================================================================================================
+  subroutine ProjectSolution_Refinement(nVar,Unew, Uold,M_0_1,M_0_2)
+    use MOD_PreProc     , only: PP_N
+    implicit none
+    !-arguments-----------------------------------------------
+    integer, intent(in)    :: nVar
+    real   , intent(inout) :: Unew(nVar,0:PP_N,0:PP_N,0:PP_N,8)
+    real   , intent(in)    :: Uold(nVar,0:PP_N,0:PP_N,0:PP_N)
+    real   , intent(in)    :: M_0_1    (0:PP_N,0:PP_N)
+    real   , intent(in)    :: M_0_2    (0:PP_N,0:PP_N)
+    !-local-variables-----------------------------------------
+    integer :: l,m,s,p,q,r
+    !---------------------------------------------------------
+    
+    Unew = 0.0
+    do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
+      do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+        Unew(:,p,q,r,1) = Unew(:,p,q,r,1) + M_0_1(l,p)*M_0_1(m,q)*M_0_1(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,2) = Unew(:,p,q,r,2) + M_0_2(l,p)*M_0_1(m,q)*M_0_1(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,3) = Unew(:,p,q,r,3) + M_0_1(l,p)*M_0_2(m,q)*M_0_1(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,4) = Unew(:,p,q,r,4) + M_0_2(l,p)*M_0_2(m,q)*M_0_1(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,5) = Unew(:,p,q,r,5) + M_0_1(l,p)*M_0_1(m,q)*M_0_2(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,6) = Unew(:,p,q,r,6) + M_0_2(l,p)*M_0_1(m,q)*M_0_2(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,7) = Unew(:,p,q,r,7) + M_0_1(l,p)*M_0_2(m,q)*M_0_2(s,r) * Uold(:,l,m,s)
+        Unew(:,p,q,r,8) = Unew(:,p,q,r,8) + M_0_2(l,p)*M_0_2(m,q)*M_0_2(s,r) * Uold(:,l,m,s)
+      end do       ; end do       ; end do
+    end do       ; end do       ; end do
+    
+  end subroutine ProjectSolution_Refinement
+!===================================================================================================================================
+!> Does a simple interpolation (extrapolation) from element 1 to the big element. This works if Ngeo<=N
+!===================================================================================================================================
+  subroutine InterpolateCoords_Coarsening(Xnew, Xold)
+    use MOD_PreProc     , only: PP_N
+    use MOD_AMR_Vars    , only: Vdm_Interp_1_0, Vdm_Interp_2_0, N_2
+    implicit none
+    !-arguments-----------------------------------------------
+    real, intent(inout) :: Xnew (1:3,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)    :: Xold (1:3,0:PP_N,0:PP_N,0:PP_N,1:8)
+    !-local-variables-----------------------------------------
+    integer :: l,m,s,p,q,r
+    !---------------------------------------------------------
+    
+    ! Fill Xnew (subcell by subcell)
+    Xnew = 0.0
+    do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+      ! Subcell 1
+      do r=0, N_2 ; do q=0, N_2 ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,1) 
+      end do       ; end do       ; end do
+      ! Subcell 2
+      do r=0, N_2 ; do q=0, N_2 ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,2)
+      end do       ; end do       ; end do
+      ! Subcell 3
+      do r=0, N_2 ; do q=N_2+1, PP_N ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,3)
+      end do       ; end do       ; end do
+      ! Subcell 4
+      do r=0, N_2 ; do q=N_2+1,PP_N ; do p=N_2+1,PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,4)
+      end do       ; end do       ; end do
+      ! Subcell 5
+      do r=N_2+1, PP_N ; do q=0, N_2 ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,5)
+      end do       ; end do       ; end do
+      ! Subcell 6
+      do r=N_2+1, PP_N ; do q=0, N_2 ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,6)
+      end do       ; end do       ; end do
+      ! Subcell 7
+      do r=N_2+1, PP_N ; do q=N_2+1, PP_N ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,7)
+      end do       ; end do       ; end do
+      ! Subcell 8
+      do r=N_2+1, PP_N ; do q=N_2+1, PP_N ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,8)
+      end do       ; end do       ; end do
+    end do       ; end do       ; end do
+    
+  end subroutine InterpolateCoords_Coarsening
 
 !============================================================================================================================
 !> Deallocate mesh data.
 !============================================================================================================================
-SUBROUTINE LoadBalancingAMR()
+SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
   ! MODULES
   USE MOD_Globals
   USE MOD_AMR_Vars
   USE MOD_P4EST
   USE MOD_DG_Vars,            ONLY: U
-  USE MOD_Mesh_Vars,          ONLY: Elem_xGP, nElems
+  USE MOD_Mesh_Vars,          ONLY: Elem_xGP
 #if SHOCK_NFVSE
   use MOD_ShockCapturing_Vars, only: alpha
 #endif /*SHOCK_NFVSE*/
+  USE MOD_PreProc,            ONLY: PP_N
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
+  ! ARGUMENTS
+  integer, intent(inout), allocatable, target :: ElemWasCoarsened(:)
+  !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:), Alpha_New(:)
-  INTEGER :: PP, nVar
+  integer,allocatable,target :: ElemWasCoarsened_new(:)
   !============================================================================================================================
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
   
@@ -804,36 +901,42 @@ SUBROUTINE LoadBalancingAMR()
   
   BalanceData%DataSize = sizeof(U(:,:,:,:,1))
   BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
-  PP = size(U(1,:,0,0,1))-1
-  nVar = size(U(:,0,0,0,1))
+
+
   
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
 #if SHOCK_NFVSE
   BalanceData%AlphaOld_Ptr = C_LOC(alpha)
 #endif /*SHOCK_NFVSE*/
-  
-  
+  BalanceData%ElemWasCoarsened_old = C_LOC(ElemWasCoarsened)
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
  
-  ALLOCATE(U_New(PP_nVar,0:PP,0:PP,0:PP,BalanceData%nElems))
+  ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
-  ALLOCATE(Elem_xGP_New(3,0:PP,0:PP,0:PP,BalanceData%nElems))
+  
+  ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
+  
+  allocate(ElemWasCoarsened_new(BalanceData%nElems))
+  BalanceData%ElemWasCoarsened_new = C_LOC(ElemWasCoarsened_new)
   
 #if SHOCK_NFVSE
   ALLOCATE(Alpha_New(BalanceData%nElems))
   BalanceData%AlphaNew_Ptr = C_LOC(Alpha_New)
 #endif /*SHOCK_NFVSE*/
- 
+  
   CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
 
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
+  CALL MOVE_ALLOC(ElemWasCoarsened_new, ElemWasCoarsened)
+  
 #if SHOCK_NFVSE
   CALL MOVE_ALLOC(Alpha_New, alpha)
 #endif /*SHOCK_NFVSE*/
+  
   CALL p4est_ResetElementNumber(P4EST_PTR)
   
   ! CALL RunAMR()
@@ -854,7 +957,7 @@ END SUBROUTINE LoadBalancingAMR
 ! IMPLICIT NONE
 
 ! REAL,POINTER :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-! INTEGER :: DataSize, nElemsNew, PP, nVar
+! INTEGER :: DataSize, nElemsNew, PP_N, PP_nVar
 ! ! REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)
 ! ! REAL, POINTER :: Elem_xGPP(:,:,:,:,:)
 ! ! REAL, POINTER :: UP(:,:,:,:,:)
@@ -867,10 +970,10 @@ END SUBROUTINE LoadBalancingAMR
 ! ENDIF
 ! ! UP=>U
 ! ! Elem_xGPP=>Elem_xGP
-! BalanceData%nVar = size(U(:,0,0,0,1))
-! BalanceData%PP = size(U(1,:,0,0,1))-1
-! nVar = BalanceData%nVar
-! PP = BalanceData%PP
+! BalanceData%PP_nVar = size(U(:,0,0,0,1))
+! BalanceData%PP_N = size(U(1,:,0,0,1))-1
+! PP_nVar = BalanceData%PP_nVar
+! PP_N = BalanceData%PP_N
 ! BalanceData%nElems = size(U(1,0,0,0,:))
 ! BalanceData%DataSize=INT(sizeof(U(:,:,:,:,1)) + sizeof(Elem_xGP(:,:,:,:,1)))
 
@@ -882,15 +985,15 @@ END SUBROUTINE LoadBalancingAMR
 
 ! ! print *, "BalanceData%nElemsNew = ",BalanceData%nElems
 ! nElemsNew=BalanceData%nElems;
-! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[nVar,PP+1,PP+1,PP+1,nElemsNew])
-! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP+1,PP+1,PP+1,nElemsNew])
+! CALL C_F_POINTER(BalanceData%DataSetU, U_New,[PP_nVar,PP_N+1,PP_N+1,PP_N+1,nElemsNew])
+! CALL C_F_POINTER(BalanceData%DataSetElem_xGP, Elem_xGP_New,[3,PP_N+1,PP_N+1,PP_N+1,nElemsNew])
 ! SDEALLOCATE(Elem_xGP)
 ! SDEALLOCATE(U)
-! ALLOCATE(Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew))
-! Elem_xGP(1:3,0:PP,0:PP,0:PP,1:nElemsNew) = Elem_xGP_New(1:3,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+! ALLOCATE(Elem_xGP(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew))
+! Elem_xGP(1:3,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew) = Elem_xGP_New(1:3,1:PP_N+1,1:PP_N+1,1:PP_N+1,1:nElemsNew)
 
-! ALLOCATE(U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew))
-! U(1:nVar,0:PP,0:PP,0:PP,1:nElemsNew) = U_new(1:nVar,1:PP+1,1:PP+1,1:PP+1,1:nElemsNew)
+! ALLOCATE(U(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew))
+! U(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElemsNew) = U_new(1:PP_nVar,1:PP_N+1,1:PP_N+1,1:PP_N+1,1:nElemsNew)
 
 ! CALL free_balance_memory(C_LOC(BalanceData))
 
@@ -912,17 +1015,15 @@ SUBROUTINE SaveMesh(FileString)
   ! MODULES
   USE MOD_AMR_Vars
   USE MOD_P4EST
-  USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP
-  ! DEbug
-  USE MOD_Mesh_vars,           ONLY: ElemToSide, SideToElem, nSides,MortarType, MortarInfo
-  !EndDebug
-  USE MOD_Globals,                only: myrank,nProcessors, MPIRoot
+  USE MOD_PreProc,            ONLY: PP_N
+  USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP, NGeo
+  USE MOD_Globals,             only: myrank,nProcessors, MPIRoot, UNIT_stdOut
   USE MOD_IO_HDF5
   USE MOD_HDF5_Output,            only: WriteHeader, WriteAttribute, WriteArray, GatheredWriteArray
-  USE MOD_DG_Vars,            ONLY: U
-  USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU, NodeTypeGL
+  USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
   USE MOD_Interpolation,      ONLY: GetVandermonde
   USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
+
   ! USE MOD_Mesh_Vars,           ONLY:Vdm_GLN_N
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
@@ -939,24 +1040,31 @@ SUBROUTINE SaveMesh(FileString)
   INTEGER          :: iElem, nIndexSide, mpisize, FirstElemInd, LastElemInd, nLocalIndSides, nGlobalIndSides, OffsetIndSides
   CHARACTER(LEN=255)             :: FileName,TypeString
   INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
-  INTEGER(HSIZE_T)               :: Dimsf(5)
   INTEGER(HSIZE_T)               :: DimsM(2)
   CHARACTER(LEN=255), ALLOCATABLE:: BCNames(:)
-  INTEGER, ALLOCATABLE           :: BCMapping(:),BCType(:,:)
-  INTEGER                        :: offset = 0, PP, i,j,k, index
+  INTEGER, ALLOCATABLE           :: BCType(:,:)
+  INTEGER                        :: i,j,k, index
   REAL,ALLOCATABLE               :: NodeCoords(:,:)
   REAL,ALLOCATABLE               :: NodeCoordsTMP(:,:,:,:)
-  REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:), Vdm_GLN_EQN(:,:)
-  REAL,ALLOCATABLE               :: Vdm_N_GLN(    :   ,:)
-  REAL,ALLOCATABLE                :: XGL_N(      :,  :,:,:)          ! mapping X(xi) P\in N
+  REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:)
+  integer                        :: NGeo_new
+
   ! REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
   ! CHARACTER(LEN=255)             :: MeshFile255
   !============================================================================================================================
   ! 
-
+  
+  ! Set NGeo of the mesh to save
+  NGeo_new = min(PP_N,NGeo)
 
   
   IF (.NOT. UseAMR) RETURN;
+
+  IF(MPIRoot)THEN
+    WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE MESH TO _MESH.H5 FILE: '
+    WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileString)
+    ! GETTIME(StartT)
+  END IF
 
   mpisize = nProcessors
   DATAPtr=SaveMeshP4(p4est_ptr)
@@ -982,11 +1090,11 @@ SUBROUTINE SaveMesh(FileString)
 
   ElInfoF(3,:) = ElInfoF(3,:) + OffsetSideArrIndexMPI(Myrank)
   ElInfoF(4,:) = ElInfoF(4,:) + OffsetSideArrIndexMPI(Myrank)
-  ! IF(nVar_Avg.GT.0)THEN
+  ! IF(PP_nVar_Avg.GT.0)THEN
   ! FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_TimeAvg',OutputTime))//'.h5'
 ! 1. Create Mesh file
   !Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
-  PP = size(U(1,:,1,1,1))-1
+
   IF(MPIRoot)THEN
    ! Create file
    FileName=TRIM(FileString)//'.h5'
@@ -995,15 +1103,17 @@ SUBROUTINE SaveMesh(FileString)
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
     ! CALL WriteHeader(TRIM(TypeString),File_ID)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
-    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=PP)
+    CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=NGeo_new)
     CALL WriteAttribute(File_ID,'nElems',1,IntScalar=nGlobalElems)
     CALL WriteAttribute(File_ID,'nSides',1,IntScalar=OffsetSideArrIndexMPI(mpisize))
-    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(PP+1)*(PP+1)*(PP+1))
+    CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1))
     CALL WriteAttribute(File_ID,'nUniqueSides',1,IntScalar=OffsetSideMPI(mpisize))
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
     
-    DimsM=(/6, nGlobalElems/)
+    CALL WriteAttribute(File_ID,'isMortarMesh',1,IntScalar=1)
+
+     DimsM=(/6, nGlobalElems/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)
     HDF5DataType=H5T_NATIVE_INTEGER
     CALL H5DCREATE_F(File_ID,'ElemInfo', HDF5DataType, FileSpace, DSet_ID, iError)
@@ -1021,7 +1131,7 @@ SUBROUTINE SaveMesh(FileString)
 
 
     ! ALLOCATE(NodeCoords)
-    DimsM=(/3, nGlobalElems*(PP+1)*(PP+1)*(PP+1)/)
+    DimsM=(/3, nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)
     HDF5DataType=H5T_NATIVE_DOUBLE
     CALL H5DCREATE_F(File_ID,'NodeCoords', HDF5DataType, FileSpace, DSet_ID, iError)
@@ -1030,7 +1140,7 @@ SUBROUTINE SaveMesh(FileString)
     CALL H5SCLOSE_F(FileSpace, iError)  
 
     ! CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=5)
-  !   CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',nVar_Avg,PP_N,VarNamesAvg,MeshFileName,OutputTime,FutureTime)
+  !   CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',PP_nVar_Avg,PP_N,VarNamesAvg,MeshFileName,OutputTime,FutureTime)
   !   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
   !   CALL WriteAttribute(File_ID,'AvgTime',1,RealScalar=dtAvg)
 
@@ -1087,11 +1197,11 @@ SUBROUTINE SaveMesh(FileString)
   ! CALL CloseDataFile()
 
 DO iElem = 1, nElems
-  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(PP+1)*(PP+1)*(PP+1)
-  ElInfoF(6,iElem) = (iElem + offsetElem)*(PP+1)*(PP+1)*(PP+1)
+  ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)
+  ElInfoF(6,iElem) = (iElem + offsetElem)*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)
 ENDDO
 
-IF (PP .EQ. 1) THEN
+IF (NGeo_new .EQ. 1) THEN
   ElInfoF(1,:)=108
 ENDIF
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
@@ -1115,31 +1225,31 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         offset=    (/0   ,OffsetIndSides  /),&
                         collective=.TRUE.,IntArray=SiInfoF)
 
-ALLOCATE(NodeCoords(3,nElems*(PP+1)*(PP+1)*(PP+1)))
-ALLOCATE(NodeCoordsTMP(3,0:PP,0:PP,0:PP))
-ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP,0:PP))
-! ALLOCATE(Vdm_GLN_EQN(0:PP,0:PP))
-! ALLOCATE(Vdm_N_GLN(0:PP,0:PP))
-! ALLOCATE(XGL_N(3,  0:PP,0:PP,0:PP))          
+ALLOCATE(NodeCoords(3,nElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)))
+ALLOCATE(NodeCoordsTMP(3,0:NGeo_new,0:NGeo_new,0:NGeo_new))
+ALLOCATE(Vdm_FromNodeType_toNVisu(0:NGeo_new,0:PP_N))
+! ALLOCATE(Vdm_GLN_EQN(0:PP_N,0:PP_N))
+! ALLOCATE(Vdm_N_GLN(0:PP_N,0:PP_N))
+! ALLOCATE(XGL_N(3,  0:PP_N,0:PP_N,0:PP_N))          
     
     ! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
-! CALL GetVandermonde(    PP   ,NodeTypeGL , PP    ,NodeTypeVISU, Vdm_GLN_EQN , modal=.FALSE.)
+! CALL GetVandermonde(    PP_N   ,NodeTypeGL , PP_N    ,NodeTypeVISU, Vdm_GLN_EQN , modal=.FALSE.)
 
-! CALL GetVandermonde(    PP   ,NodeType , PP    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
+! CALL GetVandermonde(    PP_N   ,NodeType , PP_N    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
 
-CALL GetVandermonde(PP, NodeType, PP,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
+CALL GetVandermonde(PP_N, NodeType, NGeo_new,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
     
 
 index = 1
 ! print *, "index = ", index
 DO iElem=1,nElems
  
-  CALL ChangeBasis3D(3,PP,PP,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP,PP,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP,PP,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
-  DO k=0,PP
-    DO j=0,PP
-      DO i=0,PP
+  CALL ChangeBasis3D(3,PP_N,NGeo_new,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
+  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
+  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
+  DO k=0,NGeo_new
+    DO j=0,NGeo_new
+      DO i=0,NGeo_new
 
         NodeCoords(:,index) = NodeCoordsTMP(:,i,j,k)
         index = index + 1
@@ -1149,9 +1259,9 @@ DO iElem=1,nElems
 ENDDO
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         DataSetName='NodeCoords', rank=2,  &
-                        nValGlobal=(/3,nGlobalElems*(PP+1)*(PP+1)*(PP+1)/),&
-                        nVal=      (/3,nElems*(PP+1)*(PP+1)*(PP+1)/),&
-                        offset=    (/0   ,offSetElem*(PP+1)*(PP+1)*(PP+1)/),&
+                        nValGlobal=(/3,nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
+                        nVal=      (/3,nElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
+                        offset=    (/0   ,offSetElem*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
                         collective=.TRUE.,RealArray=NodeCoords)
 
 SDEALLOCATE(NodeCoords)

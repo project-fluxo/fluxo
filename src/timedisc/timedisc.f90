@@ -161,8 +161,10 @@ USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 #if USE_AMR
-USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData
-USE MOD_AMR_Vars            ,ONLY: UseAMR
+USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData,InitialAMRRefinement
+USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR, nDoAMR
+
+USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -173,7 +175,10 @@ REAL                         :: dt_Min,dt_MinOld,dtAnalyze,dtEnd,tStart
 INTEGER(KIND=8)              :: iter,iter_loc
 REAL                         :: iterTimeStart,CalcTimeStart,CalcTimeEnd
 INTEGER                      :: TimeArray(8)              !< Array for system time
-INTEGER                      :: errType,nCalcTimestep,writeCounter, doAMR
+INTEGER                      :: errType,nCalcTimestep,writeCounter
+#if USE_AMR
+INTEGER                      :: doAMR, writeCounterAMR
+#endif /*USE_AMR*/
 LOGICAL                      :: doAnalyze,doFinalize
 LOGICAL                      :: firstWCTcheck=.TRUE.
 !==================================================================================================================================
@@ -210,29 +215,35 @@ CALL CalcArtificialViscosity(U)
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
+
+! Impose initial AMR refinement
 #if USE_AMR
-DO ITER = 1,8
-  IF (UseAMR) THEN 
-    ! doAMR = doAMR + 1;
-    ! IF (doAMR .EQ. 1) THEN
-    ! doAMR = 0;
-    CALL ShockCapturingAMR()
-    CALL InitData()
-    !  PRINT *, "ShockCapturingAMR()"
-    ! ENDIF
-  ENDIF 
-ENDDO
-#endif
+call InitialAMRRefinement()
+CALL DGTimeDerivative(t)
+#endif /*USE_AMR*/
 
 ! Write the state at time=0, i.e. the initial condition
 IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
   CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
-END IF
+#if USE_AMR
+  IF (UseAMR) THEN
+    IF(nWriteDataAMR .GT. 0) THEN
+      CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+        !Write Mesh and AMR to file
+    ENDIF
+  ENDIF
+#endif /*USE_AMR*/
+END IF 
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
+
+#if USE_AMR
+writeCounterAMR = 0
+doAMR = 0
+#endif /*USE_AMR*/
 
 iter=0
 iter_loc=0
@@ -258,7 +269,6 @@ IF(MPIroot)THEN
   WRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 END IF ! MPIroot
 
-doAMR = 0
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
@@ -266,16 +276,17 @@ CalcTimeStart=FLUXOTIME()
 
 iter = 0
 DO
-#if USE_AMR
 
+#if USE_AMR
 IF (UseAMR) THEN
   doAMR = doAMR + 1;
-  IF (doAMR .EQ. 2) THEN
+  IF (doAMR .EQ. nDoAMR) THEN
     doAMR = 0;
-    CALL ShockCapturingAMR()
+    call ShockCapturingAMR()
   ENDIF
 ENDIF
-#endif
+#endif /*USE_AMR*/
+
 IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
@@ -361,6 +372,15 @@ IF(nCalcTimestepMax.EQ.1)THEN
         CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
         writeCounter=0
         tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+#if USE_AMR
+        IF (UseAMR) THEN
+          writeCounterAMR = writeCounterAMR + 1
+          IF((writeCounterAMR .EQ. nWriteDataAMR).OR.doFinalize)THEN
+            CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+            writeCounterAMR = 0
+          ENDIF
+        ENDIF
+#endif /* USE_AMR */
       END IF
     END IF
     
@@ -381,7 +401,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
       WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps   : ',REAL(iter)
     END IF !MPIroot
-
+    
     ! do analysis
     CALL Analyze(t,iter)
     iter_loc=0

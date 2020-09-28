@@ -130,9 +130,12 @@ CONTAINS
         ! MODULES
         USE MOD_Globals
         USE MOD_HDF5_Input
+#if USE_AMR
+        USE MOD_AMR_Vars,           ONLY: p4estFileExist
+#endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
-        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo
+        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo, isMortarMesh
         ! USE MODH_Mesh,     ONLY: SetCurvedInfo
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
@@ -143,8 +146,8 @@ CONTAINS
         ! OUTPUT VARIABLES
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        LOGICAL :: isMesh
-        INTEGER :: NGEO1, nGlobalTrees1, color, key, NEWCOMM
+        LOGICAL :: isMesh, dsExists
+        INTEGER :: NGEO1, nGlobalTrees1, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
         IF(.NOT.isMesh) CALL abort(__STAMP__, &
@@ -152,17 +155,29 @@ CONTAINS
 
         ! print *, "READ IN PROGRESS"
         !Create a Communicator with MPI root processor
-        key = myrank
-        ! IF (MPIRoot) THEN
+            
 
-        ! color=0
-        ! ELSE
-        ! color=MPI_Undefined
-        ! ENDIF
-        ! CALL MPI_COMM_SPLIT(MPI_COMM_WORLD, color, key, NEWCOMM, IERROR)
+       
+       
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
+
+#if USE_AMR
+          iMortar = 0
+          dsExists = .FALSE.
+          CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
+          IF(dsExists)&
+                CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
+          isMortarMesh=(iMortar.EQ.1)
+          
+          IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
+            ! Error, we can't Run AMR on Mortar Mesh without p4est file
+            CALL CollectiveStop(__STAMP__,&
+             "Error, we cannot use AMR on Mortar Mesh without p4est file.")
+          ENDIF
+#endif /*USE_AMR*/
+
         nGlobalTrees = nGlobalTrees1
         nElems = nGlobalTrees1
         nGeo = Ngeo1
@@ -217,7 +232,7 @@ CONTAINS
         INTEGER :: BCindex
         INTEGER :: iElem, iTree, ElemID, iNode
         INTEGER :: iLocSide, iSide
-        INTEGER :: nPeriodicSides, nSideIDs
+        INTEGER :: nSideIDs
         INTEGER :: C2V(3, 8) ! Volume to 1D corner node mapping
         INTEGER, ALLOCATABLE :: ElemInfo(:, :), SideInfo(:, :), GlobalNodeIDs(:, :, :, :)
         LOGICAL :: oriented, fileExists, doConnection

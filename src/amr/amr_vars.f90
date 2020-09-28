@@ -16,10 +16,19 @@ SAVE
 CHARACTER(LEN=255)          :: p4estFile          ! name of hdf5 meshfile (write with ending .h5!)
 LOGICAL                     :: UseAMR
 LOGICAL                     :: AMRInitIsDone
+LOGICAL                     :: p4estFileExist
 INTEGER                     :: MaxLevel             ! Loaded from .ini file
 INTEGER                     :: MinLevel             ! Loaded from .ini file
+INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
+INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
+integer                     :: InitialRefinement    ! Initial refinement switch
+integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
+real, allocatable           :: Vdm_Interp_0_1_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [-1,0]
+real, allocatable           :: Vdm_Interp_0_2_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [0,1]
+real, allocatable           :: Vdm_Interp_1_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to first half of [-1,3]
+real, allocatable           :: Vdm_Interp_2_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to second half of [-3,1]
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
 
@@ -83,7 +92,9 @@ TYPE p4est_balance_datav2
     TYPE(C_PTR) ::  ElemxGPnew_Ptr; ! new Array ElemxGP
     TYPE(C_PTR) ::  ElemxGPold_Ptr; ! old Array ElemxGP
     TYPE(C_PTR) ::  Unew_Ptr; !new U
-    TYPE(C_PTR) ::  Uold_Ptr; !old U 
+    TYPE(C_PTR) ::  Uold_Ptr; !old U
+    TYPE(C_PTR) ::  ElemWasCoarsened_new; 
+    TYPE(C_PTR) ::  ElemWasCoarsened_old; 
 #if SHOCK_NFVSE
     TYPE(C_PTR) ::  AlphaNew_Ptr; !new U
     TYPE(C_PTR) ::  AlphaOld_Ptr; !old U 

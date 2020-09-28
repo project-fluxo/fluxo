@@ -1,6 +1,6 @@
 #include "connectivity.h"
 #include "p4fluxo.h"
-
+#include "p4est_wrap.h"
 
 static void
 SaveMeshSetElement_number(p4est_iter_volume_info_t *info, void *user_data) {
@@ -757,7 +757,7 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
     p4est->user_pointer = NULL;
     p4est_savef_data->nLocalSides = nLocalSides;
     //  2. Count Global Number of Sides (Array[mpisize])
-    p4est_savef_data->OffsetSideMPI = (int *) malloc(p4est->mpisize * sizeof(int));
+    p4est_savef_data->OffsetSideMPI = (int *) malloc((p4est->mpisize + 1) * sizeof(int));
     p4est->user_pointer = p4est_savef_data;
     count_parallel_sides(p4est);
     p4est->user_pointer = NULL;
@@ -829,7 +829,7 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
                   NULL);
 
 
-    p4est_savef_data->OffsetSideArrIndexMPI = (int *) malloc(p4est->mpisize * sizeof(int));
+    p4est_savef_data->OffsetSideArrIndexMPI = (int *) malloc((p4est->mpisize + 1) * sizeof(int));
     p4est_savef_data->nSidesArrIndex = p4est_savef_data->ElemInfo[(p4est->local_num_quadrants - 1) * 6 + (4 - 1)];
 
     p4est->user_pointer = (void *) p4est_savef_data;
@@ -880,37 +880,3 @@ savef_data_destroy(p4est_savef_data_t *p4est_savef_data) {
     pfree(p4est_savef_data);
 };
 
-void save_p4est(p4est_t *p4est, char in[]) {
-    printf("save p4est!! %d \n", p4est->local_num_quadrants);
-    p4est_save_ext(in, p4est, 0, 0);
-
-    return;
-};
-
-p4est_t *load_p4est(int mpicomm1, char in[]) {
-
-    p8est_connectivity_t **conn;
-    p4est_t *p4est;
-    static sc_MPI_Comm mpicomm;
-    mpicomm = MPI_Comm_f2c(mpicomm1);
-
-
-    p4est = p8est_load_ext(in,      //const char *filename,
-                           mpicomm, //sc_MPI_Comm mpicomm,
-                           0,       //size_t data_size,
-                           0,       //int load_data,
-                           1,       //int autopartition,
-                           1,       //int broadcasthead,
-                           NULL,    //void *user_pointer,
-                           conn);   //p8est_connectivity_t * *connectivity);
-    p4est->connectivity = *conn;
-    printf("Load p4est!! %d \n", p4est->connectivity->num_trees);
-
-    return p4est;
-};
-
-p8est_connectivity_t *GetConnectivity(p4est_t *p4est) {
-
-    printf("p4est->connectivity = %p \n", p4est->connectivity);
-    return p4est->connectivity;
-};

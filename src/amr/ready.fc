@@ -95,7 +95,8 @@ int p4est_init_f(int mpicomm1) {
     // mpicomm = sc_MPI_COMM_WORLD;
     mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C
     // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
-
+    //  printf("mpicomm!!! %d \n",mpicomm);
+    
     // printf("mpicomm = %d, size = %d \n", mpicomm, sizeof(mpicomm));
     // fflush(stdout);
     /* These functions are optional.  If called they store the MPI rank as a
@@ -103,8 +104,10 @@ int p4est_init_f(int mpicomm1) {
    * from processor zero.  Here we turn off most of the logging; see sc.h. */
     // sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR sc.h. */
     sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
-    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
+    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , C_LP_ERROR
+
     p4est_init(NULL, SC_LP_ERROR); //SC_LP_SILENT , SC_LP_ERROR
+   
     return 0;
 }
 
@@ -159,6 +162,53 @@ void p4estDelMPIData_f(p4est_mpi_data_t *data) {
     data = NULL;
 }
 
+void save_p4est(p4est_t *p4est, char in[]) {
+    // printf("save p4est!! \n%s!\n", in);//p4est->local_num_quadrants);
+    p4est_save_ext(in, p4est, 0, 0);
+    return;
+};
+
+
+
+p4est_t *load_p4est(int mpicomm1, char *in) {
+
+    p8est_connectivity_t *conn;
+    p4est_t *p4est;
+    sc_MPI_Comm mpicomm;
+    int myrank;
+    mpicomm = MPI_Comm_f2c(mpicomm1);
+    MPI_Comm_rank(mpicomm, &myrank);
+    p4est = p8est_load_ext(in,      //const char *filename,
+                           mpicomm, //sc_MPI_Comm mpicomm,
+                           0,       //size_t data_size,
+                           0,       //int load_data,
+                           1,       //int autopartition,
+                           0,       //int broadcasthead,
+                           NULL,    //void *user_pointer,
+                           &conn);   //p8est_connectivity_t * *connectivity);
+    
+    p4est->connectivity = conn;
+    p4est_reset_data(p4est, sizeof(p4est_inner_data_t), NULL, NULL);
+    int nEl = 0;
+    p4est_iterate(p4est,                     /* the forest */
+                  NULL,                   /* the ghost layer May be LAter!!! */
+                  (void *) &nEl,        /* the synchronized ghost data */
+                  ElementCounterNew_iter, /* callback to compute each quad's
+                                             interior contribution to du/dt */
+                  NULL,                   /* SidesCount_iter,            /* callback to compute each quads'
+                                             faces' contributions to du/du */
+                  NULL,                   /* there is no callback for the
+                                             edges between quadrants */
+                  NULL);
+    // printf("Connectivity!! %d \n", p4est->connectivity->num_trees);
+    // exit(0);
+    return p4est;
+};
+
+p8est_connectivity_t *GetConnectivity(p4est_t *p4est) {
+    // printf("p4est->connectivity = %p \n", p4est->connectivity);
+    return p4est->connectivity;
+};
 p4est_connectivity_t *p8est_connectivity_new_periodic_f() {
     return p8est_connectivity_new_periodic();
 }

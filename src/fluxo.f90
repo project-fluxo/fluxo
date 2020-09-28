@@ -43,9 +43,7 @@ USE MOD_DG,                ONLY:InitDG,FinalizeDG
 
 #if USE_AMR
 ! Added for AMR ->
-USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR,InitAMR_Connectivity
-USE MOD_AMR,                 ONLY: RunAMR,LoadBalancingAMR, SaveMesh
-USE MOD_AMR_tracking
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR
 ! <-Added for AMR 
 #endif
 #if PARABOLIC
@@ -147,9 +145,8 @@ CALL InitRestart()
 CALL InitOutput() 
 
 #if USE_AMR
-CALL InitAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+CALL InitAMR()
 #endif
-
 CALL InitMesh()
 
 #if MPI
@@ -161,17 +158,6 @@ CALL InitDG()
 #if SHOCKCAPTURE
 CALL InitShockCapturing()
 #endif /*SHOCKCAPTURE*/
-#if USE_AMR
-CALL ShockCapturingAMR()
-#endif
-                                                
-! ALLOCATE(ElemToRefineAndCoarse(1:nElems))
-! ElemToRefineAndCoarse = 0
-! ElemToRefineAndCoarse(1) = 1
-
-! CALL RunAMR(ElemToRefineAndCoarse) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-! DEALLOCATE(ElemToRefineAndCoarse)
 
 #if PARABOLIC
 CALL InitLifting()
