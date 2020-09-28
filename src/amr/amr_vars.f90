@@ -92,7 +92,9 @@ TYPE p4est_balance_datav2
     TYPE(C_PTR) ::  ElemxGPnew_Ptr; ! new Array ElemxGP
     TYPE(C_PTR) ::  ElemxGPold_Ptr; ! old Array ElemxGP
     TYPE(C_PTR) ::  Unew_Ptr; !new U
-    TYPE(C_PTR) ::  Uold_Ptr; !old U 
+    TYPE(C_PTR) ::  Uold_Ptr; !old U
+    TYPE(C_PTR) ::  ElemWasCoarsened_new; 
+    TYPE(C_PTR) ::  ElemWasCoarsened_old; 
 END TYPE p4est_balance_datav2
 
 TYPE p4est_mpi_data

@@ -2135,6 +2135,9 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
     // int a = MPI_Barrier(p4est->mpicomm);
     p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 2, data->Elem_xGP_new,
                          data->Elem_xGP_old, data->GPSize);
+                         
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 2, data->ElemWasCoarsened_new,
+                         data->ElemWasCoarsened_old, sizeof(int));
     // int b = MPI_Barrier(p4est->mpicomm);
     free(data->src_gfq);
     // free(dest);

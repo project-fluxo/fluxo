@@ -322,7 +322,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE, INTRINSIC :: ISO_C_BINDING
 ! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  real,allocatable :: Jold(:,:,:,:)
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: Ie
   TYPE(C_PTR) :: DataPtr;
@@ -330,6 +329,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,iElem, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld
+  integer, allocatable :: ElemWasCoarsened(:)
+  integer :: j,k
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -359,11 +360,11 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   ! CALL C_F_POINTER(DataPtr, FortranData)
   ! PRINT *, size(ChangeElem(1,:))
-
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
-    ALLOCATE(Jold         (0:PP_N,0:PP_N,0:PP_N,nElemsOld))
-    Jold = 1./sJ
+    ALLOCATE(Elem_xGP_New(3      ,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+    ALLOCATE(U_New       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+    allocate(ElemWasCoarsened(FortranData%nElems) )
+    ElemWasCoarsened = 0
     iElem=0;
     !  DO iElem=1,FortranData%nElems
     DO 
@@ -374,13 +375,16 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
         IF (Ie .LT. 0) THEN
           !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
           ! contains the number of child element 
-          call ProjectSolution_Refinement(3,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
+          call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
+          call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
           iElem=iElem+7;
         ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
           !  This is COARSE. Array ChangeElem(:,iElem) Contains 
           !  8 Element which must be COARSED to the new number iElem
+          ElemWasCoarsened(iElem) = 1
           call InterpolateCoords_Coarsening( Elem_xGP_New(:,:,:,:,iElem),&
                                              Elem_xGP    (:,:,:,:,ChangeElem(:,iElem)) )
+          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,ChangeElem(:,iElem)))
         ELSE
           IF (iE .LE. 0) THEN
             print *, "Error, iE = 0!, iElem = ", ielem
@@ -388,16 +392,18 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           ENDIF
           ! This is simple case of renumeration of Elements
           Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+          U_New       (:,:,:,:,iElem)= U       (:,:,:,:,Ie)
       ENDIF
     END DO
       CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+      CALL MOVE_ALLOC(U_New, U)
    ENDIF
 
   !  doLBalance = doLBalance + 1
   !  IF (doLBalance .EQ. 1) THEN
   !     doLBalance = 0;
       ! IF (doLBalance .EQ. 0) 
-!#      CALL LoadBalancingAMR()
+      CALL LoadBalancingAMR(ElemWasCoarsened)
         IF (MPIRoot) THEN
           print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
         ENDIF
@@ -660,34 +666,15 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   CALL CalcMetrics((/0/))
   
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
-    iElem=0;
-    !  DO iElem=1,FortranData%nElems
-    DO 
-      iElem=iElem+1;
-      IF (iElem .GT. FortranData%nElems) EXIT
-        i=1;
-        Ie= ChangeElem(i,iElem);
-        IF (Ie .LT. 0) THEN
-          !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-          ! contains the number of child element 
-          call ProjectSolution_Refinement(PP_nVar,U_New(:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
-          iElem=iElem+7;
-        ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-          
-          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,iElem),Jold(:,:,:,ChangeElem(:,iElem)))
-        ELSE
-          IF (iE .LE. 0) THEN
-            print *, "Error, iE = 0!, iElem = ", ielem
-            CALL EXIT()
-          ENDIF
-          ! This is simple case of renumeration of Elements
-          U_New(:,:,:,:,iElem)= U(:,:,:,:,Ie)
-      ENDIF
-    END DO
-      CALL MOVE_ALLOC(U_New, U)
-  ENDIF !(PRESENT(ElemToRefineAndCoarse))
-  
+    ! Scale coarsened elements
+    do iElem=1, nElems
+      if ( ElemWasCoarsened(iElem)>0 ) then
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          U(:,i,j,k,iElem) = U(:,i,j,k,iElem) * sJ(i,j,k,iElem)
+        end do       ; end do       ; end do
+      end if
+    end do
+  END IF ! PRESENT(ElemToRefineAndCoarse)
   
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
@@ -752,32 +739,37 @@ END SUBROUTINE RunAMR
 !> Does an L2 projection of the solution from 8 elements to 1
 !> ATTENTION: The projected solution must be scaled with the Jacobians because the projection integrals are evaluated on the fine and coarse elements
 !===================================================================================================================================
-  subroutine ProjectSolution_Coarsening(Unew, Uold,sJnew,Jold)
+  subroutine ProjectSolution_Coarsening(Unew, Uold, sJold)
     use MOD_PreProc     , only: PP_N
     use MOD_Mortar_Vars , only: M_1_0,M_2_0
     implicit none
     !-arguments-----------------------------------------------
     real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
     real, intent(in)    :: Uold(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
-    real, intent(in)    :: Jold        (0:PP_N,0:PP_N,0:PP_N,8)
-    real, intent(in)    :: sJnew       (0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)    :: sJold       (0:PP_N,0:PP_N,0:PP_N,8)
     !-local-variables-----------------------------------------
     integer :: l,m,s,p,q,r
+    real :: JUold(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
     !---------------------------------------------------------
     
+    ! Scale U with the Jacobian
+    do r=1, 8 ; do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+      JUold(:,l,m,s,r) = Uold(:,l,m,s,r) / sJold(l,m,s,r)
+    end do       ; end do       ; end do       ; end do
+    
+    ! Project to new (big) element (The scaling with the new Jacobian is missing)
     Unew = 0.0
     do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
       do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
-        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,1) *Jold(l,m,s,1) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,2) *Jold(l,m,s,2) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,3) *Jold(l,m,s,3) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,4) *Jold(l,m,s,4) &
-                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,5) *Jold(l,m,s,5) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,6) *Jold(l,m,s,6) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,7) *Jold(l,m,s,7) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,8) *Jold(l,m,s,8)
+        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,1) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,2) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,3) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,4) &
+                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,5) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,6) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,7) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,8) 
       end do       ; end do       ; end do
-      Unew(:,p,q,r) = Unew(:,p,q,r)*sJnew(p,q,r)
     end do       ; end do       ; end do
     
   end subroutine ProjectSolution_Coarsening
@@ -871,7 +863,7 @@ END SUBROUTINE RunAMR
 !============================================================================================================================
 !> Deallocate mesh data.
 !============================================================================================================================
-SUBROUTINE LoadBalancingAMR()
+SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
   ! MODULES
   USE MOD_Globals
   USE MOD_AMR_Vars
@@ -882,9 +874,12 @@ SUBROUTINE LoadBalancingAMR()
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
+  ! ARGUMENTS
+  integer, intent(inout), allocatable, target :: ElemWasCoarsened(:)
+  !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-
+  integer,allocatable,target :: ElemWasCoarsened_new(:)
   !============================================================================================================================
   TYPE(p4est_balance_datav2), TARGET :: BalanceData;
   
@@ -900,23 +895,22 @@ SUBROUTINE LoadBalancingAMR()
   
   BalanceData%Uold_Ptr = C_LOC(U)
   BalanceData%ElemxGPold_Ptr = C_LOC(Elem_xGP)
-  
-  
-  
-  
+  BalanceData%ElemWasCoarsened_old = C_LOC(ElemWasCoarsened)
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
  
   ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
   ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
- 
   BalanceData%ElemxGPnew_Ptr = C_LOC(Elem_xGP_New)
- 
+  allocate(ElemWasCoarsened_new(BalanceData%nElems))
+  BalanceData%ElemWasCoarsened_new = C_LOC(ElemWasCoarsened_new)
+  
   CALL p4est_loadbalancing_go(P4EST_PTR, C_LOC(BalanceData))
 
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
+  CALL MOVE_ALLOC(ElemWasCoarsened_new, ElemWasCoarsened)
   CALL p4est_ResetElementNumber(P4EST_PTR)
   
   ! CALL RunAMR()
