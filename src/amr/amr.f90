@@ -115,6 +115,9 @@ SUBROUTINE InitAMR()
     USE MOD_P4EST
     USE MOD_ReadInTools         ,ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
     USE MOD_Indicators          ,ONLY: InitIndicator
+    use MOD_Interpolation_Vars  ,only: NodeType
+    use MOD_Basis               ,only: InitializeVandermonde
+    use MOD_Interpolation       ,only: GetNodesAndWeights
     ! USE MOD_P4EST_Binding, ONLY: p4_initvars
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
@@ -122,6 +125,7 @@ SUBROUTINE InitAMR()
     ! INPUT/OUTPUT VARIABLES
     !----------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES
+    real :: xi_In(0:PP_N),w_in(0:PP_N),wBary_In(0:PP_N)
     !==================================================================================================================================
     INTEGER RET
 
@@ -172,6 +176,25 @@ SUBROUTINE InitAMR()
       CALL InitAMR_P4est()
     ENDIF
     
+    ! Refinement and coarsening interpolation operators
+    ! -------------------------------------------------
+    CALL GetNodesAndWeights(PP_N,NodeType,xi_In,wIP=w_in,wIPBary=wBary_In)
+    
+    ! Refinement operators (ATTENTION: we use the TRANSPOSED Vandermonde matrices since the refinement rouines can be called with these matrices AND with the Mortar matrices, which are transposed)
+    allocate (Vdm_Interp_0_1_T(0:PP_N,0:PP_N), Vdm_Interp_0_2_T(0:PP_N,0:PP_N))
+    
+    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In-1.),Vdm_Interp_0_1_T)
+    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In+1.),Vdm_Interp_0_2_T)
+    Vdm_Interp_0_1_T = transpose(Vdm_Interp_0_1_T)
+    Vdm_Interp_0_2_T = transpose(Vdm_Interp_0_2_T)
+    
+    ! Coarsening operators
+    N_2 = PP_N/2
+    allocate( Vdm_Interp_1_0(0:N_2,0:PP_N),Vdm_Interp_2_0(N_2+1:PP_N,0:PP_N) ) ! Temporary
+    
+    CALL InitializeVandermonde(PP_N,N_2              ,wBary_In,xi_In,2.0*xi_In(0    :N_2 )+1.,Vdm_Interp_1_0)
+    CALL InitializeVandermonde(PP_N,N_2-mod(PP_N+1,2),wBary_In,xi_In,2.0*xi_In(N_2+1:PP_N)-1.,Vdm_Interp_2_0)
+        
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
     SWRITE(UNIT_StdOut,'(132("-"))')
@@ -289,6 +312,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   USE MOD_Mesh_Vars,          ONLY: nGlobalElems
+  use MOD_Mortar_Vars,        only: M_0_1,M_0_2
+  use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
+  use MOD_Output, only: Visualize
 #if PARABOLIC
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
@@ -296,7 +322,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE, INTRINSIC :: ISO_C_BINDING
 ! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  real,allocatable :: sJold(:,:,:,:)
+  real,allocatable :: Jold(:,:,:,:)
   INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: Ie
   TYPE(C_PTR) :: DataPtr;
@@ -336,8 +362,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
     ALLOCATE(Elem_xGP_New(3,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
-    ALLOCATE(sJold         (0:PP_N,0:PP_N,0:PP_N,nElemsOld))
-    sJold = sJ
+    ALLOCATE(Jold         (0:PP_N,0:PP_N,0:PP_N,nElemsOld))
+    Jold = 1./sJ
     iElem=0;
     !  DO iElem=1,FortranData%nElems
     DO 
@@ -348,15 +374,13 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
         IF (Ie .LT. 0) THEN
           !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
           ! contains the number of child element 
-          CALL InterpolateCoarseRefine(Elem_xGP_New(:,:,:,:,iElem:iElem+7),&
-                                       Elem_xGP(:,:,:,:,-Ie:-Ie))
-          !It is also possible to use (/1,5,7,8/) instead of iElem:iElem+7
+          call ProjectSolution_Refinement(3,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
           iElem=iElem+7;
         ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
           !  This is COARSE. Array ChangeElem(:,iElem) Contains 
           !  8 Element which must be COARSED to the new number iElem
-          CALL InterpolateCoarseRefine(Elem_xGP_New(:,:,:,:,iElem:iElem),&
-                                       Elem_xGP(:,:,:,:,ChangeElem(:,iElem)))
+          call InterpolateCoords_Coarsening( Elem_xGP_New(:,:,:,:,iElem),&
+                                             Elem_xGP    (:,:,:,:,ChangeElem(:,iElem)) )
         ELSE
           IF (iE .LE. 0) THEN
             print *, "Error, iE = 0!, iElem = ", ielem
@@ -368,6 +392,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     END DO
       CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
    ENDIF
+
   !  doLBalance = doLBalance + 1
   !  IF (doLBalance .EQ. 1) THEN
   !     doLBalance = 0;
@@ -646,11 +671,11 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
         IF (Ie .LT. 0) THEN
           !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
           ! contains the number of child element 
-          call ProjectSolution_Refinement(U_New(:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie) )
+          call ProjectSolution_Refinement(PP_nVar,U_New(:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
           iElem=iElem+7;
         ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
           
-          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,iElem),sJold(:,:,:,ChangeElem(:,iElem)))
+          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,iElem),Jold(:,:,:,ChangeElem(:,iElem)))
         ELSE
           IF (iE .LE. 0) THEN
             print *, "Error, iE = 0!, iElem = ", ielem
@@ -727,14 +752,14 @@ END SUBROUTINE RunAMR
 !> Does an L2 projection of the solution from 8 elements to 1
 !> ATTENTION: The projected solution must be scaled with the Jacobians because the projection integrals are evaluated on the fine and coarse elements
 !===================================================================================================================================
-  subroutine ProjectSolution_Coarsening(Unew, Uold,sJnew,sJold)
+  subroutine ProjectSolution_Coarsening(Unew, Uold,sJnew,Jold)
     use MOD_PreProc     , only: PP_N
     use MOD_Mortar_Vars , only: M_1_0,M_2_0
     implicit none
     !-arguments-----------------------------------------------
     real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
     real, intent(in)    :: Uold(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
-    real, intent(in)    :: sJold       (0:PP_N,0:PP_N,0:PP_N,8)
+    real, intent(in)    :: Jold        (0:PP_N,0:PP_N,0:PP_N,8)
     real, intent(in)    :: sJnew       (0:PP_N,0:PP_N,0:PP_N)
     !-local-variables-----------------------------------------
     integer :: l,m,s,p,q,r
@@ -743,30 +768,34 @@ END SUBROUTINE RunAMR
     Unew = 0.0
     do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
       do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
-        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,1) /sJold(l,m,s,1) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,2) /sJold(l,m,s,2) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,3) /sJold(l,m,s,3) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,4) /sJold(l,m,s,4) &
-                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,5) /sJold(l,m,s,5) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,6) /sJold(l,m,s,6) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,7) /sJold(l,m,s,7) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,8) /sJold(l,m,s,8)
+        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,1) *Jold(l,m,s,1) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,2) *Jold(l,m,s,2) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,3) *Jold(l,m,s,3) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * Uold(:,l,m,s,4) *Jold(l,m,s,4) &
+                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,5) *Jold(l,m,s,5) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,6) *Jold(l,m,s,6) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,7) *Jold(l,m,s,7) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * Uold(:,l,m,s,8) *Jold(l,m,s,8)
       end do       ; end do       ; end do
       Unew(:,p,q,r) = Unew(:,p,q,r)*sJnew(p,q,r)
     end do       ; end do       ; end do
     
   end subroutine ProjectSolution_Coarsening
 !===================================================================================================================================
-!> Does an L2 projection of the solution from 1 element to 8
-!> ATTENTION: The projected solution DOES NOT HAVE to be scaled with the Jacobians because the projection integrals are evaluated only on the fine elements
+!> Projects a field from 1 element to 8. Can be used for
+!>  1. Solution (L2 projection): The projected solution DOES NOT HAVE to be scaled with the Jacobians because the projection 
+!>                               integrals are evaluated only on the fine elements
+!>  2. Coordinates: Using the interpolation matrices
 !===================================================================================================================================
-  subroutine ProjectSolution_Refinement(Unew, Uold)
+  subroutine ProjectSolution_Refinement(nVar,Unew, Uold,M_0_1,M_0_2)
     use MOD_PreProc     , only: PP_N
-    use MOD_Mortar_Vars , only: M_0_1,M_0_2
     implicit none
     !-arguments-----------------------------------------------
-    real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N,8)
-    real, intent(in)    :: Uold(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    integer, intent(in)    :: nVar
+    real   , intent(inout) :: Unew(nVar,0:PP_N,0:PP_N,0:PP_N,8)
+    real   , intent(in)    :: Uold(nVar,0:PP_N,0:PP_N,0:PP_N)
+    real   , intent(in)    :: M_0_1    (0:PP_N,0:PP_N)
+    real   , intent(in)    :: M_0_2    (0:PP_N,0:PP_N)
     !-local-variables-----------------------------------------
     integer :: l,m,s,p,q,r
     !---------------------------------------------------------
@@ -786,110 +815,58 @@ END SUBROUTINE RunAMR
     end do       ; end do       ; end do
     
   end subroutine ProjectSolution_Refinement
-  
-SUBROUTINE InterpolateCoarseRefine(Elem_xGPnew,Elem_xGPold)
-    ! Enumerate the cells number as in P4est
-    USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
-    USE MOD_Interpolation,      ONLY: GetVandermonde
-    USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
-    USE MOD_PreProc,            ONLY: PP_N
-
-    IMPLICIT NONE
-    REAL, INTENT(INOUT)          :: Elem_xGPnew(:,:,:,:,:)
-    REAL, INTENT(IN)             :: Elem_xGPold(:,:,:,:,:)
-    INTEGER                      :: SizeNew, SizeOld
-    INTEGER                      :: i
-    REAL,ALLOCATABLE                :: Elem_xGP_big(:,:,:,:,:)
-    REAL,ALLOCATABLE                :: Vdm_fromSmalltoBig(:,:),Vdm_FromNVisu_toNodeType(:,:)
-    ! REAL,ALLOCATABLE                :: Unew_big(:,:,:,:,:) , Elem_xGP_big(:,:,:,:,:)
-    REAL,ALLOCATABLE                :: Vdm_fromBigtoSmall(:,:),Vdm_FromNodeType_toNVisu(:,:)
+!===================================================================================================================================
+!> Does a simple interpolation (extrapolation) from element 1 to the big element. This works if Ngeo<=N
+!===================================================================================================================================
+  subroutine InterpolateCoords_Coarsening(Xnew, Xold)
+    use MOD_PreProc     , only: PP_N
+    use MOD_AMR_Vars    , only: Vdm_Interp_1_0, Vdm_Interp_2_0, N_2
+    implicit none
+    !-arguments-----------------------------------------------
+    real, intent(inout) :: Xnew (1:3,0:PP_N,0:PP_N,0:PP_N)
+    real, intent(in)    :: Xold (1:3,0:PP_N,0:PP_N,0:PP_N,1:8)
+    !-local-variables-----------------------------------------
+    integer :: l,m,s,p,q,r
+    !---------------------------------------------------------
     
-    sizenew=size(Elem_xGPnew(1,1,1,1,:))
-    sizeold=size(Elem_xGPold(1,1,1,1,:))
-
+    ! Fill Xnew (subcell by subcell)
+    Xnew = 0.0
+    do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
+      ! Subcell 1
+      do r=0, N_2 ; do q=0, N_2 ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,1) 
+      end do       ; end do       ; end do
+      ! Subcell 2
+      do r=0, N_2 ; do q=0, N_2 ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,2)
+      end do       ; end do       ; end do
+      ! Subcell 3
+      do r=0, N_2 ; do q=N_2+1, PP_N ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,3)
+      end do       ; end do       ; end do
+      ! Subcell 4
+      do r=0, N_2 ; do q=N_2+1,PP_N ; do p=N_2+1,PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_1_0(r,s) * Xold(:,l,m,s,4)
+      end do       ; end do       ; end do
+      ! Subcell 5
+      do r=N_2+1, PP_N ; do q=0, N_2 ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,5)
+      end do       ; end do       ; end do
+      ! Subcell 6
+      do r=N_2+1, PP_N ; do q=0, N_2 ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_1_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,6)
+      end do       ; end do       ; end do
+      ! Subcell 7
+      do r=N_2+1, PP_N ; do q=N_2+1, PP_N ; do p=0, N_2
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_1_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,7)
+      end do       ; end do       ; end do
+      ! Subcell 8
+      do r=N_2+1, PP_N ; do q=N_2+1, PP_N ; do p=N_2+1, PP_N
+        Xnew(:,p,q,r) = Xnew(:,p,q,r) + Vdm_Interp_2_0(p,l)*Vdm_Interp_2_0(q,m)*Vdm_Interp_2_0(r,s) * Xold(:,l,m,s,8)
+      end do       ; end do       ; end do
+    end do       ; end do       ; end do
     
-    !     ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
-    !     ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
-
-    IF ((sizenew .EQ. 1 .AND. sizeold .EQ. 8) .OR. (sizenew .EQ.  8 .AND. sizeold .EQ. 1)) THEN
-      IF (sizenew > sizeold) THEN
-      !This is refine
-
-
-        ALLOCATE(Vdm_fromSmalltoBig(0:2*PP_N,0:PP_N))
-        ALLOCATE(Vdm_FromNVisu_toNodeType(0:PP_N,0:PP_N))
-
-    !   print *, "Size!!!!!!!11 U old ", PP_nVar_local
-        CALL GetVandermonde(PP_N, NodeType, 2*PP_N,      NodeTypeVISU, Vdm_fromSmallToBig)
-        CALL GetVandermonde(PP_N, NodeTypeVISU, PP_N,      NodeType, Vdm_FromNVisu_toNodeType)
-
-        i=2*PP_N
-        ALLOCATE(Elem_xGP_big(size(Elem_xGPnew(:,1,1,1,1)),0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        !Add interpolation of this elements
-
-
-        !CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,Elem_xGP(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
-        CALL ChangeBasis3D(3,PP_N,2*PP_N,Vdm_fromSmallToBig,Elem_xGPold(:,:,:,:,1),Elem_xGP_big(:,:,:,:,1))
-
-
-
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,0:PP_N,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,1))! Octant%Elems(1)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,0:PP_N,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,2))! Octant%Elems(2)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,PP_N:i,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,4))! Octant%Elems(3)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,PP_N:i,0:PP_N,1),Elem_xGPnew(1:3,:,:,:,3))! Octant%Elems(4)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,0:PP_N,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,5))! Octant%Elems(5)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,0:PP_N,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,6))! Octant%Elems(6)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,PP_N:i,PP_N:i,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,8))! Octant%Elems(7)%ElemID))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNVisu_toNodeType,Elem_xGP_big(1:3,0:PP_N,PP_N:i,PP_N:i,1),Elem_xGPnew(1:3,:,:,:,7))! Octant%Elems(8)%ElemID))
-
-        !~
-        DEALLOCATE(Elem_xGP_big)
-        DEALLOCATE(Vdm_fromSmalltoBig)
-        DEALLOCATE(Vdm_FromNVisu_toNodeType)
-
-
-      ELSE
-      !This is Coarse
-  
-        ALLOCATE(Vdm_fromBigtoSmall(0:PP_N,0:2*PP_N))
-        ALLOCATE(Vdm_FromNodeType_toNVisu(0:PP_N,0:PP_N))
-         
-        CALL GetVandermonde(2*PP_N, NodeTypeVISU, PP_N, NodeType,      Vdm_fromBigToSmall)
-        CALL GetVandermonde(PP_N,      NodeType,PP_N, NodeTypeVISU,  Vdm_FromNodeType_toNVisu)
-
-        i=2*PP_N  
-        
-        ALLOCATE(Elem_xGP_big(size(Elem_xGPnew(:,1,1,1,1)),0:2*PP_N,0:2*PP_N,0:2*PP_N,1))
-        !Add interpolation of this elements
-        
-     
-        
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,1),Elem_xGP_big(1:3,0:PP_N,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,2),Elem_xGP_big(1:3,PP_N:i,0:PP_N,0:PP_N,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,4),Elem_xGP_big(1:3,PP_N:i,PP_N:i,0:PP_N,1))  
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,3),Elem_xGP_big(1:3,0:PP_N,PP_N:i,0:PP_N,1))  
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,5),Elem_xGP_big(1:3,0:PP_N,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,6),Elem_xGP_big(1:3,PP_N:i,0:PP_N,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,8),Elem_xGP_big(1:3,PP_N:i,PP_N:i,PP_N:i,1))
-        CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_FromNodeType_toNVisu,Elem_xGPold(1:3,:,:,:,7),Elem_xGP_big(1:3,0:PP_N,PP_N:i,PP_N:i,1))
-        
-        CALL ChangeBasis3D(3,2*PP_N,PP_N,Vdm_fromBigtoSmall,Elem_xGP_big(:,:,:,:,1),Elem_xGPnew(:,:,:,:,1))
-        !~     
-        DEALLOCATE(Elem_xGP_big)
-        DEALLOCATE(Vdm_fromBigtoSmall)
-        DEALLOCATE(Vdm_FromNodeType_toNVisu)
-
-      ENDIF  !if (sizenew > sizeold) THEN
-    ELSE 
-      !There is an Error !!!
-      print*, "Error in =InterpolateCoarseRefine= the number of cells not 1 to 8 or 8 to 1"
-    ENDIF
-
-  
-
-    END SUBROUTINE InterpolateCoarseRefine
-
-
+  end subroutine InterpolateCoords_Coarsening
 
 !============================================================================================================================
 !> Deallocate mesh data.

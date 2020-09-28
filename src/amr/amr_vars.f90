@@ -22,8 +22,13 @@ INTEGER                     :: MinLevel             ! Loaded from .ini file
 INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
 INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
 integer                     :: InitialRefinement    ! Initial refinement switch
+integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
+real, allocatable           :: Vdm_Interp_0_1_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [-1,0]
+real, allocatable           :: Vdm_Interp_0_2_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [0,1]
+real, allocatable           :: Vdm_Interp_1_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to first half of [-1,3]
+real, allocatable           :: Vdm_Interp_2_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to second half of [-3,1]
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
 

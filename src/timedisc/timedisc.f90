@@ -203,6 +203,7 @@ CALL DGTimeDerivative(t)
 ! Impose initial AMR refinement
 #if USE_AMR
 call InitialAMRRefinement()
+CALL DGTimeDerivative(t)
 #endif /*USE_AMR*/
 
 ! Write the state at time=0, i.e. the initial condition
@@ -265,7 +266,7 @@ IF (UseAMR) THEN
   doAMR = doAMR + 1;
   IF (doAMR .EQ. nDoAMR) THEN
     doAMR = 0;
-    CALL ShockCapturingAMR()
+    call ShockCapturingAMR()
   ENDIF
 ENDIF
 #endif /*USE_AMR*/
