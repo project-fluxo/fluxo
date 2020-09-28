@@ -113,6 +113,10 @@ end subroutine
         USE MOD_Indicators,             ONLY : ShockSensor_PerssonPeraire
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
         USE MOD_P4EST,                  ONLY: SaveP4est
+#if SHOCK_NFVSE
+        use MOD_ShockCapturing_Vars,    only: alpha, alpha_max
+        use MOD_NFVSE_Vars         ,    only: SpacePropFactor
+#endif /*SHOCK_NFVSE*/
         ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE
         ! SAVE
@@ -128,72 +132,25 @@ end subroutine
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = MinLevel;
         
-    !! < ----- Commented for the production ----- >
- 
-         DO iElem = 1, nElems
-             eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
-             IF (eta_dof .GE. RefineVal) THEN
-                 ElemToRefineAndCoarse(iElem) = MaxLevel
-           
-             ELSE IF (eta_dof .LE. CoarseVal) THEN
-                 ElemToRefineAndCoarse(iElem) = -MinLevel - 1
-             ELSE
-                 ElemToRefineAndCoarse(iElem) = MinLevel
-             END IF
+        DO iElem = 1, nElems
+          eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
+          IF (eta_dof .GE. RefineVal) THEN
+            ElemToRefineAndCoarse(iElem) = MaxLevel
+          ELSE IF (eta_dof .LE. CoarseVal) THEN
+            ElemToRefineAndCoarse(iElem) = -MinLevel - 1
+          ELSE
+            ElemToRefineAndCoarse(iElem) = MinLevel
+          END IF
+#if SHOCK_NFVSE
+          ! Always refine if the shock capturing is firing
+          if ( alpha(iElem) > alpha_max*max(0.5,SpacePropFactor)) ElemToRefineAndCoarse(iElem) = MaxLevel
+#endif /*SHOCK_NFVSE*/
         ENDDO
-        !! < ----- Commented for the production ----- >
-
-        ! IF (Count .EQ. 0 ) THEN
-            ! COUNT = 1; 
-        ! DO iElem = 1,nElems
-
-        !     ! ==== > StressTest
-        !     ! CALL RANDOM_NUMBER(R)
-        !     ! ! PRINT *, "R = ", R
-        !     ! If (R .LE. 0.2) THEN 
-        !     !     ElemToRefineAndCoarse(iElem) = MaxLevel  
-        !     !     ! PRINT *, "Refine = ", R       
-        !     ! ELSE
-        !     !     ElemToRefineAndCoarse(iElem) = -MinLevel - 1          
-        !     !     ! PRINT *, "Coarse = ", R       
-        !     ! ENDIF
-        !     ! ==== < StressTest
-        !     ! IF ((Elem_xGP(1,0,0,0,iElem)) .LE. 0.1499 .OR. &
-        !     !     (Elem_xGP(2,0,0,0,iElem)) .LE. 0.1499 .OR. &
-        !     !     ! (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
-        !     !     (Elem_xGP(1,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499 .OR. &
-        !     !     (Elem_xGP(2,PP_N,PP_N,PP_N,iElem)) .GE. 1.-0.1499) THEN ! .OR. &
-        !     !     ! (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 &
-                
-        !     !         ElemToRefineAndCoarse(iElem) = MaxLevel          
-        !     !     ELSE 
-        !     !         ElemToRefineAndCoarse(iElem) = MinLevel          
-        !     !     ! PRINT *, "REFINE!!!!!!!!!!!!!!!!"
-        !     !     ! PRINT *, "=>>>>", Minval(Elem_xGP(1,:,:,:,iElem))
-        !     !     ! CALL EXIT()
-        !     ! ENDIF
-        ! ENDDO
-          ! IF (MPIRoot) THEN
-            ! ElemToRefineAndCoarse(1) = MaxLevel
-            ! ENDIF
-        ! ENDIF
-        ! CALL EXIT()
-        ! ElemToRefineAndCoarse(1) = 1 
 
         CALL RunAMR(ElemToRefineAndCoarse);
-        ! IF ((Count .EQ. 1) .OR. (Count .EQ. 0)) THEN
-        !     COUNT = 1; 
-        !    CALL InitData();
-        !     IF (MPIRoot) PRINT *, "InitData"
-        ! ENDIF
+        
         Deallocate(ElemToRefineAndCoarse)
-    !     PRINT *, "REFINED"
-    !     CALL SaveMesh("new_mesh.h5")
-    !     Call SaveP4est("new.p4est")
-
-    !    CALL EXIT()
-       
-
+    
     END SUBROUTINE ShockCapturingAMR
 
     SUBROUTINE InitData()
@@ -205,70 +162,7 @@ end subroutine
         USE MOD_AMR, ONLY : RunAMR
         IMPLICIT NONE
 
-
-        
         if (.not. DoRestart) call FillIni(IniExactFunc,U)
-        
-!#        PP = size(U(1, :, 0, 0, 1)) - 1;
-!#        nVar = size(U(:, 0, 0, 0, 1));
-!#        X0 = 0.5
-!#        Y0 = 0.5
-!#        Mejecta = 0.5 !0.5
-!#        SigmaEjecta = 15.e-2!3.e-2
-!#        Eblast = 0*0.1 !1.
-!#        Sigmablast = 5.e-2!2.e-2
-!#        ! R = 3. / 2. !sqrt(0.5) !0.005
-!#        ! sigma = 1.
-!#        ! MachInf = 0.4 !sqrt(skappa) !0.5
-!#        ! beta = Machinf * 27. / 3.14159 / 4. * exp(2. / 9.)!Machinf*5./3.14159/2.*exp(1.)!1./5.
-!#        ! alfa = 3.14159 / 2.
-!#!        PRINT *, "IniExactFunc", IniExactFunc
-!#        ! DO l = 1, nElems
-!#        !     IF ((Elem_xGP(1,0,0,0,l)) .LE. 0.1499 .OR. &
-!#        !         (Elem_xGP(2,0,0,0,l)) .LE. 0.1499 .OR. &
-!#        !         (Elem_xGP(3,0,0,0,l)) .LE. 0.1499 .OR. &
-!#        !         (Elem_xGP(1,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 .OR. &
-!#        !         (Elem_xGP(2,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 .OR. &
-!#        !         (Elem_xGP(3,PP_N,PP_N,PP_N,l)) .GE. 1.-0.1499 ) THEN !
-!#        !             U(1,:,:,:,l ) = 5.
-!#        !         ELSE
-!#        !             U(1,:,:,:,l ) = 1.
-!#        !             ! PRINT *," ====>", Maxval(Elem_xGP(1,:,:,:,l))
-!#        !     ENDIF
-!#        ! ENDDO
-!#        ! DO  Iter = 1, 5
-!#            DO iElem = 1, nElems
-!#                DO i = 0, PP; DO j = 0, PP; DO k = 0, PP;
-
-!#                    X = Elem_xGP(1,i,j,k,iElem)
-!#                    Y = Elem_xGP(2,i,j,k,iElem)
-!#                    X = (x-x0)
-!#                    Y = (y-y0)
-
-!#                    Ux = 1.
-!#                    Vy = 1.
-!#                    Rho = 2. + Mejecta / 2. / PP_Pi / SigmaEjecta / SigmaEjecta * &
-!#                        exp(-0.5 * (x * x + y * y) / SigmaEjecta / SigmaEjecta)
-!#                    P = 1.e+2 * skappam1 + Eblast/(2 * PP_Pi * SigmaBlast * SigmaBlast) * &
-!#                        exp(-0.5 * (x * x + y * y) / Sigmablast / Sigmablast)
-!#                    	    ! F = -1./2./sigma/Sigma*(x*x/R/R + y*y/R/R)
-!#                    	    ! Omega = beta * exp(f)
-!#                    	    ! Rho = (1. - ((kappam1)/2.)*Omega*Omega)**skappam1
-!#                    	    ! Ux = Machinf*Cos(alfa) - y/r*Omega
-!#                    	    ! Vy = MachInf*sin(alfa) + x/r*Omega
-!#                    	    ! P = skappa*(1 - kappam1/2. * Omega*Omega)**(kappa*skappam1)
-!#                      Prim = (/Rho, Ux, Vy, 0., P/)
-!#                    ! Prim = (/1.29, 0.,0., 0., 100000./)
-!#                    ! CALL PrimToCons(Prim, U(:,i,j,k,iElem))
-!#                    ! SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
-!#                    CALL ExactFunc(IniExactFunc, 0., Elem_xGP(:, i, j, k, iElem), U(:, i, j, k, iElem));
-!#                ENDDO;
-!#                ENDDO;
-!#                ENDDO;
-!#                ! i,j,k
-!#            ENDDO ! nElems
-!#        !     ! Call RunAMR();
-!#        ! ENDDO !Iter
 
     END SUBROUTINE InitData
 
