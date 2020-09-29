@@ -42,7 +42,6 @@ contains
     
     do sideID=firstMortarInnerSide, nSides
       ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-
       !master sides(ElemID,locSide and flip =-1 if not existing)
       if(ElemID.NE.-1) then ! element belonging to master side is on this processor
         alpha_Master(SideID) = alpha(ElemID) 
@@ -86,7 +85,7 @@ contains
 !   Finish the MPI exchange
 !   -----------------------
 #if MPI
-    call FinishExchangeMPIData(4*nNbProcs,MPIRequest_alpha) ! gradUx,y,z: MPI_YOUR -> MPI_MINE (_slave)
+    call FinishExchangeMPIData(4*nNbProcs,MPIRequest_alpha)
 #endif /*MPI*/
     
 !   Compute the minimum alpha (for each pair master/slave) and enforce it on non-mortar sides
@@ -166,7 +165,7 @@ contains
                              MPIRequest_alpha(:,1), SendID=2) ! Receive MINE (sendID=2)
     
     ! receive the master
-    call StartReceiveMPIData(alpha_Master, 1, firstSlaveSide, lastSlaveSide, &
+    call StartReceiveMPIData(alpha_Master(firstSlaveSide:lastSlaveSide), 1, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_alpha(:,2), SendID=1) ! Receive YOUR  (sendID=1) 
     
     ! TODO: transfer the mortar to the right MPI faces 
@@ -177,7 +176,7 @@ contains
                              MPIRequest_alpha(:,3), SendID=2) ! SEND YOUR (sendID=2) 
     
     ! Send the master
-    call StartSendMPIData   (alpha_Master, 1, firstSlaveSide, lastSlaveSide, &
+    call StartSendMPIData   (alpha_Master(firstSlaveSide:lastSlaveSide), 1, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_alpha(:,4),SendID=1) 
     
   end subroutine Start_BlendCoeff_MPICommunication
