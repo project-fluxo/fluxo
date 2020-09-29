@@ -151,6 +151,7 @@ FUNCTION ShockSensor_PerssonPeraire(U) RESULT (eta)
       ! DOF energy indicator
       eta = MAX(LU_N/LU,LU_NM1/LUM1)
       
+      if (eta < epsilon(eta)) eta = epsilon(eta)
    
 END FUNCTION ShockSensor_PerssonPeraire
 
