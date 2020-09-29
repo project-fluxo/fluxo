@@ -1159,7 +1159,7 @@ if(cases[0]==0 or (caseID in cases)) :
            ,"FLUXO_PARABOLIC"        ,"OFF"
            ,"FLUXO_TESTCASE"         ,"default"
            ,"FLUXO_AMR"              ,"ON"
-           # #,"FLUXO_BUILD_P4EST"      ,"OFF"
+           ,"FLUXO_BUILD_P4EST"      ,"OFF"
           ])
   
   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
