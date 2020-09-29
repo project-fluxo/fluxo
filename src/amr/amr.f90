@@ -333,6 +333,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER :: i,j,k,iElem, nMortarSides, NGeoRef
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld, doLBalance
   integer, allocatable :: ElemWasCoarsened(:)
+  integer :: max_nElems, min_nElems, sum_nElems
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -406,9 +407,14 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   !  IF (doLBalance .EQ. 1) THEN
   !     doLBalance = 0;
       ! IF (doLBalance .EQ. 0) 
-      CALL LoadBalancingAMR(ElemWasCoarsened)
+        CALL LoadBalancingAMR(ElemWasCoarsened)
+        
+        call MPI_Reduce(FortranData%nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
+        call MPI_Reduce(FortranData%nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
+        call MPI_Reduce(FortranData%nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
+      
         IF (MPIRoot) THEN
-          print *, "LoadBalance: Done! nGlobalElems =", nGlobalElems
+          WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", nGlobalElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
         ENDIF
   !  ENDIF
 
@@ -685,7 +691,7 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
-  deallocate(ElemWasCoarsened)
+  SDEALLOCATE(ElemWasCoarsened)
   NULLIFY(MInfo)
   NULLIFY(nBCsF)
 END SUBROUTINE RunAMR
