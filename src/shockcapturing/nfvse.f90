@@ -162,6 +162,8 @@ contains
     allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( alpha_old(nElems) )
+    Fsafe = 0.
+    Fblen = 0.
     alpha_old = 0.
 #endif /*NFVSE_CORR*/
     
@@ -296,7 +298,8 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, Fsafe, Fblen
+    use MOD_ShockCapturing_Vars, only: alpha_old
     use MOD_Mesh_Vars          , only: nElems
     implicit none
     !-arguments-----------------------------------
@@ -309,6 +312,17 @@ contains
       SDEALLOCATE(SubCellMetrics)
       allocate ( SubCellMetrics(nElems) )
       call SubCellMetrics % construct(PP_N)
+#if NFVSE_CORR
+      SDEALLOCATE(Fsafe)
+      SDEALLOCATE(Fblen)
+      SDEALLOCATE(alpha_old)
+      allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+      allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+      allocate ( alpha_old(nElems) )
+      Fsafe = 0.
+      Fblen = 0.
+      alpha_old = 0.
+#endif /*NFVSE_CORR*/
     end if
     
     call ComputeSubcellMetrics()
