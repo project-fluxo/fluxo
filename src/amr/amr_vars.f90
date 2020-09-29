@@ -87,6 +87,7 @@ END TYPE p4est_balance_data
 TYPE p4est_balance_datav2
     INTEGER     ::  DataSize !DataSize of 1 Elem U = number of REALs
     INTEGER     ::  GPSize !DataSize of 1 ElemxGP = number of REALs
+    INTEGER     ::  CoarseSize !DataSize of 1 ElemxGP = number of REALs
     INTEGER     ::  nElems ! Number of new elements
     TYPE(C_PTR) ::  GlbIdxData; ! For transfer data. for p4est only
     TYPE(C_PTR) ::  ElemxGPnew_Ptr; ! new Array ElemxGP

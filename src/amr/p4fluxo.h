@@ -75,6 +75,7 @@ typedef struct p4est_balance_data {
 typedef struct p4est_balance_datav2 {
     int DataSize; //DataSize of 1 Elem
     int GPSize; //DataSize of 1 ElemxGP
+    int CoarseSize;
     int nElems;// Number of new elements
     p4est_gloidx_t *src_gfq; // For transfer data. for p4est only
     void *Elem_xGP_new; // new Array ElemxGP

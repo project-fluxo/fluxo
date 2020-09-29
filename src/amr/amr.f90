@@ -901,7 +901,7 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
   
   BalanceData%DataSize = sizeof(U(:,:,:,:,1))
   BalanceData%GPSize = sizeof(Elem_xGP(:,:,:,:,1))
-
+  BalanceData%CoarseSize = sizeof(ElemWasCoarsened(1))
 
   
   BalanceData%Uold_Ptr = C_LOC(U)
