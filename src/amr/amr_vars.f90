@@ -97,8 +97,8 @@ TYPE p4est_balance_datav2
     TYPE(C_PTR) ::  ElemWasCoarsened_new; 
     TYPE(C_PTR) ::  ElemWasCoarsened_old; 
 #if SHOCK_NFVSE
-    TYPE(C_PTR) ::  AlphaNew_Ptr; !new U
-    TYPE(C_PTR) ::  AlphaOld_Ptr; !old U 
+    TYPE(C_PTR) ::  AlphaNew_Ptr; !new alpha
+    TYPE(C_PTR) ::  AlphaOld_Ptr; !old alpha
 #endif /*SHOCK_NFVSE*/
 END TYPE p4est_balance_datav2
 

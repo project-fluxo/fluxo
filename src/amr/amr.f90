@@ -314,7 +314,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: nGlobalElems
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
-  use MOD_Output, only: Visualize
 #if PARABOLIC
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
@@ -334,6 +333,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld, doLBalance
   integer, allocatable :: ElemWasCoarsened(:)
   integer :: max_nElems, min_nElems, sum_nElems
+  integer :: new_nElems
 !==================================================================================================================================
   IF (.NOT. UseAMR) THEN
     RETURN;
@@ -407,14 +407,14 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   !  IF (doLBalance .EQ. 1) THEN
   !     doLBalance = 0;
       ! IF (doLBalance .EQ. 0) 
-        CALL LoadBalancingAMR(ElemWasCoarsened)
+        CALL LoadBalancingAMR(ElemWasCoarsened,new_nElems)
         
-        call MPI_Reduce(FortranData%nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
-        call MPI_Reduce(FortranData%nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
-        call MPI_Reduce(FortranData%nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
+        call MPI_Reduce(new_nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
+        call MPI_Reduce(new_nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
+        call MPI_Reduce(new_nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
       
         IF (MPIRoot) THEN
-          WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", nGlobalElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
+          WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", sum_nElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
         ENDIF
   !  ENDIF
 
@@ -451,9 +451,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     FortranData%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
     
   ENDIF
-
+  
   CALL GetData(p4est_ptr,DATAPtr)
-
   
   IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
@@ -494,7 +493,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (nNbProcs .EQ. 0) nNbProcs =1;
 ENDIF
 
-
 CALL p4estSetMPIData()
 nElems=FortranData%nElems
 nSides=FortranData%nSides
@@ -520,9 +518,7 @@ FortranData%MTPtr = C_LOC(MortarType)
 
 ! ALLOCATE(ChangeElem(8,FortranData%nElems))
 ! FortranData%ChngElmPtr = C_LOC(ChangeElem)
-
 CALL SetEtSandStE(p4est_ptr,DATAPtr)
-
 
   
  
@@ -877,7 +873,7 @@ END SUBROUTINE RunAMR
 !============================================================================================================================
 !> Deallocate mesh data.
 !============================================================================================================================
-SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
+SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
   ! MODULES
   USE MOD_Globals
   USE MOD_AMR_Vars
@@ -893,6 +889,7 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
   !----------------------------------------------------------------------------------------------------------------------------------
   ! ARGUMENTS
   integer, intent(inout), allocatable, target :: ElemWasCoarsened(:)
+  integer, intent(out) :: new_nElems
   !----------------------------------------------------------------------------------------------------------------------------------
   ! LOCAL VARIABLES
   REAL,ALLOCATABLE, TARGET :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:), Alpha_New(:)
@@ -918,7 +915,10 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened)
   BalanceData%ElemWasCoarsened_old = C_LOC(ElemWasCoarsened)
   
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
- 
+  
+  
+  print*, BalanceData%nElems
+  new_nElems = BalanceData%nElems
   ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
   
@@ -1280,6 +1280,7 @@ SDEALLOCATE(Vdm_FromNodeType_toNVisu)
 
   DEALLOCATE(OffsetSideMPI)
   DEALLOCATE(OffsetSideArrIndexMPI)
+  DEALLOCATE(ElemInfoW)
   CALL free_savemesh_memory(DATAPtr)
   NULLIFY(ElInfoF)
   NULLIFY(SiInfoF)

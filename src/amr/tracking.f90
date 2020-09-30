@@ -143,7 +143,7 @@ end subroutine
           END IF
 #if SHOCK_NFVSE
           ! Always refine if the shock capturing is firing
-          if ( alpha(iElem) > alpha_max*max(0.5,SpacePropFactor)) ElemToRefineAndCoarse(iElem) = MaxLevel
+          if ( alpha(iElem) > min(0.1,alpha_max*max(0.5,SpacePropFactor))) ElemToRefineAndCoarse(iElem) = MaxLevel
 #endif /*SHOCK_NFVSE*/
         ENDDO
 

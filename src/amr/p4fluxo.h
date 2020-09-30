@@ -85,8 +85,8 @@ typedef struct p4est_balance_datav2 {
     void *ElemWasCoarsened_new; // Was the elem coarsened?
     void *ElemWasCoarsened_old; // Was the elem coarsened?
 #if SHOCK_NFVSE
-    void *Alpha_new; //new U
-    void *Alpha_old; //old U 
+    void *Alpha_new; //new alpha
+    void *Alpha_old; //old alpha
 #endif /*SHOCK_NFVSE*/
 } p4est_balance_datav2_t;
 

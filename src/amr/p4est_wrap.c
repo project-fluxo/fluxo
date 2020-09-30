@@ -1337,9 +1337,6 @@ p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void *FortranData) {
 
     p4est_fortran_data->nNBProcs = nNBProcs;
     
-
-
-
     return p4est_fortran_data;
 }
 
@@ -1492,6 +1489,7 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     int nElems;// = p4est_fortran_data->nElems = 0;
     int nSides = p4est_fortran_data->nSides = 0;
     p4est_fortran_data->nGlobalElems = p4est->global_num_quadrants;
+    p4est_fortran_data->nElems = p4est->local_num_quadrants;
     p4est_fortran_data->nBCSides = 0;
     p4est_fortran_data->nMortarInnerSides = 0;
     p4est_fortran_data->nInnerSides = 0;
@@ -2038,7 +2036,7 @@ weight_fn(p4est_t *p4est,
     p4est_Weights_t *WeightStruct = (p4est_Weights_t *) p4est->user_pointer;
     int8_t Weight = WeightStruct->Weights[WeightStruct->index];
     ++WeightStruct->index;
-//	return 1;
+  	return 1;
     return Weight;
 }
 
@@ -2129,20 +2127,23 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
     // p4est_transfer_fixed(data->src_gfq, dest,  p4est->mpicomm, 0,data->U_old, data->U_new,  data->DataSize);
     // printf("data->Elem_xGP_new = %p \n", data->U_new);
     // printf("data->Elem_xGP_old= %p \n", data->U_old);
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 8, data->Elem_xGP_new,
+                         data->Elem_xGP_old, data->GPSize);
+                         
     p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 10, data->U_new, data->U_old,
                          data->DataSize);
+    
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 7, data->ElemWasCoarsened_new,
+                         data->ElemWasCoarsened_old, data->CoarseSize);
+    
 #if SHOCK_NFVSE
-    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 10, data->Alpha_new, data->Alpha_old,
+    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 9, data->Alpha_new, data->Alpha_old,
                          sizeof(double));
 #endif /*SHOCK_NFVSE*/
 
     //  printf("data->GPSize= %d \n", data->GPSize);
     // int a = MPI_Barrier(p4est->mpicomm);
-    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 2, data->Elem_xGP_new,
-                         data->Elem_xGP_old, data->GPSize);
-                         
-    p4est_transfer_fixed(p4est->global_first_quadrant, data->src_gfq, p4est->mpicomm, 2, data->ElemWasCoarsened_new,
-                         data->ElemWasCoarsened_old, data->CoarseSize);
+    
     // int b = MPI_Barrier(p4est->mpicomm);
     free(data->src_gfq);
     // free(dest);
