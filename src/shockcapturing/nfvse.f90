@@ -301,6 +301,10 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, Fsafe, Fblen
     use MOD_ShockCapturing_Vars, only: alpha_old
     use MOD_Mesh_Vars          , only: nElems
+#if MPI
+    use MOD_MPI_Vars           , only: nNbProcs
+    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries
+#endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
     integer, intent(in) :: ChangeElem(8,nElems)
@@ -325,7 +329,19 @@ contains
 #endif /*NFVSE_CORR*/
     end if
     
+    ! Compute subcell metrics
     call ComputeSubcellMetrics()
+    
+    ! Reallocate MPI variables
+#if MPI
+    SDEALLOCATE(MPIRequest_alpha)
+    allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
+    
+    if (ReconsBoundaries) then
+      SDEALLOCATE(MPIRequest_Umaster)
+      allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
+    end if
+#endif
   end subroutine InitNFVSEAfterAdaptation
 !===================================================================================================================================
 !> Computes the "volume integral": Spatial contribution to Ut by the subcell finite volumes

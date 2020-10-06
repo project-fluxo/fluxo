@@ -917,7 +917,6 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
   CALL p4est_loadbalancing_init(P4EST_PTR, C_LOC(BalanceData))
   
   
-  print*, BalanceData%nElems
   new_nElems = BalanceData%nElems
   ALLOCATE(U_New(PP_nVar,0:PP_N,0:PP_N,0:PP_N,BalanceData%nElems))
   BalanceData%Unew_Ptr = C_LOC(U_New)
