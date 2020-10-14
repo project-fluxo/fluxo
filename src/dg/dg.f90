@@ -316,6 +316,9 @@ CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+
 ! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
 #if SHOCK_NFVSE
 call CalcBlendingCoefficient(U)
@@ -329,9 +332,6 @@ call CalcBlendingCoefficient(U)
 #if PP_DiscType==2
 CALL VolInt_adv_SplitForm(Ut)
 #endif /*PP_DiscType==2*/
-
-CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 
 
 #if MPI
