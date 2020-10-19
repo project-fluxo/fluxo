@@ -314,6 +314,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: nGlobalElems
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
+  use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
+
+  
 #if PARABOLIC
   USE  MOD_Lifting_Vars
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
@@ -685,6 +688,8 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
   
+  CALL FinalizeBC()
+  CALL InitBC()
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
   SDEALLOCATE(ElemWasCoarsened)
