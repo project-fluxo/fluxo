@@ -115,6 +115,7 @@ PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !
 #ifdef JESSE_MORTAR
 INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+LOGICAL             :: useEntropyMortar     !< set true if entropy mortar interpolation is needed. Is set depending on the mortarflux
 #endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 ABSTRACT INTERFACE
@@ -161,8 +162,16 @@ INTERFACE ConsToEntropy
   MODULE PROCEDURE ConsToEntropy
 END INTERFACE
 
+INTERFACE EntropyToCons
+  MODULE PROCEDURE EntropyToCons
+END INTERFACE
+
 !INTERFACE ConsToEntropyVec
 !  MODULE PROCEDURE ConsToEntropyVec
+!END INTERFACE
+
+!INTERFACE EntropyToConsVec
+!  MODULE PROCEDURE EntropyToConsVec
 !END INTERFACE
 
 #if PARABOLIC
@@ -330,6 +339,68 @@ entropy(5)         = -rho_sp                    !-2*beta
 entropy(6:PP_nVar) =  rho_sp*cons(6:PP_nVar)    ! 2*beta*B +2*beta*psi
 
 END FUNCTION ConsToEntropy
+
+!==================================================================================================================================
+!> Transformation from entropy vector toconservative variables U, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+PURE FUNCTION EntropyToCons(Entropy) RESULT(cons)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)             :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: p_srho,u,v,w,v2s2,rho_sp,s
+!==================================================================================================================================
+! entropy(5)   = -rho_sp    !-2*beta
+rho_sp  = - entropy(5)
+p_srho = 1./rho_sp
+! entropy(2)   =  rho_sp*u  ! 2*beta*v
+! entropy(3)   =  rho_sp*v  ! 2*beta*v
+! entropy(4)   =  rho_sp*w  ! 2*beta*v
+u = entropy(2)*p_srho
+v = entropy(3)*p_srho
+w = entropy(4)*p_srho
+
+v2s2   = 0.5*(u*u+v*v+w*w)
+! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+s =kappa -((entropy(1) + rho_sp*v2s2) * kappaM1) 
+! s      = - LOG(rho_sp*(cons(1)**kappaM1))
+cons(1) = (exp(-s)*p_srho)**(skappaM1)
+cons(2) = u * cons(1)
+cons(3) = v * cons(1)
+cons(4) = w * cons(1)
+cons(6:PP_nVar) =entropy(6:PP_nVar)*p_srho
+cons(5) = cons(1)*(sKappaM1*p_srho + v2s2) +s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))
+
+END FUNCTION EntropyToCons
+
+!==================================================================================================================================
+!> Transformation from Entropy variables to conservative variables
+!==================================================================================================================================
+PURE SUBROUTINE EntropyToConsVec(dim2,ent,cons)
+! MODULES
+IMPLICIT NONE 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN)  :: dim2 
+REAL,INTENT(IN)     :: ent(PP_nVar,dim2) !< vector of primitive variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)    :: cons(PP_nVar,dim2) !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER             :: i
+!==================================================================================================================================
+DO i=1,dim2
+  cons(:,i) = EntropyToCons(ent(:,i))
+END DO!i
+END SUBROUTINE EntropyToConsVec
 
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)

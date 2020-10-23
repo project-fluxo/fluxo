@@ -99,7 +99,11 @@ END IF !doMPISides
 DO MortarSideID=firstMortarSideID,lastMortarSideID
   iSide=MortarType(2,MortarSideID) !ID in list 1:nMortarSides
 
-  CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+#if defined(navierstokes) || defined(mhd)
+    CALL InterpolateBigToSmallEqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+#else
+    CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+#endif
   !Now save the small sides into master/slave arrays
   IF(MortarType(1,MortarSideID).EQ.1)THEN
     nMortars=4
@@ -211,96 +215,44 @@ END SUBROUTINE InterpolateBigToSmall
 
 #if defined(navierstokes) || defined(mhd)
 !==================================================================================================================================
-!> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
-!> with Entropy
-!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
-!>
-!>       eta                eta                  eta                 eta
-!>        ^                  ^                    ^                   ^
-!>        |                  |                    |                   |
-!>    +---+---+          +---+---+            +---+---+           +---+---+
-!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
-!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
-!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
-!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>  if useEntropyMortar=.TRUE. , Data is transformed to entropy variables before interpolation 
+!>  and transformed back to conservative after interpolation 
+!>  else conservative variables are used
 !>
 !==================================================================================================================================
-SUBROUTINE InterpolateBigToSmallEntropy(ndim1,whichMortarType,BigCons,SmallCons)
-  ! MODULES
-  USE MOD_Preproc
-  USE MOD_Mortar_Vars, ONLY: Mint
-  USE MOD_Equation_Vars, ONLY: ConsToEntropy
-  IMPLICIT NONE
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! INPUT/OUTPUT VARIABLES
-  INTEGER, INTENT(IN)  :: ndim1  !< size of first dimension of array
-  INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
-  REAL,INTENT(IN)      :: BigCons(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
-  REAL,INTENT(INOUT)   :: smallCons(1:ndim1,0:PP_N,0:PP_N,-2:4)
-                                                      !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
-                                                      !< 2-1 mortar: sol. on big (0) and small (1:2)
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! LOCAL VARIABLES
-  INTEGER      :: p,q,l,iNb,jNb
-  REAL         :: Big(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
-  REAL         :: small(1:ndim1,0:PP_N,0:PP_N,-2:4)
-  !==================================================================================================================================
-  CALL ConsToEntropyVec(BigCons, Big)
-  small(:,:,:,0)=Big(:,:,:) !save big mortar solution, too
-  
+SUBROUTINE InterpolateBigToSmallEqn(whichMortarType,BigCons,SmallCons)
+! MODULES
+USE MOD_Preproc
+USE MOD_Equation_Vars, ONLY: useEntropyMortar,ConsToEntropyVec,EntropyToConsVec
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
+REAL,INTENT(IN)      :: BigCons(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
+REAL,INTENT(INOUT)   :: smallCons(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+                                                    !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
+                                                    !< 2-1 mortar: sol. on big (0) and small (1:2)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL         :: Big(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
+REAL         :: small(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+!==================================================================================================================================
+IF(useEntropyMortar)THEN
+  smallCons(:,:,:,0)=BigCons(:,:,:) !save big mortar solution, too
+  CALL ConsToEntropyVec((PP_N+1)*(PP_N+1),Big,BigCons)
+  CALL InterpolateBigToSmall(PP_nVar,whichMortarType,Big,Small)
   SELECT CASE(WhichMortarType)
   CASE(1) !1->4
-    !first  split 1 side into two, in eta direction
-    DO jNb=1,2
-      small(:,:,:,jNb-3)=0.
-      DO q=0,PP_N
-        DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-          DO l=0,PP_N
-            small(:,p,q,jNb-3)=small(:,p,q,jNb-3) +MInt(l,q,jNb)*Big(:,p,l)
-          END DO
-        END DO
-      END DO
-      ! then split each side again into two, now in xi direction
-      DO iNb=1,2
-        small(:,:,:,iNb+2*(jNb-1))=0.
-        DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-          DO p=0,PP_N
-            DO l=0,PP_N
-              small(:,p,q,iNb+2*(jNb-1))=small(:,p,q,iNb+2*(jNb-1)) +MInt(l,p,iNb)*small(:,l,q,jNb-3)
-            END DO !l=1,PP_N
-          END DO
-        END DO 
-      END DO !iNb=1,2
-    END DO !jNb=1,2
-  
-  CASE(2) !1->2 in eta
-    DO jNb=1,2
-      small(:,:,:,jNb)=0.
-      DO q=0,PP_N
-        DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-          DO l=0,PP_N
-            small(:,p,q,jNb)=small(:,p,q,jNb) +MInt(l,q,jNb)*Big(:,p,l)
-          END DO
-        END DO
-      END DO
-    END DO !jNb=1,2
-  
-  CASE(3) !1->2 in xi
-    DO iNb=1,2
-      small(:,:,:,iNb)=0.
-      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
-        DO p=0,PP_N
-          DO l=0,PP_N
-            small(:,p,q,iNb)=small(:,p,q,iNb) +MInt(l,p,iNb)*Big(:,l,q)
-          END DO
-        END DO
-      END DO
-    END DO !iNb=1,2
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,small(:,:,:,-2:1), SmallCons(:,:,:,-2:1))
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*4,small(:,:,:, 1:4), SmallCons(:,:,:, 1:4))
+  CASE(2,3) !1->2 in eta,1->2 in xi
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,small(:,:,:, 1:2), SmallCons(:,:,:, 1:2))
   END SELECT ! mortarType(SideID)
-  
-  CALL EntropyToConsVec(small, SmallCons)
+ELSE
+  CALL InterpolateBigToSmall(PP_nVar,whichMortarType,BigCons,SmallCons)
+END IF
 
-  END SUBROUTINE InterpolateBigToSmallEntropy
+END SUBROUTINE InterpolateBigToSmallEqn
 #endif /* defined(navierstokes) || defined(mhd) */
 
 !==================================================================================================================================
@@ -465,8 +417,9 @@ USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nMortarSides
 USE MOD_Equation_Vars,ONLY: MortarFluxAverageVec
 USE MOD_Mortar_Vars, ONLY: delta_flux_jesse !<<<<== is filled
 #if defined(navierstokes) || defined(mhd)
-USE MOD_Flux_Average, ONLY: EvalUaux1 !<<<<== is filled
-#endif /*navierstokes*/
+USE MOD_Equation_Vars,ONLY: nAuxVar
+USE MOD_Flux_Average, ONLY: EvalUaux
+#endif /*navierstokes || mhd */
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -477,6 +430,9 @@ INTEGER      :: MortarSideID,iSide
 REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N)
 REAL         :: Flux_tp_l(PP_nVar,0:PP_N)
 REAL         :: Flux_corr_l(PP_nVar)
+#if defined(navierstokes) || defined(mhd)
+REAL         :: Uaux_small(1:nAuxVar,0:PP_N,0:PP_N,-2:4)
+#endif /*navierstokes || mhd */
 
 !==================================================================================================================================
 
@@ -486,6 +442,10 @@ DO iSide=1,nMortarSides
   MortarSideID=MortarInfo(MI_SIDEID,0,iSide)
   SELECT CASE(MortarType(1,MortarSideID))
   CASE(1) !1->4
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*7,U_small(:,:,:,-2:4,iSide),Uaux_small(:,:,:,-2:4))
+#endif /*navierstokes || mhd */
+
     ! first in xi
     DO jNb=1,2
       Flux_tmp(:,:,:)= 0.
@@ -493,12 +453,11 @@ DO iSide=1,nMortarSides
         DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
           DO l=0,PP_N !index small side                       
             DO p=0,PP_N ! index big side                                  !<this is the intermediate side!>
-              CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide), U_small(:,p,q,jNb-3,iSide), &
+              CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
 #if defined(navierstokes) || defined(mhd)
-                                  EvalUaux1(U_small(:,l,q,iNb+2*(jNb-1),iSide)), &
-                                  EvalUaux1( U_small(:,p,q,jNb-3,iSide)), &
+                                      Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
 #endif /*navierstokes || mhd */
-                                        Ns_small(:,l,q,iNb+2*(jNb-1),iSide),Ns_small(:,p,q,jNb-3,iSide),Flux_tp_l(:,p))
+                                        Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide),Flux_tp_l(:,p))
             END DO
             Flux_corr_l(:)=0.
             DO r=0,PP_N  !index big side
@@ -517,12 +476,11 @@ DO iSide=1,nMortarSides
         !mortar flux in eta (l,q), for fixed p 
         DO l=0,PP_N !index small side                      
           DO q=0,PP_N  !index big side                         !<this is the big side>
-            CALL MortarFluxAverageVec( U_small(:,p,l,jNb-3,iSide), U_small(:,p,q,0,iSide), &
+            CALL MortarFluxAverageVec( U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,0,iSide), &
 #if defined(navierstokes) || defined(mhd)
-                                  EvalUaux1(U_small(:,p,l,jNb-3,iSide)), &
-                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+                                    Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,0)      , &
 #endif /*navierstokes*/
-                                      Ns_small(:,p,l,jNb-3,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
+                                      Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
           END DO
           Flux_corr_l(:)=0.
           DO r=0,PP_N !index big side
@@ -537,17 +495,19 @@ DO iSide=1,nMortarSides
     END DO !jNb=1,2
 
   CASE(2) !1->2 in eta
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*3,U_small(:,:,:,0:2,iSide),Uaux_small(:,:,:,0:2))
+#endif /*navierstokes || mhd */
     DO jNb=1,2
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         !mortar flux in eta (l,q), for fixed p 
         DO l=0,PP_N !index small side                      
           DO q=0,PP_N  !index big side                         !<this is the big side>
-            CALL MortarFluxAverageVec( U_small(:,p,l,jNb,iSide), U_small(:,p,q,0,iSide), &
+            CALL MortarFluxAverageVec( U_small(:,p,l,jNb,iSide),   U_small(:,p,q,0,iSide), &
 #if defined(navierstokes) || defined(mhd)
-                                  EvalUaux1(U_small(:,p,l,jNb,iSide)), &
-                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+                                    Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,0)      , &
 #endif /*navierstokes || mhd */
-                                      Ns_small(:,p,l,jNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
+                                      Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
           END DO
           Flux_corr_l(:)=0.
           DO r=0,PP_N !index big side
@@ -562,16 +522,18 @@ DO iSide=1,nMortarSides
     END DO !jNb=1,2
 
   CASE(3) !1->2 in xi
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*3,U_small(:,:,:,0:2,iSide),Uaux_small(:,:,:,0:2))
+#endif /*navierstokes || mhd */
     DO iNb=1,2
       DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
         DO l=0,PP_N !index small side                       !<this is the big side!>
           DO p=0,PP_N ! index big side 
-            CALL MortarFluxAverageVec( U_small(:,l,q,iNb,iSide), U_small(:,p,q,0,iSide), &
+            CALL MortarFluxAverageVec( U_small(:,l,q,iNb,iSide),   U_small(:,p,q,0,iSide), &
 #if defined(navierstokes) || defined(mhd)
-                                  EvalUaux1(U_small(:,l,q,iNb,iSide)), &
-                                  EvalUaux1(U_small(:,p,q,0,iSide)), &
+                                    Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,0)      , &
 #endif /*navierstokes || mhd */
-                                      Ns_small(:,l,q,iNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
+                                      Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
           END DO
           Flux_corr_l(:)=0.
           DO r=0,PP_N  !index big side

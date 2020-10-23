@@ -134,10 +134,9 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "  9: Gassner Winter Walch"//&
                                               " 10: EC Ismail and Roe" &
                                              ,"0")
-#endif /*PP_DiscType==2*/
 #ifdef JESSE_MORTAR
 CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
-                                              "DG volume integral "//&
+                                              "DG volume integral [DEFAULT = volumeFlux]"//&
                                               "  0: Standard DG"//&
                                               "  1: Standard DG with metric dealiasing"//&
                                               "  2: Kennedy-Gruber"//&
@@ -151,6 +150,7 @@ CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to 
                                               " 10: EC Ismail and Roe" &
                                              ,"1")
 #endif /*JESSE_MORTAR*/
+#endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -162,6 +162,7 @@ SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
+USE MOD_StringTools       ,ONLY: INTTOSTR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars
@@ -429,10 +430,10 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
-#endif /*PP_DiscType==2*/
 
 #ifdef JESSE_MORTAR
-WhichMortarFlux = GETINT('MortarFlux','0')
+WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+useEntropyMortar=.FALSE.
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG'
@@ -452,9 +453,11 @@ CASE(4)
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: EC-KEP'
   MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec
+  useEntropyMortar=.TRUE.
 CASE(6)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP'
   MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec2
+  useEntropyMortar=.TRUE.
 CASE(7)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP + press. aver.'
   MortarFluxAverageVec => ggFluxVec
@@ -467,12 +470,14 @@ CASE(9)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Two-Point EC Ismail and Roe'
   MortarFluxAverageVec => TwoPointEntropyConservingFluxVec
+  useEntropyMortar=.TRUE.
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "Mortar flux not implemented")
 END SELECT
 
 #endif /*JESSE_MORTAR*/
+#endif /*PP_DiscType==2*/
 
 
 

@@ -91,6 +91,7 @@ PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !
 #ifdef JESSE_MORTAR
 INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+LOGICAL             :: useEntropyMortar     !< set true if entropy mortar interpolation is needed. Is set depending on the mortarflux
 #endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 ABSTRACT INTERFACE
@@ -153,13 +154,13 @@ INTERFACE EntropyToCons
   MODULE PROCEDURE EntropyToCons
 END INTERFACE
 
-INTERFACE EntropyToConsVec
-  MODULE PROCEDURE EntropyToConsVec
-END INTERFACE
+!INTERFACE EntropyToConsVec
+!  MODULE PROCEDURE EntropyToConsVec
+!END INTERFACE
 
-INTERFACE ConsToEntropyVec
- MODULE PROCEDURE ConsToEntropyVec
-END INTERFACE
+!INTERFACE ConsToEntropyVec
+! MODULE PROCEDURE ConsToEntropyVec
+!END INTERFACE
 
 #if PARABOLIC
 INTERFACE ConvertToGradPrim
@@ -381,36 +382,28 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)             :: entropy !< vector of entropy v
 REAL,DIMENSION(PP_nVar)  :: cons    !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+REAL                                :: p_srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
 ! entropy(5)   = -rho_sp    !-2*beta
-rho_sp = - entropy(5)
+rho_sp  = - entropy(5)  ! rho/p 
+p_srho =   1./rho_sp    ! p/rho
 ! entropy(2)   =  rho_sp*u  ! 2*beta*v
 ! entropy(3)   =  rho_sp*v  ! 2*beta*v
 ! entropy(4)   =  rho_sp*w  ! 2*beta*v
-u = entropy(2)/rho_sp
-v = entropy(3)/rho_sp
-w = entropy(4)/rho_sp
+u = entropy(2)*p_srho
+v = entropy(3)*p_srho
+w = entropy(4)*p_srho
 
 v2s2   = 0.5*(u*u+v*v+w*w)
 ! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-s = -1.*((entropy(1) + rho_sp*v2s2) / skappaM1) + kappa
+s = kappa -((entropy(1) + rho_sp*v2s2) * kappaM1)
 ! s      = - LOG(rho_sp*(cons(1)**kappaM1))
-cons(1) = (exp(-s)/rho_sp)**(skappaM1)
+cons(1) = (EXP(-s)*p_srho)**(skappaM1)
 cons(2) = u * cons(1)
 cons(3) = v * cons(1)
 cons(4) = w * cons(1)
 ! rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2))
-cons(5) = cons(1)/rho_sp/KappaM1 + cons(1)*v2s2
-
-! srho   = 1./cons(1)
-! u      = cons(2)*srho
-! v      = cons(3)*srho
-! w      = cons(4)*srho
-!s      = LOG(p) - kappa*LOG(cons(1))
-
-! Convert to entropy variables
-! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+cons(5) = cons(1)*(p_srho*sKappaM1 + v2s2)
 
 END FUNCTION EntropyToCons
 
@@ -439,7 +432,7 @@ END SUBROUTINE EntropyToConsVec
 !==================================================================================================================================
 !> Transformation from Entropy variables to conservative variables
 !==================================================================================================================================
-PURE SUBROUTINE ConsToEntropyVec(dim2,cons,ent)
+PURE SUBROUTINE ConsToEntropyVec(dim2,ent,cons)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
