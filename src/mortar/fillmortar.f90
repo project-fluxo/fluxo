@@ -209,6 +209,7 @@ END SELECT ! mortarType(SideID)
 
 END SUBROUTINE InterpolateBigToSmall
 
+#if defined(navierstokes) || defined(mhd)
 !==================================================================================================================================
 !> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
 !> with Entropy
@@ -300,6 +301,7 @@ SUBROUTINE InterpolateBigToSmallEntropy(ndim1,whichMortarType,BigCons,SmallCons)
   CALL EntropyToConsVec(small, SmallCons)
 
   END SUBROUTINE InterpolateBigToSmallEntropy
+#endif /* defined(navierstokes) || defined(mhd) */
 
 !==================================================================================================================================
 !>  Fills master side from small non-conforming sides, using 1D projection operators Mproj(:,:,1:2)
@@ -495,7 +497,7 @@ DO iSide=1,nMortarSides
 #if defined(navierstokes) || defined(mhd)
                                   EvalUaux1(U_small(:,l,q,iNb+2*(jNb-1),iSide)), &
                                   EvalUaux1( U_small(:,p,q,jNb-3,iSide)), &
-#endif /*navierstokes*/
+#endif /*navierstokes || mhd */
                                         Ns_small(:,l,q,iNb+2*(jNb-1),iSide),Ns_small(:,p,q,jNb-3,iSide),Flux_tp_l(:,p))
             END DO
             Flux_corr_l(:)=0.
@@ -544,7 +546,7 @@ DO iSide=1,nMortarSides
 #if defined(navierstokes) || defined(mhd)
                                   EvalUaux1(U_small(:,p,l,jNb,iSide)), &
                                   EvalUaux1(U_small(:,p,q,0,iSide)), &
-#endif /*navierstokes*/
+#endif /*navierstokes || mhd */
                                       Ns_small(:,p,l,jNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
           END DO
           Flux_corr_l(:)=0.
@@ -568,7 +570,7 @@ DO iSide=1,nMortarSides
 #if defined(navierstokes) || defined(mhd)
                                   EvalUaux1(U_small(:,l,q,iNb,iSide)), &
                                   EvalUaux1(U_small(:,p,q,0,iSide)), &
-#endif /*navierstokes*/
+#endif /*navierstokes || mhd */
                                       Ns_small(:,l,q,iNb,iSide),Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
           END DO
           Flux_corr_l(:)=0.
