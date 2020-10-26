@@ -130,7 +130,7 @@ IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
   ENDIF()
 ENDIF()
 
-SET(FLUXO_JESSE_MORTAR  ON  CACHE BOOL "switch on/off the mortar implementation of Jesse's paper.")
+SET(FLUXO_JESSE_MORTAR  OFF  CACHE BOOL "switch on/off the mortar implementation of Jesse's paper.")
 IF(FLUXO_JESSE_MORTAR)
   ADD_DEFINITIONS(-DJESSE_MORTAR=1)
   IF(NOT FLUXO_DISCTYPE EQUAL 2)

@@ -119,6 +119,7 @@ END INTERFACE
 
 #if (PP_DiscType==2)
 PUBLIC:: EvalAdvFluxAverage3D
+PUBLIC:: EvalUaux
 #endif /*PP_DiscType==2*/
 PUBLIC:: StandardDGFlux
 PUBLIC:: StandardDGFluxVec
@@ -142,7 +143,6 @@ PUBLIC:: ggfluxVec
 PUBLIC:: GassnerWintersWalchFlux
 PUBLIC:: GassnerWintersWalchFluxVec
 PUBLIC:: LN_MEAN
-PUBLIC:: EvalUaux
 !==================================================================================================================================
 ! local definitions for inlining / optimizing routines, DEFAULT=-1: USE POINTER defined at runtime!
 #if PP_VolFlux==-1
