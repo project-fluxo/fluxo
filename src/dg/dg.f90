@@ -254,7 +254,7 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Vector              ,ONLY: VNullify,V2D_M_V1D
 USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave
-USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
+USE MOD_FillMortar          ,ONLY: U_Mortar_Eqn,Flux_Mortar
 #ifdef JESSE_MORTAR
 USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
 #endif
@@ -303,7 +303,7 @@ CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.TRUE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
+CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
@@ -318,7 +318,7 @@ CALL VolInt_adv_SplitForm(Ut)
 #endif
 
 CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.FALSE.)
 
 
 #if MPI
