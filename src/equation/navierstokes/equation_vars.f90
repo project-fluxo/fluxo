@@ -32,6 +32,7 @@ SAVE
 LOGICAL             :: doCalcSource        !< logical to define if a source term (e.g. exactfunc) is added
 INTEGER             :: IniExactFunc        !< Exact Function for initialization
 INTEGER             :: IniRefState         !< RefState for initialization (case IniExactFunc=1 only)
+INTEGER             :: nRefState         !< number of RefState in inifile
 REAL,ALLOCATABLE    :: RefStatePrim(:,:)   !< primitive reference states
 REAL,ALLOCATABLE    :: RefStateCons(:,:)   !< =primToCons(RefStatePrim)
 INTEGER,PARAMETER   :: nAuxVar=6           !< number of auxiliary variables for average flux

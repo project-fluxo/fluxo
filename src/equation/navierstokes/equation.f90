@@ -179,7 +179,7 @@ USE MOD_Flux_Average
 REAL    :: Tref
 #endif /*PP_VISC==2*/
 INTEGER :: i,iSide
-INTEGER :: MaxBCState,locType,locState,nRefState
+INTEGER :: MaxBCState,locType,locState
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -529,7 +529,7 @@ USE MOD_Preproc
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis,IniWaveNumber
-USE MOD_Equation_Vars,ONLY:PrimToCons
+USE MOD_Equation_Vars,ONLY:PrimToCons,nRefState
 USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 IMPLICIT NONE
@@ -809,6 +809,15 @@ CASE(14) ! Kelvin Helmhots instability
   prim(5)   = 10.
   ! print *, "prim = ", prim
   CALL PrimToCons(prim,resu)
+CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplitude, radius=IniHalfwidth 
+  IF(nRefState.LT.2) CALL abort(__STAMP__, &
+         ' 2 states needed for case 201')
+  r_len=SQRT(SUM((x-IniCenter(:))**2))
+  a=EXP(5.*(r_len-IniHalfwidth)/IniAmplitude)
+  a=a/(a+1.)
+  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  CALL PrimToCons(Prim,Resu)
+
 END SELECT ! ExactFunction
 
 IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant
