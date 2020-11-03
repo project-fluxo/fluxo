@@ -408,9 +408,11 @@ CASE(1)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: KEPEC with Metrics Dealiasing'
   MortarFluxAverageVec => EntropyAndKinEnergyConservingFluxVec
+  useEntropyMortar=.TRUE.
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: FloGor KEPEC with Metrics Dealiasing'
   MortarFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
+  useEntropyMortar=.TRUE.
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "Mortar flux not implemented")

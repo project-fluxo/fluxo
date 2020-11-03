@@ -503,6 +503,9 @@ USE MOD_Mortar_Vars, ONLY: delta_flux_jesse !<<<<== is filled
 USE MOD_Equation_Vars,ONLY: nAuxVar
 USE MOD_Flux_Average, ONLY: EvalUaux
 #endif /*navierstokes || mhd */
+#if defined(NONCONS)
+USE MOD_Flux_Average, ONLY: AddNonConsFluxVec
+#endif /*NONCONS*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -516,7 +519,10 @@ REAL         :: Flux_corr_l(PP_nVar)
 #if defined(navierstokes) || defined(mhd)
 REAL         :: Uaux_small(1:nAuxVar,0:PP_N,0:PP_N,-2:4)
 #endif /*navierstokes || mhd */
-
+#ifdef NONCONS
+REAL         :: Flux_tp(PP_nVar,0:PP_N,0:PP_N)
+REAL         :: Flux_tp_T(PP_nVar,0:PP_N,0:PP_N)
+#endif
 !==================================================================================================================================
 
 delta_Flux_jesse(:,:,:,:)= 0. 
@@ -534,8 +540,34 @@ DO iSide=1,nMortarSides
       Flux_tmp(:,:,:)= 0.
       DO iNb=1,2
         DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+#ifdef NONCONS
           DO l=0,PP_N !index small side                       
-            DO p=0,PP_N ! index big side                                  !<this is the intermediate side!>
+            DO p=0,PP_N ! index big side                                     !<this is the intermediate side!>
+              CALL MortarFluxAverageVec(   U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
+                                        Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
+                                          Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide),Flux_tp(:,l,p))
+              Flux_tp_T(:,p,l)=Flux_tp(:,l,p)
+              CALL AddNonConsFluxVec(      U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
+                                        Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
+                                          Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide), Flux_tp_T(:,p,l))
+              CALL AddNonConsFluxVec(      U_small(:,p,q,jNb-3,iSide),   U_small(:,l,q,iNb+2*(jNb-1),iSide), &
+                                        Uaux_small(:,p,q,jNb-3)      ,Uaux_small(:,l,q,iNb+2*(jNb-1))      , &
+                                          Ns_small(:,p,q,jNb-3,iSide),  Ns_small(:,l,q,iNb+2*(jNb-1),iSide), Flux_tp(:,l,p))
+            END DO !p
+          END DO !l
+          DO l=0,PP_N !index small side                       
+            Flux_corr_l(:)=0.
+            DO r=0,PP_N  !index big side
+              Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+            END DO !r=0,PP_N
+            DO p=0,PP_N !index big side
+              Flux_tmp(:,p,q)=Flux_tmp(:,p,q)  &
+                                  + Mproj_h(l,p,iNb)*(Flux_tp(:,l,p)-Flux_corr_l(:))
+            END DO !p=0,PP_N
+          END DO !l=0,PP_N
+#else 
+          DO l=0,PP_N !index small side                       
+            DO p=0,PP_N ! index big side                                     !<this is the intermediate side!>
               CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
 #if defined(navierstokes) || defined(mhd)
                                       Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
@@ -551,14 +583,41 @@ DO iSide=1,nMortarSides
                                   + Mproj_h(l,p,iNb)*(Flux_tp_l(:,p)-Flux_corr_l(:))
             END DO !p=0,PP_N
           END DO !l=0,PP_N
+#endif /*NONCONS*/
         END DO !q=0,PP_N
       END DO !iNb=1,2
       !then in eta (l,q)
      
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         !mortar flux in eta (l,q), for fixed p 
+#ifdef NONCONS
         DO l=0,PP_N !index small side                      
-          DO q=0,PP_N  !index big side                         !<this is the big side>
+          DO q=0,PP_N  !index big side                              !<this is the big side>
+            CALL MortarFluxAverageVec(   U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,    0,iSide), &
+                                      Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,    0)      , &
+                                        Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,    0,iSide),Flux_tp(:,l,q))
+            Flux_tp_T(:,q,l)=Flux_tp(:,l,q) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,    0,iSide), &
+                                      Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,    0)      , &
+                                        Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,    0,iSide), Flux_tp_T(:,q,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,    0,iSide),   U_small(:,p,l,jNb-3,iSide), &
+                                      Uaux_small(:,p,q,    0)      ,Uaux_small(:,p,l,jNb-3)      , &
+                                        Ns_small(:,p,q,    0,iSide),  Ns_small(:,p,l,jNb-3,iSide), Flux_tp(:,l,q))
+          END DO !q
+        END DO !l
+        DO l=0,PP_N !index small side                      
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tmp(:,p,l)+ Flux_tp(:,l,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#else
+        DO l=0,PP_N !index small side                      
+          DO q=0,PP_N  !index big side                             !<this is the big side>
             CALL MortarFluxAverageVec( U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,0,iSide), &
 #if defined(navierstokes) || defined(mhd)
                                     Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,0)      , &
@@ -574,6 +633,7 @@ DO iSide=1,nMortarSides
                                             + Mproj_h(l,q,jNb)*(Flux_tmp(:,p,l)+ Flux_tp_l(:,q) - Flux_corr_l(:))
           END DO !q=0,PP_N
         END DO !l=0,PP_N
+#endif /*NONCONS*/
       END DO !p=0,PP_N
     END DO !jNb=1,2
 
@@ -584,6 +644,32 @@ DO iSide=1,nMortarSides
     DO jNb=1,2
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
         !mortar flux in eta (l,q), for fixed p 
+#ifdef NONCONS
+        DO l=0,PP_N !index small side
+          DO q=0,PP_N ! index big side                             !<this is the big side!>
+            CALL MortarFluxAverageVec(   U_small(:,p,l,jNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,  0,iSide),Flux_tp(:,l,q))
+            Flux_tp_T(:,q,l)=Flux_tp(:,l,q) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,p,l,jNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,  0,iSide), Flux_tp_T(:,q,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,  0,iSide),   U_small(:,p,l,jNb,iSide), &
+                                      Uaux_small(:,p,q,  0)      ,Uaux_small(:,p,l,jNb)      , &
+                                        Ns_small(:,p,q,  0,iSide),  Ns_small(:,p,l,jNb,iSide), Flux_tp(:,l,q))
+          END DO !q
+        END DO !l
+        DO l=0,PP_N !index small side
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tp(:,l,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#else
         DO l=0,PP_N !index small side                      
           DO q=0,PP_N  !index big side                         !<this is the big side>
             CALL MortarFluxAverageVec( U_small(:,p,l,jNb,iSide),   U_small(:,p,q,0,iSide), &
@@ -601,6 +687,7 @@ DO iSide=1,nMortarSides
                                             + Mproj_h(l,q,jNb)*(Flux_tp_l(:,q) - Flux_corr_l(:))
           END DO !q=0,PP_N
         END DO !l=0,PP_N
+#endif /*NONCONS*/
       END DO !p=0,PP_N
     END DO !jNb=1,2
 
@@ -610,13 +697,39 @@ DO iSide=1,nMortarSides
 #endif /*navierstokes || mhd */
     DO iNb=1,2
       DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-        DO l=0,PP_N !index small side                       !<this is the big side!>
-          DO p=0,PP_N ! index big side 
-            CALL MortarFluxAverageVec( U_small(:,l,q,iNb,iSide),   U_small(:,p,q,0,iSide), &
+#ifdef NONCONS
+        DO l=0,PP_N !index small side
+          DO p=0,PP_N ! index big side                             !<this is the big side!> 
+            CALL MortarFluxAverageVec(   U_small(:,l,q,iNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,  0,iSide),Flux_tp(:,l,p))
+            Flux_tp_T(:,p,l)=Flux_tp(:,l,p) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,l,q,iNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,  0,iSide), Flux_tp_T(:,p,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,  0,iSide),   U_small(:,l,q,iNb,iSide), &
+                                      Uaux_small(:,p,q,  0)      ,Uaux_small(:,l,q,iNb)      , &
+                                        Ns_small(:,p,q,  0,iSide),  Ns_small(:,l,q,iNb,iSide), Flux_tp(:,l,p))
+          END DO !p
+        END DO !l
+        DO l=0,PP_N !index small side
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N  !index big side
+            Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+          END DO !r=0,PP_N
+          DO p=0,PP_N !index big side
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                              + Mproj_h(l,p,iNb)*(Flux_tp(:,l,p)-Flux_corr_l(:))
+          END DO !p=0,PP_N
+        END DO !l=0,PP_N
+#else
+        DO l=0,PP_N !index small side
+          DO p=0,PP_N ! index big side                              !<this is the big side!>
+            CALL MortarFluxAverageVec(   U_small(:,l,q,iNb,iSide),   U_small(:,p,q,0,iSide), &
 #if defined(navierstokes) || defined(mhd)
-                                    Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,0)      , &
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,0)      , &
 #endif /*navierstokes || mhd */
-                                      Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
           END DO
           Flux_corr_l(:)=0.
           DO r=0,PP_N  !index big side
@@ -627,6 +740,7 @@ DO iSide=1,nMortarSides
                                               + Mproj_h(l,p,iNb)*(Flux_tp_l(:,p)-Flux_corr_l(:))
           END DO !p=0,PP_N
         END DO !l=0,PP_N
+#endif /* NONCONS*/
       END DO !q=0,PP_N
     END DO !iNb=1,2
 
