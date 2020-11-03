@@ -285,6 +285,9 @@ IF (UseAMR) THEN
     call ShockCapturingAMR()
   ENDIF
 ENDIF
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 #endif /*USE_AMR*/
 
 IF(nCalcTimestepMax.EQ.1)THEN
@@ -571,6 +574,9 @@ subroutine TimeStepBySSPRK2(t)
 #if NFVSE_CORR
   use MOD_NFVSE        , only: Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
   implicit none
   !-arguments----------------------------------
   real, intent(in) :: t
@@ -593,6 +599,9 @@ subroutine TimeStepBySSPRK2(t)
 #if NFVSE_CORR
   call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
 #endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
   
   do iStage=2, nRKStages-1
     CurrentStage = iStage
@@ -604,6 +613,9 @@ subroutine TimeStepBySSPRK2(t)
 #if NFVSE_CORR
     call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
 #endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
     
     select case(iStage)
     case(2) ; r1 = U*RKe(iStage)
@@ -623,7 +635,9 @@ subroutine TimeStepBySSPRK2(t)
 #if NFVSE_CORR
   call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
 #endif /*NFVSE_CORR*/
-  
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
   
 end subroutine TimeStepBySSPRK2
 !===================================================================================================================================

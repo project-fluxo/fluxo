@@ -727,6 +727,7 @@ CALL ConsToPrim(PrimR(:),ConsR_in(:))
 ! make B_n continuous 
 Bn=0.5*(PrimL(6)+PrimR(6))
 PrimR(6)=Bn
+PrimL(6)=Bn
 
 CALL PrimToCons(PrimL(:),ConsL(:))
 CALL PrimToCons(PrimR(:),ConsR(:))

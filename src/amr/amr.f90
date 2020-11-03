@@ -315,7 +315,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
   use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
-
+#if POSITIVITYPRES
+  use MOD_PositivityPreservation, only: FinalizePositivityPreservation, InitPositivityPreservation
+#endif /*POSITIVITYPRES*/
   
 #if PARABOLIC
   USE  MOD_Lifting_Vars
@@ -687,6 +689,10 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 #if SHOCKCAPTURE
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+  call FinalizePositivityPreservation()
+  call InitPositivityPreservation()
+#endif /*POSITIVITYPRES*/
   
   CALL FinalizeBC()
   CALL InitBC()

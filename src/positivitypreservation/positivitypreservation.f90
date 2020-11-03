@@ -92,11 +92,6 @@ IF (PositivityPreservationInitIsDone) THEN
   SWRITE(*,*) "InitPositivityPreservation already called."
   RETURN
 END IF
-SWRITE(UNIT_StdOut,'(132("-"))')
-SWRITE(UNIT_stdOut,'(A)') ' INIT POSITIVITYPRESERVATION...'
-PositivityPreservationInitIsDone = .TRUE.
-SWRITE(UNIT_stdOut,'(A)')' INIT POSITIVITYPRESERVATION DONE!'
-SWRITE(UNIT_StdOut,'(132("-"))')
 
 allocate ( Jac(0:PP_N,0:PP_N,0:PP_N,nElems) )
 allocate ( vol(nElems) )
@@ -107,6 +102,16 @@ do l=1, nElems
     vol(l) = vol(l) + Jac(i,j,k,l) * wGP(i)*wGP(j)*wGP(k)
   end do       ; end do       ; end do
 end do
+
+PositivityPreservationInitIsDone = .TRUE.
+
+if (PositivityPreservationInitFirst) then
+  SWRITE(UNIT_StdOut,'(132("-"))')
+  SWRITE(UNIT_stdOut,'(A)') ' INIT POSITIVITYPRESERVATION...'
+  SWRITE(UNIT_stdOut,'(A)')' INIT POSITIVITYPRESERVATION DONE!'
+  SWRITE(UNIT_StdOut,'(132("-"))')
+  PositivityPreservationInitFirst = .FALSE.
+end if
 
 END SUBROUTINE InitPositivityPreservation
 
@@ -150,12 +155,9 @@ DO l = 1,nElems
     END DO ! j
   END DO ! k
 ! Compute the cell average
-  Umean = Umean/vol(l)  ! Is this hard-coded 2x2x2?
+  Umean = Umean/vol(l)
 ! Limit the density
   IF(rho_min.LT.0.) THEN
-!    WRITE(*,*)
-!    WRITE(*,*)'      The density was limited !'
-!    WRITE(*,*)
     delta = Umean(1)/(Umean(1) - rho_min)
     delta = 0.999*delta ! make delta > 0
     DO k = 0,PP_N
@@ -166,23 +168,24 @@ DO l = 1,nElems
       END DO ! j
     END DO ! k
   END IF
-! Get the minimum value of the pressure
+! Get the minimum value of the pressure and the new Umean
+  Umean = 0.0
   p_min = HUGE(1.)
   DO k = 0,PP_N
     DO j = 0,PP_N
       DO i = 0,PP_N
+        Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
         call GetPressure(Uloc(:,i,j,k),p(i,j,k))
         p_min = MIN(p_min,p(i,j,k))
       END DO ! i
     END DO ! j
   END DO ! k
-
+  ! Compute the cell average
+  Umean = Umean/vol(l)
+  
 ! Limit the pressure
   IF (p_min.LT.0.) THEN
-!    WRITE(*,*)
-!    WRITE(*,*)'      The pressure was limited !'
-!    WRITE(*,*)
-    call GetPressure(Umean,p_mean)
+    call GetPressure(Umean,p_mean) ! We compute the pressure with the mean value, as we assume that Jensen's inequality holds
     delta  = p_mean/(p_mean - p_min)
     delta  = 0.999*delta ! make delta > 0
     DO k = 0,PP_N
@@ -214,6 +217,10 @@ IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !============================================================================================================================
+
+SDEALLOCATE (vol)
+SDEALLOCATE (Jac)
+
 IF (.NOT.PositivityPreservationInitIsDone) THEN
   WRITE(UNIT_stdOut,*) "InitPositivityPreservation was not called before."
   RETURN

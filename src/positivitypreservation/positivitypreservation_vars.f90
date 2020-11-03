@@ -32,6 +32,7 @@ SAVE
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL          :: PositivityPreservationInitIsDone = .FALSE.
+LOGICAL          :: PositivityPreservationInitFirst  = .TRUE.
 !===================================================================================================================================
 
 END MODULE MOD_PositivityPreservation_Vars
