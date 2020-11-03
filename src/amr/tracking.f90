@@ -7,8 +7,8 @@
 !==================================================================================================================================
 MODULE MOD_AMR_tracking
 
-    INTERFACE ShockCapturingAMR
-        MODULE PROCEDURE ShockCapturingAMR
+    INTERFACE PerformAMR
+        MODULE PROCEDURE PerformAMR
     END INTERFACE
 
 
@@ -42,9 +42,11 @@ CONTAINS
 !==================================================================================================================================
 subroutine InitialAMRRefinement()
   USE MOD_PreProc     , only: PP_N
-  use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel
+  use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel, IniHalfwidthAMR
   use MOD_AMR         , only: RunAMR
   use MOD_Mesh_Vars   , only: nElems, Elem_xGP
+  use MOD_DG_Vars , only: U
+  use MOD_Globals, only: MPIRoot
   implicit none
   !-local-variables-----------------------------------------
   real    :: r
@@ -59,11 +61,11 @@ subroutine InitialAMRRefinement()
   select case (InitialRefinement)  
     case default ! Use the default indicator up to max-level
       do iter = 1,MaxLevel
-        call ShockCapturingAMR()
+        call PerformAMR()
         call InitData()
       end do
     
-    case(1) ! Refine any element containing a node in the spherewith radius r=0.2 to the MaxLevel
+    case(1) ! Refine any element containing a node in the spherewith radius r=IniHalfwidthAMR to the MaxLevel
       do iter = 1,MaxLevel
         allocate (ElemToRefineAndCoarse(1:nElems))!
         
@@ -74,7 +76,7 @@ subroutine InitialAMRRefinement()
           RefineElem = .FALSE.
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
             r = sqrt(sum(Elem_xGP(:,i,j,k,iElem)**2))
-            if (r <= 0.2) then
+            if (r <= IniHalfwidthAMR) then
               RefineElem = .TRUE.
               exit ; exit ; exit
             end if
@@ -102,7 +104,7 @@ subroutine InitialAMRRefinement()
 end subroutine
 
 
-    SUBROUTINE ShockCapturingAMR()
+    SUBROUTINE PerformAMR()
         !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
         USE MOD_PreProc
         USE MOD_Globals,                ONLY : MPIroot
@@ -123,10 +125,7 @@ end subroutine
         !Local variables
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
         INTEGER :: iElem
-         
-        ! REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
-        ! REAL :: LU, LUM1, LUM2, LU_N, LU_NM1, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
-        ! INTEGER :: iXMax(3), iXMin(3),i,j,k
+        
         REAL    :: eta_dof
             
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
@@ -151,7 +150,7 @@ end subroutine
         
         Deallocate(ElemToRefineAndCoarse)
     
-    END SUBROUTINE ShockCapturingAMR
+    END SUBROUTINE PerformAMR
 
     SUBROUTINE InitData()
         USE MOD_PreProc

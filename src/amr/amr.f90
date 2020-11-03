@@ -95,8 +95,9 @@ SUBROUTINE DefineParametersAMR()
                                                   '1')
  CALL prms%CreateIntOption(  'InitialRefinement', "Initial refinement to be used "//&
                                                   "  0: Use the custom indicator"//&
-                                                  "  1: Refine the elements in the sphere with r=0.2",&
+                                                  "  1: Refine the elements in the sphere with r=IniHalfwidthAMR",&
                                                   '0')
+ CALL prms%CreateRealOption(   'IniHalfwidthAMR', " For InitialRefinement: Halfwidth","0.1")
 END SUBROUTINE DefineParametersAMR
 
 
@@ -155,6 +156,7 @@ SUBROUTINE InitAMR()
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
     nDoAMR = GetINT('nDoAMR',"1")
     InitialRefinement = GETINT('InitialRefinement','0')
+    IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
     
     CALL InitIndicator()
     RET=P4EST_INIT(MPI_COMM_WORLD); 

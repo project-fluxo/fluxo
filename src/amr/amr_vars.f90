@@ -23,6 +23,7 @@ INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
 INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
 integer                     :: InitialRefinement    ! Initial refinement switch
 integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
+real                        :: IniHalfwidthAMR
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
 real, allocatable           :: Vdm_Interp_0_1_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [-1,0]

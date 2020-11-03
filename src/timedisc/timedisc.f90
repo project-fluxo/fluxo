@@ -161,7 +161,7 @@ USE MOD_ShockCapturing      ,ONLY: CalcArtificialViscosity
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 #if USE_AMR
-USE MOD_AMR_tracking        ,ONLY: ShockCapturingAMR,InitData,InitialAMRRefinement
+USE MOD_AMR_tracking        ,ONLY: PerformAMR,InitData,InitialAMRRefinement
 USE MOD_AMR_Vars            ,ONLY: UseAMR, MaxLevel, nWriteDataAMR, nDoAMR
 
 USE MOD_AMR                 ,ONLY: WriteStateAMR
@@ -282,7 +282,7 @@ IF (UseAMR) THEN
   doAMR = doAMR + 1;
   IF (doAMR .EQ. nDoAMR) THEN
     doAMR = 0;
-    call ShockCapturingAMR()
+    call PerformAMR()
   ENDIF
 ENDIF
 #if POSITIVITYPRES
