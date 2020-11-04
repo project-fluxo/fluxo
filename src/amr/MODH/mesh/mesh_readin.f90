@@ -476,8 +476,8 @@ CONTAINS
             END DO !iLocSide
         END DO !iTree
 
+        ALLOCATE(JoinFaces(5, num_periodics))
         IF(num_periodics.GT.0) THEN
-            ALLOCATE(JoinFaces(5, num_periodics))
             DO iTree = 1, nTrees
                 aElem => Trees(iTree)%ep
                 DO iLocSide = 1, 6
