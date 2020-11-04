@@ -691,6 +691,13 @@ subroutine CalcBlendingCoefficient_random(U)
   use MOD_Mesh_Vars          , only: nElems
   use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
   use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor
+#if MPI
+  use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
+  use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster
+  use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
+  USE MOD_MPI_Vars
+  use MOD_DG_Vars            , only: U_master
+#endif /*MPI*/
   implicit none
   ! Arguments
   !---------------------------------------------------------------------------------------------------------------------------------
@@ -700,6 +707,19 @@ subroutine CalcBlendingCoefficient_random(U)
   real ::  eta(nElems)
   integer :: eID, sweep
   !---------------------------------------------------------------------------------------------------------------------------------
+  
+  ! If we do reconstruction on boundaries, we need to send the U_master
+#if MPI
+  if (ReconsBoundaries) then
+    ! receive the master
+    call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
+    
+    ! Send the master
+    call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,2),SendID=1) 
+  end if
+#endif /*MPI*/
   
   do eID=1, nElems
     call RANDOM_NUMBER(alpha(eID))

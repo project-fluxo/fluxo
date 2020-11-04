@@ -1325,6 +1325,15 @@ CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant ch
   prim(7) =  r*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
   prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
 CALL PrimToCons(Prim,Resu)
+
+case(12345) ! Geospace Environmentl Modeling (GEM) reconnection challenge
+  prim = 0.
+  prim(1) = 1./cosh(2.*x(2))**2 + 0.2
+  prim(5) = 0.5 *prim(1)
+  prim(6) = tanh(2.*x(2)) - 0.1*(PP_Pi/12.8)   *sin(   PP_Pi*x(2)/12.8)*cos(2.*PP_Pi*x(1)/25.6)
+  prim(7) = 0.1*(2.*PP_Pi/25.6)*sin(2.*PP_Pi*x(1)/25.6)*cos(   PP_Pi*x(2)/12.8)
+  
+  CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
