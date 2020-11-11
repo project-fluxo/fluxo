@@ -357,7 +357,7 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps
     use MOD_ShockCapturing_Vars, only: alpha, alpha_max
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff
+    use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
 #if MPI
     use MOD_MPI                , only: FinishExchangeMPIData
     use MOD_MPI_Vars           , only: nNbProcs
@@ -380,10 +380,8 @@ contains
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htildeR  ! transformed inter-subcell flux in zeta (with ghost cells)
 #endif /*NONCONS*/
     real,dimension(PP_nVar)                         :: F_FV
-    integer                                         :: i,j,k,iElem
+    integer                                         :: i,j,k,iElem, sweep
     !===============================================================================================================================
-    
-    if (SpacePropSweeps > 0) call PropagateBlendingCoeff()
     
     !if reconstruction:
     if (ReconsBoundaries) then
@@ -391,6 +389,16 @@ contains
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
       call Get_externalU()
+    end if
+    
+    if (SpacePropSweeps > 0) then
+      ! Receive alpha (MPI) and propagate
+      call PropagateBlendingCoeff()
+      ! Do furher sweeps if needed (not MPI-optimized)
+      do sweep=2, SpacePropSweeps
+        call ProlongBlendingCoeffToFaces()
+        call PropagateBlendingCoeff()
+      end do
     end if
     
     do iElem=1,nElems
@@ -1134,7 +1142,7 @@ contains
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-
+    
 !   Entropy fix: Fall to first order if entropy condition is not fulfilled  
 !   **********************************************************************
     

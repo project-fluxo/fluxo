@@ -671,16 +671,9 @@ subroutine CalcBlendingCoefficient_indicator(U)
     alpha = alpha_max
   end where
   
-  if (SpacePropSweeps > 0) then
-    ! Do first sweep (MPI-optimized)
-    call ProlongBlendingCoeffToFaces()
-    
-    ! Do remaining sweeps (overhead in MPI communication)
-    do sweep=2, SpacePropSweeps
-      call PropagateBlendingCoeff()
-      call ProlongBlendingCoeffToFaces()
-    end do
-  end if
+  ! Start first space propagation sweep (MPI-optimized)
+  if (SpacePropSweeps > 0) call ProlongBlendingCoeffToFaces()
+  
 end subroutine CalcBlendingCoefficient_indicator
 !===================================================================================================================================
 !> This routine selects the blending coefficient randomly (and sends it with MPI)
