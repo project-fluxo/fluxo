@@ -287,7 +287,7 @@ DO j = 0,PP_N
     ConsR_r(6) = SUM(UR_r(6:8,i,j)*nv(:,i,j))
     ConsR_r(7) = SUM(UR_r(6:8,i,j)*t1(:,i,j))
     ConsR_r(8) = SUM(UR_r(6:8,i,j)*t2(:,i,j))
-#if PP_GLM
+#ifdef PP_GLM
     CALL EntropyStable9WaveFluxRecons(ConsL(:),ConsR(:),ConsL_r(:),ConsR_r(:),F(:,i,j))
 #else
     call abort(__STAMP__,'AdvRiemannRecons is only implemented for the 9waves Riemann solver (GLM)',999,999.)

@@ -21,10 +21,15 @@ module MOD_NFVSE
   implicit none
 !==================================================================================================================================
 !> Computes the spatial operator using Native Finite Volume Sub-Elements (NFVSE)
-!> Based on: Hennemann et al. (2020). "A provably entropy stable subcell shock capturing approach for high order split form 
-!>                                     DG for the compressible Euler Equations"
-!> Attention 1: The current strategy is to perform the operations on "inner faces". This can be improved, but the Riemann solver 
-!>              routines have to be adapted
+!> Based on: * Hennemann et al. (2020). "A provably entropy stable subcell shock capturing approach for high order split form 
+!>                                       DG for the compressible Euler Equations"
+!>           * Rueda-Ramírez et al. (2021) "An Entropy Stable Nodal Discontinuous Galerkin Method for the resistive MHD Equations. 
+!>                                          Part II: Subcell Finite Volume Shock Capturing"
+!> Attention 1: The current strategy is to perform the operations on "inner faces". This might not be the most optimal choice, 
+!>              as the inner element data has to be copied each time to improve performance. This can be improved, but the Riemann  
+!>              solver routines have to be adapted
+!> Attention 2: The inner faces do not have the same indexing as the inter-element faces (sides). The reshape routines, and the 
+!>              definition of TanDirs1 and TanDirs2, account for that...
 !==================================================================================================================================
 !
 ! Example for N=4 in 1D
@@ -40,7 +45,7 @@ module MOD_NFVSE
 !                    |    |      |      |    |
 !                    0-·--O--·---O---·--O--·-0
 !                    | |     |       |     | |
-!(2) FV BC idx:     -1 0     1       2     3 4
+!(2) FV BC idx:     -1 0     1       2     3 4 (inner faces)
 !                    └─┴─────┴───────┴─────┴─┘
 !(3) FV subcell idx:  0   1      2      3   4
 !
@@ -53,6 +58,7 @@ module MOD_NFVSE
 #if NFVSE_CORR
   public :: Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
+  
 contains
 !===================================================================================================================================
 !> Defines parameters for NFVSE (to be called in shockcapturing.f90)
@@ -61,9 +67,9 @@ contains
     use MOD_ReadInTools,  only: prms
     implicit none
     
-    CALL prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used "//&
-                                              "  1: 1st order FV"//&
-                                              "  2: 2nd order TVD method (not ES)"//&
+    CALL prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
+                                              "  1: 1st order FV\n"//&
+                                              "  2: 2nd order TVD method (not ES)\n"//&
                                               "  3: '2nd' order TVD-ES method"&
                                              ,"1")
     call prms%CreateRealOption    (      "alpha_max", "Maximum value for the blending coefficient", "0.5")
@@ -71,7 +77,11 @@ contains
     call prms%CreateRealOption    ("SpacePropFactor", "Space propagation factor", "0.5")
     call prms%CreateIntOption     ("SpacePropSweeps", "Number of space propagation sweeps (MPI-optimized only for 0 or 1)", "1")
     call prms%CreateRealOption    (  "TimeRelFactor", "Time relaxation factor", "0.0")
-    call prms%CreateLogicalOption("ReconsBoundaries", "Use a reconstruction procedure on boundary subcells.. Only for SubFVMethod=1/2","F")
+    call prms%CreateIntOption    ("ReconsBoundaries", "Reconstruction procedure on boundary subcells (only for SubFVMethod=1/2):\n"//&
+                                                       "   1: No reconstruction\n"//&
+                                                       "   2: Central reconstruction\n"//&
+                                                       "   3: Neighbor element reconstruction"&
+                                                       ,"1")
    
   end subroutine DefineParametersNFVSE
 !===================================================================================================================================
@@ -79,14 +89,18 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSE()
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes, SubFVMethod, ReconsBoundaries, MPIRequest_Umaster
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes, SubFVMethod, MPIRequest_Umaster
     use MOD_NFVSE_Vars         , only: SpacePropFactor, SpacePropSweeps, TimeRelFactor
+    use MOD_NFVSE_Vars         , only: ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
     use MOD_NFVSE_Vars         , only: U_ext, sdxR, sdxL, rL, rR
-    use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+    use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde, isMortarMesh
     use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_ShockCapturing_Vars, only: alpha_old, alpha_max, alpha_min
     use MOD_DG_Vars            , only: D
+#if USE_AMR
+    use MOD_AMR_Vars           , only: UseAMR
+#endif /*USE_AMR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
@@ -100,6 +114,7 @@ contains
     real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
     real, parameter :: half = 0.5d0
     real :: sumWm1
+    logical :: MeshNonConforming
     !--------------------------------------------------------------------------------------------------------------------------------
      SDEALLOCATE(SubCellMetrics)
     ! Get parameters
@@ -108,7 +123,6 @@ contains
     alpha_max        = GETREAL   ('alpha_max','0.5')
     alpha_min        = GETREAL   ('alpha_min','0.01')
     SubFVMethod      = GETINT    ('SubFVMethod','1')
-    ReconsBoundaries = GETLOGICAL('ReconsBoundaries','F')
     SpacePropFactor  = GETREAL   ('SpacePropFactor','0.5')
     SpacePropSweeps  = GETINT    ('SpacePropSweeps','1')
     TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.0')
@@ -116,10 +130,27 @@ contains
     ! Initialize everything
     ! ---------------------
     
+    ! Check if the mesh can be non-conforming
+    MeshNonConforming = isMortarMesh
+#if USE_AMR
+    MeshNonConforming = UseAMR .or. MeshNonConforming
+#endif /*USE_AMR*/
+    
+    ! Select the sub-FV method
     select case(SubFVMethod)
       case(1) ; Compute_FVFluxes => Compute_FVFluxes_1st_Order
-      case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
-      case(3) ; Compute_FVFluxes => Compute_FVFluxes_TVD2ES
+      case(2,3) 
+        ReconsBoundaries = GETINT('ReconsBoundaries','1')
+        
+        if (ReconsBoundaries >= RECONS_NEIGHBOR .and. MeshNonConforming) then
+          SWRITE(*,*) 'WARNING :: ReconsBoundaries>=3 is only possible for conforming meshes. Setting to 1.'
+          ReconsBoundaries = RECONS_NONE
+        end if
+        
+        select case(SubFVMethod)
+          case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
+          case(3) ; Compute_FVFluxes => Compute_FVFluxes_TVD2ES
+        end select
     end select
     
     ! Allocate storage
@@ -137,7 +168,7 @@ contains
     ! **********************************
     select case(SubFVMethod)
     case(2,3)
-      allocate ( U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems) )
+      if (ReconsBoundaries >= RECONS_NEIGHBOR) allocate ( U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems) )
       allocate ( sdxR(1:PP_N-1) )
       allocate ( sdxL(1:PP_N-1) )
       allocate ( rR  (1:PP_N-1) )
@@ -170,7 +201,7 @@ contains
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -303,7 +334,7 @@ contains
     use MOD_Mesh_Vars          , only: nElems
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
-    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries
+    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries, RECONS_NEIGHBOR
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
@@ -337,7 +368,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
@@ -354,7 +385,7 @@ contains
     use MOD_PreProc
     use MOD_DG_Vars            , only: U
     use MOD_Mesh_Vars          , only: nElems
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps, RECONS_NEIGHBOR
     use MOD_ShockCapturing_Vars, only: alpha, alpha_max
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
@@ -384,7 +415,7 @@ contains
     !===============================================================================================================================
     
     !if reconstruction:
-    if (ReconsBoundaries) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
@@ -685,7 +716,7 @@ contains
     use MOD_PreProc
     use MOD_Riemann   , only: AdvRiemann
     use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries
+    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
     use MOD_DG_Vars   , only: nTotal_vol
     use MOD_Equation_Vars, only: ConsToPrimVec,PrimToConsVec
     use MOD_Interpolation_Vars , only: wGP
@@ -738,7 +769,7 @@ contains
     
     call ConsToPrimVec(nTotal_vol,prim,U)
     
-    if (ReconsBoundaries) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
     
 !   *********
 !   Xi-planes
@@ -755,14 +786,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim_(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
+        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -776,14 +808,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
+      case (RECONS_CENTRAL)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -854,14 +887,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
+    select case (ReconsBoundaries) 
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim_(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
+        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -875,14 +909,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
+      case (RECONS_CENTRAL)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -951,14 +986,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-      primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
+        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -972,14 +1008,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N)
+      case (RECONS_CENTRAL)
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1040,7 +1077,7 @@ contains
     use MOD_PreProc
     use MOD_Riemann   , only: AdvRiemannRecons
     use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries
+    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
     use MOD_Interpolation_Vars , only: wGP
     use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec
     use MOD_DG_Vars           , only: nTotal_vol
@@ -1092,7 +1129,7 @@ contains
 #endif /*NONCONS*/
     
     call ConsToPrimVec(nTotal_vol,prim,U)
-    if (ReconsBoundaries) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
     
 !   *********
 !   Xi-planes
@@ -1109,15 +1146,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
-    
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim_(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
+        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -1131,14 +1168,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
+      case (RECONS_CENTRAL)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1211,14 +1249,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-      primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim_(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
+        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -1232,14 +1271,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
+      case (RECONS_CENTRAL)  
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1306,14 +1346,15 @@ contains
     ! First DOF
     !----------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-      primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
-    else
-      ! Central scheme
-      primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primR(:,:,:,0) = prim(:,:,:,0)
+      case (RECONS_CENTRAL)
+        primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
+        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+    end select
     
     ! Middle DOFs
     ! -----------
@@ -1327,14 +1368,15 @@ contains
     ! Last DOF
     ! --------
     
-    if (ReconsBoundaries) then
-      ! v3
-      sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
-    else
-      ! Central scheme
-      primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-    end if
+    select case (ReconsBoundaries)
+      case (RECONS_NONE)
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N)
+      case (RECONS_CENTRAL)
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(PP_N)      
+    end select
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1401,20 +1443,20 @@ contains
     
   end function minmod
   
-!
+!===================================================================================================================================
 !> Gets outer solution for the TVD reconstruction
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
-!> ATTENTION 2: Mortar faces are not considered (big TODO)
-! TODO: We need to send the U_master tooooooooo
-!  
+!> ATTENTION 2: Mortar faces are not considered (TODO?)
+!===================================================================================================================================
   subroutine Get_externalU()
     use MOD_PreProc
-    use MOD_NFVSE_Vars, only: U_ext
+    use MOD_NFVSE_Vars, only: U_ext, TanDirs1, TanDirs2
     use MOD_DG_Vars   , only: U, U_master, U_slave
     use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR
     implicit none
     !-local-variables-----------------------------------------
     integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
+    integer :: ax1, ax2
     !---------------------------------------------------------
     
     ! First assign the inner value on boundaries (we don't use an "external state")
@@ -1423,11 +1465,13 @@ contains
       locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
       flip    = 0 ! flip is 0 in master faces!
       
+      ax1 = TanDirs1(locSide)
+      ax2 = TanDirs2(locSide)
       DO q=0,PP_N; DO p=0,PP_N
         ijk(:)=S2V(:,0,p,q,flip,locSide)
-        U_ext(:,p,q,locSide,ElemID)=U(:,ijk(1),ijk(2),ijk(3),ElemID)
+        U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U(:,ijk(1),ijk(2),ijk(3),ElemID)
       END DO; END DO !p,q=0,PP_N
-    end do
+    end do !SideID=1, nBCSides
     
     ! TODO: Include routines for mortar faces here....
     
@@ -1440,8 +1484,14 @@ contains
       !master sides(ElemID,locSide and flip =-1 if not existing)
       IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
         locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
-        U_ext(:,:,:,locSide,ElemID)=U_slave(:,:,:,SideID) ! Slave side is force-aligned with master
-      end if
+        flip    = 0 ! flip is 0 in master faces!
+        ax1 = TanDirs1(locSide)
+        ax2 = TanDirs2(locSide)
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,0,p,q,flip,locSide)
+          U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U_slave(:,p,q,SideID) ! Slave side is force-aligned with master
+        END DO; END DO !p,q=0,PP_N
+      end if !(ElemID.NE.-1)
       
 !     Slave side
 !     ----------
@@ -1450,29 +1500,179 @@ contains
         nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
         nbFlip    = SideToElem(S2E_FLIP,SideID)
         
-        select case (nblocSide)
-          case(1,6) ! Side is normal to zeta
-            DO q=0,PP_N; DO p=0,PP_N
-              ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
-              U_ext(:,ijk(1),ijk(2),nblocSide,nbElemID) = U_master(:,p,q,SideID)
-            END DO; END DO !p,q=0,PP_N
-          case(2,4) ! Side is normal to eta
-            DO q=0,PP_N; DO p=0,PP_N
-              ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
-              U_ext(:,ijk(3),ijk(1),nblocSide,nbElemID) = U_master(:,p,q,SideID)
-            END DO; END DO !p,q=0,PP_N
-          case(3,5) ! Side is normal to xi
-            DO q=0,PP_N; DO p=0,PP_N
-              ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
-              U_ext(:,ijk(2),ijk(3),nblocSide,nbElemID) = U_master(:,p,q,SideID)
-            END DO; END DO !p,q=0,PP_N
-        end select
-      end if
-    end do
+        ax1 = TanDirs1(nblocSide)
+        ax2 = TanDirs2(nblocSide)
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,0,p,q,flip,locSide)
+          U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=U_master(:,p,q,SideID) ! Slave side is force-aligned with master
+        END DO; END DO !p,q=0,PP_N
+      end if !(nbElemID.NE.-1)
+      
+    end do ! SideID=firstInnerSide, lastMPISide_YOUR
     
-    ! TODO: Do mortar MPI sides
+!    ! A check, for debugging puposes
+!    call Check_ExternalU(U_ext,U)
     
   end subroutine Get_externalU
+  
+!===================================================================================================================================
+!> Subroutine to check if the external U was assigned correctly
+!> ATTENTION: This routine only checks inner sides and can only be done in a periodic box [0,1]^3
+!===================================================================================================================================
+  subroutine Check_ExternalU(U_ext,U)
+    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, Elem_xGP
+    use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
+    use MOD_Basis     , only: ALMOSTEQUAL
+    implicit none
+    !-arguments---------------------------------
+    real, intent(in) :: U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems)
+    real, intent(in) :: U    (1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+    !-local-variables---------------------------
+    integer :: sideID, ijkM(3), ijkS(3), ElemID, nbElemID, p, q, pp, qq, locSide, nblocSide
+    real, dimension(PP_nVar) :: U_SinM, U_MinM, U_MinS, U_SinS
+    real :: xM(3), xS(3)
+    integer :: ax1M, ax2M, ax1S, ax2S, nbFlip
+    real, parameter :: eps = 1.e-30
+    !-------------------------------------------
+    
+    ! check the inner sides
+    do SideID=firstInnerSide, lastMPISide_YOUR
+      ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+      nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+      
+      !cycle if both elems are not in this partition
+      if( (ElemID==-1) .or. (nbElemID==-1) ) cycle
+      
+      locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+      nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
+      ax1M = TanDirs1(locSide)
+      ax2M = TanDirs2(locSide)
+      ax1S = TanDirs1(nblocSide)
+      ax2S = TanDirs2(nblocSide)
+      
+      ! loop over the DOFS of the master elem
+      do q=0, PP_N ; do p=0, PP_N
+        call GetIndexes([p,q],locSide,ijkM)
+        U_MinM = U       (:,ijkM(1),ijkM(2),ijkM(3),ElemID)
+        U_SinM = U_ext   (:,ijkM(ax1M),ijkM(ax2M),locSide,ElemID)
+        xM     = Elem_xGP(:,ijkM(1),ijkM(2),ijkM(3),ElemID)
+        
+        ! Look for the corresponding  coordinates in the slave face
+        outer: do qq=0, PP_N ; do pp=0, PP_N
+          call GetIndexes([pp,qq],nblocSide,ijkS)
+          xS     = Elem_xGP(:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
+          if (sameCoords(xM,xS,ijkS,nblocSide,sideID)) then
+            U_SinS = U    (:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
+            U_MinS = U_ext(:,ijkS(ax1S),ijkS(ax2S),nblocSide,nbElemID)
+            exit outer ! (2 loops)
+          end if
+        end do        ; end do outer
+        
+        if (pp>PP_N .or. qq>PP_N) then
+          print*, 'ERROR :: coincident side not found', nblocSide, ijkS
+          print*, xM
+          do qq=0, PP_N ; do pp=0, PP_N
+            call GetIndexes([pp,qq],nblocSide,ijkS)
+            print*, ijkS
+            xS     = Elem_xGP(:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
+            print*, xS
+          end do        ; end do
+          stop
+        end if
+        
+!#        if ( .not. all(ALMOSTEQUAL(U_MinM,U_MinS)) ) then
+        if ( .not. all(abs(U_MinM-U_MinS)<eps) ) then
+          WRITE(*,*) 'Problem with Check_ExternalU'
+          WRITE(*,*) 'U_MinM', U_MinM
+          WRITE(*,*) 'U_MinS', U_MinS
+        end if
+          
+!#        if ( .not. all(ALMOSTEQUAL(U_SinS,U_SinM)) ) then
+        if ( .not. all(abs(U_SinS-U_SinM)<eps) ) then
+          WRITE(*,*) 'Problem with Check_ExternalU'
+          WRITE(*,*) 'U_SinS', U_SinS
+          WRITE(*,*) 'U_SinM', U_SinM
+        end if
+      end do       ; end do
+      
+    end do
+    
+    
+  contains
+    subroutine GetIndexes(pq,locSide,ijk)
+      implicit none
+      integer, intent(in)  :: pq(2)   ! Face indexes
+      integer, intent(in)  :: locSide ! Element side (1-6)
+      integer, intent(out) :: ijk(3)  ! 3D Index
+      
+      select case (locSide)
+        case(1)
+          ijk(1) = pq(1)
+          ijk(2) = pq(2)
+          ijk(3) = 0
+        case(2)
+          ijk(1) = pq(2)
+          ijk(2) = 0
+          ijk(3) = pq(1)
+        case(3)
+          ijk(1) = PP_N
+          ijk(2) = pq(1)
+          ijk(3) = pq(2)
+        case(4)
+          ijk(1) = pq(2)
+          ijk(2) = PP_N
+          ijk(3) = pq(1)
+        case(5)
+          ijk(1) = 0
+          ijk(2) = pq(1)
+          ijk(3) = pq(2)
+        case(6)
+          ijk(1) = pq(1)
+          ijk(2) = pq(2)
+          ijk(3) = PP_N
+      end select
+      
+    end subroutine GetIndexes
+    
+    logical function sameCoords(xM,xS,ijkS,nblocSide, sideID)
+      use MOD_Basis     , only: ALMOSTEQUAL
+      use MOD_Mesh_Vars , only: BC, BoundaryType
+      implicit none
+      !-------------------------
+      real   , intent(in) :: xM(3), xS(3)
+      integer, intent(in) :: ijkS(3),nblocSide, sideID
+      !-------------------------
+      integer :: i, counter
+      real :: xS2(3)
+      real, parameter :: dl = 1.0
+      !-------------------------
+      
+      sameCoords = .FALSE.
+      
+      ! Trivial case
+!#      if (all(ALMOSTEQUAL(xM,xS))) then
+      if (all(abs(xM-xS)<eps)) then
+        sameCoords = .TRUE.
+        return
+      end if
+      
+      ! Case of periodic boundaries
+      if ( (nblocSide == 1 .and. ijkS(3)==0   ) ) xS2 = xS + [ 0., 0., dl]
+      if ( (nblocSide == 2 .and. ijkS(2)==0   ) ) xS2 = xS + [ 0., dl, 0.]
+      if ( (nblocSide == 3 .and. ijkS(1)==PP_N) ) xS2 = xS + [-dl, 0., 0.]
+      if ( (nblocSide == 4 .and. ijkS(2)==PP_N) ) xS2 = xS + [ 0.,-dl, 0.]
+      if ( (nblocSide == 5 .and. ijkS(1)==0   ) ) xS2 = xS + [ dl, 0., 0.]
+      if ( (nblocSide == 6 .and. ijkS(3)==PP_N) ) xS2 = xS + [ 0., 0.,-dl]
+      
+!#      if (all(ALMOSTEQUAL(xM,xS2))) then
+      if (all(abs(xM-xS2)<eps)) then
+        sameCoords = .TRUE.
+        return
+      end if
+      
+    end function sameCoords
+  end subroutine Check_ExternalU
+  
 !===================================================================================================================================
 !> Corrects U and Ut after the Runge-Kutta stage
 !===================================================================================================================================

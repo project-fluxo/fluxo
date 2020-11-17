@@ -191,7 +191,7 @@ contains
     use MOD_Mesh_Vars,   only: firstMortarInnerSide,lastMortarInnerSide
     use MOD_Mesh_Vars,   only: firstMortarMPISide,lastMortarMPISide
     use MOD_Mesh_Vars,   only: firstSlaveSide,lastSlaveSide
-    use MOD_Mesh_Vars,   only: FS2M,nSides 
+    use MOD_Mesh_Vars,   only: nSides 
     implicit none
     !----------------------------------------------------------------------------------------------------------------------------------
     ! INPUT/OUTPUT VARIABLES

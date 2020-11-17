@@ -27,11 +27,14 @@ module MOD_NFVSE_Vars
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
   public :: ReconsBoundaries, MPIRequest_Umaster
+  public :: RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
   public :: SpacePropFactor, SpacePropSweeps, TimeRelFactor
-  
+  public :: TanDirs1, TanDirs2
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
 !-----------------------------------------------------------------------------------------------------------------------------------
+  ! Metric terms on an inner face
+  ! -----------------------------
   type :: InnerFaceMetrics_t
     real, allocatable :: nv(:,:,:,:) !< Sub-cell normal vectors            : (1:3,0:N,0:N,0:N-1)
     real, allocatable :: t1(:,:,:,:) !< Sub-cell tangent vectors (1)       : (1:3,0:N,0:N,0:N-1)
@@ -42,6 +45,8 @@ module MOD_NFVSE_Vars
 !                             |_____ (FV subcell idx)
   end type InnerFaceMetrics_t
   
+  ! All the metric terms of an element
+  ! ----------------------------------
   type :: SubCellMetrics_t
     type(InnerFaceMetrics_t) :: xi
     type(InnerFaceMetrics_t) :: eta
@@ -61,6 +66,12 @@ module MOD_NFVSE_Vars
   real                      , allocatable :: sWGP(:)                !< Inverse of the Gauss quadrature weights
   integer                   , allocatable :: MPIRequest_alpha(:,:)  !< MPI request for the transfer of the blending coefficient
                                                                     !< (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
+
+! Definition of the tangent directions for the "inner faces" (note that they differ from the definition of TangDirs in MOD_Mesh_Vars)
+! ----------------------------------------------------------
+  INTEGER,PARAMETER :: TanDirs1(6)  = (/ 1 , 1 , 2 , 1 , 2 , 1 /) !< first tangential vector direction for local "inner faces"
+  INTEGER,PARAMETER :: TanDirs2(6)  = (/ 2 , 3 , 3 , 3 , 3 , 2 /) !< first tangential vector direction for local "inner faces"
+  
 ! For the positivity limiter
 ! --------------------------
   real                      , allocatable :: Fsafe(:,:,:,:,:)
@@ -83,7 +94,11 @@ module MOD_NFVSE_Vars
   real                      , allocatable :: U_ext(:,:,:,:,:)       !< External solution for reconstruction on boundaries (PP_nVar,0:N,0:N,locside,iElem)
   integer                   , allocatable :: MPIRequest_Umaster(:,:)
   
-  logical                                 :: ReconsBoundaries = .FALSE.
+  integer                                 :: ReconsBoundaries = 1
+  
+  integer, parameter :: RECONS_NONE     = 1
+  integer, parameter :: RECONS_CENTRAL  = 2
+  integer, parameter :: RECONS_NEIGHBOR = 3
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! Interfaces
 !-----------------------------------------------------------------------------------------------------------------------------------

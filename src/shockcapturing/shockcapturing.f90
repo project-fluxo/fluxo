@@ -625,7 +625,7 @@ subroutine CalcBlendingCoefficient_indicator(U)
   use MOD_ShockCapturing_Vars
   use MOD_Mesh_Vars          , only: nElems
   use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
-  use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor
+  use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor, RECONS_NEIGHBOR
   ! For reconstruction on boundaries
 #if MPI
   use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
@@ -646,7 +646,7 @@ subroutine CalcBlendingCoefficient_indicator(U)
   
   ! If we do reconstruction on boundaries, we need to send the U_master
 #if MPI
-  if (ReconsBoundaries) then
+  if (ReconsBoundaries >= RECONS_NEIGHBOR) then
     ! receive the master
     call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
@@ -686,7 +686,7 @@ subroutine CalcBlendingCoefficient_random(U)
   use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor
 #if MPI
   use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
-  use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster
+  use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster, RECONS_NEIGHBOR
   use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
   USE MOD_MPI_Vars
   use MOD_DG_Vars            , only: U_master
@@ -703,7 +703,7 @@ subroutine CalcBlendingCoefficient_random(U)
   
   ! If we do reconstruction on boundaries, we need to send the U_master
 #if MPI
-  if (ReconsBoundaries) then
+  if (ReconsBoundaries >= RECONS_NEIGHBOR) then
     ! receive the master
     call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 

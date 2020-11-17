@@ -74,13 +74,13 @@ subroutine InitialAMRRefinement()
         do iElem=1, nElems  
           ! Check if the element has a node on the desired region
           RefineElem = .FALSE.
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          outer: do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
             r = sqrt(sum(Elem_xGP(:,i,j,k,iElem)**2))
             if (r <= IniHalfwidthAMR) then
               RefineElem = .TRUE.
-              exit ; exit ; exit
+              exit outer
             end if
-          end do       ; end do       ; end do
+          end do       ; end do       ; end do outer
           
           ! Set that element for refinement
           if (RefineElem) then

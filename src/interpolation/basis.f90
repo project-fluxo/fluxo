@@ -669,7 +669,7 @@ END SUBROUTINE PolynomialDerivativeMatrix
 !> Takes into account that x,y are located in-between [-1;1]
 !> Based on Algorithm 139, Kopriva
 !==================================================================================================================================
-FUNCTION ALMOSTEQUAL(x,y)
+elemental FUNCTION ALMOSTEQUAL(x,y)
 USE MOD_PreProc
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
