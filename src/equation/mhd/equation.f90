@@ -270,7 +270,7 @@ SUBROUTINE SetRiemannSolver(which)
 ! MODULES
 USE MOD_Globals
 USE MOD_Equation_Vars,ONLY: VolumeFluxAverage
-USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0
+USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0,RiemannGetDissipMatrices
 USE MOD_Riemann
 USE MOD_Flux_Average
 IMPLICIT NONE
@@ -325,7 +325,9 @@ CASE(13)
 CASE(14)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: 9 wave entropy stable flux!'
 #ifdef PP_GLM
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
   SolveRiemannProblem => EntropyStable9WaveFlux 
+  RiemannGetDissipMatrices => EntropyStable9WaveFlux_DissipMatrices
 #else
   CALL abort(__STAMP__,&
    'Entropy Stable 9 wave flux can currently only be run with GLM!!!')

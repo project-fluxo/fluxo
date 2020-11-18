@@ -83,6 +83,8 @@ PUBLIC:: RiemannSolver_EC_LLF
 PUBLIC:: RiemannSolver_ESM
 PUBLIC:: RiemannSolver_VolumeFluxAverage_LLF
 PUBLIC:: RiemannSolver_ECKEP_LLF
+PUBLIC:: RotateState
+PUBLIC:: RotateFluxBack
 !==================================================================================================================================
 
 CONTAINS
@@ -206,20 +208,8 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 ! Gauss point i,j
 DO j=0,PP_N
   DO i=0,PP_N
-    !LEFT
-    U_LL(1,i,j)=U_L(1,i,j)
-    ! rotate momentum
-    U_LL(2,i,j)=SUM(U_L(2:4,i,j)*nv(:,i,j))
-    U_LL(3,i,j)=SUM(U_L(2:4,i,j)*t1(:,i,j))
-    U_LL(4,i,j)=SUM(U_L(2:4,i,j)*t2(:,i,j))
-    U_LL(5,i,j)=U_L(5,i,j)
-    !right
-    U_RR(1,i,j)=U_R(1,i,j)
-    ! rotate momentum
-    U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
-    U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
-    U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
-    U_RR(5,i,j)=U_R(5,i,j)
+    U_LL(:,i,j) = RotateState(U_L(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    U_RR(:,i,j) = RotateState(U_R(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
   END DO ! i 
 END DO ! j
 
@@ -307,9 +297,7 @@ CALL SolveRiemannProblem(F,U_LL,U_RR)
 ! Back Rotate the normal flux into Cartesian direction
 DO j=0,PP_N
   DO i=0,PP_N
-    F(2:4,i,j)= nv(:,i,j)*F(2,i,j) &
-               +t1(:,i,j)*F(3,i,j) &
-               +t2(:,i,j)*F(4,i,j)
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
   END DO ! i
 END DO ! j
 
@@ -348,37 +336,14 @@ DO j=0,PP_N
   DO i=0,PP_N
 !   First the mean states
 !   ---------------------
-    !LEFT
-    U_LL(1,i,j)=U_L(1,i,j)
-    ! rotate momentum
-    U_LL(2,i,j)=SUM(U_L(2:4,i,j)*nv(:,i,j))
-    U_LL(3,i,j)=SUM(U_L(2:4,i,j)*t1(:,i,j))
-    U_LL(4,i,j)=SUM(U_L(2:4,i,j)*t2(:,i,j))
-    U_LL(5,i,j)=U_L(5,i,j)
-    !right
-    U_RR(1,i,j)=U_R(1,i,j)
-    ! rotate momentum
-    U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
-    U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
-    U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
-    U_RR(5,i,j)=U_R(5,i,j)
+    U_LL(:,i,j) = RotateState(U_L(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    U_RR(:,i,j) = RotateState(U_R(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
     
 !   Now the reconstructed states
 !   ----------------------------
-    !LEFT
-    U_LL_r(1,i,j)=UL_r(1,i,j)
-    ! rotate momentum
-    U_LL_r(2,i,j)=SUM(UL_r(2:4,i,j)*nv(:,i,j))
-    U_LL_r(3,i,j)=SUM(UL_r(2:4,i,j)*t1(:,i,j))
-    U_LL_r(4,i,j)=SUM(UL_r(2:4,i,j)*t2(:,i,j))
-    U_LL_r(5,i,j)=UL_r(5,i,j)
-    !right
-    U_RR_r(1,i,j)=UR_r(1,i,j)
-    ! rotate momentum
-    U_RR_r(2,i,j)=SUM(UR_r(2:4,i,j)*nv(:,i,j))
-    U_RR_r(3,i,j)=SUM(UR_r(2:4,i,j)*t1(:,i,j))
-    U_RR_r(4,i,j)=SUM(UR_r(2:4,i,j)*t2(:,i,j))
-    U_RR_r(5,i,j)=UR_r(5,i,j)
+    U_LL_r(:,i,j) = RotateState(UL_r(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    U_RR_r(:,i,j) = RotateState(UR_r(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    
   END DO ! i 
 END DO ! j
 
@@ -389,13 +354,43 @@ stop 'no ES routines for reconstructed values'
 ! Back Rotate the normal flux into Cartesian direction
 DO j=0,PP_N
   DO i=0,PP_N
-    F(2:4,i,j)= nv(:,i,j)*F(2,i,j) &
-               +t1(:,i,j)*F(3,i,j) &
-               +t2(:,i,j)*F(4,i,j)
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
   END DO ! i
 END DO ! j
 
 END SUBROUTINE AdvRiemannRecons
+!==================================================================================================================================
+!> Rotate the state to the normal frame of reference
+!==================================================================================================================================
+pure function RotateState(U,nv,t1,t2) result(rotU)
+  implicit none
+  real, intent(in) :: U(PP_nVar)
+  real, intent(in) :: nv(3)
+  real, intent(in) :: t1(3)
+  real, intent(in) :: t2(3)
+  real             :: rotU(PP_nVar)
+  
+  rotU(1) =     U(1  )
+  rotU(2) = SUM(U(2:4)*nv(:))
+  rotU(3) = SUM(U(2:4)*t1(:))
+  rotU(4) = SUM(U(2:4)*t2(:))
+  rotU(5) =     U(5  )
+end function RotateState
+!==================================================================================================================================
+!> Rotate the flux from the normal frame of reference back to the physical framework
+!==================================================================================================================================
+pure subroutine RotateFluxBack(F,nv,t1,t2)
+  implicit none
+  real, intent(inout) :: F(PP_nVar)
+  real, intent(in)    :: nv(3)
+  real, intent(in)    :: t1(3)
+  real, intent(in)    :: t2(3)
+  
+  F(2:4) =   nv(:)*F(2) &
+           + t1(:)*F(3) &
+           + t2(:)*F(4)
+  
+end subroutine RotateFluxBack
 !==================================================================================================================================
 !> Central / Average Euler flux
 !==================================================================================================================================

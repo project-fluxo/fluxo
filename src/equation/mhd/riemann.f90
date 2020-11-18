@@ -68,7 +68,10 @@ PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
 #ifdef PP_GLM
 PUBLIC :: EntropyStable9WaveFlux
+PUBLIC :: EntropyStable9WaveFlux_DissipMatrices
 #endif
+PUBLIC :: RotateState
+PUBLIC :: RotateFluxBack
 !==================================================================================================================================
 
 
@@ -193,37 +196,17 @@ INTEGER          :: i,j
 DO j = 0,PP_N
   DO i = 0,PP_N
     !rotate fields
-    ConsL(:) =     UL(:  ,i,j)
-    ConsL(2) = SUM(UL(2:4,i,j)*nv(:,i,j))
-    ConsL(3) = SUM(UL(2:4,i,j)*t1(:,i,j))
-    ConsL(4) = SUM(UL(2:4,i,j)*t2(:,i,j))
-    ConsL(6) = SUM(UL(6:8,i,j)*nv(:,i,j))
-    ConsL(7) = SUM(UL(6:8,i,j)*t1(:,i,j))
-    ConsL(8) = SUM(UL(6:8,i,j)*t2(:,i,j))
-
-    ConsR(:) =     UR(:,i,j)
-    ConsR(2) = SUM(UR(2:4,i,j)*nv(:,i,j))
-    ConsR(3) = SUM(UR(2:4,i,j)*t1(:,i,j))
-    ConsR(4) = SUM(UR(2:4,i,j)*t2(:,i,j))
-    ConsR(6) = SUM(UR(6:8,i,j)*nv(:,i,j))
-    ConsR(7) = SUM(UR(6:8,i,j)*t1(:,i,j))
-    ConsR(8) = SUM(UR(6:8,i,j)*t2(:,i,j))
-
+    ConsL = RotateState(UL(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    ConsR = RotateState(UR(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
 
     CALL SolveRiemannProblem(ConsL(:),ConsR(:),F(:,i,j))
 
     ! Back Rotate the normal flux into Cartesian direction
-    F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
-                 + t1(:,i,j)*F(3,i,j) &
-                 + t2(:,i,j)*F(4,i,j)
-    F(6:8,i,j) =   nv(:,i,j)*F(6,i,j) &
-                 + t1(:,i,j)*F(7,i,j) &
-                 + t2(:,i,j)*F(8,i,j)
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
 
   END DO !i
 END DO !j
 END SUBROUTINE AdvRiemann
-
 !==================================================================================================================================
 !> Advective Riemann solver with reconstructed states
 !==================================================================================================================================
@@ -255,38 +238,13 @@ INTEGER          :: i,j
 DO j = 0,PP_N
   DO i = 0,PP_N
     !rotate fields
-    ConsL(:) =     UL(:  ,i,j)
-    ConsL(2) = SUM(UL(2:4,i,j)*nv(:,i,j))
-    ConsL(3) = SUM(UL(2:4,i,j)*t1(:,i,j))
-    ConsL(4) = SUM(UL(2:4,i,j)*t2(:,i,j))
-    ConsL(6) = SUM(UL(6:8,i,j)*nv(:,i,j))
-    ConsL(7) = SUM(UL(6:8,i,j)*t1(:,i,j))
-    ConsL(8) = SUM(UL(6:8,i,j)*t2(:,i,j))
-
-    ConsR(:) =     UR(:,i,j)
-    ConsR(2) = SUM(UR(2:4,i,j)*nv(:,i,j))
-    ConsR(3) = SUM(UR(2:4,i,j)*t1(:,i,j))
-    ConsR(4) = SUM(UR(2:4,i,j)*t2(:,i,j))
-    ConsR(6) = SUM(UR(6:8,i,j)*nv(:,i,j))
-    ConsR(7) = SUM(UR(6:8,i,j)*t1(:,i,j))
-    ConsR(8) = SUM(UR(6:8,i,j)*t2(:,i,j))
+    ConsL = RotateState(UL(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    ConsR = RotateState(UR(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
     
     !rotate fields (reconstructed variable
-    ConsL_r(:) =     UL_r(:  ,i,j)
-    ConsL_r(2) = SUM(UL_r(2:4,i,j)*nv(:,i,j))
-    ConsL_r(3) = SUM(UL_r(2:4,i,j)*t1(:,i,j))
-    ConsL_r(4) = SUM(UL_r(2:4,i,j)*t2(:,i,j))
-    ConsL_r(6) = SUM(UL_r(6:8,i,j)*nv(:,i,j))
-    ConsL_r(7) = SUM(UL_r(6:8,i,j)*t1(:,i,j))
-    ConsL_r(8) = SUM(UL_r(6:8,i,j)*t2(:,i,j))
-
-    ConsR_r(:) =     UR_r(:,i,j)
-    ConsR_r(2) = SUM(UR_r(2:4,i,j)*nv(:,i,j))
-    ConsR_r(3) = SUM(UR_r(2:4,i,j)*t1(:,i,j))
-    ConsR_r(4) = SUM(UR_r(2:4,i,j)*t2(:,i,j))
-    ConsR_r(6) = SUM(UR_r(6:8,i,j)*nv(:,i,j))
-    ConsR_r(7) = SUM(UR_r(6:8,i,j)*t1(:,i,j))
-    ConsR_r(8) = SUM(UR_r(6:8,i,j)*t2(:,i,j))
+    ConsL_r = RotateState(UL_r(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    ConsR_r = RotateState(UR_r(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    
 #ifdef PP_GLM
     CALL EntropyStable9WaveFluxRecons(ConsL(:),ConsR(:),ConsL_r(:),ConsR_r(:),F(:,i,j))
 #else
@@ -294,17 +252,47 @@ DO j = 0,PP_N
     RETURN
 #endif /*PP_GLM*/
     ! Back Rotate the normal flux into Cartesian direction
-    F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
-                 + t1(:,i,j)*F(3,i,j) &
-                 + t2(:,i,j)*F(4,i,j)
-    F(6:8,i,j) =   nv(:,i,j)*F(6,i,j) &
-                 + t1(:,i,j)*F(7,i,j) &
-                 + t2(:,i,j)*F(8,i,j)
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
 
   END DO !i
 END DO !j
 END SUBROUTINE AdvRiemannRecons
-
+!==================================================================================================================================
+!> Rotate the state to the normal frame of reference
+!==================================================================================================================================
+pure function RotateState(U,nv,t1,t2) result(rotU)
+  implicit none
+  real, intent(in) :: U(PP_nVar)
+  real, intent(in) :: nv(3)
+  real, intent(in) :: t1(3)
+  real, intent(in) :: t2(3)
+  real             :: rotU(PP_nVar)
+  
+  rotU(:) =     U(:  )
+  rotU(2) = SUM(U(2:4)*nv(:))
+  rotU(3) = SUM(U(2:4)*t1(:))
+  rotU(4) = SUM(U(2:4)*t2(:))
+  rotU(6) = SUM(U(6:8)*nv(:))
+  rotU(7) = SUM(U(6:8)*t1(:))
+  rotU(8) = SUM(U(6:8)*t2(:))
+end function RotateState
+!==================================================================================================================================
+!> Rotate the flux from the normal frame of reference back to the physical framework
+!==================================================================================================================================
+pure subroutine RotateFluxBack(F,nv,t1,t2)
+  implicit none
+  real, intent(inout) :: F(PP_nVar)
+  real, intent(in)    :: nv(3)
+  real, intent(in)    :: t1(3)
+  real, intent(in)    :: t2(3)
+  
+  F(2:4) =   nv(:)*F(2) &
+           + t1(:)*F(3) &
+           + t2(:)*F(4)
+  F(6:8) =   nv(:)*F(6) &
+           + t1(:)*F(7) &
+           + t2(:)*F(8)
+end subroutine RotateFluxBack
 #if NONCONS
 !==================================================================================================================================
 !> strong nonconservative flux on a side: 
@@ -1418,7 +1406,7 @@ REAL            :: u_L(3),u_R(3)
 REAL            :: BAvg(3),uAvg(3)
 REAL            :: u1_B2Avg,uB_Avg
 REAL            :: V_jump(PP_nVar)
-REAL		:: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+REAL            :: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 #ifdef PP_GLM
 REAL            :: psiAvg
 #endif
@@ -1495,7 +1483,7 @@ V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
     
-    call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
                                            p_L,p_R,rho_L,rho_R,u_L, u_R)
     
     RT = TRANSPOSE(Rmatrix)
@@ -1507,7 +1495,79 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFlux
 
-pure subroutine DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
+pure subroutine EntropyStable9WaveFlux_DissipMatrices(UL,UR,Dmatrix,Rmatrix)
+  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0
+  USE MOD_Flux_Average, ONLY:LN_MEAN
+  implicit none
+  !-arguments-----------------------------------------------
+  real, intent(in)  :: UL(PP_nVar)      !< left state
+  real, intent(in)  :: UR(PP_nVar)      !< right state
+  real, intent(out) :: Dmatrix(PP_nVar,PP_nVar)
+  real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
+  !-local-variables-----------------------------------------
+  ! Mean states
+  real    :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
+  real    :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3)
+  ! Additional
+  REAL :: B2_L,B2_R !,B2Avg
+  REAL :: u2_L,u2_R !,u2Avg
+  REAL            :: beta_R,beta_L
+  REAL            :: srho_L,srho_R
+  REAL            :: pTilde
+  !---------------------------------------------------------
+  
+  ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+             rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+#ifdef PP_GLM
+                E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+              psi_L =>UL(9)   ,  psi_R =>UR(9), &
+#else
+                E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+                B_L => UL(6:8),    B_R => UR(6:8)  )
+  ! Get the inverse density, velocity, and pressure on left and right
+  srho_L=1./rho_L
+  srho_R=1./rho_R
+  u_L = rhoU_L(:)*srho_L
+  u_R = rhoU_R(:)*srho_R
+
+  u2_L = SUM(u_L(:)*u_L(:))
+  u2_R = SUM(u_R(:)*u_R(:))
+  B2_L = SUM(B_L(:)*B_L(:))
+  B2_R = SUM(B_R(:)*B_R(:))
+
+  !beta=rho/(2*p)
+  p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
+  p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
+  beta_L = 0.5*rho_L/p_L
+  beta_R = 0.5*rho_R/P_R
+
+  ! Get the averages for the numerical flux
+
+  rhoLN      = LN_MEAN( rho_L, rho_R)
+  sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
+  uAvg       = 0.5 * ( u_L +  u_R)
+!#  u2Avg      = 0.5 * (u2_L + u2_R)
+  BAvg       = 0.5 * ( B_L +  B_R)
+!#  B2Avg      = 0.5 * (B2_L + B2_R)
+!#  u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+!#  uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
+  betaAvg    = 0.5 * (beta_L + beta_R)                                                               
+  pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
+  
+#ifdef PP_GLM
+  psiAvg     = 0.5*(psi_L+psi_R)
+#endif
+  
+!#  pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+  
+  call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
+                                                  p_L,p_R,rho_L,rho_R,u_L,u_R)
+  
+  end ASSOCIATE
+end subroutine EntropyStable9WaveFlux_DissipMatrices
+
+pure subroutine EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
                                                   p_L,p_R,rho_L,rho_R,u_L,u_R)
   USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1
 #ifdef PP_GLM
@@ -1773,7 +1833,7 @@ pure subroutine DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAv
     ! Scale D matrix
     Dmatrix = MATMUL(Dmatrix, Tmatrix)
   
-end subroutine DissipationMatrices_9WaveESSolver
+end subroutine EntropyStable9WaveFlux_DissipMatrices_withMean
 
 SUBROUTINE EntropyStable9WaveFluxRecons(UL,UR,UL_r,UR_r,Fstar)
 !==================================================================================================================================
@@ -1945,7 +2005,7 @@ V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) !
 !#    #endif
     
 !#    ! Get dissipation matrices for reconstructed state
-!#    call DissipationMatrices_9WaveESSolver(Dmatrix_r,Rmatrix_r,sbetaLN_r,betaAvg_r,rhoLN_r,BAvg_r,uAvg_r,pAvg_r,psiAvg_r,&
+!#    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix_r,Rmatrix_r,sbetaLN_r,betaAvg_r,rhoLN_r,BAvg_r,uAvg_r,pAvg_r,psiAvg_r,&
 !#                                           p_L_r,p_R_r,rho_L_r,rho_R_r,u_L_r, u_R_r)
 !#    RT_r = TRANSPOSE(Rmatrix_r)
     
@@ -1953,7 +2013,7 @@ V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) !
 !#    RT_Vjump_r = matmul(RT_r,V_jump_r)
     
 !#    if ( any(RT_Vjump*RT_Vjump_r < 1.e-10) ) then
-!#      call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+!#      call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
 !#                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
 !#      RT = TRANSPOSE(Rmatrix)
       
@@ -1967,7 +2027,7 @@ V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) !
     
     !   (2) R and T matrix from nodal values
 !   --------------------------------
-    call DissipationMatrices_9WaveESSolver(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
+    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
                                            p_L,p_R,rho_L,rho_R,u_L, u_R)
     RT = TRANSPOSE(Rmatrix)
     
