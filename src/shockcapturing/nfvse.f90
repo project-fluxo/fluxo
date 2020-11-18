@@ -489,7 +489,7 @@ contains
   end subroutine VolInt_NFVSE
   
 !============================================================================================================================
-!> Get Pressure
+!> Get Pressure (TODO: Move to equation)
 !============================================================================================================================
   pure subroutine GetPressure(U,p)
 #ifdef mhd
@@ -1452,19 +1452,15 @@ contains
 #endif /*NONCONS*/
                                               sCM, iElem )
     use MOD_PreProc
-    use MOD_Riemann   , only: AdvRiemannRecons ! To be deprecated
-    !new
-    use MOD_Riemann   , only: RotateState, RotateFluxBack
-    use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
-    use MOD_Interpolation_Vars , only: wGP
-    use MOD_Equation_Vars , only: VolumeFluxAverage, RiemannGetDissipMatrices, ConsToEntropy
-    !
-    use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec ! to be deprecated(?)
-    use MOD_DG_Vars           , only: nTotal_vol
+    use MOD_Riemann           , only: RotateState, RotateFluxBack
+    use MOD_NFVSE_Vars        , only: SubCellMetrics_t, sdxR, sdxL, rL, rR
+    use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
+    use MOD_Interpolation_Vars, only: wGP
+    use MOD_Equation_Vars     , only: VolumeFluxAverage, RiemannGetDissipMatrices, ConsToEntropy
+    use MOD_Equation_Vars     , only: ConsToEntropyVec
 #if NONCONS
-    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
-    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
+    USE MOD_Riemann           , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
     !-arguments---------------------------------------------------------------
@@ -1494,6 +1490,7 @@ contains
     real :: v_R          (PP_nVar)                        ! Rotated entropy vars on the right of interface
     real :: U_           (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reshaped solution (conservative variables)
     real :: sigma        (PP_nVar,0:PP_N,0:PP_N)          ! Slope (limited)
+    real :: v_ext        (PP_nVar,0:PP_N,0:PP_N, 6)       ! Entropy variables (external state)
     real :: F_           (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_          (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
@@ -1513,7 +1510,7 @@ contains
     HR  = 0.0
 #endif /*NONCONS*/
     
-!#    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) ) ! to remove
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToEntropyVec(6*(PP_N+1)**2,v_ext,U_ext(:,:,:,:,iElem) ) ! to remove
     
 !   *********
 !   Xi-planes
@@ -1555,8 +1552,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
-!#      case (RECONS_CENTRAL)
-!#        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_CENTRAL)
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
 !#        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
@@ -1579,8 +1576,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
-!#      case (RECONS_CENTRAL)
-!#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_CENTRAL)
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
 !#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
@@ -1688,8 +1685,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
-!#      case (RECONS_CENTRAL)
-!#        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_CENTRAL)
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
 !#        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
@@ -1712,8 +1709,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
-!#      case (RECONS_CENTRAL)  
-!#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_CENTRAL)  
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
 !#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
@@ -1820,8 +1817,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
-!#      case (RECONS_CENTRAL)
-!#        primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
+      case (RECONS_CENTRAL)
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
 !#        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
@@ -1844,8 +1841,8 @@ contains
     select case (ReconsBoundaries)
       case (RECONS_NONE)
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
-!#      case (RECONS_CENTRAL)
-!#        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+      case (RECONS_CENTRAL)
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
 !#      case (RECONS_NEIGHBOR)
 !#        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
 !#        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(PP_N)      
