@@ -248,7 +248,7 @@ contains
       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,4,2,3])
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,4,2,3])
       
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = Metrics_fCont(:,:,:,0)
         SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = Metrics_gCont(:,:,:,0)
@@ -280,7 +280,7 @@ contains
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,2,4,3])
       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,2,4,3])
       
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = Metrics_gCont(:,:,:,0)
         SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = Metrics_hCont(:,:,:,0)
@@ -310,7 +310,7 @@ contains
 !     Zeta planes
 !     -----------
       ! (here we don't have to reshape)
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = Metrics_hTilde(:,:,:,0,iElem)
         SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = Metrics_fTilde(:,:,:,0,iElem)
@@ -1457,7 +1457,6 @@ contains
     use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
     use MOD_Interpolation_Vars, only: wGP
     use MOD_Equation_Vars     , only: VolumeFluxAverage, RiemannGetDissipMatrices, ConsToEntropy
-    use MOD_Equation_Vars     , only: ConsToEntropyVec
 #if NONCONS
     USE MOD_Riemann           , only: AddWholeNonConsFlux, AddInnerNonConsFlux
     use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
@@ -1490,8 +1489,11 @@ contains
     real :: v_R          (PP_nVar)                        ! Rotated entropy vars on the right of interface
     real :: U_           (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reshaped solution (conservative variables)
     real :: sigma        (PP_nVar,0:PP_N,0:PP_N)          ! Slope (limited)
-    real :: v_ext        (PP_nVar,0:PP_N,0:PP_N, 6)       ! Entropy variables (external state)
     real :: F_           (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    real :: Rmat0(PP_nVar,PP_nVar)
+    real :: Dmat0(PP_nVar,PP_nVar)
+    real :: w_L0         (PP_nVar,0:PP_N,0:PP_N)
+    real :: w_R0         (PP_nVar,0:PP_N,0:PP_N)
 #if NONCONS
     real :: FR_          (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #endif /*NONCONS*/
@@ -1509,8 +1511,6 @@ contains
     GR  = 0.0
     HR  = 0.0
 #endif /*NONCONS*/
-    
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToEntropyVec(6*(PP_N+1)**2,v_ext,U_ext(:,:,:,:,iElem) ) ! to remove
     
 !   *********
 !   Xi-planes
@@ -1554,9 +1554,24 @@ contains
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
       case (RECONS_CENTRAL)
         wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-!#        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_ext(:,j,k,5,iElem),sCM % xi   % nv(:,j,k,-1),sCM % xi   % t1(:,j,k,-1), sCM % xi   % t2(:,j,k,-1))
+          U_R = RotateState(U_   (:,j,k,1      ),sCM % xi   % nv(:,j,k,-1),sCM % xi   % t1(:,j,k,-1), sCM % xi   % t2(:,j,k,-1))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
       case default
         stop 'ReconsBoundaries not implemented'
     end select
@@ -1578,9 +1593,25 @@ contains
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
       case (RECONS_CENTRAL)
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-!#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % xi   % nv(:,j,k,PP_N),sCM % xi   % t1(:,j,k,PP_N), sCM % xi   % t2(:,j,k,PP_N))
+          U_R = RotateState(U_ext(:,j,k,3,iElem),sCM % xi   % nv(:,j,k,PP_N),sCM % xi   % t1(:,j,k,PP_N), sCM % xi   % t2(:,j,k,PP_N))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
+        
       case default
         stop 'ReconsBoundaries not implemented'
     end select
@@ -1687,9 +1718,24 @@ contains
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
       case (RECONS_CENTRAL)
         wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-!#        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_ext(:,j,k,2,iElem),sCM % eta  % nv(:,j,k,-1),sCM % eta  % t1(:,j,k,-1), sCM % eta  % t2(:,j,k,-1))
+          U_R = RotateState(U_   (:,j,k,1      ),sCM % eta  % nv(:,j,k,-1),sCM % eta  % t1(:,j,k,-1), sCM % eta  % t2(:,j,k,-1))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
       case default
         stop 'ReconsBoundaries not implemented'
     end select
@@ -1711,9 +1757,24 @@ contains
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
       case (RECONS_CENTRAL)  
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-!#        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % eta  % nv(:,j,k,PP_N),sCM % eta  % t1(:,j,k,PP_N), sCM % eta  % t2(:,j,k,PP_N))
+          U_R = RotateState(U_ext(:,j,k,4,iElem),sCM % eta  % nv(:,j,k,PP_N),sCM % eta  % t1(:,j,k,PP_N), sCM % eta  % t2(:,j,k,PP_N))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
       case default
         stop 'ReconsBoundaries not implemented'
     end select
@@ -1819,9 +1880,25 @@ contains
         wTildeR(:,:,:,0) = w_L(:,:,:,0)
       case (RECONS_CENTRAL)
         wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-!#        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_ext(:,j,k,1,iElem),sCM % zeta % nv(:,j,k,-1),sCM % zeta % t1(:,j,k,-1), sCM % zeta % t2(:,j,k,-1))
+          U_R = RotateState(U_   (:,j,k,1      ),sCM % zeta % nv(:,j,k,-1),sCM % zeta % t1(:,j,k,-1), sCM % zeta % t2(:,j,k,-1))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
+        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
+        
       case default
         stop 'ReconsBoundaries not implemented'
     end select
@@ -1843,9 +1920,25 @@ contains
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
       case (RECONS_CENTRAL)
         wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-!#      case (RECONS_NEIGHBOR)
-!#        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-!#        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(PP_N)      
+      case (RECONS_NEIGHBOR)
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % zeta % nv(:,j,k,PP_N),sCM % zeta % t1(:,j,k,PP_N), sCM % zeta % t2(:,j,k,PP_N))
+          U_R = RotateState(U_ext(:,j,k,6,iElem),sCM % zeta % nv(:,j,k,PP_N),sCM % zeta % t1(:,j,k,PP_N), sCM % zeta % t2(:,j,k,PP_N))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Get dissipation matrices
+          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          Rmat0 = transpose(Rmat0)
+          ! Compute scaled entropy vars
+          w_L0(:,j,k) = matmul(Rmat0,v_L)
+          w_R0(:,j,k) = matmul(Rmat0,v_R)
+        end do       ; end do !j,k
+        
+        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
+        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
+           
       case default
         stop 'ReconsBoundaries not implemented'
     end select
