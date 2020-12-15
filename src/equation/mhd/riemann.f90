@@ -1881,6 +1881,7 @@ real :: RT_Vjump(PP_nVar), RT_Vjump_r(PP_nVar)
 !##ifdef PP_GLM
 !#REAL            :: psiAvg_r
 !##endif
+real :: alpha
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
@@ -2033,13 +2034,25 @@ V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) !
     
     RT_Vjump   = matmul(RT,V_jump)
     RT_Vjump_r = matmul(RT,V_jump_r)
-    
+
+    ! Discrete switch    
     if ( any(RT_Vjump*RT_Vjump_r < -1.e-10) ) then
       ! Compute entropy-stable fluxes
       Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump))
     else
       Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump_r))
     end if
+    
+    ! Continuous switch
+!    alpha = minval(RT_Vjump*RT_Vjump_r)
+!    if (alpha <= 0.0) then
+!      alpha = 0.0
+!    elseif(alpha <= 10000.0*epsilon(1.0)) then
+!      alpha = alpha*0.0001/epsilon(1.0)
+!    else
+!      alpha = 1. !exp(-epsilon(1.0)/(alpha))
+!    end if
+!    Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix, alpha*RT_Vjump_r + (1.-alpha)*RT_Vjump  ))
 
 end associate
 END ASSOCIATE 

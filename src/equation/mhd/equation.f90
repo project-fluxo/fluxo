@@ -1259,6 +1259,16 @@ CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
     
   CALL PrimToCons(Prim,Resu)
 
+CASE(111) ! Geophysics application: Io interaction with its plasma torus (for shock-capturing MHD paper)
+
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148984037940128
+  Prim(8)=-3.60398345676592
+    
+  CALL PrimToCons(Prim,Resu)
+
 !CASE(666) ! random initialization for velocity and B field, only works with GNU
 !  prim =  0.
 !  !CALL RANDOM_NUMBER(prim(2:4))
@@ -1564,6 +1574,23 @@ CASE(110) ! Geophysics plasma flow through sphere (tilted B_field)
     END DO; END DO; END DO ! i,j,k
   END DO
 
+CASE(111) ! Geophysics: Io interaction with its plasma torus (for shock-capturing MHD paper)
+  tau_max=IniFrequency
+
+  DO iElem=1,nElems
+    ! New continuous application of the source term!
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (r > 1.) then
+        h = 150.0/1820.0
+        tau = tau_max*EXP((1.0-r)/h)
+      else
+        tau = tau_max
+      end if
+      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+    END DO; END DO; END DO ! i,j,k
+  END DO
 
 CASE DEFAULT
   ! No source -> do nothing
