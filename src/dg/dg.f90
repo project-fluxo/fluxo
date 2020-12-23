@@ -267,13 +267,13 @@ use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
 use MOD_ShockCapturing      ,only: CalcArtificialViscosity
 #endif /*SHOCK_LOC_ARTVISC*/
 #if PP_DiscType==1
-USE MOD_VolInt              ,ONLY: VolInt
+USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
 USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#endif /*PP_DiscType==2*/
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
 #endif /*PARABOLIC*/
-#endif /*PP_DiscType==2*/
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -332,6 +332,8 @@ call CalcBlendingCoefficient(U)
 
 #if PP_DiscType==2
 CALL VolInt_adv_SplitForm(Ut)
+#elif SHOCK_NFVSE
+CALL VolInt_adv(Ut)
 #endif /*PP_DiscType==2*/
 
 
@@ -357,12 +359,12 @@ CALL CalcArtificialViscosity(U)
 #endif /*SHOCK_LOC_ARTVISC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
-#if PP_DiscType==1
-CALL VolInt(Ut)
-#elif PP_DiscType==2
+#if PP_DiscType==2 || SHOCK_NFVSE
 #  if PARABOLIC
 CALL VolInt_visc(Ut)
 #  endif /*PARABOLIC*/
+#elif PP_DiscType==1
+CALL VolInt(Ut)
 #endif
 
 

@@ -67,8 +67,8 @@ CALL prms%CreateIntOption(      'IniRefState' , "Refstate required for initializ
 CALL prms%CreateRealArrayOption('RefState'    , "State(s) in primitive variables (density, velx, vely, velz, pressure).",&
                                                 multiple=.TRUE.)
 CALL prms%CreateRealArrayOption('AdvVel'      , "for exact function, const velocity.")
-CALL prms%CreateRealArrayOption('MachShock'   , "for exact function, Mach shock.")
-CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock density.")
+CALL prms%CreateRealOption('MachShock'        , "for exact function, Mach shock.")
+CALL prms%CreateRealOption('PreShockDens'     , "for exact function, pre shock density.")
 CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
 CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
 CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
@@ -183,7 +183,7 @@ CASE(1,11,12)
   IniRefState  =GETINT('IniRefState')
 CASE(2,21,8) ! synthetic test cases
   AdvVel = GETREALARRAY('AdvVel',3)
-CASE(6) ! shock
+CASE(6,61) ! shock
   MachShock    = GETREAL('MachShock','1.5')
   PreShockDens = GETREAL('PreShockDens','1.0')
 END SELECT ! IniExactFunc
@@ -654,6 +654,35 @@ CASE(6) ! shock
   xs=5.+Ms*tEval ! 5. bei 10x10x10 Rechengebiet
   ! Tanh boundary
   Resu=-0.5*(Resul-Resur)*TANH(5.0*(x(1)-xs))+Resur+0.5*(Resul-Resur)
+CASE(61) ! sharp shock
+  prim=0.
+
+  ! pre-shock
+  prim(1) = PreShockDens
+  Ms      = MachShock
+
+  prim(5)=prim(1)/Kappa
+  CALL PrimToCons(prim,Resur)
+
+  ! post-shock
+  prim(3)=prim(1) ! temporal storage of pre-shock density
+  prim(1)=prim(1)*((KappaP1)*Ms*Ms)/(KappaM1*Ms*Ms+2.)
+  prim(5)=prim(5)*(2.*Kappa*Ms*Ms-KappaM1)/(KappaP1)
+  IF (prim(2) .EQ. 0.0) THEN
+    prim(2)=Ms*(1.-prim(3)/prim(1))
+  ELSE
+    prim(2)=prim(2)*prim(3)/prim(1)
+  END IF
+  prim(3)=0. ! reset temporal storage
+  CALL PrimToCons(prim,Resul)
+  xs=IniHalfwidth
+  
+  
+  if (x(1) < xs) then
+    Resu=Resul
+  else
+    Resu=Resur
+  end if
 CASE(7) !TAYLOR GREEN VORTEX
   A=1. ! magnitude of speed
   Ms=0.1  ! maximum Mach number
