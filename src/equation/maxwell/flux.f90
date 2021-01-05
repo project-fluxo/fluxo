@@ -23,7 +23,7 @@ MODULE MOD_Flux
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-INTERFACE i_sub_EvalFluxTilde3D
+ABSTRACT INTERFACE
   subroutine i_sub_EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
     USE MOD_DG_Vars       ,ONLY:nTotal_vol
     INTEGER,INTENT(IN ):: iElem                !< element number
