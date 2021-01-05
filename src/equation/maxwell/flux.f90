@@ -24,9 +24,8 @@ IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
 ABSTRACT INTERFACE
-  subroutine i_sub_EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+  subroutine i_sub_EvalFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
     USE MOD_DG_Vars       ,ONLY:nTotal_vol
-    INTEGER,INTENT(IN ):: iElem                !< element number
     REAL,INTENT(IN )   :: U_in(8,1:nTotal_vol) !< solution state (conservative vars)
     REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
     REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
@@ -48,7 +47,7 @@ CONTAINS
 !==================================================================================================================================
 !> Compute advection flux of Maxwell's equations for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
                            ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc       ! PP_N
@@ -57,7 +56,6 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                !< element number
 REAL,INTENT(IN )   :: U_in(8,1:nTotal_vol) !< solution state (conservative vars)
 REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 

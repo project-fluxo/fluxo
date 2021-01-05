@@ -70,7 +70,7 @@ CONTAINS
 !> Compute MHD transformed advection fluxes using conservative variables and derivatives for every volume Gauss point.
 !> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-PURE SUBROUTINE EvalAdvFluxTilde3D(iElem,U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+PURE SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
@@ -81,7 +81,6 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                      !< element number
 REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< solution state (conservative vars)
 REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
@@ -180,7 +179,7 @@ END SUBROUTINE EvalAdvFluxTilde3D
 !==================================================================================================================================
 !> Compute transformed MHD fluxes using the conservative variables and gradients for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
 #if PARABOLIC
                            gradPx_in,gradPy_in,gradPz_in,&
 #endif /*PARABOLIC*/
@@ -203,7 +202,6 @@ USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                      !< element number
 REAL,INTENT(IN )   :: U_in(PP_nVar,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(       3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g(       3,1:nTotal_vol) !< metrics for gtilde                 
@@ -224,7 +222,7 @@ REAL,DIMENSION(1:PP_nVar) :: f,g,h                             ! Cartesian fluxe
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p,ptilde                       ! velocity and pressure(including magnetic pressure
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
-REAL                :: Ep,mu_eff,etasmu_0eff                   ! E + p, mu_eff, and etasmu_0eff
+REAL                :: Ep                                      ! E + p
 #if PARABOLIC
 REAL                :: divv
 REAL                :: lambda 
@@ -244,7 +242,6 @@ DO i=1,nTotal_vol
             b3    =>U_in(8,i), &
 #ifdef PP_GLM
             Etotal=>U_in(5,i)-s2mu_0*(U_in(9,i)**2)  &
-           ,Psi   =>U_in(9,i)  &
 #else
             Etotal=>U_in(5,i)  &
 #endif /*def PP_GLM*/
@@ -316,9 +313,6 @@ DO i=1,nTotal_vol
              gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
              gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i)  )
 
-  mu_eff = mu
-  etasmu_0eff = etasmu_0
-
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
@@ -326,7 +320,7 @@ DO i=1,nTotal_vol
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
-  lambda=mu_eff*KappasPr
+  lambda=mu*KappasPr
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
   Qz=lambda*cv_gradTz
@@ -343,22 +337,22 @@ DO i=1,nTotal_vol
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f_visc(2)=mu_eff*(2*gradv1x-s23*divv)
-  f_visc(3)=mu_eff*(  gradv2x+gradv1y)   
-  f_visc(4)=mu_eff*(  gradv3x+gradv1z)   
+  f_visc(2)=mu*(2*gradv1x-s23*divv)
+  f_visc(3)=mu*(  gradv2x+gradv1y)   
+  f_visc(4)=mu*(  gradv3x+gradv1z)   
   f_visc(6)=0.
-  f_visc(7)=etasmu_0eff*(gradB2x-gradB1y)
-  f_visc(8)=etasmu_0eff*(gradB3x-gradB1z)
+  f_visc(7)=etasmu_0*(gradB2x-gradB1y)
+  f_visc(8)=etasmu_0*(gradB3x-gradB1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) + Qx
 
   ! viscous fluxes in y-direction      
   g_visc(2)= f_visc(3)                  !mu*(  gradv1y+gradv2x)  
-  g_visc(3)=mu_eff*(2*gradv2y-s23*divv)     
-  g_visc(4)=mu_eff*(  gradv3y+gradv2z)      
+  g_visc(3)=mu*(2*gradv2y-s23*divv)     
+  g_visc(4)=mu*(  gradv3y+gradv2z)      
   g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
   g_visc(7)=0.
-  g_visc(8)=etasmu_0eff*(gradB3y-gradB2z)
+  g_visc(8)=etasmu_0*(gradB3y-gradB2z)
   !energy
   g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) + Qy 
 
@@ -367,7 +361,7 @@ DO i=1,nTotal_vol
   ! viscous fluxes in z-direction      
   h_visc(2)= f_visc(4)                       !mu*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                       !mu*(  gradv2z+gradv3y)                
-  h_visc(4)=mu_eff*(2*gradv3z-s23*divv )             
+  h_visc(4)=mu*(2*gradv3z-s23*divv )             
   h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
   h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
   h_visc(8)=0.
@@ -484,8 +478,6 @@ REAL                :: divv
 REAL                :: lambda
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
-real                :: mu_eff
-real                :: etasmu_0eff
 INTEGER             :: i 
 !==================================================================================================================================
 DO i=1,nTotal_face
@@ -512,16 +504,13 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
            gradv2z => gradPz_Face(3,i),  gradB2z => gradPz_Face(7,i), & 
            gradv3z => gradPz_Face(4,i),  gradB3z => gradPz_Face(8,i)  )
 
-  mu_eff = mu
-  etasmu_0eff = etasmu_0
-
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_face(5,i)-srho*p*gradPx_face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_face(5,i)-srho*p*gradPy_face(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_face(5,i)-srho*p*gradPz_face(1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
-  lambda=mu_eff*KappasPr
+  lambda=mu*KappasPr
 
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
@@ -541,23 +530,23 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
   f(1,i)=0.
-  f(2,i)=-mu_eff*(2*gradv1x-s23*divv)
-  f(3,i)=-mu_eff*(  gradv2x+gradv1y)   
-  f(4,i)=-mu_eff*(  gradv3x+gradv1z)   
+  f(2,i)=-mu*(2*gradv1x-s23*divv)
+  f(3,i)=-mu*(  gradv2x+gradv1y)   
+  f(4,i)=-mu*(  gradv3x+gradv1z)   
   f(6,i)= 0.
-  f(7,i)=-etasmu_0eff*(gradB2x-gradB1y)
-  f(8,i)=-etasmu_0eff*(gradB3x-gradB1z)
+  f(7,i)=-etasmu_0*(gradB2x-gradB1y)
+  f(8,i)=-etasmu_0*(gradB3x-gradB1z)
   !energy
   f(5,i)=v1*f(2,i)+v2*f(3,i)+v3*f(4,i) +smu_0*(b1*f(6,i)+b2*f(7,i)+b3*f(8,i)) - Qx
 
   ! viscous fluxes in y-direction      
   g(1,i)=0.
   g(2,i)= f(3,i)                  !mu*(  gradv1y+gradv2x)  
-  g(3,i)=-mu_eff*(2*gradv2y-s23*divv)
-  g(4,i)=-mu_eff*(  gradv3y+gradv2z)      
+  g(3,i)=-mu*(2*gradv2y-s23*divv)
+  g(4,i)=-mu*(  gradv3y+gradv2z)      
   g(6,i)=-f(7,i)                  !etasmu_0*(gradB1y-gradB2x)
   g(7,i)= 0.
-  g(8,i)=-etasmu_0eff*(gradB3y-gradB2z)
+  g(8,i)=-etasmu_0*(gradB3y-gradB2z)
   !energy
   g(5,i)=v1*g(2,i)+v2*g(3,i)+v3*g(4,i) + smu_0*(b1*g(6,i)+b2*g(7,i)+b3*g(8,i)) - Qy
 
@@ -565,7 +554,7 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   h(1,i)=0.
   h(2,i)= f(4,i)                       !mu*(  gradv1z+gradv3x)                 
   h(3,i)= g(4,i)                       !mu*(  gradv2z+gradv3y)                
-  h(4,i)=-mu_eff*(2*gradv3z-s23*divv )        
+  h(4,i)=-mu*(2*gradv3z-s23*divv )        
   h(6,i)=-f(8,i)                       !etasmu_0*(gradB1z-gradB3x)
   h(7,i)=-g(8,i)                       !etasmu_0*(gradB2z-gradB3y)
   h(8,i)= 0.
@@ -587,7 +576,7 @@ END SUBROUTINE EvalDiffFlux3D
 !==================================================================================================================================
 !> Compute only diffusive part of tranformed MHD fluxes, using conservative variables and derivatives for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
@@ -600,7 +589,6 @@ USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                           !< element number
 REAL,INTENT(IN )   :: U_in(     PP_nVar,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(            3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g(            3,1:nTotal_vol) !< metrics for gtilde                 
@@ -617,9 +605,9 @@ REAL,INTENT(OUT)   :: htilde(PP_nVar,1:nTotal_vol) !< transformed flux h(iVar,i,
 ! LOCAL VARIABLES
 REAL,DIMENSION(1:PP_nVar) :: f_Visc,g_visc,h_visc              ! Cartesian fluxes (iVar)
 REAL                :: srho                                    ! reciprocal values for density and the value of specific energy
-REAL                :: v1,v2,v3,bb2,p,Psi 
+REAL                :: v1,v2,v3,bb2,p 
 REAL                :: divv
-REAL                :: lambda,mu_eff,etasmu_0eff 
+REAL                :: lambda 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
@@ -635,9 +623,6 @@ ASSOCIATE( rho => U_in(1,i), &
   v1   = U_in(2,i)*srho 
   v2   = U_in(3,i)*srho 
   v3   = U_in(4,i)*srho 
-#ifdef PP_GLM
-  Psi  = U_in(9,i) 
-#endif
 
   p    = kappaM1*(U_in(5,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_in(6:PP_nVar,i)**2) )
   ! Viscous part
@@ -651,9 +636,6 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
            gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
            gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i))
 
-  mu_eff = mu
-  etasmu_0eff = etasmu_0
-
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
@@ -661,7 +643,7 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   
-  lambda=mu_eff*KappasPr
+  lambda=mu*KappasPr
   
   Qx=lambda*cv_gradTx  !q=lambda*gradT= (mu*kappa/Pr)*(cv*gradT)
   Qy=lambda*cv_gradTy
@@ -681,23 +663,23 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
   f_visc(1)=0.
-  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
-  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)   
-  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)   
+  f_visc(2)=-mu*(2*gradv1x-s23*divv)
+  f_visc(3)=-mu*(  gradv2x+gradv1y)   
+  f_visc(4)=-mu*(  gradv3x+gradv1z)   
   f_visc(6)=0.
-  f_visc(7)=-etasmu_0eff*(gradB2x-gradB1y)
-  f_visc(8)=-etasmu_0eff*(gradB3x-gradB1z)
+  f_visc(7)=-etasmu_0*(gradB2x-gradB1y)
+  f_visc(8)=-etasmu_0*(gradB3x-gradB1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) - Qx
 
   ! viscous fluxes in y-direction      
   g_visc(1)=0.
   g_visc(2)= f_visc(3)                  !-mu*(  gradv1y+gradv2x)  
-  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)     
-  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)      
+  g_visc(3)=-mu*(2*gradv2y-s23*divv)     
+  g_visc(4)=-mu*(  gradv3y+gradv2z)      
   g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
   g_visc(7)=0.
-  g_visc(8)=-etasmu_0eff*(gradB3y-gradB2z)
+  g_visc(8)=-etasmu_0*(gradB3y-gradB2z)
   !energy
   g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) - Qy 
 
@@ -705,7 +687,7 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   h_visc(1)=0.
   h_visc(2)= f_visc(4)                       !-mu*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                       !-mu*(  gradv2z+gradv3y)                
-  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )             
+  h_visc(4)=-mu*(2*gradv3z-s23*divv )             
   h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
   h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
   h_visc(8)=0.

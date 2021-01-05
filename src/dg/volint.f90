@@ -86,8 +86,7 @@ INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 DO iElem=1,nElems
   ! Compute for all Gauss point values already the tranformed fluxes
-  CALL EvalFluxTilde3D(                       iElem , &
-                                    U(:,:,:,:,iElem), &
+  CALL EvalFluxTilde3D(             U(:,:,:,:,iElem), &
                        metrics_fTilde(:,:,:,:,iElem), &
                        metrics_gTilde(:,:,:,:,iElem), &
                        metrics_hTilde(:,:,:,:,iElem), &
@@ -136,8 +135,7 @@ INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 DO iElem=1,nElems
   ! Compute for all Gauss point values already the tranformed fluxes
-  CALL EvalAdvFluxTilde3D(                     iElem, &
-                                    U(:,:,:,:,iElem), &
+  CALL EvalAdvFluxTilde3D(          U(:,:,:,:,iElem), &
                        metrics_fTilde(:,:,:,:,iElem), &
                        metrics_gTilde(:,:,:,:,iElem), &
                        metrics_hTilde(:,:,:,:,iElem), &
@@ -243,8 +241,7 @@ INTEGER                                           :: i,j,k,l,iElem
 
 DO iElem=1,nElems
   !compute Diffusion flux contribution of 
-  CALL EvalDiffFluxTilde3D(                       iElem , &
-                                        U(:,:,:,:,iElem), &
+  CALL EvalDiffFluxTilde3D(             U(:,:,:,:,iElem), &
                            metrics_fTilde(:,:,:,:,iElem), &
                            metrics_gTilde(:,:,:,:,iElem), &
                            metrics_hTilde(:,:,:,:,iElem), &

@@ -74,7 +74,7 @@ CONTAINS
 !> Compute Euler fluxes using the conservative variables and derivatives for every volume Gauss point.
 !> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-SUBROUTINE EvalAdvFluxTilde3D(iElem,U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:kappaM1
@@ -82,7 +82,6 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                !< element number
 REAL,INTENT(IN )   :: U_in(5,1:nTotal_vol) !< solution state (conservative vars)
 REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
@@ -135,10 +134,10 @@ END DO ! i
 END SUBROUTINE EvalAdvFluxTilde3D
 
 !==================================================================================================================================
-!> Compute transformed 3D Navier-Stokes fluxes(Euler+diffusion) for every volume Gauss point of element iElem.
+!> Compute transformed 3D Navier-Stokes fluxes(Euler+diffusion) for every volume Gauss point of an element.
 !> In comparison to EvalFlux3D, metrics are directly applied 
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
 #if PARABOLIC
                            gradPx_in,gradPy_in,gradPz_in,&
 #endif /*PARABOLIC*/
@@ -159,7 +158,6 @@ USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                !< element number
 REAL,INTENT(IN )   :: U_in(5,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
@@ -182,7 +180,6 @@ REAL                :: v1,v2,v3,p                     ! auxiliary variables
 #if PARABOLIC
 REAL                :: f_visc(5),g_visc(5),h_visc(5)           ! viscous cartesian fluxes (iVar)
 REAL                :: muS,lambda                              ! viscosity,heat coeff.
-REAL                :: mu_eff                                  ! effective viscosity can be a mix of physical and artificial
 REAL                :: divv 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 #if (PP_VISC == 1) || (PP_VISC == 2) 
@@ -238,7 +235,7 @@ DO i=1,nTotal_vol
 #if PP_VISC == 2
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-  mu_eff = muS
+  
   ! Viscous part
   ASSOCIATE( gradv1x => gradPx_in(2,i), & 
              gradv2x => gradPx_in(3,i), & 
@@ -256,25 +253,25 @@ DO i=1,nTotal_vol
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
   
   !isotropic heat flux
-  lambda=mu_eff*KappasPr
+  lambda=muS*KappasPr
   ! viscous fluxes in x-direction      
-  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
-  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)
-  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)
+  f_visc(2)=-muS*(2*gradv1x-s23*divv)
+  f_visc(3)=-muS*(  gradv2x+gradv1y)
+  f_visc(4)=-muS*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)
-  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)
+  g_visc(3)=-muS*(2*gradv2y-s23*divv)
+  g_visc(4)=-muS*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
   ! viscous fluxes in z-direction      
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )
+  h_visc(4)=-muS*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 
@@ -521,9 +518,9 @@ END SUBROUTINE EvalDiffFlux3D
 
 
 !==================================================================================================================================
-!> Compute transformed 3D Navier-Stokes diffusion fluxes for every volume Gauss point of element iElem.
+!> Compute transformed 3D Navier-Stokes diffusion fluxes for every volume Gauss point of an element.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:mu0,kappaM1,sKappaM1,KappasPr,s23
@@ -537,7 +534,6 @@ USE MOD_DG_Vars,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                     !< element number
 REAL,INTENT(IN )   :: U_in(     5,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(      3,1:nTotal_vol) !< metrics for ftilde  
 REAL,INTENT(IN )   :: M_g(      3,1:nTotal_vol) !< metrics for gtilde  
@@ -556,7 +552,6 @@ REAL                :: f_visc(5),g_visc(5),h_visc(5)           !cartesian fluxes
 REAL                :: srho,e                                  ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                              ! auxiliary variables
 REAL                :: muS,lambda                              ! viscosity,heat coeff.
-REAL                :: mu_eff                                  ! effective viscosity can be a mix of physical and artificial
 REAL                :: divv 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 #if (PP_VISC == 1) || (PP_VISC == 2) 
@@ -597,10 +592,9 @@ DO i=1,nTotal_vol
   T=p*srho/R ! Calculate temperature
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-  mu_eff = muS
   
   ! Conductivity
-  lambda=mu_eff*KappasPr
+  lambda=muS*KappasPr
   
   ! Viscous part
   divv       = gradv1x+gradv2y+gradv3z
@@ -610,17 +604,17 @@ DO i=1,nTotal_vol
 
   ! viscous fluxes in x-direction      
   f_visc(1)= 0.
-  f_visc(2)=-mu_eff*(2*gradv1x-s23*divv)
-  f_visc(3)=-mu_eff*(  gradv2x+gradv1y)
-  f_visc(4)=-mu_eff*(  gradv3x+gradv1z)
+  f_visc(2)=-muS*(2*gradv1x-s23*divv)
+  f_visc(3)=-muS*(  gradv2x+gradv1y)
+  f_visc(4)=-muS*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(1)= 0.
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-mu_eff*(2*gradv2y-s23*divv)
-  g_visc(4)=-mu_eff*(  gradv3y+gradv2z)
+  g_visc(3)=-muS*(2*gradv2y-s23*divv)
+  g_visc(4)=-muS*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
@@ -628,7 +622,7 @@ DO i=1,nTotal_vol
   h_visc(1)= 0.
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-mu_eff*(2*gradv3z-s23*divv )
+  h_visc(4)=-muS*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 

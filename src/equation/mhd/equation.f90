@@ -1765,8 +1765,7 @@ mtmp(:)=Metrics_ftilde(:,0,0,0,1) !save metric
 
 U(:,0,0,0,1)=UL
 Metrics_ftilde(:,0,0,0,1)=metricL
-CALL EvalAdvFluxTilde3D(                        1, &
-                                     U(:,:,:,:,1), &
+CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
                         Metrics_ftilde(:,:,:,:,1), &
                         Metrics_gtilde(:,:,:,:,1), &
                         Metrics_htilde(:,:,:,:,1), &
@@ -1777,8 +1776,7 @@ FrefL = fTildeElem(:,0,0,0)
 
 U(:,0,0,0,1)=UR
 Metrics_ftilde(:,0,0,0,1)=metricR
-CALL EvalAdvFluxTilde3D(                        1, &
-                                     U(:,:,:,:,1), &
+CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
                         Metrics_ftilde(:,:,:,:,1), &
                         Metrics_gtilde(:,:,:,:,1), &
                         Metrics_htilde(:,:,:,:,1), &

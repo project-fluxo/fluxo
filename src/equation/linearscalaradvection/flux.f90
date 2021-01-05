@@ -59,7 +59,7 @@ CONTAINS
 !> Compute linadvdiff transformed fluxes using conservative variables and derivatives for every volume Gauss point.
 !> directly apply metrics and output the tranformed flux 
 !==================================================================================================================================
-SUBROUTINE EvalAdvFluxTilde3D(iElem,U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:AdvVel
@@ -67,7 +67,6 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                !< element number
 REAL,INTENT(IN )   :: U_in(1,1:nTotal_vol) !< solution state (conservative vars)
 REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
@@ -92,7 +91,7 @@ END SUBROUTINE EvalAdvFluxTilde3D
 !==================================================================================================================================
 !> Compute linear scalar advection & diffusion fluxes with using the solution and its gradient for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalFluxTilde3D(iElem,U_in,M_f,M_g,M_h, &
+SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
 #if PARABOLIC
                            gradPx_in,gradPy_in,gradPz_in,&
 #endif /*PARABOLIC*/
@@ -107,7 +106,6 @@ USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                !< element number
 REAL,INTENT(IN )   :: U_in(1,1:nTotal_vol) !< solution state (conservative vars)
 REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
 REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
@@ -151,7 +149,7 @@ END SUBROUTINE EvalFluxTilde3D
 !==================================================================================================================================
 !> Compute linear scalar  diffusion fluxes with using the gradient of the solution  for every volume Gauss point.
 !==================================================================================================================================
-SUBROUTINE EvalDiffFluxTilde3D(iElem,U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
+SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:DiffC
@@ -159,7 +157,6 @@ USE MOD_DG_Vars,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-INTEGER,INTENT(IN ):: iElem                     !< element number
 REAL,INTENT(IN )   :: U_in(     1,1:nTotal_vol) !< state in conservative variables
 REAL,INTENT(IN )   :: M_f(      3,1:nTotal_vol) !< metrics for ftilde  
 REAL,INTENT(IN )   :: M_g(      3,1:nTotal_vol) !< metrics for gtilde  
