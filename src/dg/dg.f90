@@ -263,9 +263,6 @@ USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 use MOD_NFVSE               ,only: VolInt_NFVSE
 use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
-#if SHOCK_LOC_ARTVISC
-use MOD_ShockCapturing      ,only: CalcArtificialViscosity
-#endif /*SHOCK_LOC_ARTVISC*/
 #if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
@@ -353,10 +350,6 @@ call VolInt_NFVSE(Ut)
 ! The communication of the gradients is started within the lifting routines
 CALL Lifting(tIn)
 #endif /*PARABOLIC*/
-
-#if SHOCK_LOC_ARTVISC
-CALL CalcArtificialViscosity(U)
-#endif /*SHOCK_LOC_ARTVISC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
 #if PP_DiscType==2 || SHOCK_NFVSE

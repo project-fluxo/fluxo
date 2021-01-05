@@ -50,10 +50,7 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Mesh_Vars,          ONLY: S2V  !magic mapping of side to volume
 #if (PP_NodeType==1)
 USE MOD_Interpolation_Vars, ONLY: L_Minus
-#endif /*PP_NodeType*/ 
-#if SHOCK_ARTVISC && mhd
-USE MOD_ShockCapturing_Vars,ONLY:nu_Master,nu_Slave,nu
-#endif /*SHOCK_ARTVISC && mhd*/
+#endif /*PP_NodeType*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -104,9 +101,6 @@ DO SideID=firstSideID,lastSideID
       Uface_master(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),ElemID)
     END DO; END DO !p,q=0,PP_N
 #endif /*PP_NodeType*/
-#if SHOCK_ARTVISC && mhd
-   nu_Master(SideID)=nu(ElemID) 
-#endif /*SHOCK_ARTVISC && mhd*/
   END IF !master ElemID > 0
 
   nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
@@ -132,9 +126,6 @@ DO SideID=firstSideID,lastSideID
       Uface_slave(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),nbElemID)
     END DO; END DO !p,q=0,PP_N
 #endif /*PP_NodeType*/
-#if SHOCK_ARTVISC && mhd
-   nu_Slave(SideID)=nu(nbElemID) 
-#endif /*SHOCK_ARTVISC && mhd*/
   END IF !slave nbElemID > 0
 END DO !SideID=firstSideID,lastSideID
 

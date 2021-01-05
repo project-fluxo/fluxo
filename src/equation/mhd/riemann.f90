@@ -82,19 +82,10 @@ CONTAINS
 SUBROUTINE Riemann(F,UL,UR,                                                                       &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
-#if SHOCK_ARTVISC
-                   nu_L,nu_R,                                                 									  &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-                   artVisc_L,artVisc_R,                                                           &
-#endif /*SHOCK_LOC_ARTVISC*/
-#endif
+#endif /*PARABOLIC*/
                    nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
-#if SHOCK_LOC_ARTVISC
-use MOD_Sensors, ONLY: SENS_NUM
-#endif /*SHOCK_LOC_ARTVISC*/
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
@@ -103,14 +94,6 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
 REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
-#if SHOCK_ARTVISC
-REAL,INTENT(IN)  :: nu_L !artficial viscosity
-REAL,INTENT(IN)  :: nu_R
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-REAL,INTENT(IN)  :: artVisc_L(SENS_NUM,0:PP_N,0:PP_N)
-REAL,INTENT(IN)  :: artVisc_R(SENS_NUM,0:PP_N,0:PP_N)
-#endif /*SHOCK_LOC_ARTVISC*/
 #if PARABOLIC                                                 
 REAL,INTENT(IN) :: gradUx_L(PP_nVar,0:PP_N,0:PP_N) !<  left state gradient in x 
 REAL,INTENT(IN) :: gradUx_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in x 
@@ -139,23 +122,9 @@ call AdvRiemann(F,UL,UR,nv,t1,t2)
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute MHD Diffusion flux
 
-CALL EvalDiffFlux3D(k_L,g_L,j_L,UL, &
-#if SHOCK_ARTVISC
-nu_L, &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-artVisc_L, &
-#endif /*SHOCK_LOC_ARTVISC*/
-gradUx_L,gradUy_L,gradUz_L)
+CALL EvalDiffFlux3D(k_L,g_L,j_L,UL,gradUx_L,gradUy_L,gradUz_L)
 
-CALL EvalDiffFlux3D(k_R,g_R,j_R,UR, &
-#if SHOCK_ARTVISC
-nu_R, &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-artVisc_R, &
-#endif /*SHOCK_LOC_ARTVISC*/
-gradUx_R,gradUy_R,gradUz_R)
+CALL EvalDiffFlux3D(k_R,g_R,j_R,UR,gradUx_R,gradUy_R,gradUz_R)
 
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes

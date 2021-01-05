@@ -121,9 +121,6 @@ USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone,NodeTypeVISU,NodeType
-#if SHOCK_LOC_ARTVISC
-use MOD_Sensors           ,only: SENS_NUM, StrArtViscNames
-#endif /*SHOCK_ARTVISC*/
 !USE ISO_C_BINDING,         ONLY: C_NULL_CHAR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -199,12 +196,6 @@ nOutVars=PP_nVar
 nOutVars=PP_nVar
 #endif
 ! If shock-capturing is activated output extra quantities
-#if SHOCK_ARTVISC
-nOutvars = nOutvars + 1
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-nOutvars = nOutvars + SENS_NUM
-#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 nOutvars = nOutvars + 1
 #if NFVSE_CORR
@@ -220,14 +211,7 @@ strvarnames_tmp(1)=StrVarnames(1)
 strvarnames_tmp(2)='ExactSolution'
 #endif /*linearscalaradvection*/
 nVars = PP_nVar
-#if SHOCK_ARTVISC
-nVars = nVars+1
-strvarnames_tmp(nVars) = 'ArtificialViscosity'
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-strvarnames_tmp(nVars+1:nVars+SENS_NUM) = StrArtViscNames
-nVars = nVars+SENS_NUM
-#endif /*SHOCK_LOC_ARTVISC*/
+
 #if SHOCK_NFVSE
 nVars = nVars+1
 strvarnames_tmp(nVars) = 'BlendingFunction'
@@ -300,13 +284,6 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 #elif (defined(mhd) || defined(navierstokes))
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
-#if SHOCK_ARTVISC
-use MOD_ShockCapturing_Vars ,only: nu
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-use MOD_ShockCapturing_Vars ,only: artVisc
-use MOD_Sensors             ,only: SENS_NUM
-#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
 use MOD_ShockCapturing_Vars ,only: alpha, alpha_old
 #endif /*SHOCK_NFVSE*/
@@ -391,15 +368,6 @@ DO iElem=1,nElems
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
   nVars = PP_nVar
-#if SHOCK_ARTVISC
-  nVars = nVars+1
-  U_NVisu(nVars,:,:,:,iElem) = nu(iElem)
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-  ! Interpolate solution onto visu grid
-  CALL ChangeBasis3D(SENS_NUM,PP_N,NVisu,Vdm_GaussN_NVisu,artVisc(1:SENS_NUM,:,:,:,iElem),U_NVisu(nVars+1:nVars+SENS_NUM,:,:,:,iElem))
-  nVars = nVars+SENS_NUM
-#endif /*SHOCK_LOC_ARTVISC*/
 #if SHOCK_NFVSE
   nVars = nVars+1
   U_NVisu(nVars,:,:,:,iElem) = alpha(iElem)
@@ -411,7 +379,7 @@ DO iElem=1,nElems
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
 DEALLOCATE(U_NVisu)
-DEALLOCATE(Coords_NVisu)
+DEALLOCATE(Coords_NVisu) 
 END SUBROUTINE Visualize
 
 !==================================================================================================================================

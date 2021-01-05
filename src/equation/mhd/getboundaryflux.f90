@@ -212,12 +212,6 @@ USE MOD_Riemann,         ONLY: AddNonConsFlux
 #endif /*NONCONS*/
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
-#if SHOCK_ARTVISC
-USE MOD_ShockCapturing_Vars,ONLY:nu_Master
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-USE MOD_ShockCapturing_Vars,ONLY:artVisc_Master
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
@@ -252,12 +246,6 @@ DO iBC=1,nBCs
                    gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                    gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
-#if SHOCK_ARTVISC
-		   nu_Master(SideID),nu_Master(SideID), &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-				  artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -280,12 +268,6 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
-#if SHOCK_ARTVISC
-		     nu_Master(SideID),nu_Master(SideID), &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-				  artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -306,12 +288,6 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
-#if SHOCK_ARTVISC
-		     nu_Master(SideID),nu_Master(SideID), &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-				  artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -351,12 +327,6 @@ DO iBC=1,nBCs
                      gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                      gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
-#if SHOCK_ARTVISC
-		     nu_Master(SideID),nu_Master(SideID), &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-				  artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
@@ -382,12 +352,6 @@ DO iBC=1,nBCs
                    gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
                    gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
                    gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
-#if SHOCK_ARTVISC
-		   nu_Master(SideID),nu_Master(SideID), &
-#endif /*SHOCK_ARTVISC*/
-#if SHOCK_LOC_ARTVISC
-				  artVisc_Master(:,:,:,SideID),artVisc_Master(:,:,:,SideID), &
-#endif /*SHOCK_LOC_ARTVISC*/
 #endif /*PARABOLIC*/
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS

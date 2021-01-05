@@ -227,9 +227,6 @@ USE MOD_DG_Vars      ,ONLY:D_Hat_T,U
 USE MOD_Lifting_Vars ,ONLY:gradPx,gradPy,gradPz
 USE MOD_Flux         ,ONLY:EvalDiffFluxTilde3D
 USE MOD_Mesh_Vars    ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
-#if SHOCK_LOC_ARTVISC
-use MOD_ShockCapturing_Vars, only: artVisc
-#endif /*SHOCK_LOC_ARTVISC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -254,9 +251,6 @@ DO iElem=1,nElems
                                    gradPx(:,:,:,:,iElem), &
                                    gradPy(:,:,:,:,iElem), &
                                    gradPz(:,:,:,:,iElem), &
-#if SHOCK_LOC_ARTVISC
-                                  artVisc(:,:,:,:,iElem), &
-#endif /*SHOCK_LOC_ARTVISC*/
                                    ftildeDiff,gtildeDiff,htildeDiff)
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   ! euler fluxes in flux differencing form: strong, but surface parts included 
