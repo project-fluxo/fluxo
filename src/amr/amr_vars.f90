@@ -5,6 +5,7 @@ MODULE MOD_AMR_Vars
 !===================================================================================================================================
 ! MODULES
 USE,INTRINSIC :: ISO_C_BINDING
+use MOD_Indicators, only: Indicator_PerssonPeraire
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
@@ -32,7 +33,7 @@ real, allocatable           :: Vdm_Interp_1_0(:,:)    ! Interpolation Vandermond
 real, allocatable           :: Vdm_Interp_2_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to second half of [-3,1]
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
-
+type(Indicator_PerssonPeraire) :: AMR_Indicator
 
 TYPE p4est_save_data
     INTEGER ::  nGlobalSides

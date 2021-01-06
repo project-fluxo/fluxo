@@ -168,7 +168,7 @@ contains
     call StartReceiveMPIData(alpha_Master(firstSlaveSide:lastSlaveSide), 1, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_alpha(:,2), SendID=1) ! Receive YOUR  (sendID=1) 
     
-    ! TODO: transfer the mortar to the right MPI faces 
+    ! transfer the mortar to the right MPI faces 
     CALL Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.TRUE.)
 
     ! Send the slave

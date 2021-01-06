@@ -13,7 +13,7 @@
 !
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
-
+#include "defines.h"
 !==================================================================================================================================
 !> Contains parameters for the Navier stokes equation
 !==================================================================================================================================
@@ -81,6 +81,10 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
                    'VelocityY',  &
                    'VelocityZ',  &
                    'Pressure'/)
+                   
+integer, parameter :: nIndVar = 4
+character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 'Density','Pressure','DensityTimesPressure','KinEnergy'/)
+                   
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 INTEGER             :: WhichRiemannSolver       !< choose riemann solver
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
@@ -121,6 +125,11 @@ ABSTRACT INTERFACE
     REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
     REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
   END SUBROUTINE i_sub_VolumeFluxAverageVec
+  
+  pure subroutine i_indicatorFunction(U,ind)
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: ind
+  end subroutine i_indicatorFunction
 END INTERFACE
 
 INTERFACE ConsToPrim_aux
@@ -619,5 +628,80 @@ REAL,INTENT(OUT)    :: c             !< sound speed
 !==================================================================================================================================
 c=SQRT(kappa*prim(5)/prim(1))
 END SUBROUTINE FastestWave3D
+
+!===================================================================================================================================
+!> Subroutine to initialize a procedure pointer to a specific indicator function
+!===================================================================================================================================
+subroutine SetIndicatorFunction(ind_id,IndicatorFunc)
+  use MOD_Globals
+  implicit none
+  !-arguments---------------------------------------
+  character(len=255)        , intent(in) :: ind_id
+  procedure(i_indicatorFunction),pointer :: IndicatorFunc
+  !-------------------------------------------------
+  
+  select case (trim(ind_id))
+    case('Density')              ; IndicatorFunc => Get_Density
+    case('Pressure')             ; IndicatorFunc => Get_Pressure
+    case('DensityTimesPressure') ; IndicatorFunc => Get_DensityTimesPressure
+    case('KinEnergy')            ; IndicatorFunc => Get_KinEnergy
+    case default
+      CALL abort(__STAMP__,'Indicator quantity "'//trim(ind_id)//'" is not defined for this equation!',999,999.)
+      RETURN
+  end select
+  
+end subroutine SetIndicatorFunction
+
+!===================================================================================================================================
+!> Returns the density
+!===================================================================================================================================
+pure subroutine Get_Density(U,rho)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: rho
+  !-------------------------------------------------
+  
+  rho = U(1)
+end subroutine Get_Density
+!===================================================================================================================================
+!> Returns the pressure
+!===================================================================================================================================
+pure subroutine Get_Pressure(U,p)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: p
+  !-------------------------------------------------
+  
+  p = KappaM1*(U(5)-0.5*(SUM(U(2:4)*U(2:4))/U(1)))
+end subroutine Get_Pressure
+!============================================================================================================================
+!> Get Density Times Pressure
+!============================================================================================================================
+pure subroutine Get_DensityTimesPressure(U,rhop)
+  implicit none
+  !-arguments---------------------------------------
+  real, intent(in)  :: U(PP_nVar)
+  real, intent(out) :: rhop
+  !-------------------------------------------------
+  real :: p
+  !-------------------------------------------------
+  
+  call Get_Pressure(U,p)
+  rhop = U(1) * p
+end subroutine Get_DensityTimesPressure
+!============================================================================================================================
+!> Get kinetic energy
+!============================================================================================================================
+  pure subroutine Get_KinEnergy(U,kinen)
+    implicit none
+    !-arguments---------------------------------------
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: kinen
+    !-------------------------------------------------
+    
+    kinen = SUM(U(2:4)*U(2:4))/U(1)
+  end subroutine Get_KinEnergy
 
 END MODULE MOD_Equation_Vars

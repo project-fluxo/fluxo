@@ -488,26 +488,6 @@ contains
     end do ! iElem
   end subroutine VolInt_NFVSE
   
-!============================================================================================================================
-!> Get Pressure (TODO: Move to equation)
-!============================================================================================================================
-  pure subroutine GetPressure(U,p)
-#ifdef mhd
-    use MOD_Equation_Vars      , only: s2mu_0
-#endif /*mhd*/
-    use MOD_Equation_Vars      , only: KappaM1
-    implicit none
-    real, intent(in)  :: U(PP_nVar)
-    real, intent(out) :: p
-    
-    p = KappaM1*(U(5)-0.5*(SUM(U(2:4)*U(2:4))/U(1)))
-#ifdef mhd
-    p = p - KappaM1*s2mu_0*SUM(U(6:8)*U(6:8))
-#ifdef PP_GLM
-    p = p - 0.5*KappaM1*U(9)*U(9)
-#endif /*PP_GLM*/
-#endif /*mhd*/
-  end subroutine GetPressure
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux
 !===================================================================================================================================
@@ -2257,6 +2237,7 @@ contains
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: sKappaM1
     use MOD_Mesh_Vars          , only: sJ
+    use MOD_Equation_Vars      , only: Get_Pressure
     use MOD_NFVSE_MPI
     USE MOD_Globals
     implicit none
@@ -2310,7 +2291,7 @@ contains
         Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
         
         ! Check if this is a valid state
-        call GetPressure(Usafe(:,i,j,k),p_safe(i,j,k))
+        call Get_Pressure(Usafe(:,i,j,k),p_safe(i,j,k))
         if (p_safe(i,j,k) < 0.) then
           print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
           stop

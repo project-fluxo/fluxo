@@ -69,20 +69,24 @@ CONTAINS
 SUBROUTINE DefineParametersAMR()
   ! MODULES
   USE MOD_Globals
-  USE MOD_ReadInTools ,ONLY: prms
+  USE MOD_ReadInTools   , ONLY: prms
+  use MOD_Equation_Vars , only: IndicatorQuantityNames, nIndVar
   IMPLICIT NONE
+  !-local-variables----------------------------
+  integer            :: i
+  character(len=255) :: IndicatorQuantities,fmt
   !==================================================================================================================================
   CALL prms%SetSection("AMR")
   CALL prms%CreateLogicalOption( 'UseAMR',          "Use AMR for solution.",&
                                                       '.FALSE.')
   CALL prms%CreateStringOption('p4estFile', "(relative) path to p4ests connectivity file (mandatory).")
   
-  CALL prms%CreateIntOption(     "ShockIndicatorAMR",  " Specifies the quantity to be used as a shock-indicator "//&
-                                 "  1: Density"//&
-                                 "  2: Pressure"//&
-                                 "  3: Density times Pressure"//&
-                                 "  4: Kinetic Energy"&
-                                ,"1")
+  write(fmt,'(A,I0,A)') '(',nIndVar,'A)'
+  write(IndicatorQuantities,fmt) ('  * '//trim(IndicatorQuantityNames(i))//'\n', i=1, nIndVar)
+
+  CALL prms%CreateStringOption("AMRIndicatorQuantity",  " Specifies the quantity to be used for the AMR indicator. One of the following:\n"//&
+                                                        trim(IndicatorQuantities)&
+                                             ,"DensityTimesPressure")
  CALL prms%CreateRealOption(  'RefineVal',       "The value to refine Element", "0")
  CALL prms%CreateRealOption(  'CoarseVal',       "The value to Coarse 8 Elements", "0")
  
@@ -115,7 +119,6 @@ SUBROUTINE InitAMR()
     USE MOD_AMR_Vars
     USE MOD_P4EST
     USE MOD_ReadInTools         ,ONLY:GETLOGICAL,GETSTR, GETINT, GETREAL
-    USE MOD_Indicators          ,ONLY: InitIndicator
     use MOD_Interpolation_Vars  ,only: NodeType
     use MOD_Basis               ,only: InitializeVandermonde
     use MOD_Interpolation       ,only: GetNodesAndWeights
@@ -127,6 +130,7 @@ SUBROUTINE InitAMR()
     !----------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES
     real :: xi_In(0:PP_N),w_in(0:PP_N),wBary_In(0:PP_N)
+    character(len=255) :: AMRIndicatorQuantity
     !==================================================================================================================================
     INTEGER RET
 
@@ -157,8 +161,9 @@ SUBROUTINE InitAMR()
     nDoAMR = GetINT('nDoAMR',"1")
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
+    AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
+    call AMR_Indicator % construct(AMRIndicatorQuantity,.TRUE.)
     
-    CALL InitIndicator()
     RET=P4EST_INIT(MPI_COMM_WORLD); 
     
     IF  (p4estFileExist) THEN
@@ -1308,6 +1313,7 @@ SUBROUTINE FinalizeAMR()
 ! MODULES
 USE MOD_AMR_Vars
 USE MOD_P4EST
+use MOD_Indicators
 IMPLICIT NONE
 !============================================================================================================================
 ! Deallocate global variables, needs to go somewhere else later
@@ -1319,6 +1325,7 @@ ENDIF
 CALL p4est_destroy(P4EST_PTR);
 CALL p4est_connectivity_destroy(CONNECTIVITY_PTR)
 CALL p4est_finalize()
+call AMR_Indicator % destruct
 AMRInitIsDone = .FALSE.
 END SUBROUTINE FinalizeAMR
 

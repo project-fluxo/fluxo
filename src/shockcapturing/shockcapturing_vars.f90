@@ -22,6 +22,7 @@
 MODULE MOD_ShockCapturing_Vars
 !===================================================================================================================================
 ! MODULES
+use MOD_Indicators, only: Indicator_PerssonPeraire
 IMPLICIT NONE
 PUBLIC
 SAVE
@@ -39,7 +40,11 @@ real, allocatable :: alpha_Slave(:)                       !< Blending function o
 real              :: threshold
 real              :: alpha_max        ! Maximum blending factor
 real              :: alpha_min        ! Minimum blending factor
+real              :: ShockBlendCoef
 integer           :: ModalThreshold
+integer           :: ShockIndicator
+character(len=255):: ShockIndicatorQuantity
+type(Indicator_PerssonPeraire) :: Shock_Indicator
 #if NFVSE_CORR
 real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
 integer           :: PositMaxIter

@@ -112,8 +112,7 @@ end subroutine
         USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
         USE MOD_Mesh_Vars,              ONLY : nElems
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
-        USE MOD_Indicators,             ONLY : ShockSensor_PerssonPeraire
-        USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal
+        USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal, AMR_Indicator
         USE MOD_P4EST,                  ONLY: SaveP4est
 #if SHOCK_NFVSE
         use MOD_ShockCapturing_Vars,    only: alpha, alpha_max
@@ -126,16 +125,16 @@ end subroutine
         INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
         INTEGER :: iElem
         
-        REAL    :: eta_dof
+        REAL    :: eta_dof(nElems)
             
         ALLOCATE(ElemToRefineAndCoarse(1:nElems))!
         ElemToRefineAndCoarse = MinLevel;
         
+        eta_dof = AMR_Indicator % compute(U)
         DO iElem = 1, nElems
-          eta_dof = LOG10( ShockSensor_PerssonPeraire(U(:,:,:,:,iElem)))
-          IF (eta_dof .GE. RefineVal) THEN
+          IF (eta_dof(iElem) .GE. RefineVal) THEN
             ElemToRefineAndCoarse(iElem) = MaxLevel
-          ELSE IF (eta_dof .LE. CoarseVal) THEN
+          ELSE IF (eta_dof(iElem) .LE. CoarseVal) THEN
             ElemToRefineAndCoarse(iElem) = -MinLevel - 1
           ELSE
             ElemToRefineAndCoarse(iElem) = MinLevel
