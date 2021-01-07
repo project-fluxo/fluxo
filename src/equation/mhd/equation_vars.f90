@@ -125,7 +125,7 @@ ABSTRACT INTERFACE
     REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
   END SUBROUTINE i_sub_SolveRiemannProblem
   
-  SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
+  PURE SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL    !<  left conservative state  
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR    !< right conservative state
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F        !< Central volume flux
@@ -312,7 +312,7 @@ END SUBROUTINE PrimToConsVec
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
-FUNCTION ConsToEntropy(cons) RESULT(Entropy)
+PURE FUNCTION ConsToEntropy(cons) RESULT(Entropy)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE

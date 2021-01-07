@@ -90,15 +90,18 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSE()
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes, SubFVMethod, MPIRequest_Umaster
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Compute_FVFluxes, SubFVMethod, MPIRequest_Umaster
     use MOD_NFVSE_Vars         , only: SpacePropFactor, SpacePropSweeps, TimeRelFactor
-    use MOD_NFVSE_Vars         , only: ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
+    use MOD_NFVSE_Vars         , only: ReconsBoundaries, RECONS_NONE, RECONS_NEIGHBOR
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
     use MOD_NFVSE_Vars         , only: U_ext, sdxR, sdxL, rL, rR
-    use MOD_Mesh_Vars          , only: nElems, Metrics_fTilde, Metrics_gTilde, Metrics_hTilde, isMortarMesh
+    use MOD_Mesh_Vars          , only: nElems, isMortarMesh
     use MOD_Interpolation_Vars , only: wGP, xGP
-    use MOD_ShockCapturing_Vars, only: alpha_old, alpha_max, alpha_min
-    use MOD_DG_Vars            , only: D
+    use MOD_ShockCapturing_Vars, only: alpha_max, alpha_min
+#if NFVSE_CORR
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
+    use MOD_ShockCapturing_Vars, only: alpha_old
+#endif /*NFVSE_CORR*/
     use MOD_Equation_Vars      , only: RiemannVolFluxAndDissipMatrices
 #if USE_AMR
     use MOD_AMR_Vars           , only: UseAMR
@@ -107,15 +110,9 @@ contains
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
     implicit none
-    !-------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES 
-    integer :: iElem
-    integer :: i,j,k,l,m         !DOF counters
-    real :: Metrics_fCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) xi metrics
-    real :: Metrics_gCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) eta metrics
-    real :: Metrics_hCont(3,0:PP_N,0:PP_N,0:PP_N) ! Container for the (reshaped) zeta metrics
-    real, parameter :: half = 0.5d0
-    real :: sumWm1
+    !-local-variables---------------------------------------------------------------------------------------------------------------
+    integer :: i
+    real    :: sumWm1
     logical :: MeshNonConforming
     !--------------------------------------------------------------------------------------------------------------------------------
      SDEALLOCATE(SubCellMetrics)
@@ -151,7 +148,12 @@ contains
         
         select case(SubFVMethod)
           case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
-          case(3) ; Compute_FVFluxes => Compute_FVFluxes_TVD2ES
+          case(3) 
+            Compute_FVFluxes => Compute_FVFluxes_TVD2ES
+            if ( .not. associated(RiemannVolFluxAndDissipMatrices)) then
+              SWRITE(*,*) 'ERROR :: SubFVMethod=4 needs a Riemann solver with RiemannVolFluxAndDissipMatrices.'
+              stop
+            end if
           case(4) 
             Compute_FVFluxes => Compute_FVFluxes_TVD_Fjordholm
             if ( .not. associated(RiemannVolFluxAndDissipMatrices)) then
@@ -340,10 +342,13 @@ contains
 !> Reinitializes all variables that need reinitialization after the h-adaptation
 !> ATTENTION: The subcell metrics are always recomputed, as the metrics of the high-order DG elements
 !===================================================================================================================================
-  subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
+  subroutine InitNFVSEAfterAdaptation(nElemsOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, Fsafe, Fblen
+    use MOD_NFVSE_Vars         , only: SubCellMetrics
+#if NFVSE_CORR
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
     use MOD_ShockCapturing_Vars, only: alpha_old
+#endif /*NFVSE_CORR*/
     use MOD_Mesh_Vars          , only: nElems
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
@@ -351,7 +356,6 @@ contains
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
-    integer, intent(in) :: ChangeElem(8,nElems)
     integer, intent(in) :: nElemsOld
     !---------------------------------------------
     
@@ -393,27 +397,24 @@ contains
 !> Attention 2: This routine has to be called after VolInt_adv_SplitForm, since here Ut is updated with the finite volume contribution
 !===================================================================================================================================
   subroutine VolInt_NFVSE(Ut)
-  !----------------------------------------------------------------------------------------------------------------------------------
-    ! Modules
     use MOD_PreProc
     use MOD_DG_Vars            , only: U
     use MOD_Mesh_Vars          , only: nElems
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Fsafe, Fblen, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps, RECONS_NEIGHBOR
-    use MOD_ShockCapturing_Vars, only: alpha, alpha_max
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps, RECONS_NEIGHBOR
+#if NFVSE_CORR
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
+#endif /*NFVSE_CORR*/
+    use MOD_ShockCapturing_Vars, only: alpha
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
 #if MPI
     use MOD_MPI                , only: FinishExchangeMPIData
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
-    ! IMPLICIT VARIABLE HANDLING
     implicit none
-    !-------------------------------------------------------------------------------------------------------------------------------
-    ! INPUT/OUTPUT VARIABLES
+    !-arguments---------------------------------------------------------------------------------------------------------------------
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
-    !< Adds volume contribution to time derivative Ut contained in MOD_DG_Vars 
-    !-------------------------------------------------------------------------------------------------------------------------------
-    ! LOCAL VARIABLES
+    !-local-variables---------------------------------------------------------------------------------------------------------------
     real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htilde   ! transformed inter-subcell flux in zeta (with ghost cells)
@@ -1066,7 +1067,7 @@ contains
 !> ATTENTION: 1) These FV fluxes are only ES if the central two-point flux is EC.
 !>            2) Since the second-order reconstruction of the primitive variables may break the entropy stability (ES), a check is 
 !>               performed in AdvRiemannRecons and the scheme falls to first-order dissipation locally if needed to ensure ES.
-!>            3) A Riemann solver that implements AdvRiemannRecons is needed.
+!>            3) A Riemann solver that implements RiemannVolFluxAndDissipMatrices is needed.
 !===================================================================================================================================
   subroutine Compute_FVFluxes_TVD2ES(U, F , G , H , &
 #if NONCONS
@@ -1074,7 +1075,6 @@ contains
 #endif /*NONCONS*/
                                               sCM, iElem )
     use MOD_PreProc
-    use MOD_Riemann   , only: AdvRiemannRecons
     use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
     use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
     use MOD_Interpolation_Vars , only: wGP
@@ -1108,7 +1108,7 @@ contains
     real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
     real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
     real :: sigma(PP_nVar,0:PP_N,0:PP_N)
-    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    real :: F_   (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #endif /*NONCONS*/
@@ -1421,6 +1421,110 @@ contains
 #if NONCONS
     CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
 #endif /*NONCONS*/
+! ========
+  contains
+! ========
+    pure subroutine AdvRiemannRecons(F,UL,UR,UL_r,UR_r,nv,t1,t2)
+      use MOD_Riemann       , only: RotateState, RotateFluxBack
+      use MOD_Equation_Vars , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
+      implicit none
+      !-arguments-----------------------------------------------------------
+      real, intent(out):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+      real, intent(in) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+      real, intent(in) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
+      real, intent(in) :: UL_r(    PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+      real, intent(in) :: UR_r(    PP_nVar,0:PP_N,0:PP_N) !< right state on face
+      real, intent(in) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+      real, intent(in) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+      real, intent(in) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+      !-local-variables-----------------------------------------------------
+      integer :: j,k
+      real :: U_L  (PP_nVar), U_L_r  (PP_nVar)       ! Rotated nodal and reconstructed state on the left
+      real :: U_R  (PP_nVar), U_R_r  (PP_nVar)       ! Rotated nodal and reconstructed state on the right
+      real :: RT_Dv(PP_nVar), RT_Dv_r(PP_nVar)       ! Jump of entropy variables on the left (also multiplied by the R^T matrix) of rotated states
+      real :: Dmat (PP_nVar)
+      real :: Rmat (PP_nVar,PP_nVar)
+      real :: RmatT(PP_nVar,PP_nVar)
+      ! for the continuous (RELU) switch
+      !real :: alpha
+!#      ! For second variant of fix
+!#      real :: Dmat_r (PP_nVar)
+!#      real :: Rmat_r (PP_nVar,PP_nVar)
+!#      real :: RmatT_r(PP_nVar,PP_nVar)
+!#      real :: RT_Dv2 (PP_nVar), RT_Dv2_r(PP_nVar)
+!#      real :: Fstar_r(PP_nVar)
+      !---------------------------------------------------------------------
+      
+      ! Loop over the face and get the Es flux
+      do k=0, PP_N ; do j=0, PP_N
+        ! Rotate states to 1D frame
+        ! -------------------------
+        U_L   = RotateState(UL  (:,j,k), nv(:,j,k), t1(:,j,k), t2(:,j,k))
+        U_R   = RotateState(UR  (:,j,k), nv(:,j,k), t1(:,j,k), t2(:,j,k))
+        U_L_r = RotateState(UL_r(:,j,k), nv(:,j,k), t1(:,j,k), t2(:,j,k))
+        U_R_r = RotateState(UR_r(:,j,k), nv(:,j,k), t1(:,j,k), t2(:,j,k))
+        ! Compute EC flux and dissipation matrices with nodal states
+        ! ----------------------------------------------------------
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F(:,j,k),Dmat,Rmat)
+        RmatT = transpose(Rmat)
+        ! Get jump of entropy vars of rotated states
+        ! ------------------------------------------
+        RT_Dv   = ConsToEntropy(U_R)   - ConsToEntropy(U_L)
+        RT_Dv_r = ConsToEntropy(U_R_r) - ConsToEntropy(U_L_r)
+        
+        ! Check sign condition and compute flux
+        ! First variant: Use the dissipation matrices computed with the nodal states
+        ! **************************************************************************
+        
+        ! Scale entropy jump with the right-eigV mat
+        RT_Dv   = matmul(RmatT,RT_Dv)
+        RT_Dv_r = matmul(RmatT,RT_Dv_r)
+        
+        ! Discrete switch    
+        if ( any(RT_Dv*RT_Dv_r < -1.e-10) ) then ! Reconstructed is not ES
+          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv)
+        else  ! Reconstructed is ES
+          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv_r)
+        end if
+        ! Continuous switch
+!        alpha = minval(RT_Vjump*RT_Vjump_r)
+!        if (alpha <= 0.0) then
+!          alpha = 0.0
+!        elseif(alpha <= 1000.0*epsilon(1.0)) then
+!          alpha = alpha*0.001/epsilon(1.0)
+!        else
+!          alpha = 1. !exp(-epsilon(1.0)/(alpha))
+!        end if
+!        Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix, alpha*RT_Vjump_r + (1.-alpha)*RT_Vjump  ))
+        
+!#        ! Check sign condition and compute flux
+!#        ! Second variant: Use the dissipation matrices computed with the reconstructed states
+!#        !     *This does not seem to work very well (the method falls to first order almost always!!)
+!#        ! ***********************************************************************************
+        
+!#        ! Get dissipation matrices for reconstructed state
+!#        call RiemannVolFluxAndDissipMatrices(U_L_r,U_R_r,Fstar_r,Dmat_r,Rmat_r)
+!#        RmatT_r = TRANSPOSE(Rmat_r)
+        
+!#        ! Scale entropy jump with the right-eigV mat
+!#        RT_Dv2   = matmul(RmatT_r,RT_Dv)
+!#        RT_Dv2_r = matmul(RmatT_r,RT_Dv_r)
+        
+!#        ! Discrete switch    
+!#        if ( any(RT_Dv2*RT_Dv2_r < -1.e-10) ) then ! Reconstructed is not ES
+!#          ! Now we need to compute the scaled entropy vars jump with the nodal matrix
+!#          RT_Dv    = matmul(RmatT,RT_Dv)
+!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv)
+!#        else  ! Reconstructed is ES
+!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat_r,Dmat_r*RT_Dv2_r)
+!#        end if
+        
+        ! Rotate flux back to 3D frame
+        ! ----------------------------
+        call RotateFluxBack(F(:,j,k), nv(:,j,k), t1(:,j,k), t2(:,j,k))
+      end do       ; end do !j,k
+
+    end subroutine AdvRiemannRecons
     
   end subroutine Compute_FVFluxes_TVD2ES
 !===================================================================================================================================

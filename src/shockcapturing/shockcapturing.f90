@@ -237,7 +237,7 @@ SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlav
     call move_alloc(alphaNew,alpha)
   end if
   
-  call InitNFVSEAfterAdaptation(ChangeElem,nElemsOld)
+  call InitNFVSEAfterAdaptation(nElemsOld)
 #endif /*SHOCK_NFVSE*/
 END SUBROUTINE InitShockCapturingAfterAdapt
 

@@ -103,7 +103,7 @@ ABSTRACT INTERFACE
     REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N),INTENT(INOUT) :: F     !< numerical flux
   END SUBROUTINE i_sub_SolveRiemannProblem
   
-  SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
+  PURE SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL    !<  left conservative state  
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR    !< right conservative state
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F        !< Volume flux
