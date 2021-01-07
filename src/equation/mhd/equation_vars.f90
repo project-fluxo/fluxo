@@ -113,7 +113,7 @@ INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
 #endif /*PP_DiscType==2*/
-PROCEDURE(i_sub_RiemannGetDissipMatrices),POINTER :: RiemannGetDissipMatrices =>Null()
+PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDissipMatrices =>Null()
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
@@ -125,11 +125,12 @@ ABSTRACT INTERFACE
     REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
   END SUBROUTINE i_sub_SolveRiemannProblem
   
-  SUBROUTINE i_sub_RiemannGetDissipMatrices(ConsL,ConsR,Dmatrix,Rmatrix)
+  SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL !<  left conservative state  
     REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR !< right conservative state
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F !< right conservative state
     REAL,DIMENSION(PP_nVar,PP_nVar),INTENT(OUT) :: Dmatrix,Rmatrix  !< numerical flux
-  END SUBROUTINE i_sub_RiemannGetDissipMatrices
+  END SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices
 
   PURE SUBROUTINE i_sub_VolumeFluxAverage(UL,UR,Fstar)
     REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state

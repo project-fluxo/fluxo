@@ -70,10 +70,8 @@ contains
     CALL prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
                                               "  1: 1st order FV\n"//&
                                               "  2: 2nd order TVD method (not ES)\n"//&
-                                              "  3: '2nd' order TVD-ES method\n"&
-#ifdef mhd
-                                            //"  4: '2nd' order Fjordhom's method\n"&
-#endif /*mhd*/
+                                              "  3: '2nd' order TVD-ES method (entropy fix)\n"//&
+                                              "  4: '2nd' order TVD-ES method (à la Fjordhom)\n"&
                                              ,"1")
     call prms%CreateRealOption    (      "alpha_max", "Maximum value for the blending coefficient", "0.5")
     call prms%CreateRealOption    (      "alpha_min", "Minimum value for the blending coefficient (below this, alpha=0)", "0.01")
@@ -101,7 +99,7 @@ contains
     use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_ShockCapturing_Vars, only: alpha_old, alpha_max, alpha_min
     use MOD_DG_Vars            , only: D
-    use MOD_Equation_Vars      , only: VolumeFluxAverage, RiemannGetDissipMatrices
+    use MOD_Equation_Vars      , only: RiemannVolFluxAndDissipMatrices
 #if USE_AMR
     use MOD_AMR_Vars           , only: UseAMR
 #endif /*USE_AMR*/
@@ -154,14 +152,12 @@ contains
         select case(SubFVMethod)
           case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
           case(3) ; Compute_FVFluxes => Compute_FVFluxes_TVD2ES
-#if mhd
           case(4) 
             Compute_FVFluxes => Compute_FVFluxes_TVD_Fjordholm
-            if ( (.not. associated(VolumeFluxAverage)) .or. (.not. associated(RiemannGetDissipMatrices))) then
-              SWRITE(*,*) 'ERROR :: SubFVMethod=4 needs a Riemann solver with VolumeFluxAverage and RiemannGetDissipMatrices.'
+            if ( .not. associated(RiemannVolFluxAndDissipMatrices)) then
+              SWRITE(*,*) 'ERROR :: SubFVMethod=4 needs a Riemann solver with RiemannVolFluxAndDissipMatrices.'
               stop
             end if
-#endif /*mhd*/
           case default
             SWRITE(*,*) 'ERROR :: SubFVMethod not implemented.'
             stop
@@ -489,7 +485,7 @@ contains
   end subroutine VolInt_NFVSE
   
 !===================================================================================================================================
-!> Solves the inner Riemann problems and outputs a FV consistent flux
+!> Solves the inner Riemann problems and outputs a first-order FV consistent flux
 !===================================================================================================================================
   subroutine Compute_FVFluxes_1st_Order (U, F , G , H , &
 #if NONCONS
@@ -703,7 +699,7 @@ contains
   end subroutine Compute_FVFluxes_1st_Order
   
 !===================================================================================================================================
-!> Solves the inner Riemann problems and outputs a FV consistent flux
+!> Solves the inner Riemann problems and outputs a FV consistent flux using a second-order reconstruction of the primitive variables
 !===================================================================================================================================
   subroutine Compute_FVFluxes_2ndOrder(U, F , G , H , &
 #if NONCONS
@@ -1064,7 +1060,13 @@ contains
     
   end subroutine Compute_FVFluxes_2ndOrder
 !===================================================================================================================================
-!> Solves the inner Riemann problems and outputs a FV consistent flux
+!> Solves the inner Riemann problems and outputs an entropy-stable FV consistent flux that is obtained with a central (not dissipative) 
+!> two-point flux evaluated at the nodal values (i.e. a first-order reconstruction) plus a dissipation term that uses a second-order 
+!> reconstruction of the primitive variables.
+!> ATTENTION: 1) These FV fluxes are only ES if the central two-point flux is EC.
+!>            2) Since the second-order reconstruction of the primitive variables may break the entropy stability (ES), a check is 
+!>               performed in AdvRiemannRecons and the scheme falls to first-order dissipation locally if needed to ensure ES.
+!>            3) A Riemann solver that implements AdvRiemannRecons is needed.
 !===================================================================================================================================
   subroutine Compute_FVFluxes_TVD2ES(U, F , G , H , &
 #if NONCONS
@@ -1421,10 +1423,14 @@ contains
 #endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_TVD2ES
-#if mhd
 !===================================================================================================================================
-!> Solves the inner Riemann problems and outputs a FV consistent flux
-!> * The Riemann solver must specify the routines VolumeFluxAverage and RiemannGetDissipMatrices
+!> Solves the inner Riemann problems and outputs an entropy-stable FV consistent flux à la Fjordholm that is obtained with a central  
+!> (not dissipative) two-point flux evaluated at the nodal values (i.e. a first-order reconstruction) plus a dissipation term that 
+!> uses a second-order reconstruction of the "scaled entropy variables".
+!>       See: 1) Fjordholm, U. S., Mishra, S., & Tadmor, E. (2012). Arbitrarily high-order accurate entropy stable essentially nonoscillatory schemes for systems of conservation laws. SIAM Journal on Numerical Analysis, 50(2), 544-573. 
+!>            2) Rueda-Ramírez, A. M., Hennemann, S., Hindenlang, F. J., Winters, A. R., & Gassner, G. (2020). An Entropy Stable Nodal Discontinuous Galerkin Method for the resistive MHD Equations. Part II: Subcell Finite Volume Shock Capturing. arXiv preprint arXiv:2012.12040.
+!> ATTENTION: 1) A Riemann solver that implements RiemannVolFluxAndDissipMatrices is needed.
+!>            2) The resulting FV fluxes are only ES if VolumeFluxAverage is an EC flux.
 !===================================================================================================================================
   subroutine Compute_FVFluxes_TVD_Fjordholm(U, F , G , H , &
 #if NONCONS
@@ -1436,7 +1442,7 @@ contains
     use MOD_NFVSE_Vars        , only: SubCellMetrics_t, sdxR, sdxL, rL, rR
     use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
     use MOD_Interpolation_Vars, only: wGP
-    use MOD_Equation_Vars     , only: VolumeFluxAverage, RiemannGetDissipMatrices, ConsToEntropy
+    use MOD_Equation_Vars     , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
 #if NONCONS
     USE MOD_Riemann           , only: AddWholeNonConsFlux, AddInnerNonConsFlux
     use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
@@ -1470,6 +1476,7 @@ contains
     real :: U_           (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reshaped solution (conservative variables)
     real :: sigma        (PP_nVar,0:PP_N,0:PP_N)          ! Slope (limited)
     real :: F_           (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    real :: DummyF       (PP_nVar)                        ! Dummy variable to store the central flux when only the dissipation matrices are needed
     real :: Rmat0(PP_nVar,PP_nVar)
     real :: Dmat0(PP_nVar,PP_nVar)
     real :: w_L0         (PP_nVar,0:PP_N,0:PP_N)
@@ -1509,14 +1516,12 @@ contains
         ! Rotate state
         U_L = RotateState(U_(:,j,k,i  ),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
         U_R = RotateState(U_(:,j,k,i+1),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
-        ! Compute EC flux
-        call VolumeFluxAverage(U_L,U_R,F_(:,j,k,i))
+        ! Compute EC flux and dissipation matrices
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
         v_R = ConsToEntropy(U_R)
-        ! Get dissipation matrices
-        call RiemannGetDissipMatrices(U_L,U_R,Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! Compute scaled entropy vars
         w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
         w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
@@ -1543,7 +1548,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1582,7 +1587,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1673,14 +1678,12 @@ contains
         ! Rotate state
         U_L = RotateState(U_(:,j,k,i  ),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
         U_R = RotateState(U_(:,j,k,i+1),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
-        ! Compute EC flux
-        call VolumeFluxAverage(U_L,U_R,F_(:,j,k,i))
+        ! Compute EC flux and dissipation matrices
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
         v_R = ConsToEntropy(U_R)
-        ! Get dissipation matrices
-        call RiemannGetDissipMatrices(U_L,U_R,Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! Compute scaled entropy vars
         w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
         w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
@@ -1707,7 +1710,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1746,7 +1749,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1835,14 +1838,12 @@ contains
         ! Rotate state
         U_L = RotateState(U (:,j,k,i  ),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
         U_R = RotateState(U (:,j,k,i+1),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
-        ! Compute EC flux
-        call VolumeFluxAverage(U_L,U_R,H (:,j,k,i))
+        ! Compute EC flux and dissipation matrices
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,H (:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
         v_R = ConsToEntropy(U_R)
-        ! Get dissipation matrices
-        call RiemannGetDissipMatrices(U_L,U_R,Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! Compute scaled entropy vars
         w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
         w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
@@ -1869,7 +1870,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1909,7 +1910,7 @@ contains
           v_L = ConsToEntropy(U_L)
           v_R = ConsToEntropy(U_R)
           ! Get dissipation matrices
-          call RiemannGetDissipMatrices(U_L,U_R,Dmat0,Rmat0)
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
           Rmat0 = transpose(Rmat0)
           ! Compute scaled entropy vars
           w_L0(:,j,k) = matmul(Rmat0,v_L)
@@ -1976,7 +1977,6 @@ contains
 #endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_TVD_Fjordholm
-#endif /*mhd*/
 !===================================================================================================================================
 !> Traditional minmod limiter
 !===================================================================================================================================
@@ -2070,7 +2070,7 @@ contains
   
 !===================================================================================================================================
 !> Subroutine to check if the external U was assigned correctly
-!> ATTENTION: This routine only checks inner sides and can only be done in a periodic box [0,1]^3
+!> ATTENTION: This routine only checks inner sides and can only be used in a periodic box [0,1]^3
 !===================================================================================================================================
   subroutine Check_ExternalU(U_ext,U)
     use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, Elem_xGP
@@ -2189,13 +2189,11 @@ contains
     
     logical function sameCoords(xM,xS,ijkS,nblocSide, sideID)
       use MOD_Basis     , only: ALMOSTEQUAL
-      use MOD_Mesh_Vars , only: BC, BoundaryType
       implicit none
       !-------------------------
       real   , intent(in) :: xM(3), xS(3)
       integer, intent(in) :: ijkS(3),nblocSide, sideID
       !-------------------------
-      integer :: i, counter
       real :: xS2(3)
       real, parameter :: dl = 1.0
       !-------------------------

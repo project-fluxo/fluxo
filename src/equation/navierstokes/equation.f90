@@ -292,10 +292,12 @@ SELECT CASE(WhichRiemannSolver)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, EC Ismail and Roe + full wave dissipation'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
+    RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
   CASE(44)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, ECKEP + full wave dissipation'
     VolumeFluxAverage    => EntropyAndEnergyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
+    RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
   CASE(5)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: EC Ismail and Roe'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux

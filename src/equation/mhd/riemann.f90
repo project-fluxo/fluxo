@@ -68,7 +68,7 @@ PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
 #ifdef PP_GLM
 PUBLIC :: EntropyStable9WaveFlux
-PUBLIC :: EntropyStable9WaveFlux_DissipMatrices
+PUBLIC :: EntropyStable9WaveFlux_VolFluxAndDissipMatrices
 #endif
 PUBLIC :: RotateState
 PUBLIC :: RotateFluxBack
@@ -1464,25 +1464,29 @@ V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFlux
 
-pure subroutine EntropyStable9WaveFlux_DissipMatrices(UL,UR,Dmatrix,Rmatrix)
-  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0
+pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1
   USE MOD_Flux_Average, ONLY:LN_MEAN
+#ifdef PP_GLM
+  USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
   implicit none
   !-arguments-----------------------------------------------
   real, intent(in)  :: UL(PP_nVar)      !< left state
   real, intent(in)  :: UR(PP_nVar)      !< right state
+  real, intent(out) :: Fstar  (PP_nVar)
   real, intent(out) :: Dmatrix(PP_nVar,PP_nVar)
   real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
   !-local-variables-----------------------------------------
   ! Mean states
   real    :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
-  real    :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3)
+  real    :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3), pTilde
   ! Additional
-  REAL :: B2_L,B2_R !,B2Avg
-  REAL :: u2_L,u2_R !,u2Avg
-  REAL            :: beta_R,beta_L
-  REAL            :: srho_L,srho_R
-  REAL            :: pTilde
+  REAL :: B2_L,B2_R,B2Avg
+  REAL :: u2_L,u2_R,u2Avg
+  REAL :: beta_R,beta_L
+  REAL :: srho_L,srho_R
+  REAL :: u1_B2Avg, uB_Avg
   !---------------------------------------------------------
   
   ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -1516,11 +1520,11 @@ pure subroutine EntropyStable9WaveFlux_DissipMatrices(UL,UR,Dmatrix,Rmatrix)
   rhoLN      = LN_MEAN( rho_L, rho_R)
   sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
   uAvg       = 0.5 * ( u_L +  u_R)
-!#  u2Avg      = 0.5 * (u2_L + u2_R)
+  u2Avg      = 0.5 * (u2_L + u2_R)
   BAvg       = 0.5 * ( B_L +  B_R)
-!#  B2Avg      = 0.5 * (B2_L + B2_R)
-!#  u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
-!#  uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
+  B2Avg      = 0.5 * (B2_L + B2_R)
+  u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+  uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
   betaAvg    = 0.5 * (beta_L + beta_R)                                                               
   pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
   
@@ -1528,13 +1532,34 @@ pure subroutine EntropyStable9WaveFlux_DissipMatrices(UL,UR,Dmatrix,Rmatrix)
   psiAvg     = 0.5*(psi_L+psi_R)
 #endif
   
-!#  pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+  pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+  
+  ! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*uAvg(1)
+Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
+Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
+Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
+#ifdef PP_GLM
+Fstar(6) = GLM_ch*psiAvg
+Fstar(9) = GLM_ch*BAvg(1)
+#endif
+
+Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
+           + SUM(uAvg(:)*Fstar(2:4)) &
+           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
+#ifdef PP_GLM
+                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
+#endif
+                   )
   
   call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
                                                   p_L,p_R,rho_L,rho_R,u_L,u_R)
   
   end ASSOCIATE
-end subroutine EntropyStable9WaveFlux_DissipMatrices
+end subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices
 
 pure subroutine EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
                                                   p_L,p_R,rho_L,rho_R,u_L,u_R)
@@ -1550,8 +1575,8 @@ pure subroutine EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,s
   real, intent(in)  :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3)
   !-local-variables-----------------------------------------
   real    :: Tmatrix(PP_nVar,PP_nVar)
-  REAL		:: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
-  REAL 		:: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN, u2Avg
+  REAL    :: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
+  REAL    :: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN, u2Avg
   real    :: LambdaMax, phi
   !---------------------------------------------------------
   
@@ -1840,7 +1865,7 @@ REAL            :: pTilde,p_L,p_R
 REAL            :: u_L(3),u_R(3)
 REAL            :: u1_B2Avg,uB_Avg
 REAL            :: V_jump(PP_nVar), V_jump_r(PP_nVar)
-REAL		:: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+REAL            :: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 ! Reconstructed values
 real :: srho_L_r,srho_R_r, u_L_r(3), u_R_r(3), u2_L_r, u2_R_r, B2_L_r, B2_R_r, p_L_r, p_R_r, beta_L_r, beta_R_r
 real :: RT_Vjump(PP_nVar), RT_Vjump_r(PP_nVar)

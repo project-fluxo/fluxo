@@ -78,6 +78,7 @@ PUBLIC:: RiemannSolverByHLL
 PUBLIC:: RiemannSolverByHLLC
 PUBLIC:: RiemannSolverByRoe
 PUBLIC:: RiemannSolver_EntropyStable
+PUBLIC:: RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
 PUBLIC:: RiemannSolver_VolumeFluxAverage
 PUBLIC:: RiemannSolver_EC_LLF
 PUBLIC:: RiemannSolver_ESM
@@ -1194,7 +1195,7 @@ END SUBROUTINE RiemannSolver_ESM
 
 
 !==================================================================================================================================
-!> Entropy stable Riemann solver, uses TwoPoint Entropy Conserving flux
+!> Entropy stable Riemann solver with full matrix dissipation (uses TwoPoint Entropy Conserving flux)
 !==================================================================================================================================
 SUBROUTINE RiemannSolver_EntropyStable(F,U_LL,U_RR)
 !MODULES
@@ -1268,7 +1269,49 @@ DO j=0,PP_N
   END DO ! i
 END DO ! j
 END SUBROUTINE RiemannSolver_EntropyStable
+!==================================================================================================================================
+!> Volume flux and dissipation matrices evaluation for entropy stable Riemann solver with full matrix dissipation 
+!> (uses TwoPoint Entropy Conserving flux)
+!==================================================================================================================================
+PURE SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices(U_LL,U_RR,F,Dhat,Rhat)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY: kappa,KappaM1
+!USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(1:5),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5)    ,INTENT(OUT)  :: F         !< numerical flux
+REAL,DIMENSION(1:5,1:5),INTENT(OUT)  :: Dhat,Rhat !< Dissipation matrices
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                 :: uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat
+!==================================================================================================================================
 
+CALL VolumeFluxAverage(F,U_LL,U_RR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+
+! Matrix of right eigenvectors
+RHat(1,:) = (/ 1.               , 1.                                      , 0.   ,  0.  , 1.               /)
+RHat(2,:) = (/ uHat - aHat      , uHat                                    , 0.   ,  0.  , uHat + aHat      /)
+RHat(3,:) = (/ vHat             , vHat                                    , 1.   ,  0.  , vHat             /)
+RHat(4,:) = (/ wHat             , wHat                                    , 0.   ,  1.  , wHat             /)
+RHat(5,:) = (/ HHat - uHat*aHat , 0.5*(uHat*uHat + vHat*vHat + wHat*wHat) , vHat , wHat , HHat + uHat*aHat /)
+! Diagonal scaling matrix where DHat = ABS(\Lambda)S
+DHat = 0.0
+DHat(1,1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
+DHat(2,2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
+DHat(3,3) = ABS(uHat)*p1Hat!*rhoHat
+DHat(4,4) = DHat(3,3)
+DHat(5,5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
+    
+!----------------------------------------------------------------------------------------------------------------------------------
+END SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
 
 !==================================================================================================================================
 !> Riemann solver, using simply the two point average chosen by the global parameter whichVolumeFlux
