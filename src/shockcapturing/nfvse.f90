@@ -1464,7 +1464,7 @@ contains
     integer  :: i,j,k
     real :: Rmat (PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Right eigenvalue matrix
     real :: RmatT(PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Right eigenvalue matrix transposed
-    real :: Dmat (PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Dissipation matrix
+    real :: Dmat         (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Dissipation matrix
     real :: wTildeL      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the left of *subcell*
     real :: wTildeR      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the right of *subcell*
     real :: w_L          (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Scaled entropy vars variables on the left of interface
@@ -1478,7 +1478,7 @@ contains
     real :: F_           (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
     real :: DummyF       (PP_nVar)                        ! Dummy variable to store the central flux when only the dissipation matrices are needed
     real :: Rmat0(PP_nVar,PP_nVar)
-    real :: Dmat0(PP_nVar,PP_nVar)
+    real :: Dmat0(PP_nVar)
     real :: w_L0         (PP_nVar,0:PP_N,0:PP_N)
     real :: w_R0         (PP_nVar,0:PP_N,0:PP_N)
 #if NONCONS
@@ -1517,7 +1517,7 @@ contains
         U_L = RotateState(U_(:,j,k,i  ),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
         U_R = RotateState(U_(:,j,k,i+1),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
         ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
         RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
@@ -1618,7 +1618,7 @@ contains
       ! Loop over DOFs on inner face
       do k=0, PP_N ; do j=0, PP_N
         ! Add the right amount of dissipation
-        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),matmul(Dmat(:,:,j,k,i),wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
+        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
         
         ! Rotate flux back to the physical frame
         call RotateFluxBack(F_(:,j,k,i),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
@@ -1679,7 +1679,7 @@ contains
         U_L = RotateState(U_(:,j,k,i  ),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
         U_R = RotateState(U_(:,j,k,i+1),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
         ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
         RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
@@ -1780,7 +1780,7 @@ contains
       ! Loop over DOFs on inner face
       do k=0, PP_N ; do j=0, PP_N
         ! Add the right amount of dissipation
-        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),matmul(Dmat(:,:,j,k,i),wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
+        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
         
         ! Rotate flux back to the physical frame
         call RotateFluxBack(F_(:,j,k,i),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
@@ -1839,7 +1839,7 @@ contains
         U_L = RotateState(U (:,j,k,i  ),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
         U_R = RotateState(U (:,j,k,i+1),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
         ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,H (:,j,k,i),Dmat(:,:,j,k,i),Rmat(:,:,j,k,i))
+        call RiemannVolFluxAndDissipMatrices(U_L,U_R,H (:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
         RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
         ! get entropy vars from rotated state
         v_L = ConsToEntropy(U_L)
@@ -1940,7 +1940,7 @@ contains
       ! Loop over DOFs on inner face
       do k=0, PP_N ; do j=0, PP_N
         ! Add the right amount of dissipation
-        H (:,j,k,i) = H (:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),matmul(Dmat(:,:,j,k,i),wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
+        H (:,j,k,i) = H (:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
         
         ! Rotate flux back to the physical frame
         call RotateFluxBack(H (:,j,k,i),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))

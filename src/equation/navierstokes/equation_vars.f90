@@ -104,10 +104,11 @@ ABSTRACT INTERFACE
   END SUBROUTINE i_sub_SolveRiemannProblem
   
   SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
-    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL !<  left conservative state  
-    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR !< right conservative state
-    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F     !< Volume flux
-    REAL,DIMENSION(PP_nVar,PP_nVar),INTENT(OUT) :: Dmatrix,Rmatrix  !< numerical flux
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL    !<  left conservative state  
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR    !< right conservative state
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F        !< Volume flux
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: Dmatrix  !< Dissipation matrix
+    REAL,DIMENSION(PP_nVar,PP_nVar),INTENT(OUT) :: Rmatrix  !< Right eigenvector matrix
   END SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices
   
   PURE SUBROUTINE i_sub_VolumeFluxAverage(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)

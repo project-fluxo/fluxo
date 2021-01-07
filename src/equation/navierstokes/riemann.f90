@@ -1223,11 +1223,9 @@ REAL,DIMENSION(1:5)  :: Dhat,vR,vL,vjump,diss
 !==================================================================================================================================
 DO j=0,PP_N
   DO i=0,PP_N
-! Compute entropy conserving flux
-!    CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
-!                                       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-    CALL VolumeFluxAverage(F_c,U_LL(:,i,j),U_RR(:,i,j),&
-                                       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+! Compute entropy conserving flux and the dissipation matrices
+    call RiemannSolver_EntropyStable_VolFluxAndDissipMatrices(U_LL(:,i,j),U_RR(:,i,j),F_c,Dhat,Rhat)
+    
 ! Get the entropy variables locally
     sRho_L = 1./U_LL(1,i,j)
     sRho_R = 1./U_RR(1,i,j)
@@ -1245,18 +1243,6 @@ DO j=0,PP_N
     vR(2:4)=  rho_pR*Vel_R(1:3)
     vR(5)  = -rho_pR
     vL(5)  = -rho_pL
-! Matrix of right eigenvectors
-    RHat(1,:) = (/ 1.               , 1.                                      , 0.   ,  0.  , 1.               /)
-    RHat(2,:) = (/ uHat - aHat      , uHat                                    , 0.   ,  0.  , uHat + aHat      /)
-    RHat(3,:) = (/ vHat             , vHat                                    , 1.   ,  0.  , vHat             /)
-    RHat(4,:) = (/ wHat             , wHat                                    , 0.   ,  1.  , wHat             /)
-    RHat(5,:) = (/ HHat - uHat*aHat , 0.5*(uHat*uHat + vHat*vHat + wHat*wHat) , vHat , wHat , HHat + uHat*aHat /)
-! Diagonal scaling matrix where DHat = ABS(\Lambda)S
-    DHat(1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
-    DHat(2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
-    DHat(3) = ABS(uHat)*p1Hat!*rhoHat
-    DHat(4) = DHat(3)
-    DHat(5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
 ! Compute the dissipation term RHat*DHat*RHat^T*[v]
     vJump = vR - vL
     diss  = RHat(1,:)*vJump(1) + RHat(2,:)*vJump(2) + RHat(3,:)*vJump(3) + RHat(4,:)*vJump(4) + RHat(5,:)*vJump(5)
@@ -1288,7 +1274,8 @@ REAL,DIMENSION(1:5),INTENT(IN)    :: U_RR  !< rotated conservative state right
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(1:5)    ,INTENT(OUT)  :: F         !< numerical flux
-REAL,DIMENSION(1:5,1:5),INTENT(OUT)  :: Dhat,Rhat !< Dissipation matrices
+REAL,DIMENSION(1:5)    ,INTENT(OUT)  :: Dhat      !< Dissipation matrix
+REAL,DIMENSION(1:5,1:5),INTENT(OUT)  :: Rhat      !< Right-eigenvector matrix
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                 :: uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat
@@ -1304,11 +1291,11 @@ RHat(4,:) = (/ wHat             , wHat                                    , 0.  
 RHat(5,:) = (/ HHat - uHat*aHat , 0.5*(uHat*uHat + vHat*vHat + wHat*wHat) , vHat , wHat , HHat + uHat*aHat /)
 ! Diagonal scaling matrix where DHat = ABS(\Lambda)S
 DHat = 0.0
-DHat(1,1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
-DHat(2,2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
-DHat(3,3) = ABS(uHat)*p1Hat!*rhoHat
-DHat(4,4) = DHat(3,3)
-DHat(5,5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
+DHat(1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
+DHat(2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
+DHat(3) = ABS(uHat)*p1Hat!*rhoHat
+DHat(4) = DHat(3)
+DHat(5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
     
 !----------------------------------------------------------------------------------------------------------------------------------
 END SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices

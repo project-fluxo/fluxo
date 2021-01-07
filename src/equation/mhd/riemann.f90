@@ -1165,9 +1165,9 @@ USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage !pointer to EC routine
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
+!##ifdef PP_GLM
+!#USE MOD_Equation_Vars,ONLY:GLM_ch
+!##endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1196,7 +1196,7 @@ REAL            :: psiAvg
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
 #ifdef PP_GLM
-              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
             psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
@@ -1342,20 +1342,19 @@ END SUBROUTINE EntropyStableByLLF
 
 
 #ifdef PP_GLM
+!==================================================================================================================================
+!> The following three routines are for the entropy stable 9wave solver. 
+!>    See: Derigs et al. (2018). "Ideal GLM-MHD: About the entropy consistent nine-wave magnetic field divergence diminishing ideal
+!>         magnetohydrodynamics equations. Journal of Computational Physics, 364, 420-467."
+!> ATTENTION: 1) Central flux is entropy conservaing for MHD, kinetic Energy conservation only in the Euler case
+!>            2) mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!>            3) Dissipation for each characteristic wave seperately
+!==================================================================================================================================
 SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
-!==================================================================================================================================
-! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
-! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
-! dissipation for each characteristic wave seperately
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1366,84 +1365,35 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL            :: sbetaLN,beta_R,beta_L,betaAvg
-REAL            :: srho_L,srho_R,rhoLN
-REAL            :: B2_L,B2_R,B2Avg
-REAL            :: u2_L,u2_R,u2Avg
-REAL            :: pTilde,p_L,p_R,pAvg
+REAL            :: beta_R,beta_L
+REAL            :: srho_L,srho_R
+REAL            :: u2_L,u2_R
+REAL            :: p_L,p_R
 REAL            :: u_L(3),u_R(3)
-REAL            :: BAvg(3),uAvg(3)
-REAL            :: u1_B2Avg,uB_Avg
 REAL            :: V_jump(PP_nVar)
-REAL            :: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
-#ifdef PP_GLM
-REAL            :: psiAvg
-#endif
+REAL            :: Dmatrix(PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+!
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
 #ifdef PP_GLM
-              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
-            psi_L =>UL(9)   ,  psi_R =>UR(9), &
+              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
               B_L => UL(6:8),    B_R => UR(6:8)  )
-! Get the inverse density, velocity, and pressure on left and right
+
+! Get auxiliar variables
 srho_L=1./rho_L
 srho_R=1./rho_R
 u_L = rhoU_L(:)*srho_L
 u_R = rhoU_R(:)*srho_R
-
 u2_L = SUM(u_L(:)*u_L(:))
 u2_R = SUM(u_R(:)*u_R(:))
-B2_L = SUM(B_L(:)*B_L(:))
-B2_R = SUM(B_R(:)*B_R(:))
-
-!beta=rho/(2*p)
-p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
-p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
-beta_L = 0.5*rho_L/p_L
+p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*SUM(B_L(:)*B_L(:))))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*SUM(B_R(:)*B_R(:))))
+beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
 beta_R = 0.5*rho_R/P_R
-
-! Get the averages for the numerical flux
-
-rhoLN      = LN_MEAN( rho_L, rho_R)
-sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
-uAvg       = 0.5 * ( u_L +  u_R)
-u2Avg      = 0.5 * (u2_L + u2_R)
-BAvg       = 0.5 * ( B_L +  B_R)
-B2Avg      = 0.5 * (B2_L + B2_R)
-u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
-uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
-betaAvg    = 0.5 * (beta_L + beta_R)                                                               
-pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
-pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
-#ifdef PP_GLM
-psiAvg     = 0.5*(psi_L+psi_R)
-#endif
-
-! Entropy conserving and kinetic energy conserving flux
-Fstar(1) = rhoLN*uAvg(1)
-Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
-Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
-Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
-Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
-Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
-#ifdef PP_GLM
-Fstar(6) = GLM_ch*psiAvg
-Fstar(9) = GLM_ch*BAvg(1)
-#endif
-
-Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
-           + SUM(uAvg(:)*Fstar(2:4)) &
-           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
-                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
-#ifdef PP_GLM
-                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
-#endif
-                   )
-
 
 ! Jump in entropy vars
 V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
@@ -1452,20 +1402,19 @@ V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
     
-    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
-                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
-    
-    RT = TRANSPOSE(Rmatrix)
+call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+RT = TRANSPOSE(Rmatrix)
 
-    ! Compute entropy-stable fluxes
-    Fstar = Fstar - 0.5*MATMUL(MATMUL(Rmatrix,MATMUL(Dmatrix,RT)),V_jump)
-
+! Compute entropy-stable fluxes
+Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*MATMUL(RT,V_jump))
 
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFlux
-
+!==================================================================================================================================
+!> Computation of the entropy conserving flux and the dissipation matrices for the entropy stable 9wave solver
+!==================================================================================================================================
 pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
-  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1
+  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1, Kappa
   USE MOD_Flux_Average, ONLY:LN_MEAN
 #ifdef PP_GLM
   USE MOD_Equation_Vars,ONLY:GLM_ch
@@ -1475,18 +1424,22 @@ pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmat
   real, intent(in)  :: UL(PP_nVar)      !< left state
   real, intent(in)  :: UR(PP_nVar)      !< right state
   real, intent(out) :: Fstar  (PP_nVar)
-  real, intent(out) :: Dmatrix(PP_nVar,PP_nVar)
+  real, intent(out) :: Dmatrix(PP_nVar)
   real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
   !-local-variables-----------------------------------------
   ! Mean states
   real    :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
-  real    :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3), pTilde
+  real    :: p_L,p_R,u_L(3), u_R(3), pTilde
   ! Additional
   REAL :: B2_L,B2_R,B2Avg
   REAL :: u2_L,u2_R,u2Avg
   REAL :: beta_R,beta_L
   REAL :: srho_L,srho_R
   REAL :: u1_B2Avg, uB_Avg
+  real :: Tmatrix(PP_nVar)
+  REAL :: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
+  REAL :: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN
+  real :: LambdaMax, phi
   !---------------------------------------------------------
   
   ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -1498,25 +1451,20 @@ pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmat
                 E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
                 B_L => UL(6:8),    B_R => UR(6:8)  )
-  ! Get the inverse density, velocity, and pressure on left and right
+  ! Get auxiliar variables
   srho_L=1./rho_L
   srho_R=1./rho_R
   u_L = rhoU_L(:)*srho_L
   u_R = rhoU_R(:)*srho_R
-
   u2_L = SUM(u_L(:)*u_L(:))
   u2_R = SUM(u_R(:)*u_R(:))
   B2_L = SUM(B_L(:)*B_L(:))
   B2_R = SUM(B_R(:)*B_R(:))
-
-  !beta=rho/(2*p)
-  p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
   p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
-  beta_L = 0.5*rho_L/p_L
+  beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
   beta_R = 0.5*rho_R/P_R
 
   ! Get the averages for the numerical flux
-
   rhoLN      = LN_MEAN( rho_L, rho_R)
   sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
   uAvg       = 0.5 * ( u_L +  u_R)
@@ -1527,11 +1475,9 @@ pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmat
   uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
   betaAvg    = 0.5 * (beta_L + beta_R)                                                               
   pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
-  
 #ifdef PP_GLM
   psiAvg     = 0.5*(psi_L+psi_R)
 #endif
-  
   pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
   
   ! Entropy conserving and kinetic energy conserving flux
@@ -1554,38 +1500,12 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
                    +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
 #endif
                    )
-  
-  call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
-                                                  p_L,p_R,rho_L,rho_R,u_L,u_R)
-  
-  end ASSOCIATE
-end subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices
-
-pure subroutine EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg, &
-                                                  p_L,p_R,rho_L,rho_R,u_L,u_R)
-  USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1
-#ifdef PP_GLM
-  USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
-  implicit none
-  !-arguments-----------------------------------------------
-  real, intent(out) :: Dmatrix(PP_nVar,PP_nVar)
-  real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
-  real, intent(in)  :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
-  real, intent(in)  :: p_L,p_R,rho_L,rho_R,u_L(3), u_R(3)
-  !-local-variables-----------------------------------------
-  real    :: Tmatrix(PP_nVar,PP_nVar)
-  REAL    :: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
-  REAL    :: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN, u2Avg
-  real    :: LambdaMax, phi
-  !---------------------------------------------------------
-  
   ! MHD waves selective dissipation
 
     ! Compute additional averages
     rhoAvg = 0.5*(rho_L + rho_R)
     pLN = 0.5*rhoLN*sbetaLN
-    u2Avg = u_L(1)*u_R(1) + u_L(2)*u_R(2) + u_L(3)*u_R(3)
+    u2Avg = u_L(1)*u_R(1) + u_L(2)*u_R(2) + u_L(3)*u_R(3)  ! Redefinition of u2Avg -> \bar{\norm{u}^2}
     srhoLN = 1./rhoLN
     aA = SQRT(kappa*pAvg/rhoLN)
     aLN = SQRT(kappa*pLN/rhoLN)
@@ -1776,73 +1696,68 @@ pure subroutine EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,s
     ! A blend of the 9waves solver and LLF
       phi = sqrt(ABS(1.0-(p_R*rho_R/(p_L*rho_L)))/(1.0+(p_R*rho_R/(p_L*rho_L))))
       LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
-      Dmatrix = 0.0
-      Dmatrix(1,1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
-      Dmatrix(2,2) = (1.-phi)*ABS( uAvg(1) + ca ) + phi*LambdaMax
-      Dmatrix(3,3) = (1.-phi)*ABS( uAvg(1) + cs ) + phi*LambdaMax
-      Dmatrix(4,4) = (1.-phi)*ABS( uAvg(1) + GLM_ch ) + phi*LambdaMax
-      Dmatrix(5,5) = (1.-phi)*ABS( uAvg(1)      ) + phi*LambdaMax
-      Dmatrix(6,6) = (1.-phi)*ABS( uAvg(1) - GLM_ch ) + phi*LambdaMax
-      Dmatrix(7,7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
-      Dmatrix(8,8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
-      Dmatrix(9,9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
+      
+      Dmatrix(1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
+      Dmatrix(2) = (1.-phi)*ABS( uAvg(1) + ca ) + phi*LambdaMax
+      Dmatrix(3) = (1.-phi)*ABS( uAvg(1) + cs ) + phi*LambdaMax
+      Dmatrix(4) = (1.-phi)*ABS( uAvg(1) + GLM_ch ) + phi*LambdaMax
+      Dmatrix(5) = (1.-phi)*ABS( uAvg(1)      ) + phi*LambdaMax
+      Dmatrix(6) = (1.-phi)*ABS( uAvg(1) - GLM_ch ) + phi*LambdaMax
+      Dmatrix(7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
+      Dmatrix(8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
+      Dmatrix(9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
       
     ! Pure 9waves solver (no LLF)
-!#      Dmatrix = 0.0
-!#      Dmatrix(1,1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
-!#      Dmatrix(2,2) = ABS( uAvg(1) + ca ) ! + Alfven wave
-!#      Dmatrix(3,3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
-!#      Dmatrix(4,4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
-!#      Dmatrix(5,5) = ABS( uAvg(1)      ) ! / Entropy wave
-!#      Dmatrix(6,6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
-!#      Dmatrix(7,7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
-!#      Dmatrix(8,8) = ABS( uAvg(1) - ca ) ! - Alfven wave
-!#      Dmatrix(9,9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
+!#      
+!#      Dmatrix(1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
+!#      Dmatrix(2) = ABS( uAvg(1) + ca ) ! + Alfven wave
+!#      Dmatrix(3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
+!#      Dmatrix(4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
+!#      Dmatrix(5) = ABS( uAvg(1)      ) ! / Entropy wave
+!#      Dmatrix(6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
+!#      Dmatrix(7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
+!#      Dmatrix(8) = ABS( uAvg(1) - ca ) ! - Alfven wave
+!#      Dmatrix(9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
     
     ! LLF solver
 !#      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
-!#      Dmatrix = 0.0
-!#      Dmatrix(1,1) = LambdaMax
-!#      Dmatrix(2,2) = LambdaMax
-!#      Dmatrix(3,3) = LambdaMax
-!#      Dmatrix(4,4) = LambdaMax
-!#      Dmatrix(5,5) = LambdaMax
-!#      Dmatrix(6,6) = LambdaMax
-!#      Dmatrix(7,7) = LambdaMax
-!#      Dmatrix(8,8) = LambdaMax
-!#      Dmatrix(9,9) = LambdaMax
+!#      
+!#      Dmatrix(1) = LambdaMax
+!#      Dmatrix(2) = LambdaMax
+!#      Dmatrix(3) = LambdaMax
+!#      Dmatrix(4) = LambdaMax
+!#      Dmatrix(5) = LambdaMax
+!#      Dmatrix(6) = LambdaMax
+!#      Dmatrix(7) = LambdaMax
+!#      Dmatrix(8) = LambdaMax
+!#      Dmatrix(9) = LambdaMax
     
     ! Diagonal scaling matrix as described in Winters et al., eq. (4.15)
     Tmatrix = 0.0
-    Tmatrix(1,1) = 0.5/kappa/rhoLN ! + f
-    Tmatrix(2,2) = 0.25/betaAvg/rhoLN/rhoLN ! + a
-    Tmatrix(3,3) = Tmatrix(1,1) ! + s
-    Tmatrix(4,4) = 0.25 / betaAvg ! + GLM
-    Tmatrix(5,5) = rhoLN*kappaM1/kappa ! E
-    Tmatrix(6,6) = Tmatrix(4,4) ! - GLM
-    Tmatrix(7,7) = Tmatrix(1,1) ! - s
-    Tmatrix(8,8) = Tmatrix(2,2) ! - a
-    Tmatrix(9,9) = Tmatrix(1,1) ! - f
+    Tmatrix(1) = 0.5/kappa/rhoLN ! + f
+    Tmatrix(2) = 0.25/betaAvg/rhoLN/rhoLN ! + a
+    Tmatrix(3) = Tmatrix(1) ! + s
+    Tmatrix(4) = 0.25 / betaAvg ! + GLM
+    Tmatrix(5) = rhoLN*kappaM1/kappa ! E
+    Tmatrix(6) = Tmatrix(4) ! - GLM
+    Tmatrix(7) = Tmatrix(1) ! - s
+    Tmatrix(8) = Tmatrix(2) ! - a
+    Tmatrix(9) = Tmatrix(1) ! - f
 
     ! Scale D matrix
-    Dmatrix = MATMUL(Dmatrix, Tmatrix)
-  
-end subroutine EntropyStable9WaveFlux_DissipMatrices_withMean
+    Dmatrix = Dmatrix*Tmatrix
+end ASSOCIATE
+end subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices  
 
+!==================================================================================================================================
+!> Computation of the entropy stable 9waves Riemann solver when additional reconstructed states (UL_r,UR_r) are available. These 
+!> states are used for the dissipation terms if they prove to provide entropy stability
+!==================================================================================================================================
 SUBROUTINE EntropyStable9WaveFluxRecons(UL,UR,UL_r,UR_r,Fstar)
-!==================================================================================================================================
-! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
-! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
-! mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
-! dissipation for each characteristic wave seperately
-!==================================================================================================================================
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1855,92 +1770,44 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR_r     !< right state (reconstructed)
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL            :: sbetaLN,betaAvg,rhoLN,pAvg,BAvg(3),uAvg(3)
-#ifdef PP_GLM
-REAL            :: psiAvg
-#endif
-REAL            :: B2_L,B2_R,B2Avg,beta_R,beta_L
-REAL            :: u2_L,u2_R,u2Avg,srho_L,srho_R
-REAL            :: pTilde,p_L,p_R
+REAL            :: beta_R,beta_L
+REAL            :: u2_L,u2_R,srho_L,srho_R
+REAL            :: p_L,p_R
 REAL            :: u_L(3),u_R(3)
-REAL            :: u1_B2Avg,uB_Avg
 REAL            :: V_jump(PP_nVar), V_jump_r(PP_nVar)
-REAL            :: Dmatrix(PP_nVar,PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+REAL            :: Dmatrix(PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+! For continuous switch
+!real :: alpha 
 ! Reconstructed values
-real :: srho_L_r,srho_R_r, u_L_r(3), u_R_r(3), u2_L_r, u2_R_r, B2_L_r, B2_R_r, p_L_r, p_R_r, beta_L_r, beta_R_r
+real :: srho_L_r,srho_R_r, u_L_r(3), u_R_r(3), u2_L_r, u2_R_r, p_L_r, p_R_r, beta_L_r, beta_R_r
 real :: RT_Vjump(PP_nVar), RT_Vjump_r(PP_nVar)
-!#! Reconstructed means:
-!#real :: Dmatrix_r(PP_nVar,PP_nVar),Rmatrix_r(PP_nVar,PP_nVar),RT_r(PP_nVar,PP_nVar)
-!#REAL            :: sbetaLN_r,betaAvg_r,rhoLN_r,pAvg_r,BAvg_r(3),uAvg_r(3)
-!##ifdef PP_GLM
-!#REAL            :: psiAvg_r
-!##endif
-real :: alpha
+!For second variant (reconstructed means):
+!real :: Dmatrix_r(PP_nVar),Rmatrix_r(PP_nVar,PP_nVar),RT_r(PP_nVar,PP_nVar), Fstar_r(PP_nVar)
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
 #ifdef PP_GLM
-              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
             psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
               B_L => UL(6:8),    B_R => UR(6:8)  )
-! Get the inverse density, velocity, and pressure on left and right
+
+! Get jump in entropy vars of the nodal solution
+!***********************************************
+
+! Get auxiliar variables
 srho_L=1./rho_L
 srho_R=1./rho_R
 u_L = rhoU_L(:)*srho_L
 u_R = rhoU_R(:)*srho_R
-
 u2_L = SUM(u_L(:)*u_L(:))
 u2_R = SUM(u_R(:)*u_R(:))
-B2_L = SUM(B_L(:)*B_L(:))
-B2_R = SUM(B_R(:)*B_R(:))
-
-!beta=rho/(2*p)
-p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
-p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
-beta_L = 0.5*rho_L/p_L
+p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*SUM(B_L(:)*B_L(:))))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*SUM(B_R(:)*B_R(:))))
+beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
 beta_R = 0.5*rho_R/P_R
-
-! Get the averages for the numerical flux
-u2Avg      = 0.5 * (u2_L + u2_R)
-
-rhoLN      = LN_MEAN( rho_L, rho_R)
-sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
-uAvg       = 0.5 * ( u_L +  u_R)
-BAvg       = 0.5 * ( B_L +  B_R)
-B2Avg      = 0.5 * (B2_L + B2_R)
-u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
-uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
-betaAvg    = 0.5 * (beta_L + beta_R)                                                               
-pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
-pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
-#ifdef PP_GLM
-psiAvg     = 0.5*(psi_L+psi_R)
-#endif
-
-! Entropy conserving and kinetic energy conserving flux
-Fstar(1) = rhoLN*uAvg(1)
-Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
-Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
-Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
-Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
-Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
-#ifdef PP_GLM
-Fstar(6) = GLM_ch*psiAvg
-Fstar(9) = GLM_ch*BAvg(1)
-#endif
-
-Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
-           + SUM(uAvg(:)*Fstar(2:4)) &
-           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
-                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
-#ifdef PP_GLM
-                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
-#endif
-                   )
-
 
 ! Jump in entropy vars
 V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
@@ -1949,8 +1816,8 @@ V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
-! Reconstructed solution
-!***********************
+! Get jump in entropy vars of reconstructed solution
+!***************************************************
 ASSOCIATE(  rho_L_r => UL_r(1)  ,  rho_R_r => UR_r(1), &
            rhoU_L_r => UL_r(2:4), rhoU_R_r => UR_r(2:4), &
 #ifdef PP_GLM
@@ -1968,12 +1835,10 @@ u_R_r = rhoU_R_r(:)*srho_R_r
 
 u2_L_r = SUM(u_L_r(:)*u_L_r(:))
 u2_R_r = SUM(u_R_r(:)*u_R_r(:))
-B2_L_r = SUM(B_L_r(:)*B_L_r(:))
-B2_R_r = SUM(B_R_r(:)*B_R_r(:))
 
 !beta=rho/(2*p)
-p_L_r    = kappaM1*(E_L_r - 0.5*(rho_L_r*u2_L_r+smu_0*B2_L_r))
-p_R_r    = kappaM1*(E_R_r - 0.5*(rho_R_r*u2_R_r+smu_0*B2_R_r))
+p_L_r    = kappaM1*(E_L_r - 0.5*(rho_L_r*u2_L_r+smu_0*SUM(B_L_r(:)*B_L_r(:))))
+p_R_r    = kappaM1*(E_R_r - 0.5*(rho_R_r*u2_R_r+smu_0*SUM(B_R_r(:)*B_R_r(:))))
 beta_L_r = 0.5*rho_L_r/p_L_r
 beta_R_r = 0.5*rho_R_r/P_R_r
 
@@ -1985,45 +1850,9 @@ V_jump_r(2:4)       =  2.0*(beta_R_r*u_R_r(:)       -beta_L_r*u_L_r(:))        !
 V_jump_r(5)         = -2.0*(beta_R_r                -beta_L_r     )        !-2*beta
 V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) ! 2*beta*B
     
-    !    (1) R and T matrix from reconstructed state .... This does not seem to work very well (the method falls to first order almost always!!)
-    !    -------------------------------------------
-      
-!#    ! mean values in reconstructed sol
-!#    sbetaLN_r    = 1./LN_MEAN(beta_L_r,beta_R_r)
-!#    betaAvg_r    = 0.5 * (beta_L_r + beta_R_r)
-!#    rhoLN_r      = LN_MEAN( rho_L_r, rho_R_r)
-!#    pAvg_r       = 0.5*(rho_L_r+rho_R_r)/(beta_L_r+beta_R_r) !rhoMEAN/(2*betaMEAN) 
-!#    BAvg_r       = 0.5 * ( B_L_r +  B_R_r)
-!#    uAvg_r       = 0.5 * ( u_L_r +  u_R_r)
-!#    #ifdef PP_GLM
-!#    psiAvg_r     = 0.5*(psi_L_r+psi_R_r)
-!#    #endif
-    
-!#    ! Get dissipation matrices for reconstructed state
-!#    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix_r,Rmatrix_r,sbetaLN_r,betaAvg_r,rhoLN_r,BAvg_r,uAvg_r,pAvg_r,psiAvg_r,&
-!#                                           p_L_r,p_R_r,rho_L_r,rho_R_r,u_L_r, u_R_r)
-!#    RT_r = TRANSPOSE(Rmatrix_r)
-    
-!#    RT_Vjump   = matmul(RT_r,V_jump)
-!#    RT_Vjump_r = matmul(RT_r,V_jump_r)
-    
-!#    if ( any(RT_Vjump*RT_Vjump_r < 1.e-10) ) then
-!#      call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
-!#                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
-!#      RT = TRANSPOSE(Rmatrix)
-      
-!#      RT_Vjump   = matmul(RT,V_jump)
-      
-!#      ! Compute entropy-stable fluxes
-!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump))
-!#    else
-!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix_r,MATMUL(Dmatrix_r,RT_Vjump_r))
-!#    end if
-    
-    !   (2) R and T matrix from nodal values
-!   --------------------------------
-    call EntropyStable9WaveFlux_DissipMatrices_withMean(Dmatrix,Rmatrix,sbetaLN,betaAvg,rhoLN,BAvg,uAvg,pAvg,psiAvg,&
-                                           p_L,p_R,rho_L,rho_R,u_L, u_R)
+!   First variant: D and R matrices are computed from nodal values
+!   --------------------------------------------------------------
+    call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
     RT = TRANSPOSE(Rmatrix)
     
     RT_Vjump   = matmul(RT,V_jump)
@@ -2032,26 +1861,48 @@ V_jump_r(6:PP_nVar) =  2.0*(beta_R_r*UR_r(6:PP_nVar)-beta_L_r*UL_r(6:PP_nVar)) !
     ! Discrete switch    
     if ( any(RT_Vjump*RT_Vjump_r < -1.e-10) ) then
       ! Compute entropy-stable fluxes
-      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump))
+      Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*RT_Vjump)
     else
-      Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix,RT_Vjump_r))
+      Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*RT_Vjump_r)
     end if
     
     ! Continuous switch
 !    alpha = minval(RT_Vjump*RT_Vjump_r)
 !    if (alpha <= 0.0) then
 !      alpha = 0.0
-!    elseif(alpha <= 10000.0*epsilon(1.0)) then
-!      alpha = alpha*0.0001/epsilon(1.0)
+!    elseif(alpha <= 1000.0*epsilon(1.0)) then
+!      alpha = alpha*0.001/epsilon(1.0)
 !    else
 !      alpha = 1. !exp(-epsilon(1.0)/(alpha))
 !    end if
 !    Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix, alpha*RT_Vjump_r + (1.-alpha)*RT_Vjump  ))
-
+    
+    
+!    Second variant: R and D matrices computed from reconstructed state
+!      *This does not seem to work very well (the method falls to first order almost always!!)
+!    -----------------------------------------------------------------------------------------
+    
+!#    ! Get dissipation matrices for reconstructed state
+!#    call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+!#    call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL_r,UR_r,Fstar_r,Dmatrix_r,Rmatrix_r)
+!#    RT_r = TRANSPOSE(Rmatrix_r)
+    
+!#    RT_Vjump   = matmul(RT_r,V_jump)
+!#    RT_Vjump_r = matmul(RT_r,V_jump_r)
+    
+!#    if ( any(RT_Vjump*RT_Vjump_r < 1.e-10) ) then
+!#      RT = TRANSPOSE(Rmatrix)
+      
+!#      RT_Vjump   = matmul(RT,V_jump)
+!#      ! Compute entropy-stable fluxes
+!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*RT_Vjump)
+!#    else
+!#      Fstar = Fstar - 0.5*MATMUL(Rmatrix_r,Dmatrix_r*RT_Vjump_r)
+!#    end if
+    
 end associate
 END ASSOCIATE 
 END SUBROUTINE EntropyStable9WaveFluxRecons
-
 
 #endif
 

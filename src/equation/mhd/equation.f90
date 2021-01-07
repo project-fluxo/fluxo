@@ -438,58 +438,6 @@ DO iElem=1,nElems
 
 END DO ! iElem=1,PP_nElems
 
-! test
-!  tau_max = 127.6
-!  DO iElem=1,nElems
-!    IF (Elem_inCyl(iElem)) THEN
-!      tau=tau_max
-!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!        U_in(1,i,j,k,iElem)=tau
-!      END DO; END DO; END DO ! i,j,k
-!    ELSE
-!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!        r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
-!	h = 150.0/1820.0
-!	tau = tau_max*(EXP(1.0-r)/h)
-!        U_in(1,i,j,k,iElem)=tau
-!      END DO; END DO; END DO ! i,j,k
-!    END IF
-!  END DO
-
-
-!  s=0.5
-!  DO iElem=1,PP_nElems
-!    IF (Elem_inCyl(iElem)) THEN
-!      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!        U_in(1,i,j,k,iElem) = 4.
-!      END DO; END DO; END DO ! i,j,k
-!    ELSE        
-!        DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-!          tau=0.
-!          x=Elem_xGP(1,i,j,k,iElem)
-!          y=Elem_xGP(2,i,j,k,iElem)
-!          z=Elem_xGP(3,i,j,k,iElem)
-!          d1=x*x+y*y-1.
-!          d2=ABS(z-10.)-1.               
-!          IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .GE. -tol).AND.(d2 .LE. 0.5)) THEN
-!            !tau=16./PP_Pi*ATAN(2.*(0.5-SQRT(d1*d1+d2*d2)))
-!            tau=MAX(0.,s*ATANH(2.*((0.5-d1)*(0.5-d1)+(0.5-d2)*(0.5-d2))*TANH(4./s))) 
-!          ELSE
-!            IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .LE. 0.)) THEN
-!              !tau=16./PP_Pi*ATAN(2.*(0.5-d1))
-!              tau=s*ATANH(2.*(0.5-d1)*TANH(4./s))  
-!            ELSE
-!              IF ((d2 .GE. -tol).AND.(d2 .LE. 0.5).AND.(d1 .LE. 0.)) THEN
-!                !tau=16./PP_Pi*ATAN(2.*(0.5-d2))
-!                tau=s*ATANH(2.*(0.5-d2)*TANH(4./s))
-!              END IF
-!            END IF
-!          END IF
-!          U_in(1,i,j,k,iElem) = tau
-!        END DO; END DO; END DO ! i,j,k
-!   END IF 
-!  END DO
-
 END SUBROUTINE FillIni
 
 
