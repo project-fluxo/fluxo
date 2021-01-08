@@ -907,8 +907,16 @@ if(cases[0]==0 or (caseID in cases)) :
            ,"FLUXO_PARABOLIC_LIFTING_VAR","entropy_var"
           ])
   
-  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+  if(not dbg ) : 
+    stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                          stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+    # Extra runs
+    if (args.stage>0):
+      # TVD-ES à la Fjordholm and ReconsBoundaries=2
+      TEST=[]
+      TEST.extend(["freestream","parameter_freestream_mhd_SC_TVD-ES_Fjordholm.ini", "1.0e-12" ])
+      stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                           stage=2, run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -1096,12 +1104,14 @@ if(cases[0]==0 or (caseID in cases)) :
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TEST=[]
-TEST.extend(["freestream","parameter_freestream_navierstokes_SC.ini", "1.0e-12" ])
+TEST.extend(["freestream","parameter_freestream_navierstokes_SC_posit.ini", "1.0e-12" ])
+# This is actually not a free stream, but a shock at an almost zero density
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Test the FV positivity limiter
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-  pname="build_navierstokes_type2_nopara_SC"
+  pname="build_navierstokes_type2_nopara_SC_posit"
   print( "caseID: %d name: %s" % (caseID,pname) )
   
   options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -1113,15 +1123,42 @@ if(cases[0]==0 or (caseID in cases)) :
            ,"FLUXO_TESTCASE"         ,"default"
            ,"FLUXO_SHOCKCAPTURE"     ,"ON"
            ,"FLUXO_SHOCKCAP_NFVSE"   ,"ON"
-           ,"FLUXO_SHOCKINDICATOR"   ,"custom"
+           ,"FLUXO_SHOCK_NFVSE_CORR" ,"ON"
           ])
   
   if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                          stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TEST=[]
+TEST.extend(["freestream","parameter_freestream_navierstokes_SC_firstOrder.ini", "1.0e-12" ])
+# This is actually not a free stream, but a shock at an almost zero density
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Test the first-order FV method with Persson's indicator
 caseID=caseID+1
 if(cases[0]==0 or (caseID in cases)) :
-  pname="build_navierstokes_type2_br1_entr_vars_SC"
+  pname="build_navierstokes_type2_nopara_SC_firstOrder"
+  print( "caseID: %d name: %s" % (caseID,pname) )
+  
+  options=[]; options.extend(globopts) ; options.extend(baseopts)
+  options.extend([
+            "CMAKE_BUILD_TYPE"       ,"Release"
+           ,"FLUXO_DISCTYPE"         ,"2"
+           ,"FLUXO_DISC_NODETYPE"    ,"GAUSS-LOBATTO"
+           ,"FLUXO_PARABOLIC"        ,"OFF"
+           ,"FLUXO_TESTCASE"         ,"default"
+           ,"FLUXO_SHOCKCAPTURE"     ,"ON"
+           ,"FLUXO_SHOCKCAP_NFVSE"   ,"ON"
+          ])
+  
+  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                         stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Test the TVD reconstructed FV methods with random blending coefficients combined with a parabolic discretization
+caseID=caseID+1
+if(cases[0]==0 or (caseID in cases)) :
+  pname="build_navierstokes_type2_br1_entr_vars_SC_TVD"
   print( "caseID: %d name: %s" % (caseID,pname) )
   
   options=[]; options.extend(globopts) ; options.extend(baseopts)
@@ -1135,11 +1172,28 @@ if(cases[0]==0 or (caseID in cases)) :
            ,"FLUXO_TESTCASE"         ,"default"
            ,"FLUXO_SHOCKCAPTURE"     ,"ON"
            ,"FLUXO_SHOCKCAP_NFVSE"   ,"ON"
-           ,"FLUXO_SHOCKINDICATOR"   ,"dens"
           ])
-  
-  if(not dbg ) : stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+    
+  if(not dbg ) : 
+    # Simple TVD reconstruction with primitive variables and ReconsBoundaries=1
+    TEST=[]
+    TEST.extend(["freestream","parameter_freestream_navierstokes_SC_TVD.ini", "1.0e-12" ])
+    stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
                          stage=args.stage, run_test=TEST , mpi_procs = args.procs , err=builderr )
+    
+    # Extra runs
+    if (args.stage>0):
+      # TVD-ES reconstruction with primitive variables and entropy fix and ReconsBoundaries=2
+      TEST=[]
+      TEST.extend(["freestream","parameter_freestream_navierstokes_SC_TVD-ES_fix.ini", "1.0e-12" ])
+      stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                           stage=2, run_test=TEST , mpi_procs = args.procs , err=builderr )
+      
+      # TVD-ES à la Fjordholm and ReconsBoundaries=3
+      TEST=[]
+      TEST.extend(["freestream","parameter_freestream_navierstokes_SC_TVD-ES_Fjordholm.ini", "1.0e-12" ])
+      stat = test_fluxo(buildopts=options, case=caseID, project=pname, ntail = args.ntail ,\
+                           stage=2, run_test=TEST , mpi_procs = args.procs , err=builderr )
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 TEST=[]

@@ -175,7 +175,7 @@ contains
         end if
         
         select case(SubFVMethod)
-          case(2) ; Compute_FVFluxes => Compute_FVFluxes_2ndOrder
+          case(2) ; Compute_FVFluxes => Compute_FVFluxes_TVD
           case(3) 
             Compute_FVFluxes => Compute_FVFluxes_TVD2ES
             if ( .not. associated(RiemannVolFluxAndDissipMatrices)) then
@@ -783,7 +783,7 @@ contains
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux using a second-order reconstruction of the primitive variables
 !===================================================================================================================================
-  subroutine Compute_FVFluxes_2ndOrder(U, F , G , H , &
+  subroutine Compute_FVFluxes_TVD(U, F , G , H , &
 #if NONCONS
                                  FR, GR, HR, &
 #endif /*NONCONS*/
@@ -1140,7 +1140,7 @@ contains
     CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
 #endif /*NONCONS*/
     
-  end subroutine Compute_FVFluxes_2ndOrder
+  end subroutine Compute_FVFluxes_TVD
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs an entropy-stable FV consistent flux that is obtained with a central (not dissipative) 
 !> two-point flux evaluated at the nodal values (i.e. a first-order reconstruction) plus a dissipation term that uses a second-order 

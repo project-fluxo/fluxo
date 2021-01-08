@@ -169,7 +169,7 @@ variables:
     - cd tests; pwd
     - rm -rf dirx_4* log_4*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 400-499
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401,402,413,415 ;  fi
+    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401,402,413,416 ;  fi
     - mv dirx_4* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -230,7 +230,7 @@ variables:
     - rm -f freestream/log_4*.txt
     - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 400-499
-    - else python build_tests.py -p 2 -stage 2 -case 401,402,413,415 ;  fi
+    - else python build_tests.py -p 2 -stage 2 -case 401,402,413,416 ;  fi
   artifacts:
     <<: *common_arts
     paths: 

@@ -218,7 +218,7 @@ CALL DGTimeDerivative(t)
 IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
-  CALL Visualize(t,U, PrimVisuOpt = .TRUE.)
+  CALL Visualize(t,U)
 #if USE_AMR
   IF (UseAMR) THEN
     IF(nWriteDataAMR .GT. 0) THEN

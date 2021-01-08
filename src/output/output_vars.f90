@@ -36,6 +36,7 @@ INTEGER                         :: outputFormat=0        !< File format for visu
 INTEGER                         :: ASCIIOutputFormat=0   !< File format for ASCII output. 0: CSV, 1: Tecplot
 LOGICAL                         :: OutputInitIsDone=.FALSE.  !< marks whether output routines have been initialized
 LOGICAL                         :: doPrintStatusLine     !< flag indicating if status line should be printed
+LOGICAL                         :: PrimVisuDefault       !< flag indicating if the visualization routines output the primitive variables
 INTEGER                         :: nBoundingBoxes        !< number of visualization bounding boxes (default=0)
 REAL,ALLOCATABLE                :: VisuBoundingBox(:,:)  !< bounding boxes from input file, size (6,nBoundingBoxes)
                                                       !< with (xmin,xmax,ymin,ymax,zmin,zmax)
