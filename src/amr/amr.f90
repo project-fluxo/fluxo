@@ -899,7 +899,7 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
   USE MOD_DG_Vars,            ONLY: U
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP
 #if SHOCK_NFVSE
-  use MOD_ShockCapturing_Vars, only: alpha
+  use MOD_NFVSE_Vars        , only: alpha
 #endif /*SHOCK_NFVSE*/
   USE MOD_PreProc,            ONLY: PP_N
   USE, INTRINSIC :: ISO_C_BINDING

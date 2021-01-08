@@ -260,8 +260,7 @@ USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 #if SHOCK_NFVSE
-use MOD_NFVSE               ,only: VolInt_NFVSE
-use MOD_ShockCapturing      ,only: CalcBlendingCoefficient
+use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
 #if PP_DiscType==1
 USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv

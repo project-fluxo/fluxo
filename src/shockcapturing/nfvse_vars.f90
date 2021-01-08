@@ -23,7 +23,15 @@ module MOD_NFVSE_Vars
   implicit none
   
   private
-  public :: SubCellMetrics, SubCellMetrics_t, sWGP, MPIRequest_alpha, Fsafe, Fblen
+  public :: ComputeAlpha, alpha_max, alpha_min, ShockBlendCoef, sharpness, threshold, ModalThreshold
+  public :: SubCellMetrics, sWGP, alpha, alpha_Master, alpha_Slave
+  public :: SubCellMetrics_t
+#if MPI
+  public :: MPIRequest_alpha
+#endif /*MPI*/
+#if NFVSE_CORR
+  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter
+#endif /*NFVSE_CORR*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
   public :: ReconsBoundaries, MPIRequest_Umaster
@@ -62,11 +70,23 @@ module MOD_NFVSE_Vars
   
 ! General
 ! -------
-  type(SubCellMetrics_t)    , allocatable :: SubCellMetrics(:)      !< Metric terms for the native sub-cell finite volumes
-  real                      , allocatable :: sWGP(:)                !< Inverse of the Gauss quadrature weights
-  integer                   , allocatable :: MPIRequest_alpha(:,:)  !< MPI request for the transfer of the blending coefficient
-                                                                    !< (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
-
+  integer                             :: ComputeAlpha     !< Method to compute alpha
+  real, target          , allocatable :: alpha(:)         !< Element-wise blending function (modified every time Ut is computed)
+  real                  , allocatable :: alpha_Master(:)  !< Blending function on master sides
+  real                  , allocatable :: alpha_Slave(:)   !< Blending function on slave sides
+  real                                :: threshold        !< Threshold for the shock indicator
+  real, parameter                     :: sharpness = log((1.0-1.e-4)/1.e-4) !< Heuristically obtained sharpness for the shock indicator
+  real                                :: alpha_max        !< Maximum blending factor
+  real                                :: alpha_min        !< Minimum blending factor
+  real                                :: ShockBlendCoef
+  integer                             :: ModalThreshold
+  type(SubCellMetrics_t), allocatable :: SubCellMetrics(:)      !< Metric terms for the native sub-cell finite volumes
+  real                  , allocatable :: sWGP(:)                !< Inverse of the Gauss quadrature weights
+#if MPI
+  integer               , allocatable :: MPIRequest_alpha(:,:)  !< MPI request for the transfer of the blending coefficient
+                                                                !  (nNbProcs,4)... 1: send slave, 2: send master, 3: receive slave, 4, receive master
+#endif /*MPI*/
+  
 ! Definition of the tangent directions for the "inner faces" (note that they differ from the definition of TangDirs in MOD_Mesh_Vars)
 ! ----------------------------------------------------------
   INTEGER,PARAMETER :: TanDirs1(6)  = (/ 1 , 1 , 2 , 1 , 2 , 1 /) !< first tangential vector direction for local "inner faces"
@@ -74,9 +94,14 @@ module MOD_NFVSE_Vars
   
 ! For the positivity limiter
 ! --------------------------
-  real                      , allocatable :: Fsafe(:,:,:,:,:)
-  real                      , allocatable :: Fblen(:,:,:,:,:)
-  
+#if NFVSE_CORR
+  real, allocatable :: Fsafe(:,:,:,:,:)
+  real, allocatable :: Fblen(:,:,:,:,:)
+  real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
+  real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
+  integer           :: PositMaxIter
+#endif /*NFVSE_CORR*/
+
 ! For the FV method
 ! -----------------
   integer                                    :: SubFVMethod

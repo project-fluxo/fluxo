@@ -285,7 +285,10 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
 #if SHOCK_NFVSE
-use MOD_ShockCapturing_Vars ,only: alpha, alpha_old
+use MOD_NFVSE_Vars ,only: alpha
+#if NFVSE_CORR
+use MOD_NFVSE_Vars ,only: alpha_old
+#endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems

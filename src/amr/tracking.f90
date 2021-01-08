@@ -115,8 +115,7 @@ end subroutine
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal, AMR_Indicator
         USE MOD_P4EST,                  ONLY: SaveP4est
 #if SHOCK_NFVSE
-        use MOD_ShockCapturing_Vars,    only: alpha, alpha_max
-        use MOD_NFVSE_Vars         ,    only: SpacePropFactor
+        use MOD_NFVSE_Vars,             only: alpha, alpha_max, SpacePropFactor
 #endif /*SHOCK_NFVSE*/
         ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE

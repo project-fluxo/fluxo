@@ -33,8 +33,8 @@ contains
 !> Prolong the blending coefficient to the faces
 !===================================================================================================================================
   subroutine ProlongBlendingCoeffToFaces()
-    use MOD_ShockCapturing_Vars, only: alpha, alpha_Master, alpha_Slave
-    use MOD_Mesh_Vars          , only: SideToElem, firstMortarInnerSide, nSides
+    use MOD_NFVSE_Vars, only: alpha, alpha_Master, alpha_Slave
+    use MOD_Mesh_Vars , only: SideToElem, firstMortarInnerSide, nSides
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
     integer :: sideID, ElemID, nbElemID
@@ -66,14 +66,15 @@ contains
 !> -> Then, the blending coefficient is set to alpha = max (alpha, alpha_neighbor)
 !===================================================================================================================================
   subroutine PropagateBlendingCoeff()
-    use MOD_ShockCapturing_Vars, only: alpha, alpha_Master, alpha_Slave
+    use MOD_NFVSE_Vars         , only: alpha, alpha_Master, alpha_Slave
     use MOD_Mesh_Vars          , only: firstSlaveSide, LastSlaveSide, SideToElem
     use MOD_Mesh_Vars          , only: firstMortarInnerSide, lastMortarInnerSide, firstMortarMPISide,lastMortarMPISide
-    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, SpacePropFactor
+    use MOD_NFVSE_Vars         , only: SpacePropFactor
     use MOD_Mesh_Vars          , only: MortarType,MortarInfo
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_MPI                , only: FinishExchangeMPIData
+    use MOD_NFVSE_Vars         , only: MPIRequest_alpha
 #endif /*MPI*/
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
@@ -151,7 +152,7 @@ contains
 !> Start the MPI communication of the blending coefficient (send and receive)
 !===================================================================================================================================
   subroutine Start_BlendCoeff_MPICommunication()
-    use MOD_ShockCapturing_Vars, only: alpha_Master, alpha_Slave
+    use MOD_NFVSE_Vars         , only: alpha_Master, alpha_Slave
     use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
     use MOD_Mesh_Vars          , only: firstSlaveSide, LastSlaveSide
     use MOD_NFVSE_Vars         , only: MPIRequest_alpha

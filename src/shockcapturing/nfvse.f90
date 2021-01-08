@@ -55,6 +55,7 @@ module MOD_NFVSE
   public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE
   public :: DefineParametersNFVSE
   public :: InitNFVSEAfterAdaptation
+  public :: CalcBlendingCoefficient
 #if NFVSE_CORR
   public :: Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
@@ -67,12 +68,24 @@ contains
     use MOD_ReadInTools,  only: prms
     implicit none
     
-    CALL prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
-                                              "  1: 1st order FV\n"//&
-                                              "  2: 2nd order TVD method (not ES)\n"//&
-                                              "  3: '2nd' order TVD-ES method (entropy fix)\n"//&
-                                              "  4: '2nd' order TVD-ES method (à la Fjordhom)\n"&
+    call prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
+                                              "   1: 1st order FV\n"//&
+                                              "   2: TVD method (not ES)\n"//&
+                                              "   3: TVD-ES method (entropy fix)\n"//&
+                                              "   4: TVD-ES method (à la Fjordhom)\n"&
                                              ,"1")
+                                             
+    call prms%CreateIntOption     (  "ComputeAlpha",  " Specifies how to compute the blending coefficient:\n"//&
+                                              "   1: Use the shock indicator\n"//&
+                                              "   2: Randomly assign the blending coef.\n"//&
+                                              "   3: Fixed blending coef. (alpha=ShockBlendCoef)"&
+                                             ,"1")
+    call prms%CreateRealOption(   "ShockBlendCoef",  " Fixed blending coefficient to be used with ComputeAlpha=3", "0.0")
+
+    call prms%CreateIntOption(     "ModalThreshold",  " Threshold function to be used for the indicator "//&
+                                                  "  1: 0.5 * 10.0 ** (-1.8 * (PP_N+1)**0.25)"//&
+                                                  "  2: 0.5 * 10.0 ** (-1.8 * PP_N**0.25)"&
+                                                 ,"1")
     call prms%CreateRealOption    (      "alpha_max", "Maximum value for the blending coefficient", "0.5")
     call prms%CreateRealOption    (      "alpha_min", "Minimum value for the blending coefficient (below this, alpha=0)", "0.01")
     call prms%CreateRealOption    ("SpacePropFactor", "Space propagation factor", "0.5")
@@ -83,6 +96,11 @@ contains
                                                        "   2: Central reconstruction\n"//&
                                                        "   3: Neighbor element reconstruction"&
                                                        ,"1")
+
+#if NFVSE_CORR
+    call prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
+    call prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
+#endif /*NFVSE_CORR*/
    
   end subroutine DefineParametersNFVSE
 !===================================================================================================================================
@@ -90,18 +108,10 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSE()
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, MPIRequest_alpha, Compute_FVFluxes, SubFVMethod, MPIRequest_Umaster
-    use MOD_NFVSE_Vars         , only: SpacePropFactor, SpacePropSweeps, TimeRelFactor
-    use MOD_NFVSE_Vars         , only: ReconsBoundaries, RECONS_NONE, RECONS_NEIGHBOR
+    use MOD_NFVSE_Vars
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
-    use MOD_NFVSE_Vars         , only: U_ext, sdxR, sdxL, rL, rR
-    use MOD_Mesh_Vars          , only: nElems, isMortarMesh
+    USE MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh, firstMortarInnerSide
     use MOD_Interpolation_Vars , only: wGP, xGP
-    use MOD_ShockCapturing_Vars, only: alpha_max, alpha_min
-#if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
-    use MOD_ShockCapturing_Vars, only: alpha_old
-#endif /*NFVSE_CORR*/
     use MOD_Equation_Vars      , only: RiemannVolFluxAndDissipMatrices
 #if USE_AMR
     use MOD_AMR_Vars           , only: UseAMR
@@ -115,16 +125,34 @@ contains
     real    :: sumWm1
     logical :: MeshNonConforming
     !--------------------------------------------------------------------------------------------------------------------------------
-     SDEALLOCATE(SubCellMetrics)
+    
+    ! Safety deallocations
+    ! --------------------
+    SDEALLOCATE(SubCellMetrics)
+    SDEALLOCATE(alpha)
+    SDEALLOCATE(alpha_Master)
+    SDEALLOCATE(alpha_Slave)
+    
     ! Get parameters
     ! --------------
+    SWRITE(UNIT_StdOut,'(132("-"))')
+    SWRITE(UNIT_stdOut,'(A)') ' NFVSE specific parameters: '
     
+    SubFVMethod      = GETINT    ('SubFVMethod','1')
+    ComputeAlpha     = GETINT    ('ComputeAlpha','1')
+    ShockBlendCoef   = GETREAL   ('ShockBlendCoef','0.0')
+    ModalThreshold   = GETINT    ('ModalThreshold','1')
     alpha_max        = GETREAL   ('alpha_max','0.5')
     alpha_min        = GETREAL   ('alpha_min','0.01')
-    SubFVMethod      = GETINT    ('SubFVMethod','1')
     SpacePropFactor  = GETREAL   ('SpacePropFactor','0.5')
     SpacePropSweeps  = GETINT    ('SpacePropSweeps','1')
     TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.0')
+    ! ReconsBoundaries is read afterwards only if needed
+#if NFVSE_CORR
+    PositCorrFactor  = GETREAL   ('PositCorrFactor','0.1')
+    PositMaxIter     = GETINT    ('PositMaxIter','10')
+    SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
+#endif /*NFVSE_CORR*/
     
     ! Initialize everything
     ! ---------------------
@@ -170,15 +198,23 @@ contains
     end select
     
     ! Allocate storage
+    allocate ( alpha(nElems) )
+    allocate ( alpha_Master(firstMortarInnerSide:nSides ) )
+    allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
     allocate ( sWGP(0:PP_N) )
-    
     allocate ( SubCellMetrics(nElems) )
+    
+    ! Some initializations
+    alpha        = 0.0
+    alpha_Master = 0.0
+    alpha_Slave  = 0.0
+    select case (ModalThreshold)
+      case(1) ; threshold = 0.5 * 10.0 ** (-1.8 * (PP_N+1.)**0.25) ! Sebastian's thresold (Euler and MHD paper)
+      case(2) ; threshold = 0.5 * 10.0 ** (-1.8 * PP_N**0.25)      ! New threshold
+    end select
     call SubCellMetrics % construct(PP_N)
-    
     call ComputeSubcellMetrics()
-    
-    ! Compute the inverse of the quadrature weights (sub-cell dimensions)
-    sWGP = 1.d0 / wGP
+    sWGP = 1.d0 / wGP ! Iinverse of the quadrature weights (sub-cell dimensions)
     
     ! Compute variables for 2nd order FV
     ! **********************************
@@ -342,24 +378,37 @@ contains
 !> Reinitializes all variables that need reinitialization after the h-adaptation
 !> ATTENTION: The subcell metrics are always recomputed, as the metrics of the high-order DG elements
 !===================================================================================================================================
-  subroutine InitNFVSEAfterAdaptation(nElemsOld)
+  subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min
+    use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
-    use MOD_ShockCapturing_Vars, only: alpha_old
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_old
 #endif /*NFVSE_CORR*/
-    use MOD_Mesh_Vars          , only: nElems
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries, RECONS_NEIGHBOR
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
-    integer, intent(in) :: nElemsOld
+    integer, intent(in) :: ChangeElem(8,nElems)
+    integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld
+    !-local-variables-----------------------------
+    integer          :: eID
+    real,allocatable,target :: alphaNew(:)
     !---------------------------------------------
     
-    ! Reallocate storage if needed
+!   Reallocate storage
+!   ------------------
+  
+    if ( (firstMortarInnerSideOld .ne. firstMortarInnerSide) .or. (nSides .ne. nSidesOld) ) then
+      SDEALLOCATE(alpha_Master)
+      allocate ( alpha_Master(firstMortarInnerSide:nSides ) )
+    end if
+    if ( (firstSlaveSide .ne. firstSlaveSideOld) .or. (LastSlaveSide .ne. LastSlaveSideOld) ) then
+      SDEALLOCATE(alpha_Slave)
+      allocate ( alpha_Slave (firstSlaveSide:LastSlaveSide) )
+    end if
     if (nElems /= nElemsOld) then
       SDEALLOCATE(SubCellMetrics)
       allocate ( SubCellMetrics(nElems) )
@@ -377,10 +426,42 @@ contains
 #endif /*NFVSE_CORR*/
     end if
     
-    ! Compute subcell metrics
+!   Initialize values
+!   -----------------
+    alpha_Master = 0.0
+    alpha_Slave  = 0.0
+    
+    if (TimeRelFactor < alpha_min/alpha_max) then
+      ! The time relaxation has no effect, alpha can be set to 0
+      if (nElems /= nElemsOld) then
+        SDEALLOCATE(alpha)
+        allocate(alpha(nElems))
+      end if
+      alpha = 0.0
+    else
+      allocate ( alphaNew(nElems) )
+      ! Set with old values
+      do eID=1, nElems
+        if (ChangeElem(1,eID) < 0) then
+          ! refinement
+          alphaNew(eID) = alpha(-ChangeElem(1,eID))
+        elseif (ChangeElem(2,eID) > 0) then
+          ! coarsening
+          alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
+        else
+          ! simple reasignment
+          alphaNew(eID) = alpha(ChangeElem(1,eID))
+        endif
+      end do
+      call move_alloc(alphaNew,alpha)
+    end if
+    
+!   Compute Subcell Metrics
+!   -----------------------
     call ComputeSubcellMetrics()
     
-    ! Reallocate MPI variables
+!   Reallocate MPI variables
+!   ------------------------
 #if MPI
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
@@ -400,14 +481,14 @@ contains
     use MOD_PreProc
     use MOD_DG_Vars            , only: U
     use MOD_Mesh_Vars          , only: nElems
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, MPIRequest_Umaster, SpacePropSweeps, RECONS_NEIGHBOR
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max
 #endif /*NFVSE_CORR*/
-    use MOD_ShockCapturing_Vars, only: alpha
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
 #if MPI
+    use MOD_NFVSE_Vars         , only: MPIRequest_Umaster
     use MOD_MPI                , only: FinishExchangeMPIData
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
@@ -2101,6 +2182,86 @@ contains
     
   end function minmod
 !===================================================================================================================================
+!> Routines to compute the blending coefficient for NFVSE
+!> -> See Hennemann and Gassner (2020). "Entropy stable shock capturing for the discontinuous galerkin spectral element
+!>                                          method with native finite volume sub elements"
+!> -> This routine computes the sensor, makes the correction (with alpha_min and alpha_max), and sends the information with MPI
+!> -> No propagation is done yet (MPI informationmust be received).
+!===================================================================================================================================
+  subroutine CalcBlendingCoefficient(U)
+    use MOD_PreProc
+    use MOD_Mesh_Vars          , only: nElems
+    use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
+    use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor, alpha, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef, sharpness, threshold
+    use MOD_ShockCapturing_Vars, only: Shock_Indicator
+    ! For reconstruction on boundaries
+#if MPI
+    use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
+    use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster, RECONS_NEIGHBOR
+    use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
+    USE MOD_MPI_Vars
+    use MOD_DG_Vars            , only: U_master
+#endif /*MPI*/
+    implicit none
+    ! Arguments
+    !---------------------------------------------------------------------------------------------------------------------------------
+    real,dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems), intent(in)  :: U
+    !---------------------------------------------------------------------------------------------------------------------------------
+    ! Local variables
+    real ::  eta(nElems)
+    integer :: eID
+    !---------------------------------------------------------------------------------------------------------------------------------
+    
+! If we do reconstruction on boundaries, we need to send the U_master
+! -------------------------------------------------------------------
+#if MPI
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
+      ! receive the master
+      call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                               MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
+      
+      ! Send the master
+      call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                               MPIRequest_Umaster(:,2),SendID=1) 
+    end if
+#endif /*MPI*/
+    
+  ! Compute the blending coefficients
+  ! ---------------------------------
+    select case (ComputeAlpha)
+      case(1)   ! Persson-Peraire indicator
+        ! Shock indicator
+        eta = Shock_Indicator % compute(U)
+        
+        ! Compute and correct alpha
+        do eID=1, nElems
+          alpha(eID) = max(TimeRelFactor*alpha(eID), 1.0 / (1.0 + exp(-sharpness * (eta(eID) - threshold)/threshold )) )
+        end do
+        
+      case(2)   ! Random indicator
+        do eID=1, nElems
+          call RANDOM_NUMBER(alpha(eID))
+        end do
+        
+      case(3)   ! Fixed blending coefficients
+        alpha = ShockBlendCoef
+    end select
+    
+! Impose alpha_max and alpha_min
+! ------------------------------
+    where (alpha < alpha_min)
+      alpha = 0.0
+    elsewhere (alpha >= alpha_max)
+      alpha = alpha_max
+    end where
+    
+    
+! Start first space propagation sweep (MPI-optimized)
+! ---------------------------------------------------
+    if (SpacePropSweeps > 0) call ProlongBlendingCoeffToFaces()
+    
+  end subroutine CalcBlendingCoefficient
+!===================================================================================================================================
 !> Gets outer solution for the TVD reconstruction
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
 !> ATTENTION 2: Mortar faces are not considered (TODO?)
@@ -2333,8 +2494,7 @@ contains
 !===================================================================================================================================
 #if NFVSE_CORR
   subroutine Apply_NFVSE_Correction(U,Ut,t,dt)
-    use MOD_ShockCapturing_Vars, only: alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: sKappaM1
@@ -2425,7 +2585,7 @@ contains
           end if
           
           ! Pressure correction
-          call GetPressure(U(:,i,j,k,eID),pres)
+          call Get_Pressure(U(:,i,j,k,eID),pres)
           
           ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
           if (ap > 0.) then
@@ -2476,15 +2636,29 @@ contains
 !> Finalizes the NFVSE module
 !===================================================================================================================================
   subroutine FinalizeNFVSE()
-    use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, MPIRequest_alpha, Fsafe, Fblen, Compute_FVFluxes
+    use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, Compute_FVFluxes, alpha, alpha_Master, alpha_Slave
+#if NFVSE_CORR
+    use MOD_NFVSE_Vars, only: Fsafe, Fblen, alpha_old
+#endif /*NFVSE_CORR*/
     use MOD_NFVSE_Vars, only: U_ext, sdxR,sdxL,rR,rL
+#if MPI
+    use MOD_NFVSE_Vars, only: MPIRequest_alpha
+#endif /*MPI*/
     implicit none
     
+    SDEALLOCATE (alpha)
+    SDEALLOCATE (alpha_Master)
+    SDEALLOCATE (alpha_Slave)
     SDEALLOCATE (SubCellMetrics)
     SDEALLOCATE (sWGP)
+#if MPI
     SDEALLOCATE (MPIRequest_alpha)
+#endif /*MPI*/
+#if NFVSE_CORR
     SDEALLOCATE (Fsafe)
     SDEALLOCATE (Fblen)
+    SDEALLOCATE (alpha_old)
+#endif /*NFVSE_CORR*/
     
     Compute_FVFluxes => null()
     

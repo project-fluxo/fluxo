@@ -29,27 +29,11 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: ShockCapturingInitIsDone=.FALSE.     !< marks whether the shock capturing init routine is complete
-REAL,ALLOCATABLE :: sVdm_Leg(:,:)                        !< 1D inverse Vandermondematrix to Legendre polynomials
-
-! For NFVSE
-real, allocatable, target :: alpha(:)                             !< Element-wise blending function (modified every time Ut is computed)
-real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
-real, allocatable :: alpha_Master(:)                      !< Blending function on master sides
-real, allocatable :: alpha_Slave(:)                       !< Blending function on slave sides
-real              :: threshold
-real              :: alpha_max        ! Maximum blending factor
-real              :: alpha_min        ! Minimum blending factor
-real              :: ShockBlendCoef
-integer           :: ModalThreshold
-integer           :: ShockIndicator
-character(len=255):: ShockIndicatorQuantity
+LOGICAL           :: ShockCapturingInitIsDone=.FALSE. !< marks whether the shock capturing init routine is complete
+integer           :: ShockIndicator                   !< Identifier for the shock indicator
+character(len=255):: ShockIndicatorQuantity           !< Shock indicator quantity to be used
+! The shock indicator itself:
 type(Indicator_PerssonPeraire) :: Shock_Indicator
-#if NFVSE_CORR
-real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
-integer           :: PositMaxIter
-#endif /*NFVSE_CORR*/
-real, parameter   :: sharpness = log((1.0-1.e-4)/1.e-4)
 
 !===================================================================================================================================
 
