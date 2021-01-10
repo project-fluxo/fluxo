@@ -526,11 +526,11 @@ IF (nProcessors .GT. 1) THEN
   ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
   MPIRequest_U      = MPI_REQUEST_NULL
   MPIRequest_Flux   = MPI_REQUEST_NULL
-  #if PARABOLIC
+#if PARABOLIC
   SDEALLOCATE(MPIRequest_Lifting)
   ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
   MPIRequest_Lifting = MPI_REQUEST_NULL
-  #endif /*PARABOLIC*/
+#endif /*PARABOLIC*/
   IF (nNbProcs .EQ. 0) nNbProcs =1;
 ENDIF
 
