@@ -112,14 +112,12 @@ END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 
-
+ShockIndicator         = GETINT('ShockIndicator','1')
+ShockIndicatorQuantity = GETSTR('ShockIndicatorQuantity','DensityTimesPressure')
 
 #if SHOCK_NFVSE
 call InitNFVSE()
 #endif /*SHOCK_NFVSE*/
-
-ShockIndicator         = GETINT('ShockIndicator','1')
-ShockIndicatorQuantity = GETSTR('ShockIndicatorQuantity','DensityTimesPressure')
 
 if (ShockIndicator==1) then
   call Shock_Indicator % construct(ShockIndicatorQuantity)
