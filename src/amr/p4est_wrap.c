@@ -1,7 +1,7 @@
 #include "optimisation.h"
 #include "connectivity.h"
 #include "p4fluxo.h"
-#include "ready.fc"
+// #include "ready.fc"
 #include "optimisation.c"
 #include "p8est_communication.h"
 //#define NON_OPTIMIZED //Optimized Variant not ready yet
@@ -11,6 +11,238 @@
 
 //#endif
 // int KKK = 0; // Trigger for debugging. Delete after debugging 
+
+
+void p4est_destroy_f(p4est_t **p4est) {
+    p4est_destroy(*p4est);
+}
+
+void p4est_connectivity_destroy_f(p4est_connectivity_t **conn) {
+    p4est_connectivity_destroy(*conn);
+}
+
+
+static void
+ElementCounterSetOldToZero_iter(p4est_iter_volume_info_t *info, void *user_data) {
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *) q->p.user_data;
+    // p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
+    int i;
+    //ElementID must be set in previous function (for example getData444)
+
+    dataquad->weight = 0;
+    for (i = 1; i < 8; i++) {
+        dataquad->OldElementID[i] = 0;
+    }
+    dataquad->OldElementID[0] = dataquad->ElementID;
+
+#ifndef NON_OPTIMIZED
+    dataquad->IsChanged = 0;
+    for (i = 0; i < 6; i++) {
+        dataquad->OldSidesID[i] = dataquad->SidesID[i];
+
+    }
+#endif
+    return;
+}
+
+static void
+ElementCounter_iter(p4est_iter_volume_info_t *info, void *user_data) {
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *) q->p.user_data;
+    p4est_fortran_data_t *data = (p4est_fortran_data_t *) user_data;
+    int i;
+    //ElementID must be set in previous function (for example getData444)
+    dataquad->ElementID = ++data->nElems;
+    dataquad->weight = 0;
+#ifndef NON_OPTIMIZED
+    dataquad->IsChanged = 0;
+#endif
+    for (i = 0; i < 6; i++) {
+#ifndef NON_OPTIMIZED
+        dataquad->OldSidesID[i] = dataquad->SidesID[i];
+#endif
+        dataquad->SidesID[i] = 0;
+
+    }
+
+    return;
+}
+
+
+static void
+ElementCounterNew_iter(p4est_iter_volume_info_t *info, void *user_data) {
+    p4est_quadrant_t *q = info->quad;
+    p4est_inner_data_t *dataquad = (p4est_inner_data_t *) q->p.user_data;
+    int *nElems = (int *) user_data;
+    int i;
+    dataquad->ElementID = ++(*nElems);
+    dataquad->weight = 0;
+    for (i = 0; i < 8; i++) {
+        dataquad->OldElementID[i] = 0;
+    }
+    dataquad->OldElementID[0] = dataquad->ElementID;
+    for (i = 0; i < 6; i++) {
+        dataquad->SidesID[i] = -1;
+#ifndef NON_OPTIMIZED
+        dataquad->OldSidesID[i] = -1;
+#endif
+        dataquad->flips[i] = -1;
+        // dataquad->SidesRatio[i] = 0;
+    }
+    // printf("dataquad->ElementID = %d \n", dataquad->ElementID);
+    // fflush(stdout);
+
+    // data->nElems++;
+    return;
+}
+
+
+int p4est_init_f(int mpicomm1) {
+    // int mpiret = 0;
+
+    /* Initialize MPI; see sc_mpi.h.
+   * If configure --enable-mpi is given these are true MPI calls.
+   * Else these are dummy functions that simulate a single-processor run. */
+    // mpiret = sc_MPI_Init(NULL, NULL);
+    // SC_CHECK_MPI(mpiret);
+    // mpicomm = sc_MPI_COMM_WORLD;
+#if MPI 
+    mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C    
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;
+#endif  /*MPI*/
+    // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
+    //  printf("mpicomm!!! %d \n",mpicomm);
+    
+    // printf("mpicomm = %d, size = %d \n", mpicomm, sizeof(mpicomm));
+    // fflush(stdout);
+    /* These functions are optional.  If called they store the MPI rank as a
+   * static variable so subsequent global p4est log messages are only issued
+   * from processor zero.  Here we turn off most of the logging; see sc.h. */
+    // sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR sc.h. */
+    sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
+    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , C_LP_ERROR
+
+    p4est_init(NULL, SC_LP_ERROR); //SC_LP_SILENT , SC_LP_ERROR
+   
+    return 0;
+}
+
+
+void p4est_finalize() {
+    sc_finalize();
+
+}
+
+/** Broadcast a connectivity structure that exists only on one process to all.
+!  *  On the other processors, it will be allocated using p8est_connectivity_new.
+!  *  \param [in] conn_in For the root process the connectivity to be broadcast,
+!  *                      for the other processes it must be NULL.
+!  *  \param [in] root    The rank of the process that provides the connectivity.
+!  *  \param [in] comm    The MPI communicator.
+!  *  \return             For the root process this is a pointer to \a conn_in.
+!  *                      Else, a pointer to a newly allocated connectivity
+!  *                      structure with the same values as \a conn_in on the
+!  *                      root process.
+!  */
+p8est_connectivity_t *p8est_conn_bcast(p8est_connectivity_t *conn_in,
+                                       int root, /* The owner of CONN*/
+                                       int comm) {
+
+    int mpimyrank = 0;
+#if MPI 
+    MPI_Comm_rank(MPI_Comm_f2c(comm), &mpimyrank);
+#endif  /*MPI*/
+
+    if (mpimyrank != root) {
+        p4est_connectivity_destroy(conn_in);
+        conn_in = NULL;
+    }
+
+    fflush(stdout);
+    int mpicomm;
+#if MPI 
+    mpicomm = MPI_Comm_f2c(comm); //Protect from different bits for Frotran and C    
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;
+#endif  /*MPI*/
+    return p8est_connectivity_bcast(conn_in, root, mpicomm);
+    // return NULL;
+};
+
+p4est_mpi_data_t *p4estGetMPIData_f(p4est_t *p4est) {
+    p4est_mpi_data_t *data;
+    data = (p4est_mpi_data_t *) malloc(sizeof(p4est_mpi_data_t));
+    data->mpisize = p4est->mpisize;
+    data->mpirank = p4est->mpirank;
+    data->local_num_quad = p4est->local_num_quadrants;
+    data->global_num_quad = p4est->global_num_quadrants;
+    data->offsetMPI = p4est->global_first_quadrant;
+    return data;
+}
+
+void p4estDelMPIData_f(p4est_mpi_data_t *data) {
+    free(data);
+    data = NULL;
+}
+
+void save_p4est(p4est_t *p4est, char in[]) {
+    // printf("save p4est!! \n%s!\n", in);//p4est->local_num_quadrants);
+    p4est_save_ext(in, p4est, 0, 0);
+    return;
+};
+
+
+
+p4est_t *load_p4est(int mpicomm1, char *in) {
+
+    p8est_connectivity_t *conn;
+    p4est_t *p4est;
+    sc_MPI_Comm mpicomm;
+    // int myrank;
+#if MPI 
+    mpicomm = MPI_Comm_f2c(mpicomm1);
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;      
+#endif  /*MPI*/
+    // MPI_Comm_rank(mpicomm, &myrank);
+    p4est = p8est_load_ext(in,      //const char *filename,
+                           mpicomm, //sc_MPI_Comm mpicomm,
+                           0,       //size_t data_size,
+                           0,       //int load_data,
+                           1,       //int autopartition,
+                           0,       //int broadcasthead,
+                           NULL,    //void *user_pointer,
+                           &conn);   //p8est_connectivity_t * *connectivity);
+    
+    p4est->connectivity = conn;
+    p4est_reset_data(p4est, sizeof(p4est_inner_data_t), NULL, NULL);
+    int nEl = 0;
+    p4est_iterate(p4est,                     /* the forest */
+                  NULL,                   /* the ghost layer May be LAter!!! */
+                  (void *) &nEl,        /* the synchronized ghost data */
+                  ElementCounterNew_iter, /* callback to compute each quad's
+                                             interior contribution to du/dt */
+                  NULL,                   /* SidesCount_iter,            /* callback to compute each quads'
+                                             faces' contributions to du/du */
+                  NULL,                   /* there is no callback for the
+                                             edges between quadrants */
+                  NULL);
+    // printf("Connectivity!! %d \n", p4est->connectivity->num_trees);
+    // exit(0);
+    return p4est;
+};
+
+p8est_connectivity_t *GetConnectivity(p4est_t *p4est) {
+    // printf("p4est->connectivity = %p \n", p4est->connectivity);
+    return p4est->connectivity;
+};
+p4est_connectivity_t *p8est_connectivity_new_periodic_f() {
+    return p8est_connectivity_new_periodic();
+}
+
+
 //  * \return 1 if \a q should be refined,   0 otherwise.           * /
 static int
 refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
