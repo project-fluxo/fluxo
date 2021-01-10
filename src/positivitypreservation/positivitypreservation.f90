@@ -123,7 +123,7 @@ SUBROUTINE MakeSolutionPositive(U)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Interpolation_Vars         , ONLY: wGP
-use MOD_ShockCapturing             , only: GetPressure ! TODO:read from MOD_Equation_Vars
+use MOD_Equation_Vars              , only: Get_Pressure
 USE MOD_mesh_Vars                  , ONLY: nElems
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ DO l = 1,nElems
     DO j = 0,PP_N
       DO i = 0,PP_N
         Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
-        call GetPressure(Uloc(:,i,j,k),p(i,j,k))
+        call Get_Pressure(Uloc(:,i,j,k),p(i,j,k))
         p_min = MIN(p_min,p(i,j,k))
       END DO ! i
     END DO ! j
@@ -185,7 +185,7 @@ DO l = 1,nElems
   
 ! Limit the pressure
   IF (p_min.LT.0.) THEN
-    call GetPressure(Umean,p_mean) ! We compute the pressure with the mean value, as we assume that Jensen's inequality holds
+    call Get_Pressure(Umean,p_mean) ! We compute the pressure with the mean value, as we assume that Jensen's inequality holds
     delta  = p_mean/(p_mean - p_min)
     delta  = 0.999*delta ! make delta > 0
     DO k = 0,PP_N
@@ -197,6 +197,7 @@ DO l = 1,nElems
     END DO ! k
   END IF
 END DO ! l
+
 END SUBROUTINE MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 

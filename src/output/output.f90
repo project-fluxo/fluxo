@@ -96,6 +96,7 @@ CALL prms%CreateIntOption(          'NVisu',       "Polynomial degree at which s
 CALL prms%CreateStringOption(       'ProjectName', "Name of the current simulation (mandatory).")
 CALL prms%CreateLogicalOption(      'Logging',     "Write log files containing debug output.", '.FALSE.')
 CALL prms%CreateLogicalOption(      'ErrorFiles',  "Write error files containing error output.", '.TRUE.')
+CALL prms%CreateLogicalOption( 'PrimVisuDefault',  "Visualize the primitive variables by default.", '.FALSE.')
 CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None, 1: ParaView Single vtu File,"//&
                                           "2: ParaView vtu files per proc+pvtu link file,"//&
                                           "3: 2D (zeta=-1 of each element) ParaView, single vtu file,"//&
@@ -149,6 +150,7 @@ CALL GetVandermonde(PP_N,NodeType,NVisu,NodeTypeVISU,Vdm_GaussN_NVisu)
 ProjectName=GETSTR('ProjectName')
 Logging    =GETLOGICAL('Logging')
 ErrorFiles =GETLOGICAL('ErrorFiles')
+PrimVisuDefault=GETLOGICAL('PrimVisuDefault')
 
 doPrintStatusLine=GETLOGICAL("doPrintStatusLine",".FALSE.")
 
@@ -292,7 +294,7 @@ use MOD_NFVSE_Vars ,only: alpha_old
 #endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
-USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu, strvarnames_tmp, nOutVars
+USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu, strvarnames_tmp, nOutVars, PrimVisuDefault
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -327,7 +329,7 @@ END IF !PRESENT(FileTypeStrIn)
 IF(PRESENT(PrimVisuOpt))THEN
   PrimVisu=PrimVisuOpt
 ELSE
-  PrimVisu=.FALSE.
+  PrimVisu=PrimVisuDefault
 END IF
 ! Specify output names
 #if (defined (mhd) | defined (navierstokes))
