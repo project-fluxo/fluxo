@@ -158,7 +158,7 @@ p8est_connectivity_t *p8est_conn_bcast(p8est_connectivity_t *conn_in,
     }
 
     fflush(stdout);
-    int mpicomm;
+    sc_MPI_Comm mpicomm;
 #if MPI 
     mpicomm = MPI_Comm_f2c(comm); //Protect from different bits for Frotran and C    
 #else  /*MPI*/
