@@ -93,7 +93,11 @@ int p4est_init_f(int mpicomm1) {
     // mpiret = sc_MPI_Init(NULL, NULL);
     // SC_CHECK_MPI(mpiret);
     // mpicomm = sc_MPI_COMM_WORLD;
-    mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C
+#if MPI 
+    mpicomm = MPI_Comm_f2c(mpicomm1); //Protect from different bits for Frotran and C    
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;
+#endif  /*MPI*/
     // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
     //  printf("mpicomm!!! %d \n",mpicomm);
     
@@ -132,17 +136,24 @@ p8est_connectivity_t *p8est_conn_bcast(p8est_connectivity_t *conn_in,
                                        int root, /* The owner of CONN*/
                                        int comm) {
 
-    int mpimyrank;
+    int mpimyrank = 0;
+#if MPI 
     MPI_Comm_rank(MPI_Comm_f2c(comm), &mpimyrank);
+#endif  /*MPI*/
+
     if (mpimyrank != root) {
         p4est_connectivity_destroy(conn_in);
         conn_in = NULL;
     }
 
     fflush(stdout);
-
-
-    return p8est_connectivity_bcast(conn_in, root, MPI_Comm_f2c(comm));
+    int mpicomm;
+#if MPI 
+    mpicomm = MPI_Comm_f2c(comm); //Protect from different bits for Frotran and C    
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;
+#endif  /*MPI*/
+    return p8est_connectivity_bcast(conn_in, root, mpicomm);
     // return NULL;
 };
 
@@ -175,9 +186,13 @@ p4est_t *load_p4est(int mpicomm1, char *in) {
     p8est_connectivity_t *conn;
     p4est_t *p4est;
     sc_MPI_Comm mpicomm;
-    int myrank;
+    // int myrank;
+#if MPI 
     mpicomm = MPI_Comm_f2c(mpicomm1);
-    MPI_Comm_rank(mpicomm, &myrank);
+#else  /*MPI*/
+    mpicomm = sc_MPI_COMM_WORLD;      
+#endif  /*MPI*/
+    // MPI_Comm_rank(mpicomm, &myrank);
     p4est = p8est_load_ext(in,      //const char *filename,
                            mpicomm, //sc_MPI_Comm mpicomm,
                            0,       //size_t data_size,

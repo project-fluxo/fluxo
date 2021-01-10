@@ -306,8 +306,14 @@ CONTAINS
             ! GETTIME(StartT)
         END IF
         ! print *, "myrank =", myRank, TRIM(DIGIT_STRING)
+#if MPI 
         P4EST_PTR = LoadP4(MPI_COMM_WORLD, TRIM(FileName));
+#else  /*MPI*/
+        P4EST_PTR = LoadP4(INT(Z'44000000',KIND=4), TRIM(FileName));
+#endif  /*MPI*/
         
+        
+
         CONNECTIVITY_PTR = GetConnectivity(P4EST_PTR)
 
         RETURN
@@ -320,7 +326,9 @@ CONTAINS
         USE MOD_AMR_vars, ONLY : P4EST_PTR, p4est_mpi_data
         ! USE MOD_MPI_Vars,            ONLY:
         USE MOD_Mesh_Vars, ONLY : offsetElem, nElems, nGlobalElems
+#if MPI        
         USE MOD_MPI_Vars, ONLY : offsetElemMPI
+#endif  /*MPI*/
         USE, INTRINSIC :: ISO_C_BINDING
         IMPLICIT NONE
         TYPE(p4est_mpi_data), POINTER :: DATAF
@@ -342,11 +350,13 @@ CONTAINS
             offsetElem = 0
         ELSE
             CALL C_F_POINTER(DataF%offsetMPI, Offset_f, [DataF%mpisize + 1])
+#if MPI 
             SDEALLOCATE(offsetElemMPI)
             ALLOCATE(offsetElemMPI(0:DATAF%mpisize))
             offsetElemMPI(0:DataF%mpisize) = offset_f(1:DataF%mpisize + 1)
             offsetElemMPI(DataF%mpisize) = nGlobalElems
             offsetElem = offsetElemMPI(DATAF%mpirank)
+#endif  /*MPI*/
         ENDIF
         NULLIFY(Offset_f)
         NULLIFY(DATAF)

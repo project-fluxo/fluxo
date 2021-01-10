@@ -8,8 +8,9 @@
 #else
 #include <malloc.h>
 #endif
-
+#if MPI
 #include "mpi.h"
+#endif  /*MPI*/
 #include <sc_io.h>
 #include "p8est.h"
 #include <p8est_extended.h>

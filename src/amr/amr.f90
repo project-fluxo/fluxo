@@ -62,6 +62,11 @@ PUBLIC::LoadBalancingAMR
 ! INTEGER :: COUNT =0 
 CONTAINS
 
+#if MPI 
+        
+#else  /*MPI*/
+        
+#endif  /*MPI*/
 
 !==================================================================================================================================
 !> Define parameters 
@@ -164,7 +169,11 @@ SUBROUTINE InitAMR()
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
     call AMR_Indicator % construct(AMRIndicatorQuantity,.TRUE.)
     
+#if MPI 
     RET=P4EST_INIT(MPI_COMM_WORLD); 
+#else  /*MPI*/
+    RET=P4EST_INIT(INT(Z'44000000',KIND=4));      
+#endif  /*MPI*/
     
     IF  (p4estFileExist) THEN
       
@@ -241,7 +250,13 @@ SUBROUTINE InitAMR_Connectivity()
    CALL ReadMeshFromHDF5(MeshFile)
   
    ! The result is connectivity PTR
-   connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
+
+#if MPI 
+    connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
+#else  /*MPI*/
+    connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER,  INT(Z'44000000',KIND=4))
+#endif  /*MPI*/
+  
    CALL FinalizeMesh()
   
 END SUBROUTINE InitAMR_Connectivity
@@ -314,9 +329,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
+#if MPI 
   USE MOD_MPI_Vars,           ONLY: NbProc , nMPISides_MINE_Proc, nMPISides_YOUR_Proc, offsetMPISides_YOUR, offsetMPISides_MINE 
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
+#endif  /*MPI*/
+
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   USE MOD_Mesh_Vars,          ONLY: nGlobalElems
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
@@ -420,11 +438,15 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   !     doLBalance = 0;
       ! IF (doLBalance .EQ. 0) 
         CALL LoadBalancingAMR(ElemWasCoarsened,new_nElems)
+
+#if MPI 
         
+                
         call MPI_Reduce(new_nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
         call MPI_Reduce(new_nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
         call MPI_Reduce(new_nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
-      
+
+#endif  /*MPI*/        
         IF (MPIRoot) THEN
           WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", sum_nElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
         ENDIF
@@ -432,78 +454,88 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
    CALL GetnNBProcs(p4est_ptr, DATAPtr)
 
-  IF (nProcessors .GT. 1) THEN
+#if MPI 
+        
+IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
       SDEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
     ENDIF
     FortranData%nNbProc = C_LOC(NbProc)
-  
+    
     SDEALLOCATE(nMPISides_Proc)
     ALLOCATE(nMPISides_Proc(1:nNbProcs))
     FortranData%nMPISides_Proc = C_LOC(nMPISides_Proc)
-   
+    
     
     SDEALLOCATE(nMPISides_MINE_Proc)
     ALLOCATE(nMPISides_MINE_Proc(1:nNbProcs))
     FortranData%nMPISides_MINE_Proc = C_LOC(nMPISides_MINE_Proc)
-  
-   
+    
+    
     SDEALLOCATE(nMPISides_YOUR_Proc)
     ALLOCATE(nMPISides_YOUR_Proc(1:nNbProcs))
     FortranData%nMPISides_YOUR_Proc = C_LOC(nMPISides_YOUR_Proc)
-
-   
+    
+    
     SDEALLOCATE(offsetMPISides_YOUR)
     ALLOCATE(offsetMPISides_YOUR(0:nNbProcs))
     FortranData%offsetMPISides_YOUR = C_LOC(offsetMPISides_YOUR)
-
+    
     SDEALLOCATE(offsetMPISides_MINE)
     ALLOCATE(offsetMPISides_MINE(0:nNbProcs))
     FortranData%offsetMPISides_MINE = C_LOC(offsetMPISides_MINE)
     
   ENDIF
+          
+#endif  /*MPI*/
   
   CALL GetData(p4est_ptr,DATAPtr)
-  
-  IF (nProcessors .GT. 1) THEN
-    nNbProcs=FortranData%nNBProcs
-  ! Here reallocate all arrays and redefine  all parameters
 
+#if MPI 
+        
+
+IF (nProcessors .GT. 1) THEN
+  nNbProcs=FortranData%nNBProcs
+  ! Here reallocate all arrays and redefine  all parameters
+  
   SDEALLOCATE(nMPISides_send)
   ALLOCATE(nMPISides_send(       nNbProcs,2))
   
   nMPISides_send(:,1)     =nMPISides_MINE_Proc
   nMPISides_send(:,2)     =nMPISides_YOUR_Proc
-
+  
   SDEALLOCATE(nMPISides_rec)
   ALLOCATE(nMPISides_rec(        nNbProcs,2))
   nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
   nMPISides_rec(:,2)      =nMPISides_MINE_Proc
-
+  
   SDEALLOCATE(OffsetMPISides_send)
   ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
   OffsetMPISides_send(:,1)=OffsetMPISides_MINE
   OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
-
+  
   SDEALLOCATE(OffsetMPISides_rec)
   ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
   OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
   OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
-
+  
   SDEALLOCATE(MPIRequest_U)
   SDEALLOCATE(MPIRequest_Flux)
   ALLOCATE(MPIRequest_U(nNbProcs,2)    )
   ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
   MPIRequest_U      = MPI_REQUEST_NULL
   MPIRequest_Flux   = MPI_REQUEST_NULL
-#if PARABOLIC
+  #if PARABOLIC
   SDEALLOCATE(MPIRequest_Lifting)
   ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
   MPIRequest_Lifting = MPI_REQUEST_NULL
-#endif /*PARABOLIC*/
+  #endif /*PARABOLIC*/
   IF (nNbProcs .EQ. 0) nNbProcs =1;
 ENDIF
+
+      
+#endif  /*MPI*/
 
 CALL p4estSetMPIData()
 nElems=FortranData%nElems
@@ -714,7 +746,11 @@ END SUBROUTINE RunAMR
   SUBROUTINE RecalculateParameters(FortranData)
         USE MOD_AMR_Vars,            ONLY: P4EST_FORTRAN_DATA
         USE MOD_Mesh_Vars
+#if MPI 
+        
         USE MOD_MPI_Vars,             ONLY:  offsetElemMPI
+        
+#endif  /*MPI*/        
         ! USE MOD_AMR_vars,            ONLY: P4EST_PTR, p4est_mpi_data
         USE MOD_Globals,             ONLY:  myrank
         USE MOD_P4est,               ONLY: p4estGetMPIData
@@ -759,8 +795,9 @@ END SUBROUTINE RunAMR
         nSidesMaster    = lastMasterSide-firstMasterSide+1
         nSidesSlave     = lastSlaveSide -firstSlaveSide+1
         nMortarSides    = nMortarInnerSides +  nMortarMPISides
-        
+#if MPI 
         offsetElem  = offsetElemMPI(myrank)
+#endif  /*MPI*/        
         
     END SUBROUTINE RecalculateParameters
 !===================================================================================================================================

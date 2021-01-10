@@ -667,6 +667,7 @@ void count_parallel_sides(p4est_t *p4est) {
 
     p4est_savef_data->OffsetSideMPI[0] = 0;
     // global_first_quadrant[0] = 0;
+#if MPI 
     mpiret = sc_MPI_Allgather(&local, 1, MPI_INT,
                               p4est_savef_data->OffsetSideMPI + 1, 1, MPI_INT,
                               p4est->mpicomm);
@@ -674,7 +675,7 @@ void count_parallel_sides(p4est_t *p4est) {
     //                           global_first_quadrant + 1, 1, P4EST_MPI_GLOIDX,
     //                           p4est->mpicomm);
     SC_CHECK_MPI(mpiret);
-
+#endif  /*MPI*/
     for (i = 0; i < num_procs; ++i) {
         p4est_savef_data->OffsetSideMPI[i + 1] += p4est_savef_data->OffsetSideMPI[i];
     }
@@ -693,6 +694,7 @@ void count_parallel_index_sides(p4est_t *p4est) {
 
     p4est_savef_data->OffsetSideArrIndexMPI[0] = 0;
     // global_first_quadrant[0] = 0;
+#if MPI 
     mpiret = sc_MPI_Allgather(&local, 1, MPI_INT,
                               p4est_savef_data->OffsetSideArrIndexMPI + 1, 1, MPI_INT,
                               p4est->mpicomm);
@@ -700,6 +702,7 @@ void count_parallel_index_sides(p4est_t *p4est) {
     //                           global_first_quadrant + 1, 1, P4EST_MPI_GLOIDX,
     //                           p4est->mpicomm);
     SC_CHECK_MPI(mpiret);
+#endif  /*MPI*/
 
     for (i = 0; i < num_procs; ++i) {
         p4est_savef_data->OffsetSideArrIndexMPI[i + 1] += p4est_savef_data->OffsetSideArrIndexMPI[i];
