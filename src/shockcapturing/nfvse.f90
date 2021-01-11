@@ -91,7 +91,7 @@ contains
     call prms%CreateRealOption    ("SpacePropFactor", "Space propagation factor", "0.5")
     call prms%CreateIntOption     ("SpacePropSweeps", "Number of space propagation sweeps (MPI-optimized only for 0 or 1)", "1")
     call prms%CreateRealOption    (  "TimeRelFactor", "Time relaxation factor", "0.0")
-    call prms%CreateIntOption    ("ReconsBoundaries", "Reconstruction procedure on boundary subcells (only for SubFVMethod=1/2):\n"//&
+    call prms%CreateIntOption    ("ReconsBoundaries", "Reconstruction procedure on boundary subcells (only for SubFVMethod=2,3,4):\n"//&
                                                        "   1: No reconstruction\n"//&
                                                        "   2: Central reconstruction\n"//&
                                                        "   3: Neighbor element reconstruction"&
@@ -431,7 +431,7 @@ contains
     alpha_Master = 0.0
     alpha_Slave  = 0.0
     
-    if (TimeRelFactor < alpha_min/alpha_max) then
+    if (TimeRelFactor <= alpha_min/alpha_max) then
       ! The time relaxation has no effect, alpha can be set to 0
       if (nElems /= nElemsOld) then
         SDEALLOCATE(alpha)
@@ -851,9 +851,11 @@ contains
 !   *********
     F_  = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
-    U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
     primL = 0.0
     primR = 0.0
+#if NONCONS
+    U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
+#endif /*NONCONS*/
     
 !   Do the solution reconstruction
 !   ******************************
@@ -952,9 +954,11 @@ contains
 !   **********
     F_ = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
-    U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
     primL = 0.0
     primR = 0.0
+#if NONCONS
+    U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
+#endif /*NONCONS*/
     
 !   Do the solution reconstruction
 !   ******************************
@@ -1536,7 +1540,7 @@ contains
 !#      real :: Fstar_r(PP_nVar)
       !---------------------------------------------------------------------
       
-      ! Loop over the face and get the Es flux
+      ! Loop over the face and get the ES flux
       do k=0, PP_N ; do j=0, PP_N
         ! Rotate states to 1D frame
         ! -------------------------
@@ -2226,14 +2230,14 @@ contains
     end if
 #endif /*MPI*/
     
-  ! Compute the blending coefficients
-  ! ---------------------------------
+!   Compute the blending coefficients
+!   ---------------------------------
     select case (ComputeAlpha)
       case(1)   ! Persson-Peraire indicator
         ! Shock indicator
         eta = Shock_Indicator % compute(U)
         
-        ! Compute and correct alpha
+        ! Compute alpha
         do eID=1, nElems
           alpha(eID) = max(TimeRelFactor*alpha(eID), 1.0 / (1.0 + exp(-sharpness * (eta(eID) - threshold)/threshold )) )
         end do
@@ -2247,8 +2251,8 @@ contains
         alpha = ShockBlendCoef
     end select
     
-! Impose alpha_max and alpha_min
-! ------------------------------
+!   Impose alpha_max and alpha_min
+!   ------------------------------
     where (alpha < alpha_min)
       alpha = 0.0
     elsewhere (alpha >= alpha_max)
@@ -2256,8 +2260,8 @@ contains
     end where
     
     
-! Start first space propagation sweep (MPI-optimized)
-! ---------------------------------------------------
+!   Start first space propagation sweep (MPI-optimized)
+!   ---------------------------------------------------
     if (SpacePropSweeps > 0) call ProlongBlendingCoeffToFaces()
     
   end subroutine CalcBlendingCoefficient
