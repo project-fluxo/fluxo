@@ -577,7 +577,6 @@ DO iElem=1,nElems
     ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
     Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
     dSdU(:)  = ConsToEntropy(U(:,i,j,k,iElem))
-    ! PRINT *, "dSdU(:) = " ,dSdU(:)
     ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
     dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
   END DO; END DO; END DO !i,j,k

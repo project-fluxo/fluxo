@@ -128,7 +128,9 @@ CALL EvalDiffFlux3D(k_R,g_R,j_R,UR,gradUx_R,gradUy_R,gradUz_R)
 
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
-DO iVar=1,PP_nVar
+! ATTENTION: This is done from iVar=2 because the first component of the viscous fluxes is  F(1,:,:)=0
+!            ... Change to iVar=1 if that is no longer the case
+DO iVar=2,PP_nVar
   F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:))  & 
                                +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:))  &
                                +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:))  )
@@ -290,9 +292,9 @@ DO i=1,nTotal_Face
 #if NONCONS==1 /*Powell*/
   FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
 #elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*UL(6:8,i) ! TODO: is that right?
+  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*UL(6:8,i)
 #elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*v_L(1:3)  ! TODO: is that right?
+  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*v_L(1:3)
 #endif /*NONCONSTYPE*/
 
 
@@ -330,9 +332,9 @@ DO i=1,nTotal_Face
 #if NONCONS==1 /*Powell*/
   FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
 #elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*UL(6:8,i) ! TODO: is that right?
+  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*UL(6:8,i)
 #elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*v_L(1:3)  ! TODO: is that right?
+  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*v_L(1:3)
 #endif /*NONCONSTYPE*/
 
 

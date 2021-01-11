@@ -51,8 +51,8 @@ PUBLIC::MakeSolutionPositive
 PUBLIC::FinalizePositivityPreservation
 
 
-real, allocatable :: Jac(:,:,:,:)  ! det of jacobian. TODO: Move to Mesh_vars
-real, allocatable :: vol      (:)  ! Volume of cell.  TODO: Move to Mesh_vars
+real, allocatable :: Jac(:,:,:,:)  ! det of jacobian.
+real, allocatable :: vol      (:)  ! Volume of cell.
 
 !===================================================================================================================================
 CONTAINS

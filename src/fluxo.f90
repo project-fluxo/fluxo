@@ -40,12 +40,9 @@ USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTi
 USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
-
 #if USE_AMR
-! Added for AMR ->
 USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR
-! <-Added for AMR 
-#endif
+#endif /*USE_AMR*/
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
@@ -60,9 +57,6 @@ IMPLICIT NONE
 !! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
 !==================================================================================================================================
-! Added for AMR ->
-
-! <-Added for AMR 
 
 CALL InitMPI()
 CALL ParseCommandlineArguments()
@@ -183,7 +177,7 @@ SWRITE(UNIT_stdOut,'(132("="))')
 ! Run Simulation
 CALL TimeDisc()
 
-
+!Finalize
 CALL FinalizeOutput()
 CALL FinalizeAnalyze()
 #if PARABOLIC

@@ -352,7 +352,7 @@ INTEGER                        :: offset_in             !< offset =0, start at b
 INTEGER                        :: offset_dim            !< which dimension is the offset (only one dimension possible here)
 INTEGER                        :: nVal(Rank)            !< size of complete (local) array to write
 CHARACTER(LEN=*),INTENT(IN)    :: ArrayName             !< name of array to be read
-REAL*8              ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: RealArray    !< only if real array shall be read
+REAL              ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: RealArray    !< only if real array shall be read
 INTEGER           ,DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: IntegerArray !< only if integer array shall be read
 CHARACTER(LEN=255),DIMENSION(PRODUCT(nVal)),OPTIONAL,INTENT(OUT),TARGET :: StrArray     !< only if real string shall be read
 !----------------------------------------------------------------------------------------------------------------------------------

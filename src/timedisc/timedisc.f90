@@ -294,7 +294,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
     nCalcTimestep=nCalcTimestep-1
   END IF !nCalcTimeStepMax <>1
   IF(errType.NE.0)THEN !error in time step computation
-!    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
+    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
     CALL abort(__STAMP__,&
    'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
   END IF

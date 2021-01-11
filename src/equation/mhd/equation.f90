@@ -1286,7 +1286,7 @@ CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant ch
   prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
 CALL PrimToCons(Prim,Resu)
 
-case(12345) ! Geospace Environmentl Modeling (GEM) reconnection challenge
+case(12345) ! Geospace Environmental Modeling (GEM) reconnection challenge
   prim = 0.
   prim(1) = 1./cosh(2.*x(2))**2 + 0.2
   prim(5) = 0.5 *prim(1)
