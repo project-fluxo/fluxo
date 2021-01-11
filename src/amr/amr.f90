@@ -42,10 +42,6 @@ INTERFACE LoadBalancingAMR
   MODULE PROCEDURE LoadBalancingAMR
 END INTERFACE
 
-! INTERFACE LoadBalancingAMRold
-!   MODULE PROCEDURE LoadBalancingAMRold
-! END INTERFACE
-
 INTERFACE SaveMesh
   MODULE PROCEDURE SaveMesh
 END INTERFACE
@@ -61,12 +57,6 @@ PUBLIC::LoadBalancingAMR
 ! PUBLIC::LoadBalancingAMRold
 ! INTEGER :: COUNT =0 
 CONTAINS
-
-#if MPI 
-        
-#else  /*MPI*/
-        
-#endif  /*MPI*/
 
 !==================================================================================================================================
 !> Define parameters 
@@ -343,10 +333,11 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #if POSITIVITYPRES
   use MOD_PositivityPreservation, only: FinalizePositivityPreservation, InitPositivityPreservation
 #endif /*POSITIVITYPRES*/
-  
 #if PARABOLIC
   USE  MOD_Lifting_Vars
+#if MPI
   USE  MOD_MPI_Vars,          ONLY: MPIRequest_Lifting
+#endif /*MPI*/
 #endif /* PARABOLIC */
 #if SHOCKCAPTURE
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
@@ -526,7 +517,7 @@ IF (nProcessors .GT. 1) THEN
   ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
   MPIRequest_U      = MPI_REQUEST_NULL
   MPIRequest_Flux   = MPI_REQUEST_NULL
-#if PARABOLIC
+#if PARABOLIC && MPI
   SDEALLOCATE(MPIRequest_Lifting)
   ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
   MPIRequest_Lifting = MPI_REQUEST_NULL
