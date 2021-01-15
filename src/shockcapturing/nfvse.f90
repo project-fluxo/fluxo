@@ -13,6 +13,7 @@
 #include "defines.h"
 module MOD_NFVSE
 #if SHOCK_NFVSE
+  use MOD_NFVSE_Vars
   use MOD_PreProc
   implicit none
 !==================================================================================================================================
@@ -94,6 +95,11 @@ contains
                                                        ,"1")
 
 #if NFVSE_CORR
+    call prms%CreateIntOption(       "FVCorrMethod",  " Method for the FV correction:\n"//&
+                                              "   1: Positivity limiter\n"//&
+                                              "   2: Element-wise IDP."&
+                                             ,"1")
+    
     call prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
     call prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
 #endif /*NFVSE_CORR*/
@@ -147,7 +153,18 @@ contains
 #if NFVSE_CORR
     PositCorrFactor  = GETREAL   ('PositCorrFactor','0.1')
     PositMaxIter     = GETINT    ('PositMaxIter','10')
-    SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
+    FVCorrMethod     = GETINT    ('FVCorrMethod','1')
+    select case(FVCorrMethod)
+      case(1)
+        Apply_NFVSE_Correction => Apply_NFVSE_Correction_posit
+        SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
+      case(2)
+        Apply_NFVSE_Correction => Apply_NFVSE_Correction_IDP
+        SWRITE(UNIT_stdOut,'(A)') '    *NFVSE IDP correction activated'
+      case default
+        SWRITE(*,*) 'ERROR :: FVCorrMethod not defined.'
+        stop
+    end select
 #endif /*NFVSE_CORR*/
     
     ! Initialize everything
@@ -2493,7 +2510,7 @@ contains
 !> Corrects U and Ut after the Runge-Kutta stage
 !===================================================================================================================================
 #if NFVSE_CORR
-  subroutine Apply_NFVSE_Correction(U,Ut,t,dt)
+  subroutine Apply_NFVSE_Correction_posit(U,Ut,t,dt)
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
@@ -2630,7 +2647,189 @@ contains
       
     end do !eID
     
-  end subroutine Apply_NFVSE_Correction
+  end subroutine Apply_NFVSE_Correction_posit
+!===================================================================================================================================
+!> Element-wise invariant domain preserving FCT correction of 
+!>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
+!===================================================================================================================================
+  subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
+    use MOD_Mesh_Vars          , only: nElems, offsetElem
+    use MOD_Basis              , only: ALMOSTEQUAL
+    use MOD_Equation_Vars      , only: sKappaM1
+    use MOD_Mesh_Vars          , only: sJ
+    use MOD_Equation_Vars      , only: Get_Pressure
+    use MOD_NFVSE_MPI
+    USE MOD_Globals
+    implicit none
+    !-arguments----------------------------------------------
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(in)    :: t                                         !< Current time (in time step!)
+    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
+    !-local-variables----------------------------------------
+    real, parameter :: eps = 1.e-8
+    real    :: Usafe        (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
+    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Finite Volume Ut minus DG Ut
+    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
+    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
+    real    :: pres
+    real    :: corr, corr1
+    real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_max for an element
+    real    :: alphadiff
+    real    :: alphacont  !container for alpha
+    real    :: sdt
+    real    :: rho_min, rho_max, rho_safe
+    integer :: eID
+    integer :: i,j,k, l
+    integer :: iter
+    integer :: stencil_m1(0:PP_N)
+    integer :: stencil_p1(0:PP_N)
+    !--------------------------------------------------------
+    
+    stencil_m1    = -1
+    stencil_m1(0) =  0
+    
+    stencil_p1       = 1
+    stencil_p1(PP_N) = 0
+    
+!   Some definitions
+!   ****************
+    alpha_old = alpha 
+    sdt = 1./dt
+    
+!   Iterate over the elements
+!   *************************
+    do eID=1, nElems
+      
+!     ----------------------------------
+!     Check if it makes sense correcting
+!     ----------------------------------
+      alphadiff = alpha(eID) - alpha_max
+      if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
+      
+!     ----------------------------------------------------------
+!     Get Usafe for each point of the element and check validity
+!     ----------------------------------------------------------
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        
+        ! Compute Fsafe-Fblend
+        Fsafe_m_Fblen(:,i,j,k) = ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID)) ! Account for the sign change and the Jacobian division
+        
+        ! Compute Usafe
+        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
+        
+        ! Check if this is a valid state
+        call Get_Pressure(Usafe(:,i,j,k),p_safe(i,j,k))
+        if (p_safe(i,j,k) < 0.) then
+          print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
+          stop
+        end if
+        if (Usafe(1,i,j,k) < 0.) then
+          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
+          stop
+        end if
+      end do       ; end do       ; end do ! i,j,k
+      
+      ! Compute F_FV-F_DG
+      FFV_m_FDG = -Fsafe_m_Fblen/alphadiff
+      
+!     ----------------------------
+!     Iterate to get a valid state
+!     ----------------------------
+!#      do iter=1, PositMaxIter
+        corr = -eps ! Safe initialization
+        
+!       Compute correction factors
+!       --------------------------
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          
+          ! Get the limit states
+          !*********************
+          rho_min =  huge(1.0)
+          rho_max = -huge(1.0)
+          
+          ! check stencil in xi
+          do l = i + stencil_m1(i), i + stencil_p1(i)
+            rho_min = min(rho_min, Usafe(1,l,j,k))
+            rho_max = max(rho_max, Usafe(1,l,j,k))
+          end do
+          ! check stencil in eta
+          do l = j + stencil_m1(j), j + stencil_p1(j)
+            rho_min = min(rho_min, Usafe(1,i,l,k))
+            rho_max = max(rho_max, Usafe(1,i,l,k))
+          end do
+          ! check stencil in zeta
+          do l = k + stencil_m1(k), k + stencil_p1(k)
+            rho_min = min(rho_min, Usafe(1,i,j,l))
+            rho_max = max(rho_max, Usafe(1,i,j,l))
+          end do
+          
+          ! If U is in that range... nothing to correct
+          !********************************************
+          if ( U(1,i,j,k,eID) < rho_min) then
+            rho_safe = rho_min
+          elseif (U(1,i,j,k,eID) > rho_max) then
+            rho_safe = rho_max
+          else
+            cycle
+          end if
+          
+          ! Density correction
+          a = (rho_safe - U(1,i,j,k,eID))
+          if (a > 0.) then ! This DOF needs a correction
+            corr1 = a / FFV_m_FDG(1,i,j,k)
+            corr = max(corr,corr1)
+          end if
+          
+!#          ! Pressure correction
+!#          call Get_Pressure(U(:,i,j,k,eID),pres)
+          
+!#          ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
+!#          if (ap > 0.) then
+!#            corr1 = ap / FFV_m_FDG(5,i,j,k)
+!#            corr = max(corr,corr1)
+!#          end if
+          
+        end do       ; end do       ; end do ! i,j,k
+        
+      
+!       Do the correction if needed
+!       ---------------------------
+        if ( corr > 0. ) then
+          
+          ! Change the alpha for output
+          alphacont  = alpha(eID)
+          alpha(eID) = alpha(eID) + corr * sdt
+          
+          ! Change inconsistent alphas
+          if (alpha(eID) > alpha_max) then
+            alpha(eID) = alpha_max
+            corr = (alpha_max - alphacont ) * dt
+          end if
+          
+          ! Correct!
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            ! Correct U
+            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+            ! Correct Ut
+            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+          end do       ; end do       ; enddo
+          
+        else
+          exit
+        end if
+      
+!#      end do !iter
+      
+      if (iter > PositMaxIter) then
+        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' iterations. Elem: ', eID + offsetElem
+      end if
+      
+    end do !eID
+    
+  end subroutine Apply_NFVSE_Correction_IDP
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
 !> Finalizes the NFVSE module

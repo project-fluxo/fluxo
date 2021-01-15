@@ -686,6 +686,15 @@ CASE(61) ! sharp shock
   else
     Resu=Resur
   end if
+case(62) ! Sharp advected bubble
+
+  prim = [1., 2., 0., 0., 1.]
+  Cent(1:2) = x(1:2)-IniCenter(1:2)
+  r2 = sqrt(sum(Cent(1:2)*Cent(1:2)))
+  if (r2<=IniHalfwidth) prim(1) = 2.
+  
+  CALL PrimToCons(prim,Resu)
+
 CASE(7) !TAYLOR GREEN VORTEX
   A=1. ! magnitude of speed
   Ms=0.1  ! maximum Mach number

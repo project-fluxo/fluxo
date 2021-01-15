@@ -26,7 +26,7 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter
+  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
@@ -96,6 +96,8 @@ module MOD_NFVSE_Vars
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
   real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
   integer           :: PositMaxIter
+  integer           :: FVCorrMethod
+  procedure(i_sub_Correction), pointer :: Apply_NFVSE_Correction => null()
 #endif /*NFVSE_CORR*/
 
 ! For the FV method
@@ -143,6 +145,16 @@ module MOD_NFVSE_Vars
       type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
       integer                                        , intent(in)    :: iElem
     end subroutine i_sub_Compute_FVFluxes
+#if NFVSE_CORR
+    subroutine i_sub_Correction(U,Ut,t,dt)
+      use MOD_PreProc
+      use MOD_Mesh_Vars          , only: nElems
+      real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
+      real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+      real,intent(in)    :: t                                         !< Current time (in time step!)
+      real,intent(in)    :: dt     
+    end subroutine i_sub_Correction
+#endif /*NFVSE_CORR*/
   end interface
 !===================================================================================================================================
   contains
