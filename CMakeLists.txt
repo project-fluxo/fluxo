@@ -317,6 +317,11 @@ IF (FLUXO_SHOCKCAPTURE)
   OPTION(FLUXO_SHOCKCAP_NFVSE "Use NFVSE for shock capturing" ON)
   
   IF(FLUXO_SHOCKCAP_NFVSE)
+    # NFVSE only available for Gauss-Lobatto!
+    IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
+      MESSAGE(SEND_ERROR " The NFVSE shock capturing is only available for Gauss-Lobatto nodes!")
+    ENDIF()
+    
     ADD_DEFINITIONS(-DSHOCK_NFVSE=1)
     OPTION(FLUXO_SHOCK_NFVSE_CORR "Blending Correction" OFF)
     IF(FLUXO_SHOCK_NFVSE_CORR)

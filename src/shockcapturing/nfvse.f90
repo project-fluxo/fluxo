@@ -1,9 +1,5 @@
 !==================================================================================================================================
-! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
-! Copyright (c) 2016 - 2017 Andrew Winters
 ! Copyright (c) 2020 - 2020 Andrés Rueda
-! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -214,7 +210,7 @@ contains
     end select
     call SubCellMetrics % construct(PP_N)
     call ComputeSubcellMetrics()
-    sWGP = 1.d0 / wGP ! Iinverse of the quadrature weights (sub-cell dimensions)
+    sWGP = 1.d0 / wGP ! Inverse of the quadrature weights (sub-cell dimensions)
     
     ! Compute variables for 2nd order FV
     ! **********************************
@@ -529,7 +525,7 @@ contains
     
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
-      if ( ALMOSTEQUAL(alpha(iElem),0.d0) ) cycle
+      if ( ALMOSTEQUAL(alpha(iElem),0.0) ) cycle
 #endif /*NFVSE_CORR*/
       
 !     Compute the finite volume fluxes
