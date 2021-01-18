@@ -492,9 +492,9 @@ contains
 !===================================================================================================================================
   subroutine VolInt_NFVSE(Ut)
     use MOD_PreProc
-    use MOD_DG_Vars            , only: U
+    use MOD_DG_Vars            , only: U, U_master, U_slave
     use MOD_Mesh_Vars          , only: nElems
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max
 #endif /*NFVSE_CORR*/
@@ -527,7 +527,7 @@ contains
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
-      call Get_externalU()
+      call Get_externalU(U_ext,U,U_master,U_slave)
     end if
     
     if (SpacePropSweeps > 0) then
@@ -2283,12 +2283,16 @@ contains
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
 !> ATTENTION 2: Mortar faces are not considered (TODO?)
 !===================================================================================================================================
-  subroutine Get_externalU()
+  subroutine Get_externalU(U_ext,U,U_master,U_slave)
     use MOD_PreProc
-    use MOD_NFVSE_Vars, only: U_ext, TanDirs1, TanDirs2
-    use MOD_DG_Vars   , only: U, U_master, U_slave
-    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR
+    use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
+    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
     implicit none
+    !-arguments-----------------------------------------------
+    real, intent(out) :: U_ext   (PP_nVar,0:PP_N,0:PP_N,6     ,nElems)
+    real, intent(in)  :: U       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+    real, intent(in)  :: U_master(PP_nVar,0:PP_N,0:PP_N,nSides)
+    real, intent(in)  :: U_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
     !-local-variables-----------------------------------------
     integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
     integer :: ax1, ax2
@@ -2654,11 +2658,12 @@ contains
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
-    use MOD_Mesh_Vars          , only: nElems, offsetElem
+    use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: sKappaM1
     use MOD_Mesh_Vars          , only: sJ
     use MOD_Equation_Vars      , only: Get_Pressure
+    use MOD_ProlongToFace      , only: ProlongToFace
     use MOD_NFVSE_MPI
     USE MOD_Globals
     implicit none
@@ -2669,9 +2674,12 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real, parameter :: eps = 1.e-8
-    real    :: Usafe        (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real    :: Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems)
+    real    :: Usafe_master (PP_nVar,0:PP_N,0:PP_N,nSides)
+    real    :: Usafe_slave  (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    real    :: Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems)
     real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
-    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Finite Volume Ut minus DG Ut
+    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)  ! Finite Volume Ut minus DG Ut
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
     real    :: pres
@@ -2687,6 +2695,8 @@ contains
     integer :: stencil_m1(0:PP_N)
     integer :: stencil_p1(0:PP_N)
     !--------------------------------------------------------
+    
+    Usafe = 0.0
     
     stencil_m1    = -1
     stencil_m1(0) =  0
@@ -2718,22 +2728,39 @@ contains
         Fsafe_m_Fblen(:,i,j,k) = ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID)) ! Account for the sign change and the Jacobian division
         
         ! Compute Usafe
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
+        Usafe(:,i,j,k,eID) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
         
         ! Check if this is a valid state
-        call Get_Pressure(Usafe(:,i,j,k),p_safe(i,j,k))
+        call Get_Pressure(Usafe(:,i,j,k,eID),p_safe(i,j,k))
         if (p_safe(i,j,k) < 0.) then
           print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
           stop
         end if
-        if (Usafe(1,i,j,k) < 0.) then
-          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
+        if (Usafe(1,i,j,k,eID) < 0.) then
+          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k,eID)
           stop
         end if
       end do       ; end do       ; end do ! i,j,k
       
       ! Compute F_FV-F_DG
-      FFV_m_FDG = -Fsafe_m_Fblen/alphadiff
+      FFV_m_FDG(:,:,:,:,eID) = -Fsafe_m_Fblen/alphadiff
+    
+    end do !eID
+    
+    ! Get externsl Usafe
+    call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.FALSE.)
+    call Get_externalU(Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave)
+    ! FIll Usafe with info
+    do eID=1, nElems
+      Usafe(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
+      Usafe(:,PP_N+1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,3,eID)
+      Usafe(:,0:PP_N,    -1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,2,eID)
+      Usafe(:,0:PP_N,PP_N+1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,4,eID)
+      Usafe(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
+      Usafe(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
+    end do !eID
+    
+    do eID=1, nElems
       
 !     ----------------------------
 !     Iterate to get a valid state
@@ -2751,19 +2778,19 @@ contains
           rho_max = -huge(1.0)
           
           ! check stencil in xi
-          do l = i + stencil_m1(i), i + stencil_p1(i)
-            rho_min = min(rho_min, Usafe(1,l,j,k))
-            rho_max = max(rho_max, Usafe(1,l,j,k))
+          do l = i-1, i+1
+            rho_min = min(rho_min, Usafe(1,l,j,k,eID))
+            rho_max = max(rho_max, Usafe(1,l,j,k,eID))
           end do
           ! check stencil in eta
-          do l = j + stencil_m1(j), j + stencil_p1(j)
-            rho_min = min(rho_min, Usafe(1,i,l,k))
-            rho_max = max(rho_max, Usafe(1,i,l,k))
+          do l = j-1, j+1
+            rho_min = min(rho_min, Usafe(1,i,l,k,eID))
+            rho_max = max(rho_max, Usafe(1,i,l,k,eID))
           end do
           ! check stencil in zeta
-          do l = k + stencil_m1(k), k + stencil_p1(k)
-            rho_min = min(rho_min, Usafe(1,i,j,l))
-            rho_max = max(rho_max, Usafe(1,i,j,l))
+          do l = k-1, k+1
+            rho_min = min(rho_min, Usafe(1,i,j,l,eID))
+            rho_max = max(rho_max, Usafe(1,i,j,l,eID))
           end do
           
           ! If U is in that range... nothing to correct
@@ -2779,7 +2806,7 @@ contains
           ! Density correction
           a = (rho_safe - U(1,i,j,k,eID))
           if (a > 0.) then ! This DOF needs a correction
-            corr1 = a / FFV_m_FDG(1,i,j,k)
+            corr1 = a / FFV_m_FDG(1,i,j,k,eID)
             corr = max(corr,corr1)
           end if
           
@@ -2788,7 +2815,7 @@ contains
           
 !#          ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
 !#          if (ap > 0.) then
-!#            corr1 = ap / FFV_m_FDG(5,i,j,k)
+!#            corr1 = ap / FFV_m_FDG(5,i,j,k,eID)
 !#            corr = max(corr,corr1)
 !#          end if
           
@@ -2803,6 +2830,10 @@ contains
           alphacont  = alpha(eID)
           alpha(eID) = alpha(eID) + corr * sdt
           
+!#          if (alpha(eID) > 1e-10) then
+!#            print*, alpha(eID)
+!#          end if
+          
           ! Change inconsistent alphas
           if (alpha(eID) > alpha_max) then
             alpha(eID) = alpha_max
@@ -2812,9 +2843,9 @@ contains
           ! Correct!
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
             ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
             ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
           end do       ; end do       ; enddo
           
         else
