@@ -706,5 +706,26 @@ end subroutine Get_DensityTimesPressure
     
     kinen = SUM(U(2:4)*U(2:4))/U(1)
   end subroutine Get_KinEnergy
-
+  
+!============================================================================================================================
+!> Get dp/du
+!============================================================================================================================
+  pure subroutine Get_dpdU(U,dpdu)
+    implicit none
+    !-arguments---------------------------------------
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: dpdU(PP_nVar)
+    !-local-variables---------------------------------
+    real :: vel(3)
+    !-------------------------------------------------
+    
+    vel = U(2:4)/U(1)
+    
+    dpdu(1)   = 0.5*sum(vel**2)
+    dpdu(2:4) = -vel
+    dpdu(5)   = 1.0
+    
+    dpdu = dpdu*KappaM1
+    
+  end subroutine Get_dpdU
 END MODULE MOD_Equation_Vars
