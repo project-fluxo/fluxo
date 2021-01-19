@@ -257,6 +257,7 @@ contains
     allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( alpha_old(nElems) )
+    allocate ( Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
     Fsafe = 0.
     Fblen = 0.
     alpha_old = 0.
@@ -496,7 +497,7 @@ contains
     use MOD_Mesh_Vars          , only: nElems
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max, Usafe
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
@@ -539,6 +540,9 @@ contains
         call PropagateBlendingCoeff()
       end do
     end if
+    
+    ! Use IDP correction with previous step density:
+    !Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
     
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
@@ -2657,7 +2661,7 @@ contains
 !>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter, Usafe
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: sKappaM1
@@ -2674,7 +2678,6 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real, parameter :: eps = 1.e-8
-    real    :: Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems)
     real    :: Usafe_master (PP_nVar,0:PP_N,0:PP_N,nSides)
     real    :: Usafe_slave  (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
     real    :: Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems)
@@ -2692,17 +2695,7 @@ contains
     integer :: eID
     integer :: i,j,k, l
     integer :: iter
-    integer :: stencil_m1(0:PP_N)
-    integer :: stencil_p1(0:PP_N)
     !--------------------------------------------------------
-    
-    Usafe = 0.0
-    
-    stencil_m1    = -1
-    stencil_m1(0) =  0
-    
-    stencil_p1       = 1
-    stencil_p1(PP_N) = 0
     
 !   Some definitions
 !   ****************
@@ -2717,7 +2710,6 @@ contains
 !     Check if it makes sense correcting
 !     ----------------------------------
       alphadiff = alpha(eID) - alpha_max
-      if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
       
 !     ----------------------------------------------------------
 !     Get Usafe for each point of the element and check validity
@@ -2765,7 +2757,7 @@ contains
 !     ----------------------------
 !     Iterate to get a valid state
 !     ----------------------------
-!#      do iter=1, PositMaxIter
+      
         corr = -eps ! Safe initialization
         
 !       Compute correction factors
@@ -2800,28 +2792,17 @@ contains
           elseif (U(1,i,j,k,eID) > rho_max) then
             rho_safe = rho_max
           else
+            rho_safe = 999.
             cycle
           end if
           
           ! Density correction
           a = (rho_safe - U(1,i,j,k,eID))
-          if (a > 0.) then ! This DOF needs a correction
-            corr1 = a / FFV_m_FDG(1,i,j,k,eID)
-            corr = max(corr,corr1)
-          end if
-          
-!#          ! Pressure correction
-!#          call Get_Pressure(U(:,i,j,k,eID),pres)
-          
-!#          ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
-!#          if (ap > 0.) then
-!#            corr1 = ap / FFV_m_FDG(5,i,j,k,eID)
-!#            corr = max(corr,corr1)
-!#          end if
+          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
+          corr = max(corr,corr1)
           
         end do       ; end do       ; end do ! i,j,k
         
-      
 !       Do the correction if needed
 !       ---------------------------
         if ( corr > 0. ) then
@@ -2829,10 +2810,6 @@ contains
           ! Change the alpha for output
           alphacont  = alpha(eID)
           alpha(eID) = alpha(eID) + corr * sdt
-          
-!#          if (alpha(eID) > 1e-10) then
-!#            print*, alpha(eID)
-!#          end if
           
           ! Change inconsistent alphas
           if (alpha(eID) > alpha_max) then
@@ -2848,15 +2825,7 @@ contains
             Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
           end do       ; end do       ; enddo
           
-        else
-          exit
         end if
-      
-!#      end do !iter
-      
-      if (iter > PositMaxIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' iterations. Elem: ', eID + offsetElem
-      end if
       
     end do !eID
     
