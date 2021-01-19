@@ -451,12 +451,12 @@ tStage=t
 CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-#if POSITIVITYPRES
-CALL MakeSolutionPositive(U)
-#endif /*POSITIVITYPRES*/
 #if NFVSE_CORR
 call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
 #endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 
 ! Following steps
 DO iStage=2,nRKStages
@@ -465,12 +465,12 @@ DO iStage=2,nRKStages
   CALL DGTimeDerivative(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
-#if POSITIVITYPRES
-  CALL MakeSolutionPositive(U)
-#endif /*POSITIVITYPRES*/
 #if NFVSE_CORR
   call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
 #endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 END DO
 CurrentStage=1
 
@@ -592,7 +592,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
     U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
     
 #if NFVSE_CORR
-    call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+    call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -614,7 +614,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
   
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(nRKStages))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
