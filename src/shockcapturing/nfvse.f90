@@ -810,7 +810,6 @@ contains
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
     integer  :: i,j,k
-    real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
     real :: UL   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the left
     real :: UR   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the right
     real :: prim (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables
@@ -822,6 +821,7 @@ contains
     real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
+    real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
 #endif /*NONCONS*/
     !-------------------------------------------------------------------------
     
@@ -2497,9 +2497,8 @@ contains
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: sKappaM1
     use MOD_Mesh_Vars          , only: sJ
-    use MOD_Equation_Vars      , only: Get_Pressure
+    use MOD_Equation_Vars      , only: Get_Pressure, Get_dpdU
     use MOD_NFVSE_MPI
     USE MOD_Globals
     implicit none
@@ -2521,9 +2520,11 @@ contains
     real    :: alphadiff
     real    :: alphacont  !container for alpha
     real    :: sdt
+    real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
     integer :: eID
     integer :: i,j,k
     integer :: iter
+    logical :: notInIter
     !--------------------------------------------------------
     
 !   Some definitions
@@ -2567,65 +2568,119 @@ contains
       ! Compute F_FV-F_DG
       FFV_m_FDG = -Fsafe_m_Fblen/alphadiff
       
-!     ----------------------------
-!     Iterate to get a valid state
-!     ----------------------------
-      do iter=1, PositMaxIter
-        corr = -eps ! Safe initialization
+!     ---------------
+!     Correct density
+!     ---------------
+      
+      corr = -eps ! Safe initialization
         
-!       Compute correction factors
-!       --------------------------
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-          ! Density correction
-          a = (PositCorrFactor * Usafe(1,i,j,k) - U(1,i,j,k,eID))
-          if (a > 0.) then ! This DOF needs a correction
-            corr1 = a / FFV_m_FDG(1,i,j,k)
-            corr = max(corr,corr1)
-          end if
-          
-          ! Pressure correction
-          call Get_Pressure(U(:,i,j,k,eID),pres)
-          
-          ap = (PositCorrFactor * p_safe(i,j,k) - pres) * sKappaM1
-          if (ap > 0.) then
-            corr1 = ap / FFV_m_FDG(5,i,j,k)
-            corr = max(corr,corr1)
-          end if
-          
-        end do       ; end do       ; end do ! i,j,k
+!     Compute correction factors
+!     --------------------------
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        
+        ! Density correction
+        a = (PositCorrFactor * Usafe(1,i,j,k) - U(1,i,j,k,eID))
+        if (a > 0.) then ! This DOF needs a correction
+          corr1 = a / FFV_m_FDG(1,i,j,k)
+          corr = max(corr,corr1)
+        end if
+        
+      end do       ; end do       ; end do ! i,j,k
         
       
 !       Do the correction if needed
 !       ---------------------------
-        if ( corr > 0. ) then
-          
-          ! Change the alpha for output
-          alphacont  = alpha(eID)
-          alpha(eID) = alpha(eID) + corr * sdt
-          
-          ! Change inconsistent alphas
-          if (alpha(eID) > alpha_max) then
-            alpha(eID) = alpha_max
-            corr = (alpha_max - alphacont ) * dt
-          end if
-          
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
-            ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
-          end do       ; end do       ; enddo
-          
-        else
-          exit
+      if ( corr > 0. ) then
+        
+        ! Change the alpha for output
+        alphacont  = alpha(eID)
+        alpha(eID) = alpha(eID) + corr * sdt
+        
+        ! Change inconsistent alphas
+        if (alpha(eID) > alpha_max) then
+          alpha(eID) = alpha_max
+          corr = (alpha_max - alphacont ) * dt
         end if
+        
+        ! Correct!
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          ! Correct U
+          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+          ! Correct Ut
+          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+        end do       ; end do       ; enddo
+          
+      end if
       
-      end do !iter
+!     ---------------
+!     Correct pressure
+!     ---------------
       
-      if (iter > PositMaxIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' iterations. Elem: ', eID + offsetElem
+      corr = -eps ! Safe initialization
+      
+!     Compute correction factors
+!     --------------------------
+      notInIter = .FALSE.
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        ! Current pressure and goal
+        call Get_Pressure(U(:,i,j,k,eID),pres)
+        p_goal = PositCorrFactor * p_safe(i,j,k)
+        ap = (p_goal - pres)
+        
+        if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
+        
+        ! Newton initialization:
+        U_curr = U(:,i,j,k,eID)
+        corr1 = 0.0
+        
+        ! Perform Newton iterations
+        NewtonLoop: do iter=1, PositMaxIter
+          ! Evaluate dp/du
+          call Get_dpdU(U_curr,dpdU)
+          
+          ! Update correction
+          corr1 = corr1 + ap / dot_product(dpdU,FFV_m_FDG(:,i,j,k))
+          
+          ! Get new U and pressure
+          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k)
+          call Get_Pressure(U_curr,pres)
+          
+          ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
+          ap = p_goal-pres
+          if ( (ap <= 0.0) .and. (ap > -1.e-6*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
+        end do NewtonLoop ! iter
+        
+        if (iter > PositMaxIter) notInIter =.TRUE.
+        corr = max(corr,corr1) ! Compute the element-wise maximum correction
+      
+      end do       ; end do       ; enddo !i,j,k
+      
+      if (notInIter) then
+        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+      end if
+      
+!       Do the correction if needed
+!       ---------------------------
+      if ( corr > 0. ) then
+        
+        ! Change the alpha for output
+        alphacont  = alpha(eID)
+        alpha(eID) = alpha(eID) + corr * sdt
+        
+        ! Change inconsistent alphas
+        if (alpha(eID) > alpha_max) then
+          alpha(eID) = alpha_max
+          corr = (alpha_max - alphacont ) * dt
+        end if
+        
+        ! Correct!
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          ! Correct U
+          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+          ! Correct Ut
+          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+        end do       ; end do       ; enddo
+          
       end if
       
     end do !eID
