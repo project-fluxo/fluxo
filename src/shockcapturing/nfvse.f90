@@ -550,9 +550,11 @@ contains
     end if
     
     ! Use IDP correction with previous step density:
+#if NFVSE_CORR
     if (EntropyCorr) then
       Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
     end if
+#endif /*NFVSE_CORR*/
     
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
@@ -2730,7 +2732,7 @@ contains
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, DensityCorr
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: sKappaM1, Get_MathEntropy, ConsToEntropy
+    use MOD_Equation_Vars      , only: Get_MathEntropy, ConsToEntropy
     use MOD_Mesh_Vars          , only: sJ
     use MOD_Equation_Vars      , only: Get_Pressure
     use MOD_ProlongToFace      , only: ProlongToFace

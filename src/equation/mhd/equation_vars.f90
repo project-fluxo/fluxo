@@ -785,4 +785,34 @@ end subroutine Get_DensityTimesPressure
     
   end subroutine Get_dpdU
   
+!==================================================================================================================================
+!> Transformation from conservative variables U to S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+  PURE FUNCTION Get_MathEntropy(cons) RESULT(Entropy)
+    ! MODULES
+    ! IMPLICIT VARIABLE HANDLING
+    IMPLICIT NONE
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! INPUT VARIABLES
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! OUTPUT VARIABLES
+    REAL                                :: entropy !< vector of entropy variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! LOCAL VARIABLES
+    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+    !==================================================================================================================================
+    srho   = 1./cons(1)
+    u      = cons(2)*srho
+    v      = cons(3)*srho
+    w      = cons(4)*srho
+    v2s2   = 0.5*(u*u+v*v+w*w)
+    rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9
+    
+    s      = - LOG(rho_sp*(cons(1)**kappaM1))
+    
+    Entropy = -cons(1)*s*sKappaM1
+    
+  END FUNCTION Get_MathEntropy
+  
 END MODULE MOD_Equation_Vars

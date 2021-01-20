@@ -730,7 +730,7 @@ end subroutine Get_DensityTimesPressure
   end subroutine Get_dpdU
   
 !==================================================================================================================================
-!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!> Transformation from conservative variables U to S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
   PURE FUNCTION Get_MathEntropy(cons) RESULT(Entropy)
     ! MODULES
