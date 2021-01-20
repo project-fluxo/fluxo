@@ -100,6 +100,9 @@ contains
                                               "   2: Element-wise IDP."&
                                              ,"1")
     
+    call prms%CreateLogicalOption(   "EntropyCorr",  " For FVCorrMethod=2. IDP correction on entropy?", "F")
+    call prms%CreateLogicalOption(   "DensityCorr",  " For FVCorrMethod=2. IDP(TVD) correction on density?", "T")
+    
     call prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
     call prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
 #endif /*NFVSE_CORR*/
@@ -159,6 +162,8 @@ contains
         Apply_NFVSE_Correction => Apply_NFVSE_Correction_posit
         SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
       case(2)
+        EntropyCorr = GETLOGICAL('EntropyCorr','F')
+        DensityCorr = GETLOGICAL('DensityCorr','T')
         Apply_NFVSE_Correction => Apply_NFVSE_Correction_IDP
         SWRITE(UNIT_stdOut,'(A)') '    *NFVSE IDP correction activated'
       case default
@@ -258,6 +263,9 @@ contains
     allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( alpha_old(nElems) )
     allocate ( Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+    if (EntropyCorr) then
+      allocate ( EntPrev          (1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+    end if
     Fsafe = 0.
     Fblen = 0.
     alpha_old = 0.
@@ -497,7 +505,7 @@ contains
     use MOD_Mesh_Vars          , only: nElems
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max, Usafe
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max, Usafe, EntropyCorr, EntPrev
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
@@ -528,7 +536,7 @@ contains
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
-      call Get_externalU(U_ext,U,U_master,U_slave)
+      call Get_externalU(PP_nVar,U_ext,U,U_master,U_slave)
     end if
     
     if (SpacePropSweeps > 0) then
@@ -542,7 +550,9 @@ contains
     end if
     
     ! Use IDP correction with previous step density:
-    !Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
+    if (EntropyCorr) then
+      Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
+    end if
     
     do iElem=1,nElems
 #if !defined(NFVSE_CORR)
@@ -2287,16 +2297,17 @@ contains
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
 !> ATTENTION 2: Mortar faces are not considered (TODO?)
 !===================================================================================================================================
-  subroutine Get_externalU(U_ext,U,U_master,U_slave)
+  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave)
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
     use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
     implicit none
     !-arguments-----------------------------------------------
-    real, intent(out) :: U_ext   (PP_nVar,0:PP_N,0:PP_N,6     ,nElems)
-    real, intent(in)  :: U       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
-    real, intent(in)  :: U_master(PP_nVar,0:PP_N,0:PP_N,nSides)
-    real, intent(in)  :: U_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    integer, intent(in) :: nVar
+    real, intent(out) :: U_ext   (nVar,0:PP_N,0:PP_N,6     ,nElems)
+    real, intent(in)  :: U       (nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+    real, intent(in)  :: U_master(nVar,0:PP_N,0:PP_N,nSides)
+    real, intent(in)  :: U_slave (nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
     !-local-variables-----------------------------------------
     integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
     integer :: ax1, ax2
@@ -2716,10 +2727,10 @@ contains
 !>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter, Usafe
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, DensityCorr
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: sKappaM1
+    use MOD_Equation_Vars      , only: sKappaM1, Get_MathEntropy, ConsToEntropy
     use MOD_Mesh_Vars          , only: sJ
     use MOD_Equation_Vars      , only: Get_Pressure
     use MOD_ProlongToFace      , only: ProlongToFace
@@ -2736,6 +2747,9 @@ contains
     real    :: Usafe_master (PP_nVar,0:PP_N,0:PP_N,nSides)
     real    :: Usafe_slave  (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
     real    :: Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems)
+    real    :: EntPrev_master(     1,0:PP_N,0:PP_N,nSides)
+    real    :: EntPrev_slave (     1,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    real    :: EntPrev_ext   (     1,0:PP_N,0:PP_N,6,nElems)
     real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
     real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)  ! Finite Volume Ut minus DG Ut
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
@@ -2747,15 +2761,45 @@ contains
     real    :: alphacont  !container for alpha
     real    :: sdt
     real    :: rho_min, rho_max, rho_safe
+    real    :: s_max, as, U_curr(PP_nVar), dSdalpha
+    logical :: notInIter
     integer :: eID
     integer :: i,j,k, l
     integer :: iter
+    integer :: idx_p1(0:PP_N)
+    integer :: idx_m1(0:PP_N)
     !--------------------------------------------------------
+    
+!#    !FV inner stencil
+!#    idx_p1 = 1
+!#    idx_p1(PP_N) = 0
+    
+!#    idx_m1 = -1
+!#    idx_m1(0) = 0
+    
+!#    !FV stencil
+!#    idx_p1 = 1
+!#    idx_m1 = -1
+    
+!#    !DG stencil
+!#    idx_p1 = (/(PP_N-i, i=0, PP_N)/)
+!#    idx_m1 = (/(-i, i=0, PP_N)/)
+!#    idx_p1(PP_N) = 1
+!#    idx_m1(0)    =-1
+    
     
 !   Some definitions
 !   ****************
     alpha_old = alpha 
     sdt = 1./dt
+    ! Get prev entropy if needed
+    if (EntropyCorr) then
+      do eID=1, nElems
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          EntPrev(1,i,j,k,eID) = Get_MathEntropy(Usafe(:,i,j,k,eID))
+        end do       ; end do       ; end do ! i,j,k
+      end do !eID
+    end if
     
 !   Iterate over the elements
 !   *************************
@@ -2794,9 +2838,13 @@ contains
     
     end do !eID
     
-    ! Get externsl Usafe
+  if (DensityCorr) then
+    ! Get external Usafe
     call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.FALSE.)
-    call Get_externalU(Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave)
+    ! MPI communication
+    
+    ! Gather the external Usafe in the right location
+    call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave)
     ! FIll Usafe with info
     do eID=1, nElems
       Usafe(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
@@ -2807,11 +2855,11 @@ contains
       Usafe(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
     end do !eID
     
+!     ----------------------------
+!     Density TVD correction
+!     ----------------------------
+    
     do eID=1, nElems
-      
-!     ----------------------------
-!     Iterate to get a valid state
-!     ----------------------------
       
         corr = -eps ! Safe initialization
         
@@ -2825,16 +2873,19 @@ contains
           rho_max = -huge(1.0)
           
           ! check stencil in xi
+!#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
           do l = i-1, i+1
             rho_min = min(rho_min, Usafe(1,l,j,k,eID))
             rho_max = max(rho_max, Usafe(1,l,j,k,eID))
           end do
           ! check stencil in eta
+!#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
           do l = j-1, j+1
             rho_min = min(rho_min, Usafe(1,i,l,k,eID))
             rho_max = max(rho_max, Usafe(1,i,l,k,eID))
           end do
           ! check stencil in zeta
+!#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
           do l = k-1, k+1
             rho_min = min(rho_min, Usafe(1,i,j,l,eID))
             rho_max = max(rho_max, Usafe(1,i,j,l,eID))
@@ -2883,7 +2934,125 @@ contains
         end if
       
     end do !eID
+  end if ! DensityCorr
+!     ----------------------------
+!     Entropy correction
+!     ----------------------------
+    if (EntropyCorr) then
+      
+      ! Get neighbor info
+      ! *****************
     
+      ! Get external Usafe
+      call ProlongToFace(1,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,doMPISides=.FALSE.)
+      ! MPI communication
+    
+      ! Gather the external Usafe in the right location
+      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
+      ! FIll EntPrev with info
+      do eID=1, nElems
+        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
+        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
+        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
+        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
+        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
+        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
+      end do !eID
+      
+      do eID=1, nElems
+      
+        corr = -eps ! Safe initialization
+        
+!       Compute correction factors
+!       --------------------------
+        notInIter = .FALSE.
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          
+          ! Get the limit states
+          !*********************
+          s_max = -huge(1.0)
+          
+          ! check stencil in xi
+!#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
+          do l = i-1, i+1
+            s_max = max(s_max, EntPrev(1,l,j,k,eID))
+          end do
+          ! check stencil in eta
+!#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
+          do l = j-1, j+1
+            s_max = max(s_max, EntPrev(1,i,l,k,eID))
+          end do
+          ! check stencil in zeta
+!#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
+          do l = k-1, k+1
+            s_max = max(s_max, EntPrev(1,i,j,l,eID))
+          end do
+          
+          
+          ! Current entropy and goal
+          as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
+
+          if (as >= -10.*epsilon(1.0)) cycle ! this DOF does NOT need pressure correction   
+        
+          ! Newton initialization:
+          U_curr = U(:,i,j,k,eID)
+          corr1 = 0.0
+        
+          ! Perform Newton iterations
+          NewtonLoop: do iter=1, PositMaxIter
+
+            ! Evaluate dS/d(alpha)
+            dSdalpha = dot_product(ConsToEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
+            if (ALMOSTEQUAL(dSdalpha,0.0)) exit NewtonLoop ! Nothing to do here!
+            
+            ! Update correction
+            corr1 = corr1 + as / dSdalpha
+            
+            ! Get new U and pressure
+            U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
+            
+            ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
+            as = s_max-Get_MathEntropy(U_curr)
+            
+            if ( abs(as) < 1.e-12 ) exit NewtonLoop  
+            
+          end do NewtonLoop ! iter
+          
+          if (iter > PositMaxIter) notInIter =.TRUE.
+          corr = max(corr,corr1) ! Compute the element-wise maximum correction
+      
+        end do       ; end do       ; enddo !i,j,k
+        
+        if (notInIter) then
+          write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+        end if
+        
+!       Do the correction if needed
+!       ---------------------------
+        if ( corr > 0. ) then
+          
+          ! Change the alpha for output
+          alphacont  = alpha(eID)
+          alpha(eID) = alpha(eID) + corr * sdt
+          
+          ! Change inconsistent alphas
+          if (alpha(eID) > alpha_max) then
+            alpha(eID) = alpha_max
+            corr = (alpha_max - alphacont ) * dt
+          end if
+          
+          ! Correct!
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            ! Correct U
+            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
+            ! Correct Ut
+            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
+          end do       ; end do       ; enddo
+          
+        end if
+      
+      end do !eID
+    end if
   end subroutine Apply_NFVSE_Correction_IDP
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
@@ -2892,7 +3061,7 @@ contains
   subroutine FinalizeNFVSE()
     use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, Compute_FVFluxes, alpha, alpha_Master, alpha_Slave
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars, only: Fsafe, Fblen, alpha_old
+    use MOD_NFVSE_Vars, only: Fsafe, Fblen, alpha_old, Usafe, EntPrev
 #endif /*NFVSE_CORR*/
     use MOD_NFVSE_Vars, only: U_ext, sdxR,sdxL,rR,rL
 #if MPI
@@ -2912,6 +3081,8 @@ contains
     SDEALLOCATE (Fsafe)
     SDEALLOCATE (Fblen)
     SDEALLOCATE (alpha_old)
+    SDEALLOCATE (Usafe)
+    SDEALLOCATE (EntPrev)
 #endif /*NFVSE_CORR*/
     
     Compute_FVFluxes => null()
