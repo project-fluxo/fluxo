@@ -118,9 +118,11 @@ SUBROUTINE VolInt_adv(Ut)
 ! MODULES
 USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:D_hat_T,U
-#if PARABOLIC
-USE MOD_Lifting_Vars ,ONLY:gradPx,gradPy,gradPz
-#endif /*PARABOLIC*/
+#if LOCAL_ALPHA
+use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG
+use MOD_Interpolation_Vars , only: wGP
+USE MOD_DG_Vars   ,ONLY:D_T
+#endif /*LOCAL_ALPHA*/
 USE MOD_Flux      ,ONLY:EvalAdvFluxTilde3D  
 USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 ! IMPLICIT VARIABLE HANDLING
@@ -142,6 +144,21 @@ DO iElem=1,nElems
                        metrics_hTilde(:,:,:,:,iElem), &
                                ftilde,gtilde,htilde)
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
+#if LOCAL_ALPHA
+    
+    do i=0, PP_N-1
+      ftilde_DG(:,i,:,:,iElem) = 0.
+      gtilde_DG(:,:,i,:,iElem) = 0.
+      htilde_DG(:,:,:,i,iElem) = 0.
+      do l=0, i
+        do j=0, PP_N
+          ftilde_DG(:,i,:,:,iElem) = ftilde_DG(:,i,:,:,iElem) - wGP(j)*D_T(l,j)*ftilde(:,j,:,:)
+          gtilde_DG(:,:,i,:,iElem) = gtilde_DG(:,:,i,:,iElem) - wGP(j)*D_T(l,j)*gtilde(:,:,j,:)
+          htilde_DG(:,:,:,i,iElem) = htilde_DG(:,:,:,i,iElem) - wGP(j)*D_T(l,j)*htilde(:,:,:,j)
+        end do
+      end do
+    end do
+#endif /*LOCAL_ALPHA*/
   
   ! xi derivatives
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N; DO l=0,PP_N
@@ -157,6 +174,7 @@ DO iElem=1,nElems
   DO k=0,PP_N; DO l=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,k)*htilde(:,i,j,l)
   END DO; END DO; END DO; END DO
+  
 END DO ! iElem
 END SUBROUTINE VolInt_adv
 #endif /*PP_DiscType==1*/

@@ -269,6 +269,15 @@ contains
     Fsafe = 0.
     Fblen = 0.
     alpha_old = 0.
+#if LOCAL_ALPHA
+    allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+    allocate ( ftilde_FV(PP_nVar,0:PP_N-1,0:PP_N  ,0:PP_N  ,1:nElems) )
+    allocate ( gtilde_FV(PP_nVar,0:PP_N  ,0:PP_N-1,0:PP_N  ,1:nElems) )
+    allocate ( htilde_FV(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N-1,1:nElems) )
+    allocate ( ftilde_DG(PP_nVar,0:PP_N-1,0:PP_N  ,0:PP_N  ,1:nElems) )
+    allocate ( gtilde_DG(PP_nVar,0:PP_N  ,0:PP_N-1,0:PP_N  ,1:nElems) )
+    allocate ( htilde_DG(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N-1,1:nElems) )
+#endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     
 #if MPI
@@ -506,6 +515,9 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max, Usafe, EntropyCorr, EntPrev
+#if LOCAL_ALPHA
+    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV!, ftilde_DG, gtilde_DG, htilde_DG
+#endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_NFVSE_MPI          , only: PropagateBlendingCoeff, ProlongBlendingCoeffToFaces
@@ -554,6 +566,11 @@ contains
     if (EntropyCorr) then
       Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
     end if
+#if LOCAL_ALPHA
+    do iElem=1, nElems
+      alpha_loc(:,:,:,iElem) = alpha(iElem)
+    end do
+#endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     
     do iElem=1,nElems
@@ -568,7 +585,11 @@ contains
                                                ftildeR, gtildeR, htildeR, &
 #endif /*NONCONS*/
                                                SubCellMetrics(iElem), iElem )
-      
+#if LOCAL_ALPHA
+      ftilde_FV(:,:,:,:,iElem) = ftilde(:,0:PP_N-1,0:PP_N  ,0:PP_N  )
+      gtilde_FV(:,:,:,:,iElem) = gtilde(:,0:PP_N  ,0:PP_N-1,0:PP_N  )
+      htilde_FV(:,:,:,:,iElem) = htilde(:,0:PP_N  ,0:PP_N  ,0:PP_N-1)
+#endif /*LOCAL_ALPHA*/
 !     Update Ut
 !     ---------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -2729,7 +2750,10 @@ contains
 !>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, DensityCorr
+    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, DensityCorr
+#if LOCAL_ALPHA
+    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, sWGP
+#endif /*LOCAL_ALPHA*/
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: Get_MathEntropy, ConsToEntropy
@@ -2755,9 +2779,12 @@ contains
     real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
     real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)  ! Finite Volume Ut minus DG Ut
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
-    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
-    real    :: pres
     real    :: corr, corr1
+#if LOCAL_ALPHA
+    real    :: corr_loc     (0:PP_N,0:PP_N,0:PP_N)
+    real    :: alphacont_loc(0:PP_N,0:PP_N,0:PP_N)
+    real    :: my_corr      (PP_nVar)
+#endif /*LOCAL_ALPHA*/
     real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_max for an element
     real    :: alphadiff
     real    :: alphacont  !container for alpha
@@ -2864,7 +2891,9 @@ contains
     do eID=1, nElems
       
         corr = -eps ! Safe initialization
-        
+#if LOCAL_ALPHA
+        corr_loc = 0.0
+#endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -2907,6 +2936,9 @@ contains
           ! Density correction
           a = (rho_safe - U(1,i,j,k,eID))
           corr1 = a / FFV_m_FDG(1,i,j,k,eID)
+#if LOCAL_ALPHA
+          corr_loc(i,j,k) = corr1
+#endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1)
           
         end do       ; end do       ; end do ! i,j,k
@@ -2925,6 +2957,63 @@ contains
             corr = (alpha_max - alphacont ) * dt
           end if
           
+#if LOCAL_ALPHA
+          ! Change the alpha for output
+          alphacont_loc(:,:,:) = alpha_loc(:,:,:,eID)
+          alpha_loc(:,:,:,eID) = alpha_loc(:,:,:,eID) + corr_loc(:,:,:)* sdt
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            if (alpha_loc(i,j,k,eID) > alpha_max) then
+              alpha_loc(i,j,k,eID) = alpha_max
+              corr_loc (i,j,k)     = (alpha_max - alphacont_loc(i,j,k) ) * dt
+            end if
+          end do       ; end do       ; enddo
+          
+          ! Correct!
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            ! xi correction
+            ! -------------
+            ! left
+            if (i /= 0) then
+              my_corr=-max(corr_loc(i-1,j  ,k  ),corr_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (i /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! eta correction
+            ! --------------
+            ! left
+            if (j /= 0) then
+              my_corr=-max(corr_loc(i  ,j-1,k  ),corr_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (j /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! zeta correction
+            ! ---------------
+            ! left
+            if (k /= 0) then
+              my_corr=-max(corr_loc(i  ,j  ,k-1),corr_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (k /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+          end do       ; end do       ; enddo
+#else
           ! Correct!
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
             ! Correct U
@@ -2932,7 +3021,7 @@ contains
             ! Correct Ut
             Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
           end do       ; end do       ; enddo
-          
+#endif
         end if
       
     end do !eID
@@ -2964,7 +3053,9 @@ contains
       do eID=1, nElems
       
         corr = -eps ! Safe initialization
-        
+#if LOCAL_ALPHA
+        corr_loc = 0.0
+#endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
         notInIter = .FALSE.
@@ -2989,7 +3080,6 @@ contains
           do l = k-1, k+1
             s_max = max(s_max, EntPrev(1,i,j,l,eID))
           end do
-          
           
           ! Current entropy and goal
           as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
@@ -3021,8 +3111,11 @@ contains
           end do NewtonLoop ! iter
           
           if (iter > PositMaxIter) notInIter =.TRUE.
+          
+#if LOCAL_ALPHA
+          corr_loc(i,j,k) = corr1
+#endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1) ! Compute the element-wise maximum correction
-      
         end do       ; end do       ; enddo !i,j,k
         
         if (notInIter) then
@@ -3036,12 +3129,70 @@ contains
           ! Change the alpha for output
           alphacont  = alpha(eID)
           alpha(eID) = alpha(eID) + corr * sdt
-          
+
           ! Change inconsistent alphas
           if (alpha(eID) > alpha_max) then
             alpha(eID) = alpha_max
             corr = (alpha_max - alphacont ) * dt
           end if
+          
+#if LOCAL_ALPHA
+          ! Change the alpha for output
+          alphacont_loc(:,:,:) = alpha_loc(:,:,:,eID)
+          alpha_loc(:,:,:,eID) = alpha_loc(:,:,:,eID) + corr_loc(:,:,:)* sdt
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            if (alpha_loc(i,j,k,eID) > alpha_max) then
+              alpha_loc(i,j,k,eID) = alpha_max
+              corr_loc (i,j,k)     = (alpha_max - alphacont_loc(i,j,k) ) * dt
+            end if
+          end do       ; end do       ; enddo
+          
+          ! Correct!
+          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+            ! xi correction
+            ! -------------
+            ! left
+            if (i /= 0) then
+              my_corr=-max(corr_loc(i-1,j  ,k  ),corr_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (i /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! eta correction
+            ! --------------
+            ! left
+            if (j /= 0) then
+              my_corr=-max(corr_loc(i  ,j-1,k  ),corr_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (j /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! zeta correction
+            ! ---------------
+            ! left
+            if (k /= 0) then
+              my_corr=-max(corr_loc(i  ,j  ,k-1),corr_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+            ! right
+            if (k /= PP_N) then
+              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
+              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
+            end if
+          end do       ; end do       ; enddo
+#else
           
           ! Correct!
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -3050,6 +3201,7 @@ contains
             ! Correct Ut
             Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
           end do       ; end do       ; enddo
+#endif /*LOCAL_ALPHA*/
           
         end if
       

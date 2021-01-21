@@ -204,6 +204,9 @@ nOutvars = nOutvars + 1
 #if NFVSE_CORR
 nOutvars = nOutvars + 1
 #endif /*NFVSE_CORR*/
+#if LOCAL_ALPHA
+nOutvars = nOutvars + 1
+#endif /*LOCAL_ALPHA*/
 #endif /*SHOCK_NFVSE*/
 allocate(strvarnames_tmp(nOutVars))
 
@@ -222,6 +225,10 @@ strvarnames_tmp(nVars) = 'BlendingFunction'
 nVars = nVars+1
 strvarnames_tmp(nVars) = 'BlendingFunction_old'
 #endif /*NFVSE_CORR*/
+#if LOCAL_ALPHA
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'BlendingFunction_loc'
+#endif /*LOCAL_ALPHA*/
 #endif /*SHOCK_NFVSE*/
 
 
@@ -292,6 +299,9 @@ use MOD_NFVSE_Vars ,only: alpha
 #if NFVSE_CORR
 use MOD_NFVSE_Vars ,only: alpha_old
 #endif /*NFVSE_CORR*/
+#if LOCAL_ALPHA
+use MOD_NFVSE_Vars ,only: alpha_loc
+#endif /*LOCAL_ALPHA*/
 #endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
@@ -319,6 +329,9 @@ REAL                          :: cons(PP_nVar)
 #endif
 INTEGER                       :: i,j,k
 integer                       :: nVars
+#if LOCAL_ALPHA
+real :: alpha_local(1,0:PP_N,0:PP_N,0:PP_N)
+#endif /*LOCAL_ALPHA*/
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
 
@@ -381,6 +394,11 @@ DO iElem=1,nElems
   nVars = nVars+1
   U_NVisu(nVars ,:,:,:,iElem) = alpha_old(iElem)
 #endif /*NFVSE_CORR*/
+#if LOCAL_ALPHA
+  nVars = nVars+1
+  alpha_local(1,:,:,:) = alpha_loc(:,:,:,iElem)
+  CALL ChangeBasis3D(1,PP_N,NVisu,Vdm_GaussN_NVisu,alpha_local,U_NVisu(nVars:nVars,:,:,:,iElem))
+#endif /*LOCAL_ALPHA*/
 #endif /*SHOCK_NFVSE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)

@@ -28,6 +28,9 @@ module MOD_NFVSE_Vars
 #if NFVSE_CORR
   public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, DensityCorr
 #endif /*NFVSE_CORR*/
+#if LOCAL_ALPHA
+  public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG
+#endif /*LOCAL_ALPHA*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
   public :: ReconsBoundaries, MPIRequest_Umaster
@@ -67,6 +70,15 @@ module MOD_NFVSE_Vars
 ! General
 ! -------
   integer                             :: ComputeAlpha     !< Method to compute alpha
+#if LOCAL_ALPHA
+  real, target          , allocatable :: alpha_loc(:,:,:,:) !< subcell-wise blending function
+  real                  , allocatable :: ftilde_FV(:,:,:,:,:)
+  real                  , allocatable :: gtilde_FV(:,:,:,:,:)
+  real                  , allocatable :: htilde_FV(:,:,:,:,:)
+  real                  , allocatable :: ftilde_DG(:,:,:,:,:)
+  real                  , allocatable :: gtilde_DG(:,:,:,:,:)
+  real                  , allocatable :: htilde_DG(:,:,:,:,:)
+#endif /*LOCAL_ALPHA*/
   real, target          , allocatable :: alpha(:)         !< Element-wise blending function (modified every time Ut is computed)
   real                  , allocatable :: alpha_Master(:)  !< Blending function on master sides
   real                  , allocatable :: alpha_Slave(:)   !< Blending function on slave sides
