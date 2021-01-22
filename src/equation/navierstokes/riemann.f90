@@ -161,7 +161,7 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> Advective Riemann solver
 !==================================================================================================================================
-SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2)
+pure SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
@@ -237,7 +237,7 @@ end subroutine RotateFluxBack
 !==================================================================================================================================
 !> Central / Average Euler flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverCentral(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverCentral(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
@@ -266,7 +266,7 @@ END SUBROUTINE RiemannSolverCentral
 !==================================================================================================================================
 !> Rusanov / lax-Friedrichs Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByRusanov(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:SoundSpeed2
@@ -307,7 +307,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -378,7 +378,7 @@ END SUBROUTINE RiemannSolverByHLL
 !==================================================================================================================================
 !> HLLC Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByHLLC(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -447,7 +447,7 @@ END SUBROUTINE RiemannSolverByHLLC
 !==================================================================================================================================
 !> HLLC Riemann solver with Carbuncle fix
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLCnoCarbuncle(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByHLLCnoCarbuncle(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -572,7 +572,7 @@ END SUBROUTINE RiemannSolverByHLLCnoCarbuncle
 !==================================================================================================================================
 !> Roe riemann solver, depending on "whichvolumeflux" global parameter, consistent dissipation is added
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByRoe(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars, ONLY: kappaM1,WhichVolumeFlux
@@ -693,7 +693,7 @@ END SUBROUTINE RiemannSolverByRoe
 !==================================================================================================================================
 !> Entropy stable Riemann solver with full matrix dissipation (uses TwoPoint Entropy Conserving flux)
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_EntropyStable(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_EntropyStable(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY: kappa,KappaM1
@@ -799,7 +799,7 @@ END SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
 !==================================================================================================================================
 !> Riemann solver, using simply the two point average chosen by the global parameter whichVolumeFlux
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_VolumeFluxAverage(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_VolumeFluxAverage(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
@@ -830,7 +830,7 @@ END SUBROUTINE RiemannSolver_VolumeFluxAverage
 !==================================================================================================================================
 !> Entropy conservative Ismali and Roe with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_EC_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_EC_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,SoundSpeed2
@@ -937,7 +937,7 @@ END SUBROUTINE RiemannSolver_EC_LLF
 !==================================================================================================================================
 !> Kennedy Gruber /Decros with LLF diss, EC+KEP - pressure with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage,SoundSpeed2
@@ -976,7 +976,7 @@ END SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF
 !==================================================================================================================================
 !> Kennedy Gruber /Decros with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_ECKEP_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_ECKEP_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,SoundSpeed2

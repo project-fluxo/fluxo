@@ -95,7 +95,7 @@ PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
 ABSTRACT INTERFACE
-  SUBROUTINE i_sub_SolveRiemannProblem(F,U_LL,U_RR)
+  pure SUBROUTINE i_sub_SolveRiemannProblem(F,U_LL,U_RR)
 #if PP_N == N
     IMPORT PP_N
 #endif
@@ -321,7 +321,7 @@ END SUBROUTINE PrimToConsVec
 !==================================================================================================================================
 !> calculate soundspeed^2 ,c^2 = kappa*p/rho 
 !==================================================================================================================================
-FUNCTION SoundSpeed2(Cons) RESULT(cs2)
+pure FUNCTION SoundSpeed2(Cons) RESULT(cs2)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------

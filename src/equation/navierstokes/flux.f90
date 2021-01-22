@@ -295,7 +295,7 @@ END SUBROUTINE EvalFluxTilde3D
 !==================================================================================================================================
 !> Computes the first cartesian Euler flux (F_x) using the conservative variables for every surface point
 !==================================================================================================================================
-SUBROUTINE EvalEulerFlux1D(U_Face,F_Face)
+pure SUBROUTINE EvalEulerFlux1D(U_Face,F_Face)
 ! MODULES
 USE MOD_Equation_Vars,ONLY:KappaM1
 USE MOD_DG_Vars,ONLY:nTotal_face

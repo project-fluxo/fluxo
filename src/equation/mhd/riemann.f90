@@ -142,7 +142,7 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> Advective Riemann solver
 !==================================================================================================================================
-SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
+pure SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
 IMPLICIT NONE
@@ -225,7 +225,7 @@ end subroutine RotateFluxBack
 !> we only need to add
 !> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
 !==================================================================================================================================
-SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
+pure SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:nTotal_Face
 IMPLICIT NONE
@@ -268,7 +268,7 @@ END SUBROUTINE AddNonConsFlux
 !==================================================================================================================================
 !> Lax-friedrichs / rusanov flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -309,7 +309,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -366,7 +366,7 @@ END SUBROUTINE RiemannSolverByHLL
 !==================================================================================================================================
 !> HLLC solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -506,7 +506,7 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and 
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
+pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -728,7 +728,7 @@ END SUBROUTINE RiemannSolverByHLLD
 
 
 
-SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
+pure SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
 !==================================================================================================================================
 ! Calculates the HLL state for use with the MHD HLLC Riemann solver
 !==================================================================================================================================
@@ -759,7 +759,7 @@ END SUBROUTINE EvalHLLState
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: WaveSpeeds1D
@@ -1022,7 +1022,7 @@ Flux(:)=0.5*Flux(:)
 END SUBROUTINE RiemannSolverByRoe
 
 
-SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
+pure SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
 ! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
@@ -1219,7 +1219,7 @@ END SUBROUTINE EntropyStableByLLF
 !>            2) mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !>            3) Dissipation for each characteristic wave seperately
 !==================================================================================================================================
-SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
+pure SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN

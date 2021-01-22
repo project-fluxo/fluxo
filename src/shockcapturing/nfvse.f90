@@ -575,7 +575,6 @@ contains
     use MOD_Riemann   , only: AdvRiemann
 #if NONCONS
     USE MOD_Riemann   , only: AddNonConsFlux
-    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
     !-arguments---------------------------------------------------------------
@@ -591,7 +590,6 @@ contains
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
-    integer  :: i,j,k
     real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
     real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
@@ -623,34 +621,12 @@ contains
     
 !   Fill inner interfaces
 !   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
-                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
+    call Compute_FVFluxes_1D(U_,U_,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i),sCM % xi   % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i),sCM % xi   % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
+                                U_,FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
-    end do ! i (xi planes)
+                                   sCM % xi)
+    
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -670,34 +646,11 @@ contains
     
 !   Fill inner interfaces
 !   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1), &
-                   sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
+    call Compute_FVFluxes_1D(U_,U_,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i),sCM % eta  % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i),sCM % eta  % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
+                                U_,FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
-    end do ! i (eta planes)
+                                   sCM % eta)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -711,35 +664,11 @@ contains
 !   ***********    
 !   Fill inner interfaces
 !   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1), &
-                   sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
+    call Compute_FVFluxes_1D(U , U , H , &
 #if NONCONS
-      ! Copy conservative part
-      HR(:,:,:,i) = H(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(H(:,:,:,i), &
-                          U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      CALL AddNonConsFlux(HR(:,:,:,i), &
-                          U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
+                                 U , HR, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
-    end do ! i (zeta planes)
-    
+                                   sCM % zeta)
   end subroutine Compute_FVFluxes_1st_Order
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux using a second-order reconstruction of the primitive variables
@@ -750,16 +679,9 @@ contains
 #endif /*NONCONS*/
                                               sCM, iElem )
     use MOD_PreProc
-    use MOD_Riemann   , only: AdvRiemann
-    use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
-    use MOD_DG_Vars   , only: nTotal_vol
-    use MOD_Equation_Vars, only: ConsToPrimVec,PrimToConsVec
-    use MOD_Interpolation_Vars , only: wGP
-#if NONCONS
-    USE MOD_Riemann   , only: AddNonConsFlux
-    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
-#endif /*NONCONS*/
+    use MOD_NFVSE_Vars, only: SubCellMetrics_t
+    use MOD_DG_Vars       , only: nTotal_vol
+    use MOD_Equation_Vars , only: ConsToPrimVec,PrimToConsVec
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
@@ -774,15 +696,12 @@ contains
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
-    integer  :: i,j,k
     real :: UL   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the left
     real :: UR   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the right
     real :: prim (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables
-    real :: prim_ext(PP_nVar,0:PP_N,0:PP_N, 6)  ! Primitive variables
     real :: prim_(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables after reshape
     real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
     real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
-    real :: sigma(PP_nVar,0:PP_N,0:PP_N)
     real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
@@ -805,94 +724,33 @@ contains
     
     call ConsToPrimVec(nTotal_vol,prim,U)
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
-    
 !   *********
 !   Xi-planes
 !   *********
     F_  = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
-    primL = 0.0
-    primR = 0.0
 #if NONCONS
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
 #endif /*NONCONS*/
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim_(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
-      case (RECONS_CENTRAL)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,5,3,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
+!   Fill fluxes
+!   -----------
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
+    call Compute_FVFluxes_1D(UL,UR,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
+                                U_,FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
-    end do ! i (xi planes)
+                                sCM % xi)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -906,89 +764,28 @@ contains
 !   **********
     F_ = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
-    primL = 0.0
-    primR = 0.0
 #if NONCONS
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
 #endif /*NONCONS*/
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries) 
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim_(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
-      case (RECONS_CENTRAL)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,2,4,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
+!   Fill fluxes
+!   -----------
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
+    call Compute_FVFluxes_1D(UL,UR,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
+                                U_,FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
-    end do ! i (eta planes)
+                                         sCM % eta)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1001,80 +798,21 @@ contains
 !   ***********    
 !   Zeta-planes
 !   ***********
-    primL = 0.0
-    primR = 0.0
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim(:,:,:,i+1)-prim(:,:,:,i)),sdxL(i)*(prim(:,:,:,i)-prim(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N)
-      case (RECONS_CENTRAL)
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(0)
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,1,6,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemann(H(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
+!   Fill fluxes
+!   -----------
+    call Compute_FVFluxes_1D(UL,UR,H , &
 #if NONCONS
-      ! Copy conservative part
-      HR(:,:,:,i) = H(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(H(:,:,:,i), &
-                          U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      CALL AddNonConsFlux(HR(:,:,:,i), &
-                          U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
+                                U ,HR, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
-    end do ! i (zeta planes)
+                                sCM % zeta)
     
   end subroutine Compute_FVFluxes_TVD
 !===================================================================================================================================
@@ -1085,6 +823,7 @@ contains
 !>            2) Since the second-order reconstruction of the primitive variables may break the entropy stability (ES), a check is 
 !>               performed in AdvRiemannRecons and the scheme falls to first-order dissipation locally if needed to ensure ES.
 !>            3) A Riemann solver that implements RiemannVolFluxAndDissipMatrices is needed.
+!>            4) This routine has its own Compute_FVFluxes_1D
 !===================================================================================================================================
   subroutine Compute_FVFluxes_TVD2ES(U, F , G , H , &
 #if NONCONS
@@ -1092,15 +831,9 @@ contains
 #endif /*NONCONS*/
                                               sCM, iElem )
     use MOD_PreProc
-    use MOD_NFVSE_Vars, only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars, only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
-    use MOD_Interpolation_Vars , only: wGP
+    use MOD_NFVSE_Vars    , only: SubCellMetrics_t
     use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec
-    use MOD_DG_Vars           , only: nTotal_vol
-#if NONCONS
-    USE MOD_Riemann   , only: AddNonConsFlux
-    use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
-#endif /*NONCONS*/
+    use MOD_DG_Vars       , only: nTotal_vol
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
@@ -1115,16 +848,13 @@ contains
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
-    integer  :: i,j,k
     real :: U_   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
     real :: UL   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the left
     real :: UR   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed solution on the right
     real :: prim (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables
-    real :: prim_ext(PP_nVar,0:PP_N,0:PP_N, 6)  ! Primitive variables
     real :: prim_(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables after reshape
     real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
     real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
-    real :: sigma(PP_nVar,0:PP_N,0:PP_N)
     real :: F_   (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
@@ -1145,7 +875,6 @@ contains
 #endif /*NONCONS*/
     
     call ConsToPrimVec(nTotal_vol,prim,U)
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec(6*(PP_N+1)**2,prim_ext,U_ext(:,:,:,:,iElem) )
     
 !   *********
 !   Xi-planes
@@ -1153,86 +882,25 @@ contains
     F_  = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
-    primL = 0.0
-    primR = 0.0
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim_(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,5)))
-        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
-      case (RECONS_CENTRAL)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,3)-prim_(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,5,3,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-    
-!   Entropy fix: Fall to first order if entropy condition is not fulfilled  
-!   **********************************************************************
-    
+        
+!   Fill inner interfaces
+!   ---------------------
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i) )
+    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
+                                             FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
-    end do ! i (xi planes)
+                                             sCM % xi)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1247,83 +915,25 @@ contains
     F_ = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
-    primL = 0.0
-    primR = 0.0
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim_(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_ext(:,:,:,2)))
-        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
-      case (RECONS_CENTRAL)  
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,4)-prim_(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(PP_N)
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,2,4,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
-    
+        
+!   Fill inner interfaces
+!   ---------------------
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
+                                             FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
-    end do ! i (eta planes)
+                                             sCM % eta)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1339,79 +949,85 @@ contains
     primR = 0.0
     
 !   Do the solution reconstruction
-!   ******************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primR(:,:,:,0) = prim(:,:,:,0)
-      case (RECONS_CENTRAL)
-        primR(:,:,:,0) = prim(:,:,:,0) + (prim(:,:,:,1) - prim(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim(:,:,:,1) - prim(:,:,:,0)),sdxL(1)*(prim(:,:,:,1) - prim_ext(:,:,:,1)))
-        primR(:,:,:,0) = prim(:,:,:,0) + sigma*wGP(0)
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(prim(:,:,:,i+1)-prim(:,:,:,i)),sdxL(i)*(prim(:,:,:,i)-prim(:,:,:,i-1)))
-      
-      primR(:,:,:,i) = prim(:,:,:,i) + sigma * rR(i)
-      primL(:,:,:,i) = prim(:,:,:,i) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N)
-      case (RECONS_CENTRAL)
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - (prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        sigma = minmod(sdxL(1)*(prim(:,:,:,PP_N) - prim(:,:,:,PP_N-1)),sdxL(1)*(prim_ext(:,:,:,6)-prim(:,:,:,PP_N-1)))
-        primL(:,:,:,PP_N) = prim(:,:,:,PP_N) - sigma*wGP(PP_N)      
-    end select
+!   ------------------------------
+    call ReconstructSolution_2nd_Order(prim_,primL,primR,1,6,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
 !   Fill inner interfaces
 !   ---------------------
-    do i=0, PP_N-1
-      
-      call AdvRiemannRecons(H(:,:,:,i),U(:,:,:,i),U(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
-                   sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+    call Compute_FVFluxes_1D_TVD2ES(U,UL,UR,H , &
 #if NONCONS
-      ! Copy conservative part
-      HR(:,:,:,i) = H(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(H(:,:,:,i), &
-                          U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      CALL AddNonConsFlux(HR(:,:,:,i), &
-                          U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
+                                            HR, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
-    end do ! i (zeta planes)
-    
+                                            sCM % zeta)
 ! ========
   contains
 ! ========
+!===================================================================================================================================
+!> Computes the numerical fluxes and the numerical non-conservative terms for all the DOFs of an inner interface
+!> ATTENTION: 1) This works only for Compute_FVFluxes_TVD2ES
+!             1) The U_, UL, UR and F_ arrays have to be reshaped before calling this routine
+!===================================================================================================================================
+    pure subroutine Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F_ , &
+#if NONCONS
+                                                 FR_, &
+#endif /*NONCONS*/
+                                                 metrics)
+      use MOD_NFVSE_Vars, only: InnerFaceMetrics_t
+#if NONCONS
+      use MOD_Riemann   , only: AddNonConsFlux
+#endif /*NONCONS*/
+      implicit none
+      !-arguments---------------------------------------------------------------
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: U_       !< The nodal solution
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: UL       !< The solution on the left of the subcells
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: UR       !< The solution on the right of the subcells
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: F_       !< Left flux
+#if NONCONS
+      real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: FR_      !< Right flux
+#endif /*NONCONS*/
+      type(InnerFaceMetrics_t)                        , intent(in)    :: metrics  !< Sub-cell metric terms
+      !-local-variables---------------------------------------------------------
+      integer  :: i,j,k
+      !-------------------------------------------------------------------------
+      
+!     Loop over inner interfaces
+!     --------------------------
+      do i=0, PP_N-1
+        
+        call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
+                              metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+        
+#if NONCONS
+        ! Copy conservative part
+        FR_(:,:,:,i) = F_(:,:,:,i)
+        
+        ! Add nonconservative fluxes
+        CALL AddNonConsFlux(F_(:,:,:,i), &
+                            U_(:,:,:,i+1), U_(:,:,:,i),&
+                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+        CALL AddNonConsFlux(FR_(:,:,:,i), &
+                            U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+        
+        ! Scale right flux
+        do k=0, PP_N ; do j=0, PP_N
+          FR_(:,j,k,i) = FR_(:,j,k,i) * metrics%norm(j,k,i)
+        end do       ; end do
+#endif /*NONCONS*/
+        
+        ! Scale flux
+        do k=0, PP_N ; do j=0, PP_N
+          F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
+        end do       ; end do
+      end do
+    end subroutine Compute_FVFluxes_1D_TVD2ES
+!===================================================================================================================================
+!> Computes the advective Riemann solver for an inner interface with reconstructed states. If the flux is not EC, it returns the 
+!> Riemann solution computed with the nodal states
+!===================================================================================================================================
     pure subroutine AdvRiemannRecons(F,UL,UR,UL_r,UR_r,nv,t1,t2)
       use MOD_Riemann       , only: RotateState, RotateFluxBack
       use MOD_Equation_Vars , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
@@ -1530,15 +1146,7 @@ contains
 #endif /*NONCONS*/
                                               sCM, iElem )
     use MOD_PreProc
-    use MOD_Riemann           , only: RotateState, RotateFluxBack
-    use MOD_NFVSE_Vars        , only: SubCellMetrics_t, sdxR, sdxL, rL, rR
-    use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
-    use MOD_Interpolation_Vars, only: wGP
-    use MOD_Equation_Vars     , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
-#if NONCONS
-    USE MOD_Riemann           , only: AddNonConsFlux
-    use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
-#endif /*NONCONS*/
+    use MOD_NFVSE_Vars        , only: SubCellMetrics_t
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
@@ -1553,26 +1161,8 @@ contains
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
-    integer  :: i,j,k
-    real :: Rmat (PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Right eigenvalue matrix
-    real :: RmatT(PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Right eigenvalue matrix transposed
-    real :: Dmat         (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Dissipation matrix
-    real :: wTildeL      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the left of *subcell*
-    real :: wTildeR      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the right of *subcell*
-    real :: w_L          (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Scaled entropy vars variables on the left of interface
-    real :: w_R          (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Scaled entropy vars variables on the right of interface
-    real :: U_L          (PP_nVar)                        ! Rotated state on the left of interface
-    real :: U_R          (PP_nVar)                        ! Rotated state on the right of interface
-    real :: v_L          (PP_nVar)                        ! Rotated entropy vars on the left of interface
-    real :: v_R          (PP_nVar)                        ! Rotated entropy vars on the right of interface
-    real :: U_           (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reshaped solution (conservative variables)
-    real :: sigma        (PP_nVar,0:PP_N,0:PP_N)          ! Slope (limited)
-    real :: F_           (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-    real :: DummyF       (PP_nVar)                        ! Dummy variable to store the central flux when only the dissipation matrices are needed
-    real :: Rmat0(PP_nVar,PP_nVar)
-    real :: Dmat0(PP_nVar)
-    real :: w_L0         (PP_nVar,0:PP_N,0:PP_N)
-    real :: w_R0         (PP_nVar,0:PP_N,0:PP_N)
+    real :: U_   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
+    real :: F_   (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
     real :: FR_          (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #endif /*NONCONS*/
@@ -1596,146 +1186,15 @@ contains
 !   *********
     F_  = 0.0
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
-    wTildeL = 0.0
-    wTildeR = 0.0
-    
-!   Get the dissipation matrices and compute the scaled entropy vars
-!   ****************************************************************
-    ! Loop over the inner faces and compute
-    do i=0, PP_N-1
-      ! Loop over the DOFs of the face
-      do k=0, PP_N ; do j=0, PP_N
-        ! Rotate state
-        U_L = RotateState(U_(:,j,k,i  ),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
-        U_R = RotateState(U_(:,j,k,i+1),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
-        ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
-        ! get entropy vars from rotated state
-        v_L = ConsToEntropy(U_L)
-        v_R = ConsToEntropy(U_R)
-        ! Compute scaled entropy vars
-        w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
-        w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
-      end do       ; end do !j,k
-    end do !i
-    
-!   Do the reconstruction of the scaled entropy variables
-!   *****************************************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0)
-      case (RECONS_CENTRAL)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_ext(:,j,k,5,iElem),sCM % xi   % nv(:,j,k,-1),sCM % xi   % t1(:,j,k,-1), sCM % xi   % t2(:,j,k,-1))
-          U_R = RotateState(U_   (:,j,k,1      ),sCM % xi   % nv(:,j,k,-1),sCM % xi   % t1(:,j,k,-1), sCM % xi   % t2(:,j,k,-1))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
-      case default
-        stop 'ReconsBoundaries not implemented'
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(w_R(:,:,:,i)-w_L(:,:,:,i)),sdxL(i)*(w_R(:,:,:,i-1)-w_L(:,:,:,i-1)))
-      
-      wTildeR(:,:,:,i) = w_L(:,:,:,i  ) + sigma * rR(i)
-      wTildeL(:,:,:,i) = w_R(:,:,:,i-1) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
-      case (RECONS_CENTRAL)
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % xi   % nv(:,j,k,PP_N),sCM % xi   % t1(:,j,k,PP_N), sCM % xi   % t2(:,j,k,PP_N))
-          U_R = RotateState(U_ext(:,j,k,3,iElem),sCM % xi   % nv(:,j,k,PP_N),sCM % xi   % t1(:,j,k,PP_N), sCM % xi   % t2(:,j,k,PP_N))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
-        
-      case default
-        stop 'ReconsBoundaries not implemented'
-    end select
-    
-    
-!   Compute fluxes 
-!   **************
-
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      ! Loop over DOFs on inner face
-      do k=0, PP_N ; do j=0, PP_N
-        ! Add the right amount of dissipation
-        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
-        
-        ! Rotate flux back to the physical frame
-        call RotateFluxBack(F_(:,j,k,i),sCM % xi   % nv(:,j,k,i),sCM % xi   % t1(:,j,k,i), sCM % xi   % t2(:,j,k,i))
-      end do       ; end do !j,k
-      
+    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
+                                              FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
-      end do       ; end do
-    end do ! i (xi planes)
+                                              sCM % xi  ,5,3,iElem)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1749,145 +1208,15 @@ contains
 !   **********
     F_ = 0.0
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
-    wTildeL = 0.0
-    wTildeR = 0.0
-    
-!   Get the dissipation matrices and compute the scaled entropy vars
-!   ****************************************************************
-    ! Loop over the inner faces and compute
-    do i=0, PP_N-1
-      ! Loop over the DOFs of the face
-      do k=0, PP_N ; do j=0, PP_N
-        ! Rotate state
-        U_L = RotateState(U_(:,j,k,i  ),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
-        U_R = RotateState(U_(:,j,k,i+1),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
-        ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
-        ! get entropy vars from rotated state
-        v_L = ConsToEntropy(U_L)
-        v_R = ConsToEntropy(U_R)
-        ! Compute scaled entropy vars
-        w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
-        w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
-      end do       ; end do !j,k
-    end do !i
-    
-!   Do the reconstruction of the scaled entropy variables
-!   *****************************************************
-    
-    ! First DOF
-    !----------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0)
-      case (RECONS_CENTRAL)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
-      case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_ext(:,j,k,2,iElem),sCM % eta  % nv(:,j,k,-1),sCM % eta  % t1(:,j,k,-1), sCM % eta  % t2(:,j,k,-1))
-          U_R = RotateState(U_   (:,j,k,1      ),sCM % eta  % nv(:,j,k,-1),sCM % eta  % t1(:,j,k,-1), sCM % eta  % t2(:,j,k,-1))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
-      case default
-        stop 'ReconsBoundaries not implemented'
-    end select
-    
-    ! Middle DOFs
-    ! -----------
-    do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(w_R(:,:,:,i)-w_L(:,:,:,i)),sdxL(i)*(w_R(:,:,:,i-1)-w_L(:,:,:,i-1)))
-      
-      wTildeR(:,:,:,i) = w_L(:,:,:,i  ) + sigma * rR(i)
-      wTildeL(:,:,:,i) = w_R(:,:,:,i-1) + sigma * rL(i)
-    end do
-    
-    ! Last DOF
-    ! --------
-    
-    select case (ReconsBoundaries)
-      case (RECONS_NONE)
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
-      case (RECONS_CENTRAL)  
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
-      case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % eta  % nv(:,j,k,PP_N),sCM % eta  % t1(:,j,k,PP_N), sCM % eta  % t2(:,j,k,PP_N))
-          U_R = RotateState(U_ext(:,j,k,4,iElem),sCM % eta  % nv(:,j,k,PP_N),sCM % eta  % t1(:,j,k,PP_N), sCM % eta  % t2(:,j,k,PP_N))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
-      case default
-        stop 'ReconsBoundaries not implemented'
-    end select
-    
-    
-!   Compute fluxes 
-!   **************
 #if NONCONS
     FR_ = 0.0
 #endif /*NONCONS*/
     
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      ! Loop over DOFs on inner face
-      do k=0, PP_N ; do j=0, PP_N
-        ! Add the right amount of dissipation
-        F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
-        
-        ! Rotate flux back to the physical frame
-        call RotateFluxBack(F_(:,j,k,i),sCM % eta  % nv(:,j,k,i),sCM % eta  % t1(:,j,k,i), sCM % eta  % t2(:,j,k,i))
-      end do       ; end do !j,k
-      
+    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,F_ , &
 #if NONCONS
-      ! Copy conservative part
-      FR_(:,:,:,i) = F_(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(F_(:,:,:,i), &
-                          U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      CALL AddNonConsFlux(FR_(:,:,:,i), &
-                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        FR_(:,j,k,i) = FR_(:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
+                                              FR_, &
 #endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
-      end do       ; end do
-    end do ! i (eta planes)
+                                              sCM % eta ,2,4,iElem)
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1899,71 +1228,343 @@ contains
 !   ***********    
 !   Zeta-planes
 !   ***********
-    wTildeL = 0.0
-    wTildeR = 0.0
     
-!   Get the dissipation matrices and compute the scaled entropy vars
-!   ****************************************************************
-    ! Loop over the inner faces and compute
+    call Compute_FVFluxes_1D_TVD_Fjordholm(U ,H , &
+#if NONCONS
+                                              HR, &
+#endif /*NONCONS*/
+                                              sCM % zeta,1,6,iElem)
+! ========
+  contains
+! ========
+!===================================================================================================================================
+!> Computes the numerical fluxes and the numerical non-conservative terms for all the DOFs of an inner interface
+!> ATTENTION: 1) This works only for Compute_FVFluxes_TVD_Fjordholm
+!             2) The reconstruction in scaled entropy variables is done here!
+!             3) The U_ array has to be reshaped before calling this routine
+!===================================================================================================================================
+    pure subroutine Compute_FVFluxes_1D_TVD_Fjordholm(U_,F_ , &
+#if NONCONS
+                                                         FR_, &
+#endif /*NONCONS*/
+                                                         metrics,sideL,sideR,iElem)
+      use MOD_Riemann           , only: RotateState, RotateFluxBack
+      use MOD_NFVSE_Vars        , only: InnerFaceMetrics_t, sdxR, sdxL, rL, rR, U_ext
+      use MOD_NFVSE_Vars        , only: ReconsBoundaries, RECONS_CENTRAL, RECONS_NEIGHBOR, RECONS_NONE
+      use MOD_Interpolation_Vars, only: wGP
+      use MOD_Equation_Vars     , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
+#if NONCONS
+      use MOD_Riemann           , only: AddNonConsFlux
+#endif /*NONCONS*/
+      implicit none
+      !-arguments---------------------------------------------------------------      
+      real,dimension        (PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: U_       !< The nodal solution
+      real,dimension        (PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: F_       !< Left flux
+#if NONCONS      
+      real,dimension        (PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: FR_      !< Right flux
+#endif /*NONCONS*/
+      type(InnerFaceMetrics_t)                                , intent(in)    :: metrics  !< Sub-cell metric terms
+      integer                                                 , intent(in)    :: sideL    !< Side on the left
+      integer                                                 , intent(in)    :: sideR    !< Side on the right
+      integer                                                 , intent(in)    :: iElem    !< Element index
+      !-local-variables---------------------------------------------------------
+      integer :: i,j,k
+      real :: Rmat (PP_nVar,PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Right eigenvalue matrix for the nodes of each interface
+      real :: RmatT(PP_nVar,PP_nVar)                        ! Right eigenvalue matrix transposed
+      real :: Dmat         (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Dissipation matrix for the nodes of each interface
+      real :: wTildeL      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the left of *subcell*
+      real :: wTildeR      (PP_nVar,0:PP_N,0:PP_N,0:PP_N)   ! Reconstructed scaled entropy vars variables on the right of *subcell*
+      real :: w_L          (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Scaled entropy vars variables on the left of interface
+      real :: w_R          (PP_nVar,0:PP_N,0:PP_N,0:PP_N-1) ! Scaled entropy vars variables on the right of interface
+      real :: U_L          (PP_nVar)                        ! Rotated state on the left of interface
+      real :: U_R          (PP_nVar)                        ! Rotated state on the right of interface
+      real :: v_L          (PP_nVar)                        ! Rotated entropy vars on the left of interface
+      real :: v_R          (PP_nVar)                        ! Rotated entropy vars on the right of interface
+      real :: sigma        (PP_nVar,0:PP_N,0:PP_N)          ! Slope (limited)
+      real :: DummyF       (PP_nVar)                        ! Dummy variable to store the central flux when only the dissipation matrices are needed
+      real :: Rmat0(PP_nVar,PP_nVar)
+      real :: Dmat0(PP_nVar)
+      real :: w_L0         (PP_nVar,0:PP_N,0:PP_N)
+      real :: w_R0         (PP_nVar,0:PP_N,0:PP_N)
+      !-------------------------------------------------------------------------
+      
+      wTildeL = 0.0
+      wTildeR = 0.0
+    
+!     Get the dissipation matrices and compute the scaled entropy vars
+!     ****************************************************************
+      ! Loop over the inner faces and compute
+      do i=0, PP_N-1
+        ! Loop over the DOFs of the face
+        do k=0, PP_N ; do j=0, PP_N
+          ! Rotate state
+          U_L = RotateState(U_(:,j,k,i  ),metrics%nv(:,j,k,i),metrics%t1(:,j,k,i), metrics%t2(:,j,k,i))
+          U_R = RotateState(U_(:,j,k,i+1),metrics%nv(:,j,k,i),metrics%t1(:,j,k,i), metrics%t2(:,j,k,i))
+          ! Compute EC flux and dissipation matrices
+          call RiemannVolFluxAndDissipMatrices(U_L,U_R,F_(:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
+          RmatT = transpose(Rmat(:,:,j,k,i))
+          ! get entropy vars from rotated state
+          v_L = ConsToEntropy(U_L)
+          v_R = ConsToEntropy(U_R)
+          ! Compute scaled entropy vars
+          w_L(:,j,k,i) = matmul(RmatT,v_L)
+          w_R(:,j,k,i) = matmul(RmatT,v_R)
+        end do       ; end do !j,k
+      end do !i
+    
+!     Do the reconstruction of the scaled entropy variables
+!     *****************************************************
+    
+      ! First DOF
+      !----------
+      
+      select case (ReconsBoundaries)
+        case (RECONS_NONE)
+          wTildeR(:,:,:,0) = w_L(:,:,:,0)
+        case (RECONS_CENTRAL)
+          wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
+        case (RECONS_NEIGHBOR)
+          do k=0, PP_N ; do j=0, PP_N
+            ! Rotate state
+            U_L = RotateState(U_ext(:,j,k,sideL,iElem),metrics%nv(:,j,k,-1),metrics%t1(:,j,k,-1), metrics%t2(:,j,k,-1))
+            U_R = RotateState(U_   (:,j,k,1)          ,metrics%nv(:,j,k,-1),metrics%t1(:,j,k,-1), metrics%t2(:,j,k,-1))
+            ! get entropy vars from rotated state
+            v_L = ConsToEntropy(U_L)
+            v_R = ConsToEntropy(U_R)
+            ! Get dissipation matrices
+            call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
+            Rmat0 = transpose(Rmat0)
+            ! Compute scaled entropy vars
+            w_L0(:,j,k) = matmul(Rmat0,v_L)
+            w_R0(:,j,k) = matmul(Rmat0,v_R)
+          end do       ; end do !j,k
+          
+          sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
+          wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
+      end select
+      
+      ! Middle DOFs
+      ! -----------
+      do i=1, PP_N-1
+        sigma = minmod(sdxR(i)*(w_R(:,:,:,i)-w_L(:,:,:,i)),sdxL(i)*(w_R(:,:,:,i-1)-w_L(:,:,:,i-1)))
+        
+        wTildeR(:,:,:,i) = w_L(:,:,:,i  ) + sigma * rR(i)
+        wTildeL(:,:,:,i) = w_R(:,:,:,i-1) + sigma * rL(i)
+      end do
+      
+      ! Last DOF
+      ! --------
+      
+      select case (ReconsBoundaries)
+        case (RECONS_NONE)
+          wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
+        case (RECONS_CENTRAL)
+          wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+        case (RECONS_NEIGHBOR)
+          do k=0, PP_N ; do j=0, PP_N
+            ! Rotate state
+            U_L = RotateState(U_   (:,j,k,PP_N-1 )    ,metrics%nv(:,j,k,PP_N),metrics%t1(:,j,k,PP_N), metrics%t2(:,j,k,PP_N))
+            U_R = RotateState(U_ext(:,j,k,sideR,iElem),metrics%nv(:,j,k,PP_N),metrics%t1(:,j,k,PP_N), metrics%t2(:,j,k,PP_N))
+            ! get entropy vars from rotated state
+            v_L = ConsToEntropy(U_L)
+            v_R = ConsToEntropy(U_R)
+            ! Get dissipation matrices
+            call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
+            Rmat0 = transpose(Rmat0)
+            ! Compute scaled entropy vars
+            w_L0(:,j,k) = matmul(Rmat0,v_L)
+            w_R0(:,j,k) = matmul(Rmat0,v_R)
+          end do       ; end do !j,k
+          
+          sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
+          wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
+          
+      end select
+      
+!     Compute fluxes 
+!     **************
+
+!     Loop over inner interfaces
+!     --------------------------
+      
+      do i=0, PP_N-1
+        ! Loop over DOFs on inner face
+        do k=0, PP_N ; do j=0, PP_N
+          ! Add the right amount of dissipation
+          F_(:,j,k,i) = F_(:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
+          
+          ! Rotate flux back to the physical frame
+          call RotateFluxBack(F_(:,j,k,i),metrics%nv(:,j,k,i),metrics%t1(:,j,k,i), metrics%t2(:,j,k,i))
+        end do       ; end do !j,k
+        
+#if NONCONS
+        ! Copy conservative part
+        FR_(:,:,:,i) = F_(:,:,:,i)
+        
+        ! Add nonconservative fluxes
+        CALL AddNonConsFlux(F_(:,:,:,i), &
+                            U_(:,:,:,i+1), U_(:,:,:,i),&
+                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i), metrics%t2(:,:,:,i))
+        CALL AddNonConsFlux(FR_(:,:,:,i), &
+                            U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i), metrics%t2(:,:,:,i))
+        
+        ! Scale right flux
+        do k=0, PP_N ; do j=0, PP_N
+          FR_(:,j,k,i) = FR_(:,j,k,i) * metrics%norm(j,k,i)
+        end do       ; end do
+#endif /*NONCONS*/
+        
+        ! Scale flux
+        do k=0, PP_N ; do j=0, PP_N
+          F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
+        end do       ; end do
+      end do ! i (xi planes)
+      
+      !!!!!!----old...................
+!#      do i=0, PP_N-1
+        
+!#        call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
+!#                              metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+        
+!##if NONCONS
+!#        ! Copy conservative part
+!#        FR_(:,:,:,i) = F_(:,:,:,i)
+        
+!#        ! Add nonconservative fluxes
+!#        CALL AddNonConsFlux(F_(:,:,:,i), &
+!#                            U_(:,:,:,i+1), U_(:,:,:,i),&
+!#                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+!#        CALL AddNonConsFlux(FR_(:,:,:,i), &
+!#                            U_(:,:,:,i  ), U_(:,:,:,i+1),&
+!#                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+        
+!#        ! Scale right flux
+!#        do k=0, PP_N ; do j=0, PP_N
+!#          FR_(:,j,k,i) = FR_(:,j,k,i) * metrics%norm(j,k,i)
+!#        end do       ; end do
+!##endif /*NONCONS*/
+        
+!#        ! Scale flux
+!#        do k=0, PP_N ; do j=0, PP_N
+!#          F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
+!#        end do       ; end do
+!#      end do
+    end subroutine Compute_FVFluxes_1D_TVD_Fjordholm
+  end subroutine Compute_FVFluxes_TVD_Fjordholm
+!===================================================================================================================================
+!> Computes the numerical fluxes and the numerical non-conservative terms for all the DOFs of an inner interface
+!> ATTENTION: 1) The U_, UL and UR arrays have to be reshaped before calling this routine
+!>            2) Works for Compute_FVFluxes_1st_Order and Compute_FVFluxes_TVD
+!===================================================================================================================================
+  pure subroutine Compute_FVFluxes_1D(UL,UR,F_ , &
+#if NONCONS
+                                         U_,FR_, &
+#endif /*NONCONS*/
+                                            metrics)
+    use MOD_Riemann   , only: AdvRiemann
+    use MOD_NFVSE_Vars, only: InnerFaceMetrics_t
+#if NONCONS
+    use MOD_Riemann   , only: AddNonConsFlux
+#endif /*NONCONS*/
+    implicit none
+    !-arguments---------------------------------------------------------------
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: UL       !< The solution on the left of the subcells
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: UR       !< The solution on the right of the subcells... It can be the same as UL for 1st order: there's no aliasing problem because of the intent(in)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: F_       !< Left flux
+#if NONCONS
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: U_       !< The nodal solution (to compute the non-conservative terms)... It can be the same as UL and/or UR: there's no aliasing problem because of the intent(in)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N ), intent(inout) :: FR_      !< Right flux
+#endif /*NONCONS*/
+    type(InnerFaceMetrics_t)                        , intent(in)    :: metrics  !< Sub-cell metric terms
+    !-local-variables---------------------------------------------------------
+    integer  :: i,j,k
+    !-------------------------------------------------------------------------
+    
+!   Loop over inner interfaces
+!   --------------------------
     do i=0, PP_N-1
-      ! Loop over the DOFs of the face
+      
+      call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
+                      metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+      
+#if NONCONS
+      ! Copy conservative part
+      FR_(:,:,:,i) = F_(:,:,:,i)
+      
+      ! Add nonconservative fluxes
+      CALL AddNonConsFlux(F_(:,:,:,i), &
+                          U_(:,:,:,i+1), U_(:,:,:,i),&
+                          metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
+                          U_(:,:,:,i  ), U_(:,:,:,i+1),&
+                          metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+      
+      ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
-        ! Rotate state
-        U_L = RotateState(U (:,j,k,i  ),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
-        U_R = RotateState(U (:,j,k,i+1),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
-        ! Compute EC flux and dissipation matrices
-        call RiemannVolFluxAndDissipMatrices(U_L,U_R,H (:,j,k,i),Dmat(:,j,k,i),Rmat(:,:,j,k,i))
-        RmatT(:,:,j,k,i) = transpose(Rmat(:,:,j,k,i))
-        ! get entropy vars from rotated state
-        v_L = ConsToEntropy(U_L)
-        v_R = ConsToEntropy(U_R)
-        ! Compute scaled entropy vars
-        w_L(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_L)
-        w_R(:,j,k,i) = matmul(RmatT(:,:,j,k,i),v_R)
-      end do       ; end do !j,k
-    end do !i
+        FR_(:,j,k,i) = FR_(:,j,k,i) * metrics%norm(j,k,i)
+      end do       ; end do
+#endif /*NONCONS*/
+      
+      ! Scale flux
+      do k=0, PP_N ; do j=0, PP_N
+        F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
+      end do       ; end do
+    end do
+  end subroutine Compute_FVFluxes_1D
+!===================================================================================================================================
+!> Perdorms a second order reconstruction of the solution (primitive variables)
+!> Attention: 1) prim_ must be reshaped before calling this routine
+!===================================================================================================================================
+  pure subroutine ReconstructSolution_2nd_Order(prim_,primL,primR,sideL,sideR,iElem)
+    use MOD_Preproc
+    use MOD_NFVSE_Vars        , only: sdxR, sdxL, rL, rR
+    use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
+    use MOD_DG_Vars           , only: nTotal_vol
+    use MOD_Equation_Vars     , only: ConsToPrimVec,PrimToConsVec
+    use MOD_Interpolation_Vars, only: wGP
+    implicit none
+    !-arguments---------------------------------------------------------------
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(in)    :: prim_      !< The solution in primitive variables
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(out)   :: primL      !< The reconstructed solution (prim vars) on the left of the subcells
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N ), intent(out)   :: primR      !< The reconstructed solution (prim vars) on the right of the subcells
+    integer                                         , intent(in)    :: sideL
+    integer                                         , intent(in)    :: sideR
+    integer                                         , intent(in)    :: iElem
+    !-local-variables---------------------------------------------------------
+    integer  :: i
+    real :: prim_extL(PP_nVar, 0:PP_N, 0:PP_N)
+    real :: prim_extR(PP_nVar, 0:PP_N, 0:PP_N)
+    real :: sigma    (PP_nVar, 0:PP_N, 0:PP_N)
+    !-------------------------------------------------------------------------
     
-!   Do the reconstruction of the scaled entropy variables
-!   *****************************************************
+    ! Initialize values
+    primL = 0.0
+    primR = 0.0
+    
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec((PP_N+1)**2,prim_extL,U_ext(:,:,:,sideL,iElem) )
+    if (ReconsBoundaries >= RECONS_NEIGHBOR) call ConsToPrimVec((PP_N+1)**2,prim_extR,U_ext(:,:,:,sideR,iElem) )
     
     ! First DOF
     !----------
     
     select case (ReconsBoundaries)
       case (RECONS_NONE)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0)
+        primR(:,:,:,0) = prim_(:,:,:,0)
       case (RECONS_CENTRAL)
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + (w_R(:,:,:,0) - w_L(:,:,:,0))*sdxL(1)*wGP(0)
+        primR(:,:,:,0) = prim_(:,:,:,0) + (prim_(:,:,:,1) - prim_(:,:,:,0))*sdxL(1)*wGP(0)
       case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_ext(:,j,k,1,iElem),sCM % zeta % nv(:,j,k,-1),sCM % zeta % t1(:,j,k,-1), sCM % zeta % t2(:,j,k,-1))
-          U_R = RotateState(U_   (:,j,k,1      ),sCM % zeta % nv(:,j,k,-1),sCM % zeta % t1(:,j,k,-1), sCM % zeta % t2(:,j,k,-1))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,0) - w_L(:,:,:,0)),sdxL(1)*(w_R0 - w_L0))
-        wTildeR(:,:,:,0) = w_L(:,:,:,0) + sigma*wGP(0)
-        
-      case default
-        stop 'ReconsBoundaries not implemented'
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,1) - prim_(:,:,:,0)),sdxL(1)*(prim_(:,:,:,1) - prim_extL))
+        primR(:,:,:,0) = prim_(:,:,:,0) + sigma*wGP(0)
     end select
     
     ! Middle DOFs
     ! -----------
     do i=1, PP_N-1
-      sigma = minmod(sdxR(i)*(w_R(:,:,:,i)-w_L(:,:,:,i)),sdxL(i)*(w_R(:,:,:,i-1)-w_L(:,:,:,i-1)))
+      sigma = minmod(sdxR(i)*(prim_(:,:,:,i+1)-prim_(:,:,:,i)),sdxL(i)*(prim_(:,:,:,i)-prim_(:,:,:,i-1)))
       
-      wTildeR(:,:,:,i) = w_L(:,:,:,i  ) + sigma * rR(i)
-      wTildeL(:,:,:,i) = w_R(:,:,:,i-1) + sigma * rL(i)
+      primR(:,:,:,i) = prim_(:,:,:,i) + sigma * rR(i)
+      primL(:,:,:,i) = prim_(:,:,:,i) + sigma * rL(i)
     end do
     
     ! Last DOF
@@ -1971,73 +1572,14 @@ contains
     
     select case (ReconsBoundaries)
       case (RECONS_NONE)
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N)
       case (RECONS_CENTRAL)
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - (w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - (prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1))*sdxL(1)*wGP(PP_N)
       case (RECONS_NEIGHBOR)
-        do k=0, PP_N ; do j=0, PP_N
-          ! Rotate state
-          U_L = RotateState(U_   (:,j,k,PP_N-1 ),sCM % zeta % nv(:,j,k,PP_N),sCM % zeta % t1(:,j,k,PP_N), sCM % zeta % t2(:,j,k,PP_N))
-          U_R = RotateState(U_ext(:,j,k,6,iElem),sCM % zeta % nv(:,j,k,PP_N),sCM % zeta % t1(:,j,k,PP_N), sCM % zeta % t2(:,j,k,PP_N))
-          ! get entropy vars from rotated state
-          v_L = ConsToEntropy(U_L)
-          v_R = ConsToEntropy(U_R)
-          ! Get dissipation matrices
-          call RiemannVolFluxAndDissipMatrices(U_L,U_R,DummyF,Dmat0,Rmat0)
-          Rmat0 = transpose(Rmat0)
-          ! Compute scaled entropy vars
-          w_L0(:,j,k) = matmul(Rmat0,v_L)
-          w_R0(:,j,k) = matmul(Rmat0,v_R)
-        end do       ; end do !j,k
-        
-        sigma = minmod(sdxL(1)*(w_R(:,:,:,PP_N-1) - w_L(:,:,:,PP_N-1)),sdxL(1)*(w_R0 - w_L0))
-        wTildeL(:,:,:,PP_N) = w_R(:,:,:,PP_N-1) - sigma*wGP(PP_N)
-           
-      case default
-        stop 'ReconsBoundaries not implemented'
+        sigma = minmod(sdxL(1)*(prim_(:,:,:,PP_N) - prim_(:,:,:,PP_N-1)),sdxL(1)*(prim_extR-prim_(:,:,:,PP_N-1)))
+        primL(:,:,:,PP_N) = prim_(:,:,:,PP_N) - sigma*wGP(0)
     end select
-    
-!   Compute fluxes 
-!   **************
-    
-!   Fill inner interfaces
-!   ---------------------
-    do i=0, PP_N-1
-      
-      ! Loop over DOFs on inner face
-      do k=0, PP_N ; do j=0, PP_N
-        ! Add the right amount of dissipation
-        H (:,j,k,i) = H (:,j,k,i) - 0.5*matmul(Rmat(:,:,j,k,i),Dmat(:,j,k,i)*(wTildeL(:,j,k,i+1)-wTildeR(:,j,k,i)))
-        
-        ! Rotate flux back to the physical frame
-        call RotateFluxBack(H (:,j,k,i),sCM % zeta % nv(:,j,k,i),sCM % zeta % t1(:,j,k,i), sCM % zeta % t2(:,j,k,i))
-      end do       ; end do !j,k
-      
-#if NONCONS
-      ! Copy conservative part
-      HR(:,:,:,i) = H(:,:,:,i)
-      
-      ! Add nonconservative fluxes
-      CALL AddNonConsFlux(H(:,:,:,i), &
-                          U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      CALL AddNonConsFlux(HR(:,:,:,i), &
-                          U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
-      
-      ! Scale right flux
-      do k=0, PP_N ; do j=0, PP_N
-        HR(:,j,k,i) = HR(:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
-#endif /*NONCONS*/
-      
-      ! Scale flux
-      do k=0, PP_N ; do j=0, PP_N
-        H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
-      end do       ; end do
-    end do ! i (zeta planes)
-    
-  end subroutine Compute_FVFluxes_TVD_Fjordholm
+  end subroutine ReconstructSolution_2nd_Order
 !===================================================================================================================================
 !> Traditional minmod limiter
 !===================================================================================================================================
@@ -2603,4 +2145,3 @@ contains
   end subroutine FinalizeNFVSE
 #endif /*SHOCK_NFVSE*/
 end module MOD_NFVSE
-
