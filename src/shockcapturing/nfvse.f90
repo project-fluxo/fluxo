@@ -1419,37 +1419,8 @@ contains
         do k=0, PP_N ; do j=0, PP_N
           F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
         end do       ; end do
-      end do ! i (xi planes)
+      end do
       
-      !!!!!!----old...................
-!#      do i=0, PP_N-1
-        
-!#        call AdvRiemannRecons(F_(:,:,:,i),U_(:,:,:,i),U_(:,:,:,i+1),UR(:,:,:,i),UL(:,:,:,i+1), &
-!#                              metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
-        
-!##if NONCONS
-!#        ! Copy conservative part
-!#        FR_(:,:,:,i) = F_(:,:,:,i)
-        
-!#        ! Add nonconservative fluxes
-!#        CALL AddNonConsFlux(F_(:,:,:,i), &
-!#                            U_(:,:,:,i+1), U_(:,:,:,i),&
-!#                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
-!#        CALL AddNonConsFlux(FR_(:,:,:,i), &
-!#                            U_(:,:,:,i  ), U_(:,:,:,i+1),&
-!#                            metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
-        
-!#        ! Scale right flux
-!#        do k=0, PP_N ; do j=0, PP_N
-!#          FR_(:,j,k,i) = FR_(:,j,k,i) * metrics%norm(j,k,i)
-!#        end do       ; end do
-!##endif /*NONCONS*/
-        
-!#        ! Scale flux
-!#        do k=0, PP_N ; do j=0, PP_N
-!#          F_ (:,j,k,i) = F_ (:,j,k,i) * metrics%norm(j,k,i)
-!#        end do       ; end do
-!#      end do
     end subroutine Compute_FVFluxes_1D_TVD_Fjordholm
   end subroutine Compute_FVFluxes_TVD_Fjordholm
 !===================================================================================================================================
