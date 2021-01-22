@@ -574,7 +574,7 @@ contains
     use MOD_NFVSE_Vars, only: SubCellMetrics_t
     use MOD_Riemann   , only: AdvRiemann
 #if NONCONS
-    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    USE MOD_Riemann   , only: AddNonConsFlux
     use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
@@ -617,12 +617,8 @@ contains
 !   *********
     F_  = 0.0
     U_ = reshape(U , shape(U_), order = [1,4,2,3])
-    
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -637,12 +633,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i),sCM % xi   % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i))
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i),sCM % xi   % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -656,12 +652,6 @@ contains
       end do       ; end do
     end do ! i (xi planes)
     
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
-#endif /*NONCONS*/
-    
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
     F  = reshape(F_ , shape(F ), order = [1,3,4,2])
@@ -674,12 +664,8 @@ contains
 !   **********
     F_ = 0.0
     U_ = reshape(U , shape(U_), order = [1,2,4,3])
-    
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -694,12 +680,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i),sCM % eta  % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i))
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i),sCM % eta  % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -712,12 +698,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
       end do       ; end do
     end do ! i (eta planes)
-   
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -728,15 +708,7 @@ contains
 
 !   ***********    
 !   Zeta-planes
-!   ***********
-
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
-#if NONCONS
-    FR_ = 0.0
-    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
-#endif /*NONCONS*/
-    
+!   ***********    
 !   Fill inner interfaces
 !   ---------------------
     do i=0, PP_N-1
@@ -749,12 +721,12 @@ contains
       HR(:,:,:,i) = H(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+      CALL AddNonConsFlux(H(:,:,:,i), &
                           U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      CALL AddNonConsFlux(HR(:,:,:,i), &
                           U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i))
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -767,12 +739,6 @@ contains
         H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
       end do       ; end do
     end do ! i (zeta planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
-#endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_1st_Order
   
@@ -792,7 +758,7 @@ contains
     use MOD_Equation_Vars, only: ConsToPrimVec,PrimToConsVec
     use MOD_Interpolation_Vars , only: wGP
 #if NONCONS
-    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    USE MOD_Riemann   , only: AddNonConsFlux
     use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
@@ -894,11 +860,8 @@ contains
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -913,12 +876,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i))
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -931,12 +894,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
       end do       ; end do
     end do ! i (xi planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1001,7 +958,6 @@ contains
 !   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -1016,12 +972,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i))
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1034,12 +990,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
       end do       ; end do
     end do ! i (eta planes)
-   
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1096,13 +1046,6 @@ contains
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
-#if NONCONS
-    FR_ = 0.0
-    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
-#endif /*NONCONS*/
-    
 !   Fill inner interfaces
 !   ---------------------
     do i=0, PP_N-1
@@ -1115,12 +1058,12 @@ contains
       HR(:,:,:,i) = H(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+      CALL AddNonConsFlux(H(:,:,:,i), &
                           U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      CALL AddNonConsFlux(HR(:,:,:,i), &
                           U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i))
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1133,12 +1076,6 @@ contains
         H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
       end do       ; end do
     end do ! i (zeta planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
-#endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_TVD
 !===================================================================================================================================
@@ -1162,7 +1099,7 @@ contains
     use MOD_Equation_Vars , only: ConsToPrimVec, PrimToConsVec
     use MOD_DG_Vars           , only: nTotal_vol
 #if NONCONS
-    USE MOD_Riemann   , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    USE MOD_Riemann   , only: AddNonConsFlux
     use MOD_Mesh_Vars , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
@@ -1264,11 +1201,8 @@ contains
 !   Entropy fix: Fall to first order if entropy condition is not fulfilled  
 !   **********************************************************************
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -1282,12 +1216,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i))
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1300,12 +1234,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
       end do       ; end do
     end do ! i (xi planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1364,11 +1292,8 @@ contains
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -1382,12 +1307,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i))
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1400,12 +1325,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
       end do       ; end do
     end do ! i (eta planes)
-   
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1461,12 +1380,6 @@ contains
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
-#endif /*NONCONS*/
-    
 !   Fill inner interfaces
 !   ---------------------
     do i=0, PP_N-1
@@ -1478,12 +1391,12 @@ contains
       HR(:,:,:,i) = H(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+      CALL AddNonConsFlux(H(:,:,:,i), &
                           U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      CALL AddNonConsFlux(HR(:,:,:,i), &
                           U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i))
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1497,11 +1410,6 @@ contains
       end do       ; end do
     end do ! i (zeta planes)
     
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
-#endif /*NONCONS*/
 ! ========
   contains
 ! ========
@@ -1629,7 +1537,7 @@ contains
     use MOD_Interpolation_Vars, only: wGP
     use MOD_Equation_Vars     , only: RiemannVolFluxAndDissipMatrices, ConsToEntropy
 #if NONCONS
-    USE MOD_Riemann           , only: AddWholeNonConsFlux, AddInnerNonConsFlux
+    USE MOD_Riemann           , only: AddNonConsFlux
     use MOD_Mesh_Vars         , only: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde
 #endif /*NONCONS*/
     implicit none
@@ -1789,12 +1697,9 @@ contains
     
 !   Compute fluxes 
 !   **************
-    
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
+
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_fTilde(:,0,:,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -1814,12 +1719,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i),&
-                          sCM % xi   % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % xi   % nv(:,:,:,i))
+                          sCM % xi   % nv(:,:,:,i),sCM % xi   % t1(:,:,:,i), sCM % xi   % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1832,12 +1737,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % xi   % norm(j,k,i)
       end do       ; end do
     end do ! i (xi planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_fTilde(:,PP_N,:,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -1950,12 +1849,8 @@ contains
     
 !   Compute fluxes 
 !   **************
-
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
 #if NONCONS
     FR_ = 0.0
-    CALL AddInnerNonConsFlux(F_ (:,:,:,-1), U_(:,:,:,0), Metrics_gTilde(:,:,0,:,iElem))
 #endif /*NONCONS*/
     
 !   Fill inner interfaces
@@ -1976,12 +1871,12 @@ contains
       FR_(:,:,:,i) = F_(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(F_(:,:,:,i), &
+      CALL AddNonConsFlux(F_(:,:,:,i), &
                           U_(:,:,:,i+1), U_(:,:,:,i  ),&
-                          sCM % eta  % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(FR_(:,:,:,i), &
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
+      CALL AddNonConsFlux(FR_(:,:,:,i), &
                           U_(:,:,:,i  ), U_(:,:,:,i+1),&
-                          sCM % eta  % nv(:,:,:,i))
+                          sCM % eta  % nv(:,:,:,i),sCM % eta  % t1(:,:,:,i), sCM % eta  % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -1994,12 +1889,6 @@ contains
         F_ (:,j,k,i) = F_ (:,j,k,i) * sCM % eta  % norm(j,k,i)
       end do       ; end do
     end do ! i (eta planes)
-   
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(FR_(:,:,:,PP_N), U_(:,:,:,PP_N), Metrics_gTilde(:,:,PP_N,:,iElem))
-#endif /*NONCONS*/
     
 !   Reshape arrays back to original storage structure
 !   -------------------------------------------------
@@ -2112,12 +2001,6 @@ contains
 !   Compute fluxes 
 !   **************
     
-!   Fill left boundary if non-conservative terms are present
-!   --------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(H(:,:,:,-1), U(:,:,:,0), Metrics_hTilde(:,:,:,0,iElem))
-#endif /*NONCONS*/
-    
 !   Fill inner interfaces
 !   ---------------------
     do i=0, PP_N-1
@@ -2136,12 +2019,12 @@ contains
       HR(:,:,:,i) = H(:,:,:,i)
       
       ! Add nonconservative fluxes
-      CALL AddWholeNonConsFlux(H(:,:,:,i), &
+      CALL AddNonConsFlux(H(:,:,:,i), &
                           U(:,:,:,i+1), U(:,:,:,i  ),&
-                          sCM % zeta % nv(:,:,:,i))
-      CALL AddWholeNonConsFlux(HR(:,:,:,i), &
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
+      CALL AddNonConsFlux(HR(:,:,:,i), &
                           U(:,:,:,i  ), U(:,:,:,i+1),&
-                          sCM % zeta % nv(:,:,:,i))
+                          sCM % zeta % nv(:,:,:,i),sCM % zeta % t1(:,:,:,i), sCM % zeta % t2(:,:,:,i))
       
       ! Scale right flux
       do k=0, PP_N ; do j=0, PP_N
@@ -2154,12 +2037,6 @@ contains
         H (:,j,k,i) = H (:,j,k,i) * sCM % zeta % norm(j,k,i)
       end do       ; end do
     end do ! i (zeta planes)
-    
-!   Fill right boundary if non-conservative terms are present
-!   ---------------------------------------------------------
-#if NONCONS
-    CALL AddInnerNonConsFlux(HR(:,:,:,PP_N), U(:,:,:,PP_N), Metrics_hTilde(:,:,:,PP_N,iElem))
-#endif /*NONCONS*/
     
   end subroutine Compute_FVFluxes_TVD_Fjordholm
 !===================================================================================================================================

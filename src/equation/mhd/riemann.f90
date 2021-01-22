@@ -58,8 +58,6 @@ END INTERFACE
 PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
-public :: AddWholeNonConsFlux
-public :: AddInnerNonConsFlux
 #endif /*NONCONS*/
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
@@ -265,88 +263,6 @@ DO i=1,nTotal_Face
 END DO !i=1,nTotal_Face
 
 END SUBROUTINE AddNonConsFlux
-
-!==================================================================================================================================
-!> strong nonconservative flux on a side: 
-!> * Powell:
-!>   phi^L 1/2(B^L+B^R)*nvec  - phi^L B^L nvec = phi^L 1/2(B^R-B^L)*nvec
-!==================================================================================================================================
-SUBROUTINE AddWholeNonConsFlux(FL,UL,UR,nv)
-USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_Face
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
-REAL,INTENT(IN) :: UR(      PP_nVar,nTotal_Face) !< right state on face
-REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER :: i
-REAL    :: v_L(3)
-!==================================================================================================================================
-DO i=1,nTotal_Face
-  v_L=UL(2:4,i)/UL(1,i)
-#if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
-#elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*UL(6:8,i)
-#elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*v_L(1:3)
-#endif /*NONCONSTYPE*/
-
-
-#if defined (PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*(UR(9,i)-UL(9,i)),UR(9,i)-UL(9,i)/)
-#endif /*PP_GLM and PP_NC_GLM*/
-
-END DO !i=1,nTotal_Face
-
-END SUBROUTINE AddWholeNonConsFlux
-
-
-!==================================================================================================================================
-!> The remaining part: AddWholeNonConsFlux - AddNonConsFlux
-!==================================================================================================================================
-SUBROUTINE AddInnerNonConsFlux(FL,UL,nv)
-USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_Face
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
-REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER :: i
-REAL    :: v_L(3)
-!==================================================================================================================================
-DO i=1,nTotal_Face
-  v_L=UL(2:4,i)/UL(1,i)
-#if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
-#elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*UL(6:8,i)
-#elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*v_L(1:3)
-#endif /*NONCONSTYPE*/
-
-
-#if defined (PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) -(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*UL(9,i),UL(9,i)/)
-#endif /*PP_GLM and PP_NC_GLM*/
-
-END DO !i=1,nTotal_Face
-
-END SUBROUTINE AddInnerNonConsFlux
 #endif /*NONCONS*/
 
 !==================================================================================================================================
