@@ -278,7 +278,7 @@ contains
       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,4,2,3])
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,4,2,3])
       
-      do i=-1, PP_N
+      do i=0, PP_N-1
         ! Compute vectors
         SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = Metrics_fCont(:,:,:,0)
         SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = Metrics_gCont(:,:,:,0)
@@ -310,7 +310,7 @@ contains
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,2,4,3])
       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,2,4,3])
       
-      do i=-1, PP_N
+      do i=0, PP_N-1
         ! Compute vectors
         SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = Metrics_gCont(:,:,:,0)
         SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = Metrics_hCont(:,:,:,0)
@@ -340,7 +340,7 @@ contains
 !     Zeta planes
 !     -----------
       ! (here we don't have to reshape)
-      do i=-1, PP_N
+      do i=0, PP_N-1
         ! Compute vectors
         SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = Metrics_hTilde(:,:,:,0,iElem)
         SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = Metrics_fTilde(:,:,:,0,iElem)
@@ -741,7 +741,6 @@ contains
     end do ! i (zeta planes)
     
   end subroutine Compute_FVFluxes_1st_Order
-  
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux using a second-order reconstruction of the primitive variables
 !===================================================================================================================================
