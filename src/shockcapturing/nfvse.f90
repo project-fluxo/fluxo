@@ -2748,6 +2748,9 @@ contains
 !===================================================================================================================================
 !> Element-wise invariant domain preserving FCT correction of 
 !>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
+!> ATTENTION: 1) Density correction uses BLOCKING communication (not optimal)
+!>            2) We use U_master and U_slave for the Usafe transfer... This works because this is done outside of DGTimeDerivative_weakForm
+!>            3) Memory use must be improved
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
     use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, DensityCorr
@@ -2776,14 +2779,12 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real, parameter :: eps = 1.e-8
-    real    :: Usafe_master (PP_nVar,0:PP_N,0:PP_N,nSides)
-    real    :: Usafe_slave  (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
-    real    :: Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems)
-    real    :: EntPrev_master(     1,0:PP_N,0:PP_N,nSides)
-    real    :: EntPrev_slave (     1,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
-    real    :: EntPrev_ext   (     1,0:PP_N,0:PP_N,6,nElems)
+    real,allocatable    :: Usafe_ext     (:,:,:,:,:)
+    real,allocatable    :: EntPrev_master(:,:,:,:)
+    real,allocatable    :: EntPrev_slave (:,:,:,:)
+    real,allocatable    :: EntPrev_ext   (:,:,:,:,:)
+    real,allocatable    :: FFV_m_FDG     (:,:,:,:,:)  ! Finite Volume Ut minus DG Ut
     real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
-    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)  ! Finite Volume Ut minus DG Ut
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: corr, corr1
 #if LOCAL_ALPHA
@@ -2804,6 +2805,12 @@ contains
     integer :: idx_p1(0:PP_N)
     integer :: idx_m1(0:PP_N)
     !--------------------------------------------------------
+    
+    allocate( Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
+    allocate( EntPrev_master(     1,0:PP_N,0:PP_N,nSides) )
+    allocate( EntPrev_slave (     1,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) )
+    allocate( EntPrev_ext   (     1,0:PP_N,0:PP_N,6,nElems) )
+    allocate( FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )  ! Finite Volume Ut minus DG Ut
     
 !#    !FV inner stencil
 !#    idx_p1 = 1
@@ -2888,29 +2895,29 @@ contains
     ! MPI communication.... Blocking :(
 #if MPI
     ! receive the slave
-    CALL StartReceiveMPIData(Usafe_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+    CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                              MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
     
     ! prolong MPI sides and do the mortar on the MPI sides
-    CALL ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.TRUE.)
+    CALL ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,doMPISides=.TRUE.)
     !Mortars are not really working yet!!
-    !CALL U_Mortar(Usafe_master,Usafe_slave,doMPISides=.TRUE.)
+    !CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
     
     ! send the slave
-    CALL StartSendMPIData(Usafe_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+    CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                           MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
     
     ! receive the master
-    call StartReceiveMPIData(Usafe_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+    call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
     
 #endif /* MPI */
     ! Get external Usafe
-    call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.FALSE.)
+    call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,doMPISides=.FALSE.)
     ! TODO: Add mortars!!
 #if MPI
     ! Send the master
-    call StartSendMPIData   (Usafe_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+    call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                              MPIRequest_Umaster(:,2),SendID=1) 
     
     
@@ -2919,7 +2926,7 @@ contains
     
 #endif /* MPI */
     ! Gather the external Usafe in the right location
-    call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave)
+    call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
     ! FIll Usafe with info
     do eID=1, nElems
       Usafe(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
@@ -3080,11 +3087,7 @@ contains
       ! Get neighbor info
       ! *****************
     
-      ! Get external Usafe
-!#      call ProlongToFace(1,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,doMPISides=.FALSE.)
-!#      ! MPI communication
-    
-!#      ! Gather the external Usafe in the right location
+      ! Gather the external Usafe in the right location
       call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
       ! FIll EntPrev with info
       do eID=1, nElems
@@ -3127,7 +3130,7 @@ contains
             s_max = max(s_max, EntPrev(1,i,j,l,eID))
           end do
           
-          ! Current entropy and goal
+          ! Difference between goal entropy and current entropy
           as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
 
           if (as >= -10.*epsilon(1.0)) cycle ! this DOF does NOT need pressure correction   
@@ -3146,12 +3149,11 @@ contains
             ! Update correction
             corr1 = corr1 + as / dSdalpha
             
-            ! Get new U and pressure
+            ! Get new U
             U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
             
-            ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
+            ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
             as = s_max-Get_MathEntropy(U_curr)
-            
             if ( abs(as) < 1.e-12 ) exit NewtonLoop  
             
           end do NewtonLoop ! iter
@@ -3253,6 +3255,12 @@ contains
       
       end do !eID
     end if
+    
+    SDEALLOCATE( Usafe_ext )
+    SDEALLOCATE( EntPrev_master)
+    SDEALLOCATE( EntPrev_slave )
+    SDEALLOCATE( EntPrev_ext   )
+    SDEALLOCATE( FFV_m_FDG  )
   end subroutine Apply_NFVSE_Correction_IDP
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
