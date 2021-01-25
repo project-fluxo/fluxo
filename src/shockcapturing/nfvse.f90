@@ -283,7 +283,7 @@ contains
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. DensityCorr) then
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -497,7 +497,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
@@ -544,11 +544,11 @@ contains
     !===============================================================================================================================
     
     !if reconstruction:
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr) then
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
-      call Get_externalU(PP_nVar,U_ext,U,U_master,U_slave)
+      if (ReconsBoundaries >= RECONS_NEIGHBOR) call Get_externalU(PP_nVar,U_ext,U,U_master,U_slave)
     end if
     
     if (SpacePropSweeps > 0) then
@@ -2269,7 +2269,7 @@ contains
 ! If we do reconstruction on boundaries, we need to send the U_master
 ! -------------------------------------------------------------------
 #if MPI
-    if (ReconsBoundaries >= RECONS_NEIGHBOR) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr) then
       ! receive the master
       call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
@@ -2754,6 +2754,7 @@ contains
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, sWGP
 #endif /*LOCAL_ALPHA*/
+    use MOD_DG_Vars            , only: U_master,U_slave
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: Get_MathEntropy, ConsToEntropy
@@ -2762,6 +2763,11 @@ contains
     use MOD_ProlongToFace      , only: ProlongToFace
     use MOD_NFVSE_MPI
     USE MOD_Globals
+#if MPI
+    USE MOD_MPI_Vars           , only: MPIRequest_U, DataSizeSide, nNbProcs
+    use MOD_NFVSE_Vars         , only: MPIRequest_Umaster
+    USE MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
+#endif /*MPI*/
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -2792,7 +2798,7 @@ contains
     real    :: rho_min, rho_max, rho_safe
     real    :: s_max, as, U_curr(PP_nVar), dSdalpha
     logical :: notInIter
-    integer :: eID
+    integer :: eID, sideID
     integer :: i,j,k, l
     integer :: iter
     integer :: idx_p1(0:PP_N)
@@ -2828,6 +2834,16 @@ contains
           EntPrev(1,i,j,k,eID) = Get_MathEntropy(Usafe(:,i,j,k,eID))
         end do       ; end do       ; end do ! i,j,k
       end do !eID
+      do sideID=1, nSides
+        do j=0, PP_N ; do i=0, PP_N
+          EntPrev_master(1,i,j,sideID) = Get_MathEntropy(U_master(:,i,j,sideID))
+        end do       ; end do ! i,j
+      end do !sideID
+      do sideID=firstSlaveSide, LastSlaveSide
+        do j=0, PP_N ; do i=0, PP_N
+          EntPrev_slave (1,i,j,sideID) = Get_MathEntropy(U_slave (:,i,j,sideID))
+        end do       ; end do ! i,j
+      end do !sideID
     end if
     
 !   Iterate over the elements
@@ -2868,10 +2884,40 @@ contains
     end do !eID
     
   if (DensityCorr) then
+    
+    ! MPI communication.... Blocking :(
+#if MPI
+    ! receive the slave
+    CALL StartReceiveMPIData(Usafe_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                             MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
+    
+    ! prolong MPI sides and do the mortar on the MPI sides
+    CALL ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.TRUE.)
+    !Mortars are not really working yet!!
+    !CALL U_Mortar(Usafe_master,Usafe_slave,doMPISides=.TRUE.)
+    
+    ! send the slave
+    CALL StartSendMPIData(Usafe_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                          MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
+    
+    ! receive the master
+    call StartReceiveMPIData(Usafe_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
+    
+#endif /* MPI */
     ! Get external Usafe
     call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave,doMPISides=.FALSE.)
-    ! MPI communication
+    ! TODO: Add mortars!!
+#if MPI
+    ! Send the master
+    call StartSendMPIData   (Usafe_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+                             MPIRequest_Umaster(:,2),SendID=1) 
     
+    
+    call FinishExchangeMPIData(2*nNbProcs,MPIRequest_U) 
+    call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
+    
+#endif /* MPI */
     ! Gather the external Usafe in the right location
     call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),Usafe_master,Usafe_slave)
     ! FIll Usafe with info
@@ -3035,10 +3081,10 @@ contains
       ! *****************
     
       ! Get external Usafe
-      call ProlongToFace(1,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,doMPISides=.FALSE.)
-      ! MPI communication
+!#      call ProlongToFace(1,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,doMPISides=.FALSE.)
+!#      ! MPI communication
     
-      ! Gather the external Usafe in the right location
+!#      ! Gather the external Usafe in the right location
       call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
       ! FIll EntPrev with info
       do eID=1, nElems
@@ -3230,6 +3276,7 @@ contains
     SDEALLOCATE (sWGP)
 #if MPI
     SDEALLOCATE (MPIRequest_alpha)
+    SDEALLOCATE (MPIRequest_Umaster)
 #endif /*MPI*/
 #if NFVSE_CORR
     SDEALLOCATE (Fsafe)
@@ -3247,6 +3294,7 @@ contains
     SDEALLOCATE ( sdxL  )
     SDEALLOCATE ( rR    )
     SDEALLOCATE ( rL    )
+    
     
   end subroutine FinalizeNFVSE
 #endif /*SHOCK_NFVSE*/
