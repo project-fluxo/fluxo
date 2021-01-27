@@ -151,20 +151,20 @@ module MOD_NFVSE_Vars
       class(SubCellMetrics_t), intent(inout) :: this
       integer                , intent(in)    :: N
       
-      allocate ( this % xi   % nv (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % xi   % t1 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % xi   % t2 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % xi   % norm   (0:N,0:N,0:N-1) )
+      allocate ( this % xi   % nv (1:3,0:N,0:N,-1:N) )
+      allocate ( this % xi   % t1 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % xi   % t2 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % xi   % norm   (0:N,0:N,-1:N) )
       
-      allocate ( this % eta  % nv (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % eta  % t1 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % eta  % t2 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % eta   % norm   (0:N,0:N,0:N-1) )
+      allocate ( this % eta  % nv (1:3,0:N,0:N,-1:N) )
+      allocate ( this % eta  % t1 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % eta  % t2 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % eta   % norm   (0:N,0:N,-1:N) )
       
-      allocate ( this % zeta % nv (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % zeta % t1 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % zeta % t2 (1:3,0:N,0:N,0:N-1) )
-      allocate ( this % zeta % norm   (0:N,0:N,0:N-1) )
+      allocate ( this % zeta % nv (1:3,0:N,0:N,-1:N) )
+      allocate ( this % zeta % t1 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % zeta % t2 (1:3,0:N,0:N,-1:N) )
+      allocate ( this % zeta % norm   (0:N,0:N,-1:N) )
       
     end subroutine SubCellMetrics_construct
     

@@ -278,7 +278,7 @@ contains
       Metrics_fCont = reshape(Metrics_fTilde(:,:,:,:,iElem) , shape(Metrics_fCont), order = [1,4,2,3])
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,4,2,3])
       
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % xi   % nv(:,:,:,i) = Metrics_fCont(:,:,:,0)
         SubCellMetrics(iElem) % xi   % t1(:,:,:,i) = Metrics_gCont(:,:,:,0)
@@ -310,7 +310,7 @@ contains
       Metrics_gCont = reshape(Metrics_gTilde(:,:,:,:,iElem) , shape(Metrics_gCont), order = [1,2,4,3])
       Metrics_hCont = reshape(Metrics_hTilde(:,:,:,:,iElem) , shape(Metrics_hCont), order = [1,2,4,3])
       
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % eta  % nv(:,:,:,i) = Metrics_gCont(:,:,:,0)
         SubCellMetrics(iElem) % eta  % t1(:,:,:,i) = Metrics_hCont(:,:,:,0)
@@ -340,7 +340,7 @@ contains
 !     Zeta planes
 !     -----------
       ! (here we don't have to reshape)
-      do i=0, PP_N-1
+      do i=-1, PP_N
         ! Compute vectors
         SubCellMetrics(iElem) % zeta % nv(:,:,:,i) = Metrics_hTilde(:,:,:,0,iElem)
         SubCellMetrics(iElem) % zeta % t1(:,:,:,i) = Metrics_fTilde(:,:,:,0,iElem)
@@ -801,7 +801,7 @@ contains
     
 !   Do the solution reconstruction
 !   ------------------------------
-    call ReconstructSolution_2nd_Order(prim_,primL,primR,1,6,iElem)
+    call ReconstructSolution_2nd_Order(prim,primL,primR,1,6,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -950,7 +950,7 @@ contains
     
 !   Do the solution reconstruction
 !   ------------------------------
-    call ReconstructSolution_2nd_Order(prim_,primL,primR,1,6,iElem)
+    call ReconstructSolution_2nd_Order(prim,primL,primR,1,6,iElem)
     
     call PrimToConsVec(nTotal_vol,primL,UL)
     call PrimToConsVec(nTotal_vol,primR,UR)
@@ -1491,8 +1491,7 @@ contains
     use MOD_Preproc
     use MOD_NFVSE_Vars        , only: sdxR, sdxL, rL, rR
     use MOD_NFVSE_Vars        , only: U_ext, ReconsBoundaries, RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
-    use MOD_DG_Vars           , only: nTotal_vol
-    use MOD_Equation_Vars     , only: ConsToPrimVec,PrimToConsVec
+    use MOD_Equation_Vars     , only: ConsToPrimVec
     use MOD_Interpolation_Vars, only: wGP
     implicit none
     !-arguments---------------------------------------------------------------
@@ -1710,7 +1709,7 @@ contains
         ax1 = TanDirs1(nblocSide)
         ax2 = TanDirs2(nblocSide)
         DO q=0,PP_N; DO p=0,PP_N
-          ijk(:)=S2V(:,0,p,q,flip,locSide)
+          ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
           U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=U_master(:,p,q,SideID) ! Slave side is force-aligned with master
         END DO; END DO !p,q=0,PP_N
       end if !(nbElemID.NE.-1)
