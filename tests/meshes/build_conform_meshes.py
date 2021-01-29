@@ -56,9 +56,9 @@ args.ntail = 20
 args.procs = 1
 
 # this generates 4 3D refinements meshes
-nElemsX = ['02','04','08','16' ]
-nElemsY = ['02','04','08','16' ]
-nElemsZ = ['02','04','08','16' ]
+nElemsX = ['02','03','04','08' ]
+nElemsY = ['02','03','04','08' ]
+nElemsZ = ['02','03','04','08' ]
 
 #this generates 5 2D refinements
 #nElemsX = ['02','04','08','16' ,'32','64' ]
