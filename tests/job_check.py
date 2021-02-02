@@ -5,10 +5,14 @@ from job_def import job_definition
 
 
 ###########################################################################
-# run job_definition and check all the jobs!
+# run job_definition and check all the jobs! 
+# can be run in command line with:
+#    ` python -c 'from job_check import * ; job_init(list_all=True)' `
 ###########################################################################
-def job_init():
+def job_init(list_all=False):
    
+   assert (sys.version_info.major == 3),'python>=3.0 is needed!'
+
    jobs=job_definition()
 
    jobs_correct=True
@@ -40,21 +44,27 @@ def job_init():
    
       if(len(errmsg) >0):
          jobs_correct=False
-         print('!!!! PROBLEM WITH  DEFINITION OF JOB "%s":'%(j_name))
+         print('!!!! PROBLEM WITH  DEFINITION OF JOB "%s" \n'%(j_name))
          for line in errmsg :
-            print( "!!!!===> "+line )
-         print(job)
+            print( "     ===> %s \n" % line )
          
    if(jobs_correct):
+      if(list_all):
+         joblist=[]
+         job_cases=[]
+         for j_name,job in jobs.items(): 
+            joblist.extend([j_name])
+            job_cases.extend([job['case']])
+         #sort job_runs via caseID
+         joblist=[j for c,j in sorted(zip(job_cases,joblist))]
+         for j_name in joblist: 
+            job=jobs[j_name]
+            print('- case: %s jobname: %s\n            tags: %s'% (job['case'],j_name,job['tags']))
+
       print("===>  ALL JOBS CHECKED")
       return jobs
    else:
       sys.exit(100)
 
 
-##test
-#jobs=job_init()
-#ff= jobs['navierstokes_type1_br1_GL']['run_opts']['runs/navst/freestream/conforming']['test_opts']['err_Linf']
-#
-#[stat,msg]=ff['func'](**ff['f_kwargs'])
-#print(stat,msg)
+
