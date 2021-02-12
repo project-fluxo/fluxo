@@ -592,7 +592,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
     U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
     
 #if NFVSE_CORR
-    call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
+    call Apply_NFVSE_Correction(U,Ut,tStage,b_dt(iStage))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -614,7 +614,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
   
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,t,b_dt(nRKStages))
+  call Apply_NFVSE_Correction(U,Ut,tStage,b_dt(nRKStages))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)

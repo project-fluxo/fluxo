@@ -564,7 +564,7 @@ contains
     ! Use IDP correction with previous step density:
 #if NFVSE_CORR
     if (EntropyCorr) then
-      Usafe(:,0:PP_N,0:PP_N,0:PP_N,:) = U
+      Usafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) = U
     end if
 #if LOCAL_ALPHA
     do iElem=1, nElems
@@ -2380,7 +2380,7 @@ contains
         ax1 = TanDirs1(nblocSide)
         ax2 = TanDirs2(nblocSide)
         DO q=0,PP_N; DO p=0,PP_N
-          ijk(:)=S2V(:,0,p,q,flip,locSide)
+          ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
           U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=U_master(:,p,q,SideID) ! Slave side is force-aligned with master
         END DO; END DO !p,q=0,PP_N
       end if !(nbElemID.NE.-1)
@@ -2778,7 +2778,9 @@ contains
     real,intent(in)    :: t                                         !< Current time (in time step!)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real, parameter :: eps = 1.e-8
+    real, parameter :: eps = 1.e-12           ! Very small value
+    real, parameter :: NEWTON_RELTOL = 1.e-12 ! Relative tolerance to exit Newton loop
+    real, parameter :: NEWTON_ABSTOL = 1.e-8  ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
     real,allocatable    :: Usafe_ext     (:,:,:,:,:)
     real,allocatable    :: EntPrev_master(:,:,:,:)
     real,allocatable    :: EntPrev_slave (:,:,:,:)
@@ -2804,6 +2806,7 @@ contains
     integer :: iter
     integer :: idx_p1(0:PP_N)
     integer :: idx_m1(0:PP_N)
+    real    :: corr_old
     !--------------------------------------------------------
     
     allocate( Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
@@ -2943,7 +2946,7 @@ contains
     
     do eID=1, nElems
       
-        corr = -eps ! Safe initialization
+        corr = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
         corr_loc = 0.0
 #endif /*LOCAL_ALPHA*/
@@ -2998,6 +3001,7 @@ contains
         
 !       Do the correction if needed
 !       ---------------------------
+        
         if ( corr > 0. ) then
           
           ! Change the alpha for output
@@ -3101,7 +3105,7 @@ contains
       
       do eID=1, nElems
       
-        corr = -eps ! Safe initialization
+        corr = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
         corr_loc = 0.0
 #endif /*LOCAL_ALPHA*/
@@ -3138,23 +3142,34 @@ contains
           ! Newton initialization:
           U_curr = U(:,i,j,k,eID)
           corr1 = 0.0
-        
+          
           ! Perform Newton iterations
           NewtonLoop: do iter=1, PositMaxIter
-
+            corr_old = corr1
+            
             ! Evaluate dS/d(alpha)
             dSdalpha = dot_product(ConsToEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
-            if (ALMOSTEQUAL(dSdalpha,0.0)) exit NewtonLoop ! Nothing to do here!
+            
+            if ( abs(dSdalpha)<1.e-14 ) exit NewtonLoop ! Nothing to do here!
             
             ! Update correction
             corr1 = corr1 + as / dSdalpha
+            if (alpha(eID) + corr1 * sdt > alpha_max) then
+              corr1 = (alpha_max - alpha(eID) ) * dt
+            end if
+            if (corr1<0) corr1=0.0
+            
+            ! Check relative tolerance
+            if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoop
             
             ! Get new U
             U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
             
             ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
             as = s_max-Get_MathEntropy(U_curr)
-            if ( abs(as) < 1.e-12 ) exit NewtonLoop  
+            
+            ! Check absolute tolerance
+            if ( abs(as) < max(eps,s_max*NEWTON_ABSTOL) ) exit NewtonLoop  
             
           end do NewtonLoop ! iter
           
