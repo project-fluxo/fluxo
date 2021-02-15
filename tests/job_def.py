@@ -181,11 +181,11 @@ def job_definition():
           'run_opts': {**run_opt_fsp,}
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#============================================================================
-#============================================================================
-#next group, MAXWELL, 200 < caseID <300
-#============================================================================
-#============================================================================
+   #============================================================================
+   #============================================================================
+   #next group, MAXWELL, 200 < caseID <300
+   #============================================================================
+   #============================================================================
    caseID=200 
    baseopts={ 'FLUXO_EQNSYSNAME'       :'maxwell',
               'FLUXO_PARABOLIC'        :'OFF',
@@ -591,5 +591,244 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+   caseID=caseID+1
+   jobs['build_navierstokes_type1_br1_entropy_var']={
+          'case': caseID,
+          'tags': [ 'navierstokes','standardDG','GL','br1','entropy_var'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'1',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_br1_prim_var']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','br1','prim_var'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type1_Gauss_br1_viscsuth']={
+          'case': caseID,
+          'tags': [ 'navierstokes','standardDG','gauss','br1','cons_var',"sutherland"],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'1',
+                        "FLUXO_EQN_VISCOSITY"    :"sutherland",
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"cons_var",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type1_GL_br2_viscpow']={
+          'case': caseID,
+          'tags': [ 'navierstokes','standardDG','GL','br2','cons_var',"powerlaw"],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'1',
+                        "FLUXO_EQN_VISCOSITY"    :"powerlaw",
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br2",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"cons_var",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type1_GL_nopara']={
+          'case': caseID,
+          'tags': [ 'navierstokes','standardDG','GL'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'1',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   volfluxes=['-1','0','5','8']
+   for  vvv  in range(0,len(volfluxes)):
+      volflux=volfluxes[vvv]
+      caseID=caseID+1
+   
+      jobs['build_navierstokes_type2_nopara_volFlux_'+volflux]={
+            'case': caseID,
+            'tags': [ 'navierstokes','split-form','GL'],
+            'build_opts':{**baseopts,
+                          'FLUXO_DISCTYPE'         :'2',
+                          "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                          "FLUXO_PARABOLIC"        :"OFF",
+                          'FLUXO_EQN_VOLFLUX'      : volflux,
+                         },
+            'run_opts': {**run_opt_fsp_conf, 
+                         **run_opt_fsp_nonconf,
+                        }
+           }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type1_GL_nopara_TC_angmom']={
+          'case': caseID,
+          'tags': [ 'navierstokes','standardDG','GL'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'1',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_TESTCASE"         :"ns_angularmomentum",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: A shock at a very low density (rho=1e-14) that is captured by the positivity limiter
+   run_opt_shock_posit={'runs/navst/shock/positivity':
+         {'tags': ['navierstokes','shock','conforming','positivity','SC','firstorder'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_nopara_SC_posit']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','SC','positivity'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                        "FLUXO_SHOCK_NFVSE_CORR" :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                       **run_opt_shock_posit,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: A shock at a very low density (rho=1e-14) that is captured by the shock indicator
+   run_opt_shock_SC={'runs/navst/shock/SC_firstOrder':
+         {'tags': ['navierstokes','shock','conforming','SC','firstorder'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_nopara_SC_firstOrder']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','SC'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                       **run_opt_shock_SC,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Free stream for the TVD SC (prim vars, ReconsBoundaries=1)
+   run_opt_fsp_SC_TVD={'runs/navst/freestream/SC_TVD':
+         {'tags': ['navierstokes','freestream','conforming','SC','TVD'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Free stream for the TVD-ES SC (prim vars with entropy fix, ReconsBoundaries=2)
+   run_opt_fsp_SC_TVD_ES_fix={'runs/navst/freestream/SC_TVD_ES_fix':
+         {'tags': ['navierstokes','freestream','conforming','SC','TVD_ES_fix'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      } 
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Free stream for the TVD-ES SC à la Fjordholm (ReconsBoundaries=3)
+   run_opt_fsp_SC_TVD_ES_Fjordholm={'runs/navst/freestream/SC_TVD_ES_Fjordholm':
+         {'tags': ['navierstokes','freestream','conforming','SC','TVD_ES_Fjod'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      } 
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_br1_entr_vars_SC_TVD']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','br1','entropy_var','SC'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_SC_TVD,
+                       **run_opt_fsp_SC_TVD_ES_fix,
+                       **run_opt_fsp_SC_TVD_ES_Fjordholm,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Free stream for the TVD-ES SC à la Fjordholm (ReconsBoundaries=3)
+   run_opt_fsp_p4est={'runs/navst/freestream/p4est_1':
+         {'tags': ['navierstokes','freestream','nonconforming','amr','p4est'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      } 
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_p4est']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','amr','p4est'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_AMR"              :"ON",
+                        "FLUXO_BUILD_P4EST"      :"OFF",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_p4est,
+                      }
+         }
    return jobs
