@@ -268,7 +268,7 @@ jobs = job_init()
 
 # THESE OPTIONS ARE ALWAYS ENFORCED
 globopts={}
-globopts['FLUXO_BUILD_MPI']= ('OFF' if (args.withmpi == 0) else 'ON')
+globopts['FLUXO_ENABLE_MPI']= ('OFF' if (args.withmpi == 0) else 'ON')
 globopts['FLUXO_BUILD_HDF5']= ('OFF' if (args.buildhdf5 == 0) else 'ON')
 
 if(len(args.hostname) > 1 ) :
