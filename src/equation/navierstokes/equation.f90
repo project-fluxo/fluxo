@@ -99,6 +99,8 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            "  0: Central"//&
                                            "  1: Local Lax-Friedrichs"//&
                                            " 22: HLL"//&
+                                           " 23: HLLE"//&
+                                           " 24: HLLEM"//&
                                            "  2: HLLC"//&
                                            "  3: Roe"//&
                                            "  4: Entropy Stable: EC Ismail and Roe + full wave diss."//&
@@ -286,6 +288,12 @@ SELECT CASE(WhichRiemannSolver)
   CASE(22)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
     SolveRiemannProblem     => RiemannSolverByHLL
+  CASE(23)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLE'
+    SolveRiemannProblem     => RiemannSolverByHLLE
+  CASE(24)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLEM'
+    SolveRiemannProblem     => RiemannSolverByHLLEM
   CASE(3)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
     SolveRiemannProblem     => RiemannSolverByRoe
@@ -502,6 +510,8 @@ REAL                            :: phi
 real                            :: dens0, dens1, pres0, velx0, vely0, slope
 integer :: dim_
 real :: newx(3)
+! For new blast
+real    :: bell_sigma, blast_sigma, bell_mass, blast_energy, bell_mass_normalized, blast_ener_normalized
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
@@ -809,6 +819,34 @@ CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
     prim(5) = 1.51333333333333
   END IF
   CALL PrimToCons(prim,resu)
+  
+case(15)
+  ! Some parameters
+  dim_ = 2 ! (2D)
+  bell_sigma  = 0.5 * 5e-1
+  blast_sigma = 0.5 * 3e-1
+  bell_mass  = 0.5 !! note also norm. in setup_init
+  blast_energy = 1.0
+
+  dens0       = 1.
+  pres0       = 1e-5
+
+  bell_mass_normalized  = bell_mass/SQRT((2*PP_Pi)**dim_)/bell_sigma**dim_
+  blast_ener_normalized = blast_energy/SQRT((2*PP_Pi)**dim_)/blast_sigma**dim_
+  r2 = SQRT(SUM(x(1:dim_)*x(1:dim_)))! the radius
+
+  ! Initialization
+  Prim(1) = dens0
+  Prim(2) = 0.
+  Prim(3) = 0.
+  Prim(4) = 0.
+  Prim(5) = pres0
+
+  Prim(1) = dens0 + bell_mass_normalized * exp(-0.5*(r2/bell_sigma)**2)
+
+  CALL PrimToCons(prim,resu)
+
+  resu(5) = resu(5) + blast_ener_normalized * exp(-0.5*(r2/blast_sigma)**2)
 END SELECT ! ExactFunction
 
 IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant

@@ -40,6 +40,14 @@ INTERFACE RiemannSolverByHLL
   MODULE PROCEDURE RiemannSolverByHLL
 END INTERFACE
 
+INTERFACE RiemannSolverByHLLE
+  MODULE PROCEDURE RiemannSolverByHLLE
+END INTERFACE
+
+INTERFACE RiemannSolverByHLLEM
+  MODULE PROCEDURE RiemannSolverByHLLEM
+END INTERFACE
+
 INTERFACE RiemannSolverByHLLC
   MODULE PROCEDURE RiemannSolverByHLLC
 END INTERFACE
@@ -72,6 +80,8 @@ PUBLIC:: Riemann, AdvRiemann
 PUBLIC:: RiemannSolverCentral
 PUBLIC:: RiemannSolverByRusanov
 PUBLIC:: RiemannSolverByHLL
+PUBLIC:: RiemannSolverByHLLE
+PUBLIC:: RiemannSolverByHLLEM
 PUBLIC:: RiemannSolverByHLLC
 PUBLIC:: RiemannSolverByRoe
 PUBLIC:: RiemannSolver_EntropyStable
@@ -360,6 +370,9 @@ DO j=0,PP_N
     Ssl = vTilde - aTilde
     Ssr = vTilde + aTilde
     
+!   New Einfeldt
+!   ------------
+    
     ! positive supersonic speed
     IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
       F(:,i,j)=F_L(:,i,j)
@@ -374,6 +387,164 @@ DO j=0,PP_N
 END DO ! j
 END SUBROUTINE RiemannSolverByHLL
 
+!==================================================================================================================================
+!> HLLE Riemann solver:
+!> Positivity preserving!
+!>    * Einfeldt, B. (1988). On Godunov-type methods for gas dynamics. SIAM Journal on Numerical Analysis, 25(2), 294-318.
+!>    * Einfeldt, B., Munz, C. D., Roe, P. L., & Sjögreen, B. (1991). On Godunov-type methods near low densities. Journal of computational physics, 92(2), 273-295.
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLE(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,aL,aR
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, RoeVel(3), RoeH, absVel, Roec, SqrtRho_L, SqrtRho_R, sSqrtRho, beta
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+beta=SQRT(0.5*kappaM1/kappa)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    aL    =sqrt(kappa*p_L*sRho_L)
+    aR    =sqrt(kappa*p_R*sRho_R)
+!   
+!   Signal speeds
+!   ------------------
+    ! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)*sRho_L
+    H_R = (U_RR(5,i,j) + p_R)*sRho_R
+    ! Root of densities
+    SqrtRho_L = SQRT(U_LL(1,i,j))
+    SqrtRho_R = SQRT(U_RR(1,i,j))
+    sSqrtRho  = 1./(SqrtRho_L+SqrtRho_R)
+    ! Roe mean values
+    RoeVel    = (SqrtRho_R*Vel_R + SqrtRho_L*Vel_L) * sSqrtRho
+    RoeH      = (SqrtRho_R*H_R   + SqrtRho_L*H_L  ) * sSqrtRho
+    absVel    = DOT_PRODUCT(RoeVel,RoeVel)
+    Roec      = SQRT(kappaM1*(RoeH-0.5*absVel))
+    ! HLLE flux (positively conservative)
+    SsL=MIN(RoeVel(1)-Roec,Vel_L(1) - beta*aL, 0.)
+    SsR=MAX(RoeVel(1)+Roec,Vel_R(1) + beta*aR, 0.)
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR*(U_RR(:,i,j)-U_LL(:,i,j)))/(ssR-ssL)
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLE
+
+!==================================================================================================================================
+!> HLLEM Riemann solver:
+!> Positivity preserving!
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLEM(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,aL,aR, Alpha(2:4),delta, RoeDens
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, RoeVel(3), RoeH, absVel, Roec, SqrtRho_L, SqrtRho_R, sSqrtRho, beta
+REAL,DIMENSION(PP_nVar)           :: r2,r3,r4  ! Roe eigenvectors + jump in prims
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+beta=SQRT(0.5*kappaM1/kappa)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    aL    =sqrt(kappa*p_L*sRho_L)
+    aR    =sqrt(kappa*p_R*sRho_R)
+!   
+!   Signal speeds
+!   ------------------
+    ! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)*sRho_L
+    H_R = (U_RR(5,i,j) + p_R)*sRho_R
+    ! Root of densities
+    SqrtRho_L = SQRT(U_LL(1,i,j))
+    SqrtRho_R = SQRT(U_RR(1,i,j))
+    sSqrtRho  = 1./(SqrtRho_L+SqrtRho_R)
+    ! Roe mean values
+    RoeVel    = (SqrtRho_R*Vel_R + SqrtRho_L*Vel_L) * sSqrtRho
+    RoeH      = (SqrtRho_R*H_R   + SqrtRho_L*H_L  ) * sSqrtRho
+    absVel    = DOT_PRODUCT(RoeVel,RoeVel)
+    Roec      = SQRT(kappaM1*(RoeH-0.5*absVel))
+    RoeDens   = SQRT(U_LL(1,i,j)*U_RR(1,i,j))
+    ! HLLE flux (positively conservative)
+    SsL=MIN(RoeVel(1)-Roec,Vel_L(1) - beta*aL, 0.)
+    SsR=MAX(RoeVel(1)+Roec,Vel_R(1) + beta*aR, 0.)
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      ! delta
+      delta = Roec/(Roec+ABS(0.5*(Ssl+Ssr)))
+      
+      ! mean eigenvectors
+      Alpha(2)   = (U_RR(1,i,j)-U_LL(1,i,j))  - (p_R-p_L)/(Roec*Roec)
+      Alpha(3:4) = RoeDens*(Vel_R(2:3) - Vel_L(2:3))
+      r2 = (/ 1., RoeVel(1), RoeVel(2), RoeVel(3), 0.5*absVel /)
+      r3 = (/ 0., 0.,        1.,        0.,        RoeVel(2)  /)
+      r4 = (/ 0., 0.,        0.,        1.,        RoeVel(3)  /)
+      
+      F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR* &
+                 (U_RR(:,i,j)-U_LL(:,i,j) - delta*(r2*Alpha(2)+r3*Alpha(3)+r4*Alpha(4))))/(ssR-ssL)
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLEM
 
 !==================================================================================================================================
 !> HLLC Riemann solver
