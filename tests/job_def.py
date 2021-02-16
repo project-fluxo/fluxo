@@ -19,6 +19,18 @@ def find_last_occurence(findstr,n_tail=40,stdout_filepath="std.out",**kwargs):
       if findstr in line : 
          return True,line
    return False, ' '  
+#==========================================================================
+# open the file (default "std.out") and parse for `findstr`, 
+# returns all the lines of the file that contain `findstr`
+#==========================================================================
+def find_all_occurences(findstr,stdout_filepath="std.out",**kwargs):
+   with open(stdout_filepath,'r') as fp: 
+      lines=fp.readlines()
+   linesWithStr=[]
+   for line in reversed(lines) :
+      if findstr in line : 
+         linesWithStr.append(line)
+   return linesWithStr
 
 
 ###########################################################################
@@ -38,6 +50,23 @@ def check_error(whichError='L_inf ', err_tol=1.0e-12,**kwargs ):
    errors=[float(x) for x in (line.split(":")[1]).split()]
    check=all([e < err_tol for e in errors])
    msg=('check_error: "%s" < %e = %s' % (line.strip(),err_tol,check))
+   return check,msg
+   
+#==========================================================================
+# find all the lines of the string `whichError` and check all entries after :  to be < err_tol
+#==========================================================================
+def check_all_errors(whichError='dSdU*Ut', err_tol=1.0e-12,err_abs=False,**kwargs ):
+   lines=find_all_occurences(whichError,**kwargs)
+   assert len(lines)>=1, ('check_all_errors: did not find "%s" in std.out' % (whichError))
+   errors = []
+   check = True
+   for line in lines:
+      newErrors=[float(x) for x in (line.split(":")[1]).split()]
+      if err_abs:
+        newErrors = [abs(e) for e in newErrors]
+      errors.append (newErrors)
+      check=all([e < err_tol for e in newErrors]) and check
+   msg=('check_all_errors: "%s" < %e = %s' % (max(errors),err_tol,check))
    return check,msg
 
 ###########################################################################
@@ -556,7 +585,22 @@ def job_definition():
                       },
          },
       }
-
+   # Entropy conservation test with EC-KEP flux (with and without shock-capturing)
+   run_opt_entropyCons={'runs/navst/softBlast/entropyCons':
+         {'tags': ['navierstokes','entropyCons','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      } 
+   # Entropy stability test with EC-KEP flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab={'runs/navst/softBlast/entropyStab':
+         {'tags': ['navierstokes','entropyCons','conforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      } 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['navierstokes_type1_br1_GL']={
@@ -675,7 +719,16 @@ def job_definition():
    for  vvv  in range(0,len(volfluxes)):
       volflux=volfluxes[vvv]
       caseID=caseID+1
-   
+      
+      my_run_opts={**run_opt_fsp_conf, 
+                   **run_opt_fsp_nonconf,
+                  }
+      if vvv==0 or vvv==2:
+        my_run_opts={**my_run_opts,
+                     **run_opt_entropyCons,
+                     **run_opt_entropyStab,
+                    }
+      
       jobs['build_navierstokes_type2_nopara_volFlux_'+volflux]={
             'case': caseID,
             'tags': [ 'navierstokes','split-form','GL'],
@@ -685,9 +738,7 @@ def job_definition():
                           "FLUXO_PARABOLIC"        :"OFF",
                           'FLUXO_EQN_VOLFLUX'      : volflux,
                          },
-            'run_opts': {**run_opt_fsp_conf, 
-                         **run_opt_fsp_nonconf,
-                        }
+            'run_opts': my_run_opts
            }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
@@ -755,6 +806,8 @@ def job_definition():
           'run_opts': {**run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
                        **run_opt_shock_SC,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -831,4 +884,5 @@ def job_definition():
                        **run_opt_fsp_p4est,
                       }
          }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    return jobs
