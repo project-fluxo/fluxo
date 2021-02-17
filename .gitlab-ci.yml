@@ -191,56 +191,56 @@ variables:
   stage: short_runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_1*.txt
+    - rm -f tests/runs/linadv/*/log_1*.txt
     - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_1* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 100-199
     - else python3 build_tests.py -p 2 -stage 2 -build Release -case 101,102 ;  fi
   artifacts:
     <<: *common_arts
     paths:
-    - tests/freestream/log_1*.txt
+    - tests/runs/linadv/*/log_1*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
 .job_script_short_runs_mhd: &script_short_runs_maxwell
   stage: short_runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_2*.txt
+    - rm -f tests/runs/maxwell/*/log_2*.txt
     - rm -rf dirx_2*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_2* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 200-299
     - else python3 build_tests.py -p 2 -stage 2 -build Release -case 201,202 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_2*.txt
+    - tests/runs/maxwell/*/log_2*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
 .job_script_short_runs_mhd: &script_short_runs_mhd
   stage: short_runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_3*.txt
+    - rm -f tests/runs/mhd/*/*/log_3*.txt
     - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_3* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 300-399
     - else python3 build_tests.py -p 2 -stage 2 -build Release -case 301,302,319 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_3*.txt
+    - tests/runs/mhd/*/*/log_3*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
 .job_script_short_runs_nav-st: &script_short_runs_nav-st
   stage: short_runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_4*.txt
+    - rm -f tests/runs/navst/*/*/log_4*.txt
     - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 400-499
     - else python3 build_tests.py -p 2 -stage 2 -build Release -case 401,402,413,414,416 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_4*.txt
+    - tests/runs/navst/*/*/log_4*.txt
 
 # =================================================================================================================================
 # TEMPLATES FOR STAGE "cleanup"
