@@ -372,6 +372,61 @@ entropy(4)   =  rho_sp*w  ! 2*beta*v
 entropy(5)   = -rho_sp    !-2*beta
 END FUNCTION ConsToEntropy
 
+!==================================================================================================================================
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+PURE FUNCTION GetEntropyPot(cons,entropy) RESULT(Psi)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(3)                   :: Psi !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: srho,u,v,w,v2s2,rho_sp,s,p, mathEnt
+real                                :: f(PP_nVar), g(PP_nVar), h(PP_nVar) !flux
+!==================================================================================================================================
+srho   = 1./cons(1)
+u      = cons(2)*srho
+v      = cons(3)*srho
+w      = cons(4)*srho
+v2s2   = 0.5*(u*u+v*v+w*w)
+p      = KappaM1*(cons(5)-cons(1)*v2s2)
+rho_sp = cons(1)/p
+!s      = LOG(p) - kappa*LOG(cons(1))
+s      = - LOG(rho_sp*(cons(1)**kappaM1))
+
+mathEnt = -cons(1)*s*sKappaM1
+
+! x direction
+f(1)=cons(2)         
+f(2)=cons(2)*u+p    
+f(3)=cons(2)*v      
+f(4)=cons(2)*w      
+f(5)=(cons(5)+p)*u         
+Psi(1) = dot_product(entropy,f) - u*mathEnt
+
+! y-direction
+g(1)=cons(3)
+g(2)=f(3)                      ! rho*u*v
+g(3)=cons(3)*v+p  
+g(4)=cons(3)*w
+g(5)=(cons(5)+p)*v 
+Psi(2) = dot_product(entropy,g) - v*mathEnt
+
+! z-direction
+h(1)=cons(4)
+h(2)=f(4)               ! rho*v1*v3
+h(3)=g(4)               ! rho*v2*v3  
+h(4)=cons(4)*w+p    
+h(5)=(cons(5)+p)*w  
+Psi(3) = dot_product(entropy,h) - w*mathEnt
+END FUNCTION GetEntropyPot
 
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
@@ -758,4 +813,65 @@ end subroutine Get_DensityTimesPressure
     Entropy = -cons(1)*s*sKappaM1
     
   END FUNCTION Get_MathEntropy
+!==================================================================================================================================
+!> Transformation from conservative variables U to S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+  PURE FUNCTION Get_SpecEntropy(cons) RESULT(Entropy)
+    ! MODULES
+    ! IMPLICIT VARIABLE HANDLING
+    IMPLICIT NONE
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! INPUT VARIABLES
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! OUTPUT VARIABLES
+    REAL                                :: entropy !< vector of entropy variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! LOCAL VARIABLES
+    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+    !==================================================================================================================================
+    srho   = 1./cons(1)
+    u      = cons(2)*srho
+    v      = cons(3)*srho
+    w      = cons(4)*srho
+    v2s2   = 0.5*(u*u+v*v+w*w)
+    rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2))
+    !s      = LOG(p) - kappa*LOG(cons(1))
+    Entropy = - LOG(rho_sp*(cons(1)**kappaM1))
+    
+  END FUNCTION Get_SpecEntropy
+  
+!==================================================================================================================================
+!> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+PURE FUNCTION ConsToSpecEntropy(cons) RESULT(Entropy)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: srho,u,v,w,v2s2,sp,s
+!==================================================================================================================================
+srho   = 1./cons(1)
+u      = cons(2)*srho
+v      = cons(3)*srho
+w      = cons(4)*srho
+v2s2   = 0.5*(u*u+v*v+w*w)
+sp     = 1.0/(KappaM1*(cons(5)-cons(1)*v2s2))
+!s      = LOG(p) - kappa*LOG(cons(1))
+s      = - LOG(cons(1)*sp*(cons(1)**kappaM1))
+
+! Convert to entropy variables
+entropy(1)   =  KappaM1*v2s2*sp-kappa*srho
+entropy(2)   =  - KappaM1*u*sp
+entropy(3)   =  - KappaM1*v*sp
+entropy(4)   =  - KappaM1*w*sp
+entropy(5)   = KappaM1*sp    !-2*beta
+END FUNCTION ConsToSpecEntropy
 END MODULE MOD_Equation_Vars

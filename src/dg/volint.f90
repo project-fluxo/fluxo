@@ -194,6 +194,11 @@ USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
 USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
+#if LOCAL_ALPHA
+use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG
+use MOD_Interpolation_Vars , only: wGP
+USE MOD_DG_Vars   ,ONLY:D_T
+#endif /*LOCAL_ALPHA*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -216,6 +221,23 @@ DO iElem=1,nElems
                             metrics_gTilde(:,:,:,:,iElem), &
                             metrics_hTilde(:,:,:,:,iElem), &
                                    ftilde,gtilde,htilde)
+  
+#if LOCAL_ALPHA
+    
+    do i=0, PP_N-1
+      ftilde_DG(:,i,:,:,iElem) = 0.
+      gtilde_DG(:,:,i,:,iElem) = 0.
+      htilde_DG(:,:,:,i,iElem) = 0.
+      do l=0, i
+        do j=0, PP_N
+          ftilde_DG(:,i,:,:,iElem) = ftilde_DG(:,i,:,:,iElem) - 2.*wGP(j)*D_T(l,j)*ftilde(:,l,j,:,:)
+          gtilde_DG(:,:,i,:,iElem) = gtilde_DG(:,:,i,:,iElem) - 2.*wGP(j)*D_T(l,j)*gtilde(:,l,:,j,:)
+          htilde_DG(:,:,:,i,iElem) = htilde_DG(:,:,:,i,iElem) - 2.*wGP(j)*D_T(l,j)*htilde(:,l,:,:,j)
+        end do
+      end do
+    end do
+#endif /*LOCAL_ALPHA*/
+  
   !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
