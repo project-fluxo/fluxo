@@ -6,7 +6,7 @@
 stages:
   - startup
   - build
-  - short_runs
+  - runs
   - cleanup
 
 # =================================================================================================================================
@@ -45,7 +45,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
+    - export NIGHTLYBUILDMODE="Debug"
 
 .job_IPP_setup_intel_build: &IPP_setup_intel_build
   variables:
@@ -57,7 +57,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
+    - export NIGHTLYBUILDMODE="Debug"
 
 .job_IPP_setup_gnu: &IPP_setup_gnu
   variables:
@@ -68,7 +68,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
+    - export NIGHTLYBUILDMODE="Debug"
 
 .job_IPP_setup_gnu_build: &IPP_setup_gnu_build
   variables:
@@ -80,7 +80,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
+    - export NIGHTLYBUILDMODE="Debug"
 
 .job_PCM_setup_gnu: &PCM_setup_gnu
   variables:
@@ -183,12 +183,12 @@ variables:
     - tests/log_4*.txt
 
 # =================================================================================================================================
-# TEMPLATES FOR STAGE "short_runs"
+# TEMPLATES FOR STAGE "runs"
 # =================================================================================================================================
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_linadv: &script_short_runs_linadv
-  stage: short_runs
+.job_script_runs_linadv: &script_runs_linadv
+  stage: runs
   script:
     - cd tests; pwd
     - rm -f tests/runs/linadv/*/log_1*.txt
@@ -201,8 +201,8 @@ variables:
     - tests/runs/linadv/*/log_1*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_mhd: &script_short_runs_maxwell
-  stage: short_runs
+.job_script_runs_mhd: &script_runs_maxwell
+  stage: runs
   script:
     - cd tests; pwd
     - rm -f tests/runs/maxwell/*/log_2*.txt
@@ -215,8 +215,8 @@ variables:
     - tests/runs/maxwell/*/log_2*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_mhd: &script_short_runs_mhd
-  stage: short_runs
+.job_script_runs_mhd: &script_runs_mhd
+  stage: runs
   script:
     - cd tests; pwd
     - rm -f tests/runs/mhd/*/*/log_3*.txt
@@ -229,8 +229,8 @@ variables:
     - tests/runs/mhd/*/*/log_3*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_nav-st: &script_short_runs_nav-st
-  stage: short_runs
+.job_script_runs_nav-st: &script_runs_nav-st
+  stage: runs
   script:
     - cd tests; pwd
     - rm -f tests/runs/navst/*/*/log_4*.txt
@@ -284,157 +284,157 @@ PCM_gnu_startup:
 # Stage "build"
 # =================================================================================================================================
 
-IPP_gnu_build_mhd:
+IPP_gnu_mhd_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_mhd
 
-IPP_intel_build_mhd:
+IPP_intel_mhd_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_mhd
 
-PCM_gnu_build_mhd:
+PCM_gnu_mhd_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_linadv:
+IPP_gnu_linadv_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_linadv
 
-IPP_intel_build_linadv:
+IPP_intel_linadv_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_linadv
 
-PCM_gnu_build_linadv:
+PCM_gnu_linadv_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_linadv
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_maxwell:
+IPP_gnu_maxwell_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_maxwell
 
-IPP_intel_build_maxwell:
+IPP_intel_maxwell_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_maxwell
 
-PCM_gnu_build_maxwell:
+PCM_gnu_maxwell_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_nav-st:
+IPP_gnu_nav-st_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_nav-st
 
-IPP_intel_build_nav-st:
+IPP_intel_nav-st_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_nav-st
 
-PCM_gnu_build_nav-st:
+PCM_gnu_nav-st_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_nav-st
 
 # =================================================================================================================================
-# Stage "short_runs"
+# Stage "runs"
 # =================================================================================================================================
 
-IPP_gnu_short_runs_mhd:
-  needs: ["IPP_gnu_build_mhd"]
+IPP_gnu_mhd_runs:
+  needs: ["IPP_gnu_mhd_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
-IPP_intel_short_runs_mhd:
-  needs: ["IPP_intel_build_mhd"]
+IPP_intel_mhd_runs:
+  needs: ["IPP_intel_mhd_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
-PCM_gnu_short_runs_mhd:
-  needs: ["PCM_gnu_build_mhd"]
+PCM_gnu_mhd_runs:
+  needs: ["PCM_gnu_mhd_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_linadv:
-  needs: ["IPP_gnu_build_linadv"]
+IPP_gnu_linadv_runs:
+  needs: ["IPP_gnu_linadv_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
-IPP_intel_short_runs_linadv:
-  needs: ["IPP_intel_build_linadv"]
+IPP_intel_linadv_runs:
+  needs: ["IPP_intel_linadv_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
-PCM_gnu_short_runs_linadv:
-  needs: ["PCM_gnu_build_linadv"]
+PCM_gnu_linadv_runs:
+  needs: ["PCM_gnu_linadv_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_maxwell:
-  needs: ["IPP_gnu_build_maxwell"]
+IPP_gnu_maxwell_runs:
+  needs: ["IPP_gnu_maxwell_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
-IPP_intel_short_runs_maxwell:
-  needs: ["IPP_intel_build_maxwell"]
+IPP_intel_maxwell_runs:
+  needs: ["IPP_intel_maxwell_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
-PCM_gnu_short_runs_maxwell:
-  needs: ["PCM_gnu_build_maxwell"]
+PCM_gnu_maxwell_runs:
+  needs: ["PCM_gnu_maxwell_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_nav-st:
-  needs: ["IPP_gnu_build_nav-st"]
+IPP_gnu_nav-st_runs:
+  needs: ["IPP_gnu_nav-st_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
-IPP_intel_short_runs_nav-st:
-  needs: ["IPP_intel_build_nav-st"]
+IPP_intel_nav-st_runs:
+  needs: ["IPP_intel_nav-st_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
-PCM_gnu_short_runs_nav-st:
-  needs: ["PCM_gnu_build_nav-st"]
+PCM_gnu_nav-st_runs:
+  needs: ["PCM_gnu_nav-st_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
 # =================================================================================================================================
 # Stage "cleanup"
 # =================================================================================================================================
 
 IPP_gnu_cleanup_cache:
-  needs: ["IPP_gnu_short_runs_linadv", "IPP_gnu_short_runs_maxwell", "IPP_gnu_short_runs_mhd", "IPP_gnu_short_runs_nav-st"]
+  needs: ["IPP_gnu_linadv_runs", "IPP_gnu_maxwell_runs", "IPP_gnu_mhd_runs", "IPP_gnu_nav-st_runs"]
   <<: *IPP_setup_gnu
   <<: *script_cleanup
 
 IPP_intel_cleanup_cache:
-  needs: ["IPP_intel_short_runs_linadv", "IPP_intel_short_runs_maxwell", "IPP_intel_short_runs_mhd", "IPP_intel_short_runs_nav-st"]
+  needs: ["IPP_intel_linadv_runs", "IPP_intel_maxwell_runs", "IPP_intel_mhd_runs", "IPP_intel_nav-st_runs"]
   <<: *IPP_setup_intel
   <<: *script_cleanup
 
 PCM_gnu_cleanup_cache:
-  needs: ["PCM_gnu_short_runs_linadv", "PCM_gnu_short_runs_maxwell", "PCM_gnu_short_runs_mhd", "PCM_gnu_short_runs_nav-st"]
+  needs: ["PCM_gnu_linadv_runs", "PCM_gnu_maxwell_runs", "PCM_gnu_mhd_runs", "PCM_gnu_nav-st_runs"]
   <<: *PCM_setup_gnu
   <<: *script_cleanup

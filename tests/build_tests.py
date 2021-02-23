@@ -245,7 +245,8 @@ parser.add_argument('-xtags', type=str, default='',     help='no exclude tags: D
                                                        
 parser.add_argument('-stage',type=int, default='0',    help='0 : DEFAULT, only build code\n'
                                                             '1 : build code and run with executable and parameterfile\n' 
-                                                            '2 : only run examples (checks if code builds exist) ')
+                                                            '2 : only run examples (checks if code builds exist)\n'
+                                                            '-1: only shows selection of cases without build/run them.')
                                                        
 parser.add_argument('-ntail', type=int, default=5,     help='    number of last line output of cmake/make screenlog (DEFAULT=5)')
 
@@ -301,14 +302,17 @@ for j_name,job in jobs.items():
       job_cases.extend([job['case']])
 
 if(len(job_runs) == 0):
-   print( ' NO MATCHING JOBS FOUND FULFILLING -case AND -tags ARGUMENTS!' )
+   print( ' NO MATCHING JOBS FOUND FULFILLING -case, -tags,-xtags ARGUMENTS!' )
    sys.exit(100)
 else:
    #sort job_runs via caseID
    job_runs=[j for c,j in sorted(zip(job_cases,job_runs))]
-   print('MATCHING JOBS FULFILLING -case AND -tags ARGUMENTS:')
+   print(' %d MATCHING JOBS FOUND THAT FULFILL -case, -tags, -xtags ARGUMENTS:' % (len(job_runs)))
    for j_name in job_runs:
-      print(' - caseID: %s, jobname: %s' % (jobs[j_name]['case'],j_name))
+      job=jobs[j_name]
+      print(' - caseID: %s, jobname: %s,\n          tags: %s' % (job['case'],j_name,job['tags']))
+   if ( args.stage == -1) :
+     sys.exit(0)
    for j_name in job_runs: 
       job=jobs[j_name]
       print('\n'+'‾'*132) 
