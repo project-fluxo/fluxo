@@ -2828,15 +2828,18 @@ contains
     real :: rh_FV( 0:PP_N, 0:PP_N,-1:PP_N)
     !--------------------------------------------------------
     
+#define barStates 1
+! ATTENTION: barStates=1 only works WITHOUT density correction!!!
+    
     allocate( FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )  ! Finite Volume Ut minus DG Ut
     if (EntropyCorr .or. SpecEntropyCorr) then
       allocate( EntPrev_master(     1,0:PP_N,0:PP_N,nSides) )
       allocate( EntPrev_slave (     1,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) )
       allocate( EntPrev_ext   (     1,0:PP_N,0:PP_N,6,nElems) )
     end if
-    if (DensityCorr) then
+!#    if (DensityCorr) then
       allocate( Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
-    end if
+!#    end if
     
     rf_FV = 0.0
     rg_FV = 0.0
@@ -2882,6 +2885,7 @@ contains
         end do       ; end do ! i,j
       end do !sideID
     ! Specific entropy
+#if !(barStates)
     elseif (SpecEntropyCorr) then
       do eID=1, nElems
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -2898,6 +2902,7 @@ contains
           EntPrev_slave (1,i,j,sideID) = Get_SpecEntropy(U_slave (:,i,j,sideID))
         end do       ; end do ! i,j
       end do !sideID
+#endif /*barStates*/
     end if
     
 !   Iterate over the elements
@@ -2955,7 +2960,7 @@ contains
           do k=0, PP_N ; do j=0, PP_N
             ! Jumps
             Ent_Jump = entVar(:,i+1,j,k) - entVar(:,i,j,k)
-            Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,i,j,k)*SubCellMetrics(eID) % xi % norm(i,j,k), entPot(:,i+1,j,k) - entPot(:,i,j,k) )
+            Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,i)*SubCellMetrics(eID) % xi % norm(j,k,i), entPot(:,i+1,j,k) - entPot(:,i,j,k) )
             ! Compute entropy production
             rf_FV(i,j,k) = dot_product(Ent_Jump, ftilde_FV(:,i,j,k,eID)) - Psi_Jump
           end do       ; end do !j,k
@@ -2965,7 +2970,7 @@ contains
           do k=0, PP_N ; do i=0, PP_N
             ! Jumps
             Ent_Jump = entVar(:,i,j+1,k) - entVar(:,i,j,k)
-            Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,i,j,k)*SubCellMetrics(eID) % eta % norm(i,j,k), entPot(:,i,j+1,k) - entPot(:,i,j,k) )
+            Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,i,k,j)*SubCellMetrics(eID) % eta % norm(i,k,j), entPot(:,i,j+1,k) - entPot(:,i,j,k) )
             ! Compute entropy production
             rg_FV(i,j,k) = dot_product(Ent_Jump, gtilde_FV(:,i,j,k,eID)) - Psi_Jump
           end do       ; end do !j,k
@@ -3326,7 +3331,19 @@ contains
       
       ! Get neighbor info
       ! *****************
-    
+#if barStates
+      ! Gather the external Usafe in the right location
+      call Get_externalU(PP_nVar,Usafe_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
+      ! FIll Usafe with info
+      do eID=1, nElems
+        Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
+        Uprev(:,PP_N+1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,3,eID)
+        Uprev(:,0:PP_N,    -1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,2,eID)
+        Uprev(:,0:PP_N,PP_N+1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,4,eID)
+        Uprev(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
+        Uprev(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
+      end do !eID
+#else
       ! Gather the external Usafe in the right location
       call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
       ! FIll EntPrev with info
@@ -3338,6 +3355,7 @@ contains
         EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
         EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
       end do !eID
+#endif /*barStates*/
       
       do eID=1, nElems
       
@@ -3348,12 +3366,38 @@ contains
 !       Compute correction factors
 !       --------------------------
         notInIter = .FALSE.
+
+#if barStates
+        associate (SCM => SubCellMetrics(eID))
+#endif /*barStates*/
+        
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           
           ! Get the limit states
           !*********************
           s_min = huge(1.0)
           
+#if barStates
+          ! ATTENTION: The subcell metrics are RESHAPED!!!
+          !xi+
+          U_curr = GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i+1,j,k,eID),SCM % xi   % nv (:,j,k,i)  ,SCM % xi   % t1 (:,j,k,i)  ,SCM % xi   % t2 (:,j,k,i)  ,SCM % xi   % norm(j,k,i) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+          !xi-
+          U_curr = GetBarStates(Uprev(:,i-1,j,k,eID),Uprev(:,i,j,k,eID),SCM % xi   % nv (:,j,k,i-1),SCM % xi   % t1 (:,j,k,i-1),SCM % xi   % t2 (:,j,k,i-1),SCM % xi   % norm(j,k,i-1) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+          !eta+
+          U_curr = GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i,j+1,k,eID),SCM % eta  % nv (:,i,k,j)  ,SCM % eta  % t1 (:,i,k,j)  ,SCM % eta  % t2 (:,i,k,j)  ,SCM % eta  % norm(i,k,j) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+          !eta-
+          U_curr = GetBarStates(Uprev(:,i,j-1,k,eID),Uprev(:,i,j,k,eID),SCM % eta  % nv (:,i,k,j-1),SCM % eta  % t1 (:,i,k,j-1),SCM % eta  % t2 (:,i,k,j-1),SCM % eta  % norm(i,k,j-1) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+          !zeta+
+          U_curr = GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i,j,k+1,eID),SCM % zeta % nv (:,i,j,k)  ,SCM % zeta % t1 (:,i,j,k)  ,SCM % zeta % t2 (:,i,j,k)  ,SCM % zeta % norm(i,j,k) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+          !zeta-
+          U_curr = GetBarStates(Uprev(:,i,j,k-1,eID),Uprev(:,i,j,k,eID),SCM % zeta % nv (:,i,j,k-1),SCM % zeta % t1 (:,i,j,k-1),SCM % zeta % t2 (:,i,j,k-1),SCM % zeta % norm(i,j,k-1) )
+          s_min = min(s_min, Get_SpecEntropy(U_curr))
+#else
           ! check stencil in xi
 !#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
           do l = i-1, i+1
@@ -3369,6 +3413,7 @@ contains
           do l = k-1, k+1
             s_min = min(s_min, EntPrev(1,i,j,l,eID))
           end do
+#endif /*barStates*/
           
           ! Difference between goal entropy and current entropy
           as = (s_min - Get_SpecEntropy(U(:,i,j,k,eID)))
@@ -3417,6 +3462,10 @@ contains
           corr = max(corr,corr1) ! Compute the element-wise maximum correction
         end do       ; end do       ; enddo !i,j,k
         
+#if barStates
+        end associate
+#endif /*barStates*/
+        
         if (notInIter) then
           write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
         end if
@@ -3436,61 +3485,7 @@ contains
           end if
           
 #if LOCAL_ALPHA
-          ! Change the alpha for output
-          alphacont_loc(:,:,:) = alpha_loc(:,:,:,eID)
-          alpha_loc(:,:,:,eID) = alpha_loc(:,:,:,eID) + corr_loc(:,:,:)* sdt
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            if (alpha_loc(i,j,k,eID) > alpha_max) then
-              alpha_loc(i,j,k,eID) = alpha_max
-              corr_loc (i,j,k)     = (alpha_max - alphacont_loc(i,j,k) ) * dt
-            end if
-          end do       ; end do       ; enddo
-          
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! xi correction
-            ! -------------
-            ! left
-            if (i /= 0) then
-              my_corr=-max(corr_loc(i-1,j  ,k  ),corr_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-            ! right
-            if (i /= PP_N) then
-              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr 
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-            ! eta correction
-            ! --------------
-            ! left
-            if (j /= 0) then
-              my_corr=-max(corr_loc(i  ,j-1,k  ),corr_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-            ! right
-            if (j /= PP_N) then
-              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-            ! zeta correction
-            ! ---------------
-            ! left
-            if (k /= 0) then
-              my_corr=-max(corr_loc(i  ,j  ,k-1),corr_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-            ! right
-            if (k /= PP_N) then
-              my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-              U (:,i,j,k,eID) = U (:,i,j,k,eID) + my_corr
-              Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + my_corr * sdt
-            end if
-          end do       ; end do       ; enddo
+          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)
 #else
           
           ! Correct!
@@ -3513,6 +3508,40 @@ contains
     SDEALLOCATE( EntPrev_ext   )
     SDEALLOCATE( FFV_m_FDG  )
   end subroutine Apply_NFVSE_Correction_IDP
+  
+  pure function GetBarStates(UL,UR,nv,t1,t2,norm) result(Ubar)
+    use MOD_Riemann       , only: RotateState, RotateFluxBack
+    use MOD_Equation_Vars , only: SoundSpeed2
+    USE MOD_Flux          , only: EvalOneEulerFlux1D
+    implicit none
+    !-arguments----------------------------------------
+    real, intent(in) :: UL  (PP_nVar)
+    real, intent(in) :: UR  (PP_nVar)
+    real, intent(in) :: nv  (3)
+    real, intent(in) :: t1  (3)
+    real, intent(in) :: t2  (3)
+    real, intent(in) :: norm
+    real             :: Ubar(PP_nVar)
+    !-local-variables----------------------------------
+    real :: UL_r(PP_nVar) ! Rotated left state
+    real :: UR_r(PP_nVar) ! Rotated right state
+    real :: FL_r(PP_nVar) ! Rotated left flux
+    real :: FR_r(PP_nVar) ! Rotated right flux
+    real :: lambdamax
+    !--------------------------------------------------
+    
+    UL_r = RotateState(UL,nv,t1,t2)
+    UR_r = RotateState(UR,nv,t1,t2)
+    
+    lambdamax = MAX(ABS(UL_r(2)/UL_r(1)),ABS(UR_r(2)/UR_r(1))) + SQRT(MAX(SoundSpeed2(UL_r),SoundSpeed2(UR_r)) )
+    
+    call EvalOneEulerFlux1D(UL_r, FL_r)
+    call EvalOneEulerFlux1D(UR_r, FR_r)
+    
+    Ubar = 0.5*( UL_r + UR_r ) + (0.5/(lambdamax)) * (FR_r-FL_r) !lambdamax*norm ???
+    
+    call RotateFluxBack(Ubar,nv,t1,t2)
+  end function GetBarStates
 !===================================================================================================================================
 !> Takes corr_loc U and Ut, and outputs the corrected U and Ut, and alpha_loc for visu
 !===================================================================================================================================

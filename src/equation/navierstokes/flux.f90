@@ -58,6 +58,7 @@ END INTERFACE
 PUBLIC::EvalAdvFluxTilde3D
 PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalEulerFlux1D
+PUBLIC::EvalOneEulerFlux1D
 #if PARABOLIC
 PUBLIC::EvalDiffFlux1D_Outflow
 PUBLIC::EvalDiffFlux3D
@@ -328,7 +329,39 @@ DO i=1,nTotal_face
 END DO !i=1,nTotal
 END SUBROUTINE EvalEulerFlux1D
 
+!==================================================================================================================================
+!> Computes the first cartesian Euler flux (F_x) using the conservative variables for one left/right combination
+!==================================================================================================================================
+pure SUBROUTINE EvalOneEulerFlux1D(U_Face,F_Face)
+! MODULES
+USE MOD_Equation_Vars,ONLY:KappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: U_Face(5)   !< state (conservative vars) on surface points
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT)    :: F_Face(5)   !< Cartesian flux in "x" direction
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+REAL                :: srho                    ! reciprocal values for density and kappa/Pr
+REAL                :: v1,v2,v3,p              ! auxiliary variables
+!==================================================================================================================================
 
+    ! auxiliary variables
+    srho = 1. / U_Face(1) ! 1/rho
+    v1   = U_Face(2)*srho ! u
+    v2   = U_Face(3)*srho ! v
+    v3   = U_Face(4)*srho ! w
+    p    = kappaM1*(U_Face(5)-0.5*(U_Face(2)*v1+U_Face(3)*v2+U_Face(4)*v3))
+    ! Euler fluxes x-direction
+    F_Face(1)= U_Face(2)          ! rho*u
+    F_Face(2)= U_Face(2)*v1+p     ! rho*u²+p
+    F_Face(3)= U_Face(2)*v2       ! rho*u*v
+    F_Face(4)= U_Face(2)*v3       ! rho*u*w
+    F_Face(5)=(U_Face(5) + p)*v1 ! (rho*e+p)*u    
+
+END SUBROUTINE EvalOneEulerFlux1D
 
 #if PARABOLIC
 !==================================================================================================================================
