@@ -165,7 +165,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
-USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus, Qp
 #if PP_DiscType==2
 USE MOD_DG_Vars,            ONLY: DvolSurf,DvolSurf_T
 #endif
@@ -181,7 +181,7 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
+REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv, Q   
 REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
 INTEGER                            :: i
 !===================================================================================================================================
@@ -203,7 +203,7 @@ D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
 #if PP_DiscType==2
-!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! DvolSurf^T = -DvolSurf
+!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since M*Dvolsurf is fully skew symmetric! M*DvolSurf^T = -M*DvolSurf
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
 !modified D matrix for fluxdifference volint
@@ -211,6 +211,12 @@ Dvolsurf=2.0*D
 Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
 Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
 Dvolsurf_T= TRANSPOSE(Dvolsurf)
+
+! For the secret DG flux (debug)
+ALLOCATE(Qp(    0:N_in,0:N_in) )
+Q = matmul(M,D)
+Qp = 1./Q
+!-------------
 #endif /*PP_DiscType==2*/
 
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix

@@ -26,10 +26,10 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr
+  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr, Uprev
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
-  public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG
+  public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG
 #endif /*LOCAL_ALPHA*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
@@ -78,6 +78,9 @@ module MOD_NFVSE_Vars
   real                  , allocatable :: ftilde_DG(:,:,:,:,:)
   real                  , allocatable :: gtilde_DG(:,:,:,:,:)
   real                  , allocatable :: htilde_DG(:,:,:,:,:)
+  real                  , allocatable :: rf_DG(:,:,:,:)
+  real                  , allocatable :: rg_DG(:,:,:,:)
+  real                  , allocatable :: rh_DG(:,:,:,:)
 #endif /*LOCAL_ALPHA*/
   real, target          , allocatable :: alpha(:)         !< Element-wise blending function (modified every time Ut is computed)
   real                  , allocatable :: alpha_Master(:)  !< Blending function on master sides
@@ -106,6 +109,7 @@ module MOD_NFVSE_Vars
   real, allocatable :: Fsafe(:,:,:,:,:)
   real, allocatable :: Fblen(:,:,:,:,:)
   real, allocatable :: Usafe(:,:,:,:,:)
+  real, allocatable :: Uprev(:,:,:,:,:)
   logical           :: EntropyCorr
   logical           :: SpecEntropyCorr
   logical           :: DensityCorr

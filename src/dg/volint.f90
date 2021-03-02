@@ -165,6 +165,17 @@ DO iElem=1,nElems
     Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,i)*ftilde(:,l,j,k)
   END DO; END DO; END DO; END DO
   
+  !<debug
+  DO k=1,PP_N-1; DO j=1,PP_N-1; DO i=1,PP_N-1
+    if (any(abs(Ut(:,i,j,k,iElem))>1.e-8)) then
+      print*, iElem, i, j, j
+      print*, Ut(:,i,j,k,iElem)
+      print*, (ftilde_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j,k,iElem))/wGP(i)
+      read(*,*)
+    end if
+  END DO; END DO; END DO
+  !debug>
+  
   ! eta derivatives
   DO k=0,PP_N; DO j=0,PP_N; DO l=0,PP_N; DO i=0,PP_N
     Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,j)*gtilde(:,i,l,k)
@@ -195,9 +206,10 @@ USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
 USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
 #if LOCAL_ALPHA
-use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG
+use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG, SemiDiscEntCorr
 use MOD_Interpolation_Vars , only: wGP
-USE MOD_DG_Vars   ,ONLY:D_T
+USE MOD_DG_Vars   ,ONLY:D
+use MOD_Equation_Vars      , only: ConsToEntropy, GetEntropyPot
 #endif /*LOCAL_ALPHA*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -211,9 +223,21 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-INTEGER                                           :: i,j,k,l,iElem
+REAL,DIMENSION(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems):: ftilde_DGloc
+REAL,DIMENSION(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems):: gtilde_DGloc
+REAL,DIMENSION(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems):: htilde_DGloc
+real :: entVar(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+real :: entPot(3      ,0:PP_N,0:PP_N,0:PP_N)
+real :: newUt(PP_nVar)
+INTEGER                                           :: i,j,k,l,m,iElem
 !==================================================================================================================================
+ftilde_DGloc=0.0
+htilde_DGloc=0.0
+gtilde_DGloc=0.0
 
+rf_DG = 0.0
+rg_DG = 0.0
+rh_DG = 0.0
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalAdvFluxAverage3D(             U(:,:,:,:,iElem), &
@@ -224,18 +248,65 @@ DO iElem=1,nElems
   
 #if LOCAL_ALPHA
     
-    do i=0, PP_N-1
-      ftilde_DG(:,i,:,:,iElem) = 0.
-      gtilde_DG(:,:,i,:,iElem) = 0.
-      htilde_DG(:,:,:,i,iElem) = 0.
-      do l=0, i
-        do j=0, PP_N
-          ftilde_DG(:,i,:,:,iElem) = ftilde_DG(:,i,:,:,iElem) - 2.*wGP(j)*D_T(l,j)*ftilde(:,l,j,:,:)
-          gtilde_DG(:,:,i,:,iElem) = gtilde_DG(:,:,i,:,iElem) - 2.*wGP(j)*D_T(l,j)*gtilde(:,l,:,j,:)
-          htilde_DG(:,:,:,i,iElem) = htilde_DG(:,:,:,i,iElem) - 2.*wGP(j)*D_T(l,j)*htilde(:,l,:,:,j)
-        end do
+    ! High-order fluxes:
+    ! ******************
+    do j=0, PP_N-1
+      ftilde_DGloc(:,j,:,:,iElem) = ftilde_DGloc(:,j-1,:,:,iElem)
+      gtilde_DGloc(:,:,j,:,iElem) = gtilde_DGloc(:,:,j-1,:,iElem)
+      htilde_DGloc(:,:,:,j,iElem) = htilde_DGloc(:,:,:,j-1,iElem)
+      
+      do i=0, PP_N
+        ftilde_DGloc(:,j,:,:,iElem) = ftilde_DGloc(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
+        gtilde_DGloc(:,:,j,:,iElem) = gtilde_DGloc(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
+        htilde_DGloc(:,:,:,j,iElem) = htilde_DGloc(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
       end do
     end do
+    ftilde_DG(:,0:PP_N-1,:,:,iElem) = ftilde_DGloc(:,0:PP_N-1,:,:,iElem)
+    gtilde_DG(:,:,0:PP_N-1,:,iElem) = gtilde_DGloc(:,:,0:PP_N-1,:,iElem)
+    htilde_DG(:,:,:,0:PP_N-1,iElem) = htilde_DGloc(:,:,:,0:PP_N-1,iElem)
+      
+    ! Entropy production
+    ! ******************
+    if (SemiDiscEntCorr) then
+    
+      ! Get entropy vars and potential
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        entVar(:,i,j,k) = ConsToEntropy(U(:,i,j,k,iElem))
+        entPot(:,i,j,k) = GetEntropyPot(U(:,i,j,k,iElem),entVar(:,i,j,k))
+      end do       ; end do       ; end do !i,j,k
+      
+      ! Get the production terms
+      do j=0, PP_N-1
+        ! new
+        rf_DG(j,:,:,iElem) = rf_DG(j-1,:,:,iElem)  ! TODO: Should I have a minus sign here?
+        rg_DG(:,j,:,iElem) = rg_DG(:,j-1,:,iElem)
+        rh_DG(:,:,j,iElem) = rh_DG(:,:,j-1,iElem)
+        do i=0, PP_N
+          do m=0, PP_N ; do l=0, PP_N
+            rf_DG(j,l,m,iElem) = rf_DG(j,l,m,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,i,l,m)-entVar(:,j,l,m),ftilde(:,i,j,l,m)) - 0.5*dot_product(metrics_fTilde(:,i,l,m,iElem)+metrics_fTilde(:,j,l,m,iElem),entPot(:,i,l,m)-entPot(:,j,l,m)) )
+            rg_DG(l,j,m,iElem) = rg_DG(l,j,m,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,l,i,m)-entVar(:,l,j,m),gtilde(:,i,l,j,m)) - 0.5*dot_product(metrics_gTilde(:,l,i,m,iElem)+metrics_gTilde(:,l,j,m,iElem),entPot(:,l,i,m)-entPot(:,l,j,m)) )
+            rh_DG(l,m,j,iElem) = rh_DG(l,m,j,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,l,m,i)-entVar(:,l,m,j),htilde(:,i,l,m,j)) - 0.5*dot_product(metrics_hTilde(:,l,m,i,iElem)+metrics_hTilde(:,l,m,j,iElem),entPot(:,l,m,i)-entPot(:,l,m,j)) )
+          end do       ; end do
+        end do
+!#        !<<some debugging:
+!#        if (any((rf_DG(j,:,:,iElem))>1.e-14)) then
+!#          print*, iElem, j, 'rf'
+!#          print*, rf_DG(j,:,:,iElem)
+!#          read(*,*)
+!#        end if
+!#        if (any((rg_DG(:,j,:,iElem))>1.e-14)) then
+!#          print*, iElem, j, 'rg'
+!#          print*, rg_DG(:,j,:,iElem)
+!#          read(*,*)
+!#        end if
+!#        if (any((rh_DG(:,:,j,iElem))>1.e-14)) then
+!#          print*, iElem, j, 'rh'
+!#          print*, rh_DG(:,:,j,iElem)
+!#          read(*,*)
+!#        end if
+!#        !some debugging>>
+      end do
+    end if
 #endif /*LOCAL_ALPHA*/
   
   !only euler
@@ -247,6 +318,7 @@ DO iElem=1,nElems
                                             + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
     END DO ! l
   END DO; END DO; END DO ! i,j,k
+  
 END DO ! iElem
 END SUBROUTINE VolInt_SplitForm
 #endif /*PP_DiscType==2*/
