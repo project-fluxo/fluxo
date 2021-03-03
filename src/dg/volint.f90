@@ -212,21 +212,24 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
+#if LOCAL_ALPHA
 REAL,DIMENSION(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems):: ftilde_DGloc
 REAL,DIMENSION(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems):: gtilde_DGloc
 REAL,DIMENSION(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems):: htilde_DGloc
 real :: entVar(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 real :: entPot(3      ,0:PP_N,0:PP_N,0:PP_N)
-real :: newUt(PP_nVar)
+#endif /*LOCAL_ALPHA*/
 INTEGER                                           :: i,j,k,l,m,iElem
 !==================================================================================================================================
+#if LOCAL_ALPHA
 ftilde_DGloc=0.0
 htilde_DGloc=0.0
 gtilde_DGloc=0.0
-
 rf_DG = 0.0
 rg_DG = 0.0
 rh_DG = 0.0
+#endif /*LOCAL_ALPHA*/
+
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalAdvFluxAverage3D(             U(:,:,:,:,iElem), &

@@ -26,8 +26,9 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr, Uprev
+  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, SemiDiscEntCorr, Uprev
 #endif /*NFVSE_CORR*/
+  public :: IDPneedsUprev, DensityCorr
 #if LOCAL_ALPHA
   public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG
 #endif /*LOCAL_ALPHA*/
@@ -112,7 +113,6 @@ module MOD_NFVSE_Vars
   real, allocatable :: Uprev(:,:,:,:,:)
   logical           :: EntropyCorr
   logical           :: SpecEntropyCorr
-  logical           :: DensityCorr
   logical           :: SemiDiscEntCorr
   real, allocatable :: EntPrev(:,:,:,:,:)
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
@@ -121,6 +121,8 @@ module MOD_NFVSE_Vars
   integer           :: FVCorrMethod
   procedure(i_sub_Correction), pointer :: Apply_NFVSE_Correction => null()
 #endif /*NFVSE_CORR*/
+  logical           :: DensityCorr   = .FALSE.
+  logical           :: IDPneedsUprev = .FALSE.
 
 ! For the FV method
 ! -----------------
