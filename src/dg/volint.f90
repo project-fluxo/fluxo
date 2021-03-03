@@ -165,17 +165,6 @@ DO iElem=1,nElems
     Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,i)*ftilde(:,l,j,k)
   END DO; END DO; END DO; END DO
   
-  !<debug
-  DO k=1,PP_N-1; DO j=1,PP_N-1; DO i=1,PP_N-1
-    if (any(abs(Ut(:,i,j,k,iElem))>1.e-8)) then
-      print*, iElem, i, j, j
-      print*, Ut(:,i,j,k,iElem)
-      print*, (ftilde_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j,k,iElem))/wGP(i)
-      read(*,*)
-    end if
-  END DO; END DO; END DO
-  !debug>
-  
   ! eta derivatives
   DO k=0,PP_N; DO j=0,PP_N; DO l=0,PP_N; DO i=0,PP_N
     Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + D_hat_T(l,j)*gtilde(:,i,l,k)

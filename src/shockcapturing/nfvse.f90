@@ -294,7 +294,7 @@ contains
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. DensityCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. DensityCorr .or. SemiDiscEntCorr) then
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -508,7 +508,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. DensityCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. DensityCorr .or. SemiDiscEntCorr) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
@@ -555,7 +555,7 @@ contains
     !===============================================================================================================================
     
     !if reconstruction:
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. SemiDiscEntCorr) then
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
@@ -2280,7 +2280,7 @@ contains
 ! If we do reconstruction on boundaries, we need to send the U_master
 ! -------------------------------------------------------------------
 #if MPI
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. EntropyCorr .or. SpecEntropyCorr .or. SemiDiscEntCorr) then
       ! receive the master
       call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
@@ -2331,7 +2331,7 @@ contains
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
 !> ATTENTION 2: Mortar faces are not considered (TODO?)
 !===================================================================================================================================
-  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave)
+  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave,fluxSign)
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
     use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
@@ -2342,10 +2342,23 @@ contains
     real, intent(in)  :: U       (nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
     real, intent(in)  :: U_master(nVar,0:PP_N,0:PP_N,nSides)
     real, intent(in)  :: U_slave (nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    logical, optional :: fluxSign
     !-local-variables-----------------------------------------
     integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
     integer :: ax1, ax2
+    integer :: signIdx
+    integer, parameter :: signo(2) = [1, -1]
     !---------------------------------------------------------
+    
+    if (present(fluxSign)) then
+      if (fluxSign) then
+        signIdx=2
+      else
+        signIdx=1
+      end if
+    else
+      signIdx=1
+    end if
     
     ! First assign the inner value on boundaries (we don't use an "external state")
     do SideID=1, nBCSides
@@ -2392,7 +2405,7 @@ contains
         ax2 = TanDirs2(nblocSide)
         DO q=0,PP_N; DO p=0,PP_N
           ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
-          U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=U_master(:,p,q,SideID) ! Slave side is force-aligned with master
+          U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=signo(signIdx)*U_master(:,p,q,SideID) ! Slave side is force-aligned with master
         END DO; END DO !p,q=0,PP_N
       end if !(nbElemID.NE.-1)
       
@@ -2768,7 +2781,7 @@ contains
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, sWGP, rf_DG, rh_DG, rg_DG
 #endif /*LOCAL_ALPHA*/
-    use MOD_DG_Vars            , only: U_master,U_slave
+    use MOD_DG_Vars            , only: U_master,U_slave, Flux_master, Flux_slave
     use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: Get_MathEntropy, Get_SpecEntropy, ConsToEntropy, ConsToSpecEntropy, GetEntropyPot
@@ -2793,6 +2806,7 @@ contains
     real, parameter :: NEWTON_RELTOL = 1.e-12 ! Relative tolerance to exit Newton loop
     real, parameter :: NEWTON_ABSTOL = 1.e-8  ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
     real,allocatable    :: Usafe_ext     (:,:,:,:,:)
+    real,allocatable    :: Flux_ext      (:,:,:,:,:)
     real,allocatable    :: EntPrev_master(:,:,:,:)
     real,allocatable    :: EntPrev_slave (:,:,:,:)
     real,allocatable    :: EntPrev_ext   (:,:,:,:,:)
@@ -2820,8 +2834,8 @@ contains
     real    :: corr_old
     
     real :: Ent_Jump(PP_nVar), Psi_Jump, newAlpha, r, rFV
-    real :: entVar(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real :: entPot(3      ,0:PP_N,0:PP_N,0:PP_N)
+    real :: entVar(PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+    real :: entPot(3      ,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
     
     real :: rf_FV(-1:PP_N, 0:PP_N, 0:PP_N)
     real :: rg_FV( 0:PP_N,-1:PP_N, 0:PP_N)
@@ -2840,6 +2854,9 @@ contains
 !#    if (DensityCorr) then
       allocate( Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
 !#    end if
+    if (SemiDiscEntCorr) then
+      allocate( Flux_ext     (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
+    end if
     
     rf_FV = 0.0
     rg_FV = 0.0
@@ -2945,6 +2962,32 @@ contains
     if(SemiDiscEntCorr) then
 #if LOCAL_ALPHA
       ! ATTENTION: 1) we are supposing that alpha=0 before limiting
+      
+      ! Get the boundary entropy production (same for FV and DG)
+      ! ********************************************************
+      
+      ! Gather the external Usafe in the right location
+      call Get_externalU(PP_nVar,Usafe_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
+      ! FIll Usafe with info
+      do eID=1, nElems
+        Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
+        Uprev(:,PP_N+1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,3,eID)
+        Uprev(:,0:PP_N,    -1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,2,eID)
+        Uprev(:,0:PP_N,PP_N+1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,4,eID)
+        Uprev(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
+        Uprev(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
+      end do !eID
+      
+      ! TODO: Send the F_master across MPI interfaces
+#if MPI
+      if (nProcessors > 1) then
+        stop 'SemiDiscEntCorr not working in parallel.. Send Flux_master!!'
+      end if
+#endif /*MPI*/
+      
+      ! Get the external fluxes in place (only working without BCs!!! TODO..)
+      call Get_externalU(PP_nVar,Flux_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),Flux_master,Flux_slave,fluxSign=.TRUE.)
+      
       do eID=1, nElems
         
         ! Get entropy vars and potential
@@ -2952,6 +2995,81 @@ contains
           entVar(:,i,j,k) = ConsToEntropy(Uprev(:,i,j,k,eID))
           entPot(:,i,j,k) = GetEntropyPot(Uprev(:,i,j,k,eID),entVar(:,i,j,k))
         end do       ; end do       ; end do !i,j,k
+        
+        ! Get entropy vars and potential (boundaries)
+        do k=0, PP_N ; do j=0, PP_N
+          !xi-
+          entVar(:,-1,j,k) = ConsToEntropy(Uprev(:,-1,j,k,eID))
+          entPot(:,-1,j,k) = GetEntropyPot(Uprev(:,-1,j,k,eID),entVar(:,-1,j,k))
+          !xi+
+          entVar(:,PP_N+1,j,k) = ConsToEntropy(Uprev(:,PP_N+1,j,k,eID))
+          entPot(:,PP_N+1,j,k) = GetEntropyPot(Uprev(:,PP_N+1,j,k,eID),entVar(:,PP_N+1,j,k))
+          !eta-
+          entVar(:,j,-1,k) = ConsToEntropy(Uprev(:,j,-1,k,eID))
+          entPot(:,j,-1,k) = GetEntropyPot(Uprev(:,j,-1,k,eID),entVar(:,j,-1,k))
+          !eta+
+          entVar(:,j,PP_N+1,k) = ConsToEntropy(Uprev(:,j,PP_N+1,k,eID))
+          entPot(:,j,PP_N+1,k) = GetEntropyPot(Uprev(:,j,PP_N+1,k,eID),entVar(:,j,PP_N+1,k))
+          !zeta-
+          entVar(:,j,k,-1) = ConsToEntropy(Uprev(:,j,k,-1,eID))
+          entPot(:,j,k,-1) = GetEntropyPot(Uprev(:,j,k,-1,eID),entVar(:,j,k,-1))
+          !zeta+
+          entVar(:,j,k,PP_N+1) = ConsToEntropy(Uprev(:,j,k,PP_N+1,eID))
+          entPot(:,j,k,PP_N+1) = GetEntropyPot(Uprev(:,j,k,PP_N+1,eID),entVar(:,j,k,PP_N+1))
+        end do          ; end do !j,k
+        
+        ! Compute boundary entropy production
+        ! -----------------------------------
+        do k=0, PP_N  ; do j=0, PP_N
+          !xi- (minus flux)
+          Ent_Jump = entVar(:,0,j,k) - entVar(:,-1,j,k)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,-1  )*SubCellMetrics(eID) % xi % norm(j,k,-1  ), entPot(:,0     ,j,k) - entPot(:,-1  ,j,k) )
+          rf_DG(-1,j,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,5,eID)) - Psi_Jump
+          rf_FV(-1,j,k)     = rf_DG(-1,j,k,eID)
+          if (rf_FV(-1,j,k) > eps) then
+            print*, 'xi-', eID, rf_FV(-1,j,k)
+          end if
+          !xi+
+          Ent_Jump = entVar(:,PP_N+1,j,k) - entVar(:,PP_N,j,k)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,PP_N)*SubCellMetrics(eID) % xi % norm(j,k,PP_N), entPot(:,PP_N+1,j,k) - entPot(:,PP_N,j,k) )
+          rf_DG(PP_N,j,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,3,eID)) - Psi_Jump
+          rf_FV(PP_N,j,k)     = rf_DG(PP_N,j,k,eID)
+          if (rf_FV(PP_N,j,k) > eps) then
+            print*, 'xi+', eID, rf_FV(PP_N,j,k)
+          end if
+          !eta- (minus flux)
+          Ent_Jump = entVar(:,j,0,k) - entVar(:,j,-1,k)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,-1  )*SubCellMetrics(eID) % eta % norm(j,k,-1  ), entPot(:,j,0     ,k) - entPot(:,j,-1  ,k) )
+          rg_DG(j,-1,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,2,eID)) - Psi_Jump
+          rg_FV(j,-1,k)     = rg_DG(j,-1,k,eID)
+          if (rg_FV(j,-1,k) > eps) then
+            print*, 'eta-', eID
+          end if
+          !eta+
+          Ent_Jump = entVar(:,j,PP_N+1,k) - entVar(:,j,PP_N,k)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % eta % norm(j,k,PP_N), entPot(:,j,PP_N+1,k) - entPot(:,j,PP_N,k) )
+          rg_DG(j,PP_N,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,4,eID)) - Psi_Jump
+          rg_FV(j,PP_N,k)     = rg_DG(j,PP_N,k,eID)
+          if (rg_FV(j,PP_N,k) > eps) then
+            print*, 'eta+', eID
+          end if
+          !zeta- (minus flux)
+          Ent_Jump = entVar(:,j,k,0) - entVar(:,j,k,-1)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,-1  )*SubCellMetrics(eID) % zeta % norm(j,k,-1  ), entPot(:,j,k,0     ) - entPot(:,j,k,-1  ) )
+          rh_DG(j,k,-1,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,1,eID)) - Psi_Jump
+          rh_FV(j,k,-1)     = rh_DG(j,k,-1,eID)
+          if (rh_FV(j,k,-1) > eps) then
+            print*, 'eta-', eID
+          end if
+          !zeta+
+          Ent_Jump = entVar(:,j,k,PP_N+1) - entVar(:,j,k,PP_N)
+          Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % zeta % norm(j,k,PP_N), entPot(:,j,k,PP_N+1) - entPot(:,j,k,PP_N) )
+          rh_DG(j,k,PP_N,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,6,eID)) - Psi_Jump
+          rh_FV(j,k,PP_N)     = rh_DG(j,k,PP_N,eID)
+          if (rh_FV(j,k,PP_N) > eps) then
+            print*, 'zeta+', eID
+          end if
+        end do        ; end do
         
         ! compute entropy production of FV
         ! --------------------------------
@@ -3039,8 +3157,8 @@ contains
           end if
           
 #if LOCAL_ALPHA
-!#          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)  ! TODO: See if the local correction is consistent with the entropy balance
-!##else
+          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)  ! TODO: See if the local correction is consistent with the entropy balance
+#else
           ! Correct!
           do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
             ! Correct U
