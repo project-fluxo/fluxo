@@ -113,6 +113,8 @@ CASE('ketchesonrk4-20','ketchesonrk4-18')
 #endif
 case('ssprk4-5')
   TimeDiscType='SSPRK2'
+case('ssprk3-3')
+  TimeDiscType='ShuSSPRK'
 CASE DEFAULT
   CALL CollectiveStop(__STAMP__,&
                       'Unknown method of time discretization: '//TRIM(TimeDiscMethod))
@@ -120,6 +122,34 @@ END SELECT
 
 
 SELECT CASE (TimeDiscMethod)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+! Strong-Stability-Preserving Runge-Kutta 4, 5 stages, Spiteri & Ruuth
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CASE('ssprk3-3')
+
+  TimeDiscName = 'SSP RK3-3'
+  nRKStages=3
+#if PARABOLIC
+  RelativeDFL=1.
+#endif
+
+! TODO: Adjust CFLScaleAlpha!! ... These are the ones for standardrk3-3
+#if (PP_NodeType==1)
+  CFLScaleAlpha(1:15) = &
+  (/ 1.2285, 1.0485, 0.9101, 0.8066, 0.7268, 0.6626, 0.6109, 0.5670, 0.5299, 0.4973, 0.4703, 0.4455, 0.4230, 0.4039, 0.3859 /)
+#elif (PP_NodeType==2)
+  CFLScaleAlpha(1:15) = &
+  (/ 3.1871, 2.2444, 1.7797, 1.5075, 1.3230, 1.1857, 1.0800, 0.9945, 0.9247, 0.8651, 0.8134, 0.7695, 0.7301, 0.6952, 0.6649 /)
+#endif /*PP_NodeType*/
+
+  ALLOCATE(RKA(2:nRKStages),RKb(1:nRKStages),RKc(2:nRKStages),RKd(2:nRKStages),RKe(2:4))
+  ! The coefficients that multiply Uprev
+  RKa(2:nRKStages) = (/ 3./4. , 1./3. /)
+  ! The coefficients that multiply dt*Ut
+  RKb(2:nRKStages) = (/ 1./4. , 2./3. /)
+  ! The c coefficients (that scale dt)... Not known. TODO: Check if there's an expression for these..
+  RKc(2:nRKStages) = (/ 0.    , 0.    /)
+  
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Strong-Stability-Preserving Runge-Kutta 4, 5 stages, Spiteri & Ruuth
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

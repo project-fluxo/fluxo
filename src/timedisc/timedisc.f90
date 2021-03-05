@@ -98,6 +98,8 @@ CASE('LSERKK3')
   TimeStep=>TimeStepByLSERKK3
 case('SSPRK2')
   TimeStep=>TimeStepBySSPRK2
+case('ShuSSPRK')
+  TimeStep=>TimeStepByShuSSPRK
 END SELECT
 
 IF(TimeDiscInitIsDone)THEN
@@ -621,6 +623,79 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
   
 end subroutine TimeStepBySSPRK2
+!===================================================================================================================================
+!> Strong-Stability-Preserving Runge-Kutta integration of Shu and Osher
+!===================================================================================================================================
+subroutine TimeStepByShuSSPRK(t)
+  use MOD_PreProc
+  use MOD_Vector
+  use MOD_TimeDisc_Vars, only: dt,nRKStages,CurrentStage, RKa, RKb, RKc
+  use MOD_DG_Vars      , only: U, Ut, nTotalU
+  use MOD_MESH_Vars    , only: nElems
+  use MOD_DG           , only: DGTimeDerivative
+#if NFVSE_CORR
+  use MOD_NFVSE        , only: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
+  implicit none
+  !-arguments----------------------------------
+  real, intent(in) :: t
+  !-local-variables----------------------------
+  real    :: r0(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! Register 0
+  real    :: tStage
+  integer :: iStage
+  !--------------------------------------------
+  
+  ! Copy solution
+  r0 = U
+  
+  ! First stage
+  ! -----------
+  CurrentStage = 1
+  tStage=t
+    
+  ! Compute Ut
+  CALL DGTimeDerivative(tStage) 
+    
+  ! Perform Forward Euler step
+  U = U + Ut*dt 
+    
+  ! Correct the solution if needed
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,tStage,dt)
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+  
+  ! Other stages
+  ! -----------
+  do iStage=2, nRKStages
+    CurrentStage = iStage
+    tStage=t+dt*RKc(iStage)
+    
+    ! Compute Ut
+    CALL DGTimeDerivative(tStage) 
+    
+    ! Perform Forward Euler step
+    U = U + Ut*dt 
+    
+    ! Correct the solution if needed
+#if NFVSE_CORR
+    call Apply_NFVSE_Correction(U,Ut,tStage,dt)
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+    CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+    
+    ! Perform convex combination
+    U = r0*RKa(iStage) + U*RKb(iStage)
+
+  end do
+  
+end subroutine TimeStepByShuSSPRK
 !===================================================================================================================================
 !> Scaling of the CFL number, from paper GASSNER, KOPRIVA, "A comparision of the Gauss and Gauss-Lobatto
 !> Discontinuous Galerkin Spectral Element Method for Wave Propagation Problems" .

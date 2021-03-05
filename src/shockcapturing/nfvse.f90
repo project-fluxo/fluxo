@@ -105,7 +105,7 @@ contains
     call prms%CreateLogicalOption(   "EntropyCorr",  " For FVCorrMethod=2. IDP correction on entropy?", "F")
     call prms%CreateLogicalOption("SpecEntropyCorr",  " For FVCorrMethod=2. IDP correction on specific entropy?", "F")
     call prms%CreateLogicalOption("SemiDiscEntCorr",  " For FVCorrMethod=2. IDP correction on semi-discrete entropy balance?", "F")
-    call prms%CreateLogicalOption(   "DensityCorr",  " For FVCorrMethod=2. IDP(TVD) correction on density?", "T")
+    call prms%CreateLogicalOption(   "DensityCorr",  " For FVCorrMethod=2. IDP(TVD) correction on density?", "F")
     
     call prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
     call prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
@@ -2813,7 +2813,7 @@ contains
     real,intent(in)    :: t                                         !< Current time (in time step!)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real, parameter :: eps = 1.e-8           ! Very small value
+    real, parameter :: eps = 1.e-10           ! Very small value
     real, parameter :: NEWTON_RELTOL = 1.e-12 ! Relative tolerance to exit Newton loop
     real, parameter :: NEWTON_ABSTOL = 1.e-8  ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
     real,allocatable    :: Usafe_ext     (:,:,:,:,:)
@@ -2831,8 +2831,6 @@ contains
     real    :: corr, corr1
 #if LOCAL_ALPHA
     real    :: corr_loc     (0:PP_N,0:PP_N,0:PP_N)
-    real    :: alphacont_loc(0:PP_N,0:PP_N,0:PP_N)
-    real    :: my_corr      (PP_nVar)
 #endif /*LOCAL_ALPHA*/
     real    :: p_safe ! pressure obtained with alpha_max for an element
     real    :: alphadiff
@@ -2945,7 +2943,7 @@ contains
 #else
 !   Otherwise get the previous entropy if needed
 !   ********************************************
-    ! Math entropy if needed
+    ! Mathematical entropy
     if (EntropyCorr) then
       do eID=1, nElems
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -2979,6 +2977,23 @@ contains
           EntPrev_slave (1,i,j,sideID) = Get_SpecEntropy(U_slave (:,i,j,sideID))
         end do       ; end do ! i,j
       end do !sideID
+    end if
+    
+    if (EntropyCorr .or. SpecEntropyCorr) then
+      ! Get neighbor info
+      ! *****************
+    
+      ! Gather the external math entropy in the right location
+      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
+      ! FIll EntPrev with info
+      do eID=1, nElems
+        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
+        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
+        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
+        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
+        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
+        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
+      end do !eID
     end if
 #endif /*barStates*/
     
@@ -3168,7 +3183,7 @@ contains
           ! correction
           corr1 = r*dt/rFV
 #if LOCAL_ALPHA
-          corr_loc(i,j,k) = corr1
+          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1)
           
@@ -3297,19 +3312,19 @@ contains
           end do
 #else
           ! check stencil in xi
-!#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
+!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
           do l = i-1, i+1
             rho_min = min(rho_min, Usafe(1,l,j,k,eID))
             rho_max = max(rho_max, Usafe(1,l,j,k,eID))
           end do
           ! check stencil in eta
-!#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
+!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
           do l = j-1, j+1
             rho_min = min(rho_min, Usafe(1,i,l,k,eID))
             rho_max = max(rho_max, Usafe(1,i,l,k,eID))
           end do
           ! check stencil in zeta
-!#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
+!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
           do l = k-1, k+1
             rho_min = min(rho_min, Usafe(1,i,j,l,eID))
             rho_max = max(rho_max, Usafe(1,i,j,l,eID))
@@ -3318,12 +3333,11 @@ contains
           
           ! If U is in that range... nothing to correct
           !********************************************
-          if ( U(1,i,j,k,eID) < rho_min) then
+          if ( U(1,i,j,k,eID) < rho_min*(1.-NEWTON_ABSTOL)) then
             rho_safe = rho_min
-          elseif (U(1,i,j,k,eID) > rho_max) then
+          elseif (U(1,i,j,k,eID) > rho_max*(1.+NEWTON_ABSTOL)) then
             rho_safe = rho_max
           else
-            rho_safe = 999.
             cycle
           end if
           
@@ -3333,7 +3347,7 @@ contains
           a = (rho_safe - U(1,i,j,k,eID))
           corr1 = a / FFV_m_FDG(1,i,j,k,eID)
 #if LOCAL_ALPHA
-          corr_loc(i,j,k) = corr1
+          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1)
           
@@ -3374,21 +3388,6 @@ contains
 !     ----------------------------
     if (EntropyCorr) then
       
-      ! Get neighbor info
-      ! *****************
-    
-      ! Gather the external math entropy in the right location
-      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
-      ! FIll EntPrev with info
-      do eID=1, nElems
-        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
-        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
-        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
-        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
-        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
-        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
-      end do !eID
-      
       do eID=1, nElems
       
         corr = -epsilon(1.0) ! Safe initialization
@@ -3404,26 +3403,41 @@ contains
           !*********************
           s_max = -huge(1.0)
           
+#if barStates
+          !xi+
+          s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
+          !xi-
+          s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
+          !eta+
+          s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
+          !eta-
+          s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+          !zeta+
+          s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
+          !zeta-
+          s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+#else
           ! check stencil in xi
-!#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
+!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
           do l = i-1, i+1
             s_max = max(s_max, EntPrev(1,l,j,k,eID))
           end do
           ! check stencil in eta
-!#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
+!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
           do l = j-1, j+1
             s_max = max(s_max, EntPrev(1,i,l,k,eID))
           end do
           ! check stencil in zeta
-!#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
+!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
           do l = k-1, k+1
             s_max = max(s_max, EntPrev(1,i,j,l,eID))
           end do
+#endif /*barStates*/
           
           ! Difference between goal entropy and current entropy
           as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
 
-          if (as >= -10.*epsilon(1.0)) cycle ! this DOF does NOT need pressure correction   
+          if (as >= -max(eps,abs(s_max)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
         
           ! Newton initialization:
           U_curr = U(:,i,j,k,eID)
@@ -3436,7 +3450,7 @@ contains
             ! Evaluate dS/d(alpha)
             dSdalpha = dot_product(ConsToEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
             
-            if ( abs(dSdalpha)<1.e-14 ) exit NewtonLoop ! Nothing to do here!
+            if ( abs(dSdalpha)<eps ) exit NewtonLoop ! Nothing to do here!
             
             ! Update correction
             corr1 = corr1 + as / dSdalpha
@@ -3462,7 +3476,7 @@ contains
           if (iter > PositMaxIter) notInIter =.TRUE.
           
 #if LOCAL_ALPHA
-          corr_loc(i,j,k) = corr1
+          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1) ! Compute the element-wise maximum correction
         end do       ; end do       ; enddo !i,j,k
@@ -3505,22 +3519,6 @@ contains
     
     if (SpecEntropyCorr) then
       
-      ! Get neighbor info
-      ! *****************
-#if !(barStates)
-      ! Gather the external entropy in the right location
-      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
-      ! FIll EntPrev with info
-      do eID=1, nElems
-        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
-        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
-        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
-        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
-        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
-        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
-      end do !eID
-#endif /*barStates*/
-      
       do eID=1, nElems
       
         corr = -epsilon(1.0) ! Safe initialization
@@ -3538,7 +3536,6 @@ contains
           s_min = huge(1.0)
           
 #if barStates
-          ! ATTENTION: The subcell metrics are RESHAPED!!!
           !xi+
           s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
           !xi-
@@ -3572,7 +3569,7 @@ contains
           ! Difference between goal entropy and current entropy
           as = (s_min - Get_SpecEntropy(U(:,i,j,k,eID)))
 
-          if (as <= 10.*epsilon(1.0)) cycle ! this DOF does NOT need entropy correction   
+          if (as <= max(eps,abs(s_min)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
         
           ! Newton initialization:
           U_curr = U(:,i,j,k,eID)
@@ -3585,7 +3582,7 @@ contains
             ! Evaluate dS/d(alpha)
             dSdalpha = dot_product(ConsToSpecEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
             
-            if ( abs(dSdalpha)<1.e-14 ) exit NewtonLoopSpec ! Nothing to do here!
+            if ( abs(dSdalpha)<eps) exit NewtonLoopSpec ! Nothing to do here!
             
             ! Update correction
             corr1 = corr1 + as / dSdalpha
@@ -3611,7 +3608,7 @@ contains
           if (iter > PositMaxIter) notInIter =.TRUE.
           
 #if LOCAL_ALPHA
-          corr_loc(i,j,k) = corr1
+          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
           corr = max(corr,corr1) ! Compute the element-wise maximum correction
         end do       ; end do       ; enddo !i,j,k
@@ -3694,7 +3691,7 @@ contains
     call EvalOneEulerFlux1D(UL_r, FL_r)
     call EvalOneEulerFlux1D(UR_r, FR_r)
     
-    Ubar = 0.5*( UL_r + UR_r ) + (0.5/(lambdamax)) * (FR_r-FL_r) !lambdamax*norm ???
+    Ubar = 0.5*( UL_r + UR_r ) - (0.5/(lambdamax)) * (FR_r-FL_r)
     
     call RotateFluxBack(Ubar,nv,t1,t2)
   end function GetBarStates
