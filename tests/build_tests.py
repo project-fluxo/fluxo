@@ -8,11 +8,11 @@ from helpers import read_prm
 ###########################################################################
 ## EXECUTE CODE AND check if stdout exists
 ###########################################################################
-def execute(exec_path, prm_path, log_path = '' , ntail = 0 , mpi_procs = 1 ,**kwargs) :
+def execute(exec_path, prm_path, restartfile='', log_path = '' , ntail = 0 , mpi_procs = 1 ,**kwargs) :
 
    cmd = ('${MPIRUNCOMMAND} %d ' % mpi_procs) #should be set in environment (export MPIRUNCOMMAND='mpirun -np' or 'srun -p')
 
-   cmd=cmd+' '+exec_path.strip()+' '+prm_path.strip()
+   cmd=cmd+' '+exec_path.strip()+' '+prm_path.strip() + ' '+restartfile.strip()
    log = len(log_path)>0
    if log :
       with open(prm_path,'r') as fp: 
@@ -170,7 +170,7 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
             log_path=('log_%d_%s.txt' % (case,jobname))
             try :
                # execute the code and parse the output
-               success = execute(path_to_exec,'parameter.ini',log_path=log_path,mpi_procs=mpi_procs,ntail=ntail)
+               success = execute(path_to_exec,'parameter.ini',**r_opts,log_path=log_path,mpi_procs=mpi_procs,ntail=ntail)
             except :
                err.extend(['caseID: %6d ,jobname: %s <=RUN %s problem in execute' % (case,jobname,r_name)])
                os.chdir(cwd)

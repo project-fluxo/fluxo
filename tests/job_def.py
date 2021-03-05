@@ -574,7 +574,8 @@ def job_definition():
             }
    
    run_opt_fsp_conf={'runs/navst/freestream/conforming':
-         {'tags': ['navierstokes','freestream','conforming'] ,
+         {'tags': ['navierstokes','freestream','conforming','restart'] ,
+          'restartfile': 'NAVIERSTOKES_FREESTREAM_State_0000000.000000000.h5',
           'test_opts':{'err_Linf':{'func': check_error ,'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
                       },
          },
