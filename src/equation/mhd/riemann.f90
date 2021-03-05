@@ -58,8 +58,6 @@ END INTERFACE
 PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
-public :: AddWholeNonConsFlux
-public :: AddInnerNonConsFlux
 #endif /*NONCONS*/
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
@@ -144,7 +142,7 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> Advective Riemann solver
 !==================================================================================================================================
-SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
+pure SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
 IMPLICIT NONE
@@ -227,7 +225,7 @@ end subroutine RotateFluxBack
 !> we only need to add
 !> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
 !==================================================================================================================================
-SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
+pure SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:nTotal_Face
 IMPLICIT NONE
@@ -265,94 +263,12 @@ DO i=1,nTotal_Face
 END DO !i=1,nTotal_Face
 
 END SUBROUTINE AddNonConsFlux
-
-!==================================================================================================================================
-!> strong nonconservative flux on a side: 
-!> * Powell:
-!>   phi^L 1/2(B^L+B^R)*nvec  - phi^L B^L nvec = phi^L 1/2(B^R-B^L)*nvec
-!==================================================================================================================================
-SUBROUTINE AddWholeNonConsFlux(FL,UL,UR,nv)
-USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_Face
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
-REAL,INTENT(IN) :: UR(      PP_nVar,nTotal_Face) !< right state on face
-REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER :: i
-REAL    :: v_L(3)
-!==================================================================================================================================
-DO i=1,nTotal_Face
-  v_L=UL(2:4,i)/UL(1,i)
-#if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
-#elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*UL(6:8,i)
-#elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i)-UR(6:8,i))*nv(:,i)))*v_L(1:3)
-#endif /*NONCONSTYPE*/
-
-
-#if defined (PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*(UR(9,i)-UL(9,i)),UR(9,i)-UL(9,i)/)
-#endif /*PP_GLM and PP_NC_GLM*/
-
-END DO !i=1,nTotal_Face
-
-END SUBROUTINE AddWholeNonConsFlux
-
-
-!==================================================================================================================================
-!> The remaining part: AddWholeNonConsFlux - AddNonConsFlux
-!==================================================================================================================================
-SUBROUTINE AddInnerNonConsFlux(FL,UL,nv)
-USE MOD_PreProc
-USE MOD_DG_Vars,ONLY:nTotal_Face
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT VARIABLES
-REAL,INTENT(IN) :: UL(      PP_nVar,nTotal_Face) !<  left state on face
-REAL,INTENT(IN) :: nv(            3,nTotal_Face) !< normal vector of face
-!----------------------------------------------------------------------------------------------------------------------------------
-! OUTPUT VARIABLES
-REAL,INTENT(INOUT):: FL(       PP_nVar,nTotal_Face) !< ADDING TO nonconservative flux on UL side
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER :: i
-REAL    :: v_L(3)
-!==================================================================================================================================
-DO i=1,nTotal_Face
-  v_L=UL(2:4,i)/UL(1,i)
-#if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
-#elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*UL(6:8,i)
-#elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) -(0.5*SUM((UL(6:8,i))*nv(:,i)))*v_L(1:3)
-#endif /*NONCONSTYPE*/
-
-
-#if defined (PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) -(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*UL(9,i),UL(9,i)/)
-#endif /*PP_GLM and PP_NC_GLM*/
-
-END DO !i=1,nTotal_Face
-
-END SUBROUTINE AddInnerNonConsFlux
 #endif /*NONCONS*/
 
 !==================================================================================================================================
 !> Lax-friedrichs / rusanov flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -393,7 +309,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -450,7 +366,7 @@ END SUBROUTINE RiemannSolverByHLL
 !==================================================================================================================================
 !> HLLC solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -590,7 +506,7 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and 
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
+pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -812,7 +728,7 @@ END SUBROUTINE RiemannSolverByHLLD
 
 
 
-SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
+pure SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
 !==================================================================================================================================
 ! Calculates the HLL state for use with the MHD HLLC Riemann solver
 !==================================================================================================================================
@@ -843,7 +759,7 @@ END SUBROUTINE EvalHLLState
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: WaveSpeeds1D
@@ -1106,7 +1022,7 @@ Flux(:)=0.5*Flux(:)
 END SUBROUTINE RiemannSolverByRoe
 
 
-SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
+pure SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
 ! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
@@ -1303,7 +1219,7 @@ END SUBROUTINE EntropyStableByLLF
 !>            2) mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !>            3) Dissipation for each characteristic wave seperately
 !==================================================================================================================================
-SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
+pure SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN

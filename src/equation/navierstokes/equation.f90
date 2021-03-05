@@ -99,6 +99,8 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            "  0: Central"//&
                                            "  1: Local Lax-Friedrichs"//&
                                            " 22: HLL"//&
+                                           " 23: HLLE"//&
+                                           " 24: HLLEM"//&
                                            "  2: HLLC"//&
                                            "  3: Roe"//&
                                            "  4: Entropy Stable: EC Ismail and Roe + full wave diss."//&
@@ -286,6 +288,12 @@ SELECT CASE(WhichRiemannSolver)
   CASE(22)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
     SolveRiemannProblem     => RiemannSolverByHLL
+  CASE(23)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLE'
+    SolveRiemannProblem     => RiemannSolverByHLLE
+  CASE(24)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLEM'
+    SolveRiemannProblem     => RiemannSolverByHLLEM
   CASE(3)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
     SolveRiemannProblem     => RiemannSolverByRoe
@@ -829,7 +837,7 @@ case(15) ! Johannes Sedov
   blast_energy = 1.0
 
   dens0       = 1.
-  pres0       = 1e-1
+  pres0       = 1e-5
 
   bell_mass_normalized  = bell_mass/SQRT((2*PP_Pi)**dim_)/bell_sigma**dim_
   blast_ener_normalized = blast_energy/SQRT((2*PP_Pi)**dim_)/blast_sigma**dim_

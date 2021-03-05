@@ -21,7 +21,7 @@ module MOD_NFVSE_Vars
   private
   public :: ComputeAlpha, alpha_max, alpha_min, ShockBlendCoef, sharpness, threshold, ModalThreshold
   public :: SubCellMetrics, sWGP, alpha, alpha_Master, alpha_Slave
-  public :: SubCellMetrics_t
+  public :: SubCellMetrics_t, InnerFaceMetrics_t
 #if MPI
   public :: MPIRequest_alpha
 #endif /*MPI*/

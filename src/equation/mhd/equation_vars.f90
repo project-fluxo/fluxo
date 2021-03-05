@@ -120,7 +120,7 @@ PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
 ABSTRACT INTERFACE
-  SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
+  pure SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
     REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsL !<  left conservative state  
     REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsR !< right conservative state
     REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
@@ -584,7 +584,7 @@ END SUBROUTINE WaveSpeeds1D
 !==================================================================================================================================
 !> calculate fastest wave speed 
 !==================================================================================================================================
-SUBROUTINE FastestWave1D(Prim,cf)
+pure SUBROUTINE FastestWave1D(Prim,cf)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -638,7 +638,7 @@ END SUBROUTINE FastestWave3D
 !> use Roe mean wavespeeds from  Roe meanvalues 
 !>   (paper by Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997)
 !==================================================================================================================================
-SUBROUTINE FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
+pure SUBROUTINE FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
