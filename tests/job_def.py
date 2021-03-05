@@ -42,14 +42,14 @@ def find_all_occurences(findstr,stdout_filepath="std.out",**kwargs):
 ###########################################################################
 
 #==========================================================================
-# find the line of the string `whichError` and check all entries after :  to be < err_tol
+# find the line of the string `whichError` and check all entries after :  to_be < err_tol
 #==========================================================================
-def check_error(whichError='L_inf ', err_tol=1.0e-12,**kwargs ):
+def check_error(whichError='L_inf ', err_tol=1.0e-12, to_be=[0.0],**kwargs ):
    [found,line]=find_last_occurence(whichError,**kwargs)
    assert found, ('check_error: did not find "%s" in std.out' % (whichError))
    errors=[float(x) for x in (line.split(":")[1]).split()]
-   check=all([e < err_tol for e in errors])
-   msg=('check_error: "%s" < %e = %s' % (line.strip(),err_tol,check))
+   check=all([e-ref < err_tol for (e,ref) in zip(errors,to_be)])
+   msg=('check_error: "%s"-to_be < %e = %s' % (line.strip(),err_tol,check))
    return check,msg
    
 #==========================================================================
@@ -596,6 +596,43 @@ def job_definition():
                        **run_opt_entropyStab,
                       },
       }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Soft blast with shock capturing and AMR
+   run_opt_p4est_SC={'runs/mhd/softBlast/p4est_SC':
+         {'tags': ['mhd','freestream','nonconforming','p4est','SC'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [0.20843974245430472, 0.16163638839069047, 0.11036650636467360, 0.13146725568430423, 0.29599931757632236, 0.12065374311914598, 0.17516347069271623, 0.12596313999327302, 4.9235758173196982E-002],
+                                                  'err_tol': 1e-8} } , # err_tol is limited by the precision of the output..
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_nopara_p4est_SC']={
+          'case': caseID ,
+          'tags': ['mhd','split-form','SC','GL','GLM','NONCONS'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'  :'ON',
+                        'FLUXO_PARABOLIC'        :'OFF',
+                        'FLUXO_SHOCKCAPTURE'     :'ON',
+                        'FLUXO_SHOCKCAP_NFVSE'   :'ON',
+                        'FLUXO_SHOCKINDICATOR'   :'custom',
+                        "FLUXO_AMR"              :"ON",
+                        "FLUXO_BUILD_P4EST"      :"OFF",
+                       },
+          'run_opts': {
+                       **run_opt_fsp_conf,
+                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_SC_first,
+                       **run_opt_p4est_SC,
+                      },
+
+         }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    #============================================================================
