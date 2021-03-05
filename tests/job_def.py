@@ -297,6 +297,22 @@ def job_definition():
                       },
          },
       }
+   # Entropy conservation test with EC flux (with and without shock-capturing)
+   run_opt_entropyCons={'runs/mhd/softBlast/entropyCons':
+         {'tags': ['mhd','entropyCons','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      } 
+   # Entropy stability test with EC flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab={'runs/mhd/softBlast/entropyStab':
+         {'tags': ['mhd','entropyCons','conforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }  
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['mhd_type1_br1_cons_GL']={
@@ -316,9 +332,9 @@ def job_definition():
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
-   jobs['mhd_split_noglm_noncons_br1entr_ecvolflux']={
+   jobs['mhd_split_glm_noncons_br1entr_ecvolflux']={
           'case': caseID ,
-          'tags': ['mhd','split-form','br1','GL','NONCONS','ECflux'] ,
+          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -332,6 +348,8 @@ def job_definition():
                        },
           'run_opts': {**run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -353,6 +371,8 @@ def job_definition():
                        },
           'run_opts': {**run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -369,7 +389,8 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'10',
                         'FLUXO_TESTCASE'         :'taylorgreenvortex',
                        },
-          'run_opts': {**run_opt_fsp_conf, 
+          'run_opts': {**run_opt_entropyCons,
+                       **run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
                       }
          }
@@ -424,7 +445,9 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING':'br1',
                         'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var',
                        },
-          'run_opts': {**run_opt_fsp_conf, 
+          'run_opts': {**run_opt_entropyCons,
+                       **run_opt_entropyStab,
+                       **run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
                       }
          }
@@ -468,6 +491,15 @@ def job_definition():
    for  vvv  in range(0,len(volfluxes)):
       volflux=volfluxes[vvv]
       caseID=caseID+1
+      
+      my_run_opts={**run_opt_fsp_conf, 
+                   **run_opt_fsp_nonconf,
+                  }
+      if vvv==1 or vvv==2:
+        my_run_opts={**my_run_opts,
+                     **run_opt_entropyCons,
+                    }
+      
       jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
           'case': caseID ,
           'tags': ['mhd','split-form','GL','NONCONS'] ,
@@ -479,8 +511,7 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'OFF',
                         'FLUXO_EQN_VOLFLUX'      : volflux,
                        },
-          'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+          'run_opts': {**my_run_opts,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -526,6 +557,8 @@ def job_definition():
           'run_opts': {**run_opt_fsp_conf,
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
                       },
 
          }
@@ -559,6 +592,8 @@ def job_definition():
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
                        **run_opt_fsp_SC_TVD_ES,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
                       },
       }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
