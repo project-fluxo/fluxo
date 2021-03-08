@@ -44,18 +44,25 @@ def find_all_occurences(findstr,stdout_filepath="std.out",**kwargs):
 #==========================================================================
 # find the line of the string `whichError` and check all entries after :  to_be < err_tol
 #==========================================================================
-def check_error(whichError='L_inf ', err_tol=1.0e-12, to_be=[0.0],**kwargs ):
+def check_error(whichError='L_inf ', err_tol=1.0e-12,err_abs=True, to_be=[0.0],**kwargs ):
    [found,line]=find_last_occurence(whichError,**kwargs)
    assert found, ('check_error: did not find "%s" in std.out' % (whichError))
    errors=[float(x) for x in (line.split(":")[1]).split()]
-   check=all([e-ref < err_tol for (e,ref) in zip(errors,to_be)])
-   msg=('check_error: "%s"-to_be < %e = %s' % (line.strip(),err_tol,check))
+   if(len(to_be)==1):
+     errors_ref=[e-to_be[0] for e in errors]
+   else:
+     assert len(errors)==len(to_be), ('to_be must either be a scalar of have the same length as errors')
+     errors_ref=[e-ref for (e,ref) in zip(errors,to_be)]
+   if err_abs:
+     errors_ref = [abs(e) for e in errors_ref]
+   check=all([e < err_tol for e in errors_ref])
+   msg=('check_error: "%s" - to_be < %e = %s' % (line.strip(),err_tol,check))
    return check,msg
    
 #==========================================================================
 # find all the lines of the string `whichError` and check all entries after :  to be < err_tol
 #==========================================================================
-def check_all_errors(whichError='dSdU*Ut', err_tol=1.0e-12,err_abs=False,**kwargs ):
+def check_all_errors(whichError='dSdU*Ut', err_tol=1.0e-12,err_abs=True,**kwargs ):
    lines=find_all_occurences(whichError,**kwargs)
    assert len(lines)>=1, ('check_all_errors: did not find "%s" in std.out' % (whichError))
    errors = []
