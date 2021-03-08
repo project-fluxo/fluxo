@@ -254,7 +254,7 @@ if(args.withmpi == 0) :
    MPIOPT="OFF"
 else :
    MPIOPT="ON"
-globopts=["FLUXO_BUILD_MPI"        ,MPIOPT 
+globopts=["FLUXO_ENABLE_MPI"        ,MPIOPT 
          ]
 
 

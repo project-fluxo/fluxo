@@ -1,3 +1,15 @@
+!===================================================================================================================================
+! Copyright (c) 2018 - 2020 Alexander Astanin
+!
+! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+! of the License, or (at your option) any later version.
+!
+! FLUXO is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+!
+! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
+!===================================================================================================================================
 #include "../hopest_f.h"
 
 MODULE MODH_Mesh_ReadIn
@@ -73,7 +85,6 @@ CONTAINS
         !===================================================================================================================================
         ! MODULES
         USE MOD_Globals
-        ! USE MODH_Mesh_Vars,  ONLY: BoundaryName,BoundaryType,nBCs,nUserBCs
         USE MOD_Mesh_Vars, ONLY : BoundaryName, BoundaryType, nBCs, nUserBCs
 
         USE MOD_ReadinTools, ONLY : GETSTR, GETINTARRAY
@@ -155,10 +166,7 @@ CONTAINS
 
         ! print *, "READ IN PROGRESS"
         !Create a Communicator with MPI root processor
-            
-
-       
-       
+        
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
@@ -604,18 +612,7 @@ CONTAINS
         CHARACTER(LEN = 255) :: DataSets(9)
         !===================================================================================================================================
         CALL OpenDataFile(MeshFile_in, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
-        ! nDataSets=9
-        ! DataSets(1)= 'BCNames'
-        ! DataSets(2)='BCType'
-        ! DataSets(3)='ElemBarycenters'
-        ! DataSets(4)='ElemCounter'
-        ! DataSets(5)='ElemInfo'
-        ! DataSets(6)='ElemWeight'
-        ! DataSets(7)='NodeCoords'
-        ! DataSets(8)='GlobalNodeIDs'
-        ! DataSets(9)='SideInfo'
-
-
+        
         ! It is used short version check. P4fluxo created the short version of mesh file
         nDataSets = 5
         DataSets(1) = 'BCNames'

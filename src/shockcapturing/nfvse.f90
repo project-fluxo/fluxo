@@ -277,16 +277,14 @@ contains
       end do
     end if
 #if NFVSE_CORR
-    allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+    allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
     allocate ( alpha_old(nElems) )
     allocate ( Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
     allocate ( Uprev        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
     if (EntropyCorr .or. SpecEntropyCorr) then
       allocate ( EntPrev          (1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
     end if
-    Fsafe = 0.
-    Fblen = 0.
+    FFV_m_FDG = 0.
     alpha_old = 0.
 #if LOCAL_ALPHA
     allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,1:nElems) )
@@ -436,7 +434,7 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_old
+    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha_old
 #endif /*NFVSE_CORR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
@@ -467,14 +465,11 @@ contains
       allocate ( SubCellMetrics(nElems) )
       call SubCellMetrics % construct(PP_N)
 #if NFVSE_CORR
-      SDEALLOCATE(Fsafe)
-      SDEALLOCATE(Fblen)
+      SDEALLOCATE(FFV_m_FDG)
       SDEALLOCATE(alpha_old)
-      allocate ( Fsafe(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-      allocate ( Fblen(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+      allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
       allocate ( alpha_old(nElems) )
-      Fsafe = 0.
-      Fblen = 0.
+      FFV_m_FDG = 0.
       alpha_old = 0.
 #endif /*NFVSE_CORR*/
     end if
@@ -533,10 +528,10 @@ contains
   subroutine VolInt_NFVSE(Ut)
     use MOD_PreProc
     use MOD_DG_Vars            , only: U, U_master, U_slave
-    use MOD_Mesh_Vars          , only: nElems
+    use MOD_Mesh_Vars          , only: nElems, sJ
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext, IDPneedsUprev
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha_max, Usafe, Uprev, EntropyCorr, SpecEntropyCorr, SemiDiscEntCorr
+    use MOD_NFVSE_Vars         , only: FFV_m_FDG, Uprev
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV!, ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
@@ -627,12 +622,11 @@ contains
 #endif /*NONCONS*/
                
 #if NFVSE_CORR
-        Fsafe(:,i,j,k,iElem) = (1. - alpha_max   ) * Ut(:,i,j,k,iElem) +  alpha_max    * F_FV
-        Fblen(:,i,j,k,iElem) = (1. - alpha(iElem)) * Ut(:,i,j,k,iElem) +  alpha(iElem) * F_FV
-        Ut(:,i,j,k,iElem)    = Fblen(:,i,j,k,iElem)
-#else
-        Ut   (:,i,j,k,iElem) = (1. - alpha(iElem)) * Ut(:,i,j,k,iElem) +  alpha(iElem) * F_FV
+        FFV_m_FDG(:,i,j,k,iElem) = (F_FV - Ut(:,i,j,k,iElem)) * (-sJ(i,j,k,iElem)) ! Account for the sign change and the Jacobian division
 #endif /*NFVSE_CORR*/
+        
+        Ut   (:,i,j,k,iElem) = (1. - alpha(iElem)) * Ut(:,i,j,k,iElem) +  alpha(iElem) * F_FV
+
       end do       ; end do       ; end do ! i,j,k
       
     end do ! iElem
@@ -1810,178 +1804,16 @@ contains
       
     end do ! SideID=firstInnerSide, lastMPISide_YOUR
     
-!    ! A check, for debugging puposes
-!    call Check_ExternalU(U_ext,U)
-    
   end subroutine Get_externalU
-  
-!===================================================================================================================================
-!> Subroutine to check if the external U was assigned correctly
-!> ATTENTION: This routine only checks inner sides and can only be used in a periodic box [0,1]^3
-!===================================================================================================================================
-  subroutine Check_ExternalU(U_ext,U)
-    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, Elem_xGP
-    use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
-    use MOD_Basis     , only: ALMOSTEQUAL
-    implicit none
-    !-arguments---------------------------------
-    real, intent(in) :: U_ext(1:PP_nVar,0:PP_N,0:PP_N,6,nElems)
-    real, intent(in) :: U    (1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
-    !-local-variables---------------------------
-    integer :: sideID, ijkM(3), ijkS(3), ElemID, nbElemID, p, q, pp, qq, locSide, nblocSide
-    real, dimension(PP_nVar) :: U_SinM, U_MinM, U_MinS, U_SinS
-    real :: xM(3), xS(3)
-    integer :: ax1M, ax2M, ax1S, ax2S, nbFlip
-    real, parameter :: eps = 1.e-30
-    !-------------------------------------------
-    
-    ! check the inner sides
-    do SideID=firstInnerSide, lastMPISide_YOUR
-      ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-      nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
-      
-      !cycle if both elems are not in this partition
-      if( (ElemID==-1) .or. (nbElemID==-1) ) cycle
-      
-      locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
-      nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
-      ax1M = TanDirs1(locSide)
-      ax2M = TanDirs2(locSide)
-      ax1S = TanDirs1(nblocSide)
-      ax2S = TanDirs2(nblocSide)
-      
-      ! loop over the DOFS of the master elem
-      do q=0, PP_N ; do p=0, PP_N
-        call GetIndexes([p,q],locSide,ijkM)
-        U_MinM = U       (:,ijkM(1),ijkM(2),ijkM(3),ElemID)
-        U_SinM = U_ext   (:,ijkM(ax1M),ijkM(ax2M),locSide,ElemID)
-        xM     = Elem_xGP(:,ijkM(1),ijkM(2),ijkM(3),ElemID)
-        
-        ! Look for the corresponding  coordinates in the slave face
-        outer: do qq=0, PP_N ; do pp=0, PP_N
-          call GetIndexes([pp,qq],nblocSide,ijkS)
-          xS     = Elem_xGP(:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
-          if (sameCoords(xM,xS,ijkS,nblocSide,sideID)) then
-            U_SinS = U    (:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
-            U_MinS = U_ext(:,ijkS(ax1S),ijkS(ax2S),nblocSide,nbElemID)
-            exit outer ! (2 loops)
-          end if
-        end do        ; end do outer
-        
-        if (pp>PP_N .or. qq>PP_N) then
-          print*, 'ERROR :: coincident side not found', nblocSide, ijkS
-          print*, xM
-          do qq=0, PP_N ; do pp=0, PP_N
-            call GetIndexes([pp,qq],nblocSide,ijkS)
-            print*, ijkS
-            xS     = Elem_xGP(:,ijkS(1),ijkS(2),ijkS(3),nbElemID)
-            print*, xS
-          end do        ; end do
-          stop
-        end if
-        
-!#        if ( .not. all(ALMOSTEQUAL(U_MinM,U_MinS)) ) then
-        if ( .not. all(abs(U_MinM-U_MinS)<eps) ) then
-          WRITE(*,*) 'Problem with Check_ExternalU'
-          WRITE(*,*) 'U_MinM', U_MinM
-          WRITE(*,*) 'U_MinS', U_MinS
-        end if
-          
-!#        if ( .not. all(ALMOSTEQUAL(U_SinS,U_SinM)) ) then
-        if ( .not. all(abs(U_SinS-U_SinM)<eps) ) then
-          WRITE(*,*) 'Problem with Check_ExternalU'
-          WRITE(*,*) 'U_SinS', U_SinS
-          WRITE(*,*) 'U_SinM', U_SinM
-        end if
-      end do       ; end do
-      
-    end do
-    
-    
-  contains
-    subroutine GetIndexes(pq,locSide,ijk)
-      implicit none
-      integer, intent(in)  :: pq(2)   ! Face indexes
-      integer, intent(in)  :: locSide ! Element side (1-6)
-      integer, intent(out) :: ijk(3)  ! 3D Index
-      
-      select case (locSide)
-        case(1)
-          ijk(1) = pq(1)
-          ijk(2) = pq(2)
-          ijk(3) = 0
-        case(2)
-          ijk(1) = pq(2)
-          ijk(2) = 0
-          ijk(3) = pq(1)
-        case(3)
-          ijk(1) = PP_N
-          ijk(2) = pq(1)
-          ijk(3) = pq(2)
-        case(4)
-          ijk(1) = pq(2)
-          ijk(2) = PP_N
-          ijk(3) = pq(1)
-        case(5)
-          ijk(1) = 0
-          ijk(2) = pq(1)
-          ijk(3) = pq(2)
-        case(6)
-          ijk(1) = pq(1)
-          ijk(2) = pq(2)
-          ijk(3) = PP_N
-      end select
-      
-    end subroutine GetIndexes
-    
-    logical function sameCoords(xM,xS,ijkS,nblocSide, sideID)
-      use MOD_Basis     , only: ALMOSTEQUAL
-      implicit none
-      !-------------------------
-      real   , intent(in) :: xM(3), xS(3)
-      integer, intent(in) :: ijkS(3),nblocSide, sideID
-      !-------------------------
-      real :: xS2(3)
-      real, parameter :: dl = 1.0
-      !-------------------------
-      
-      sameCoords = .FALSE.
-      
-      ! Trivial case
-!#      if (all(ALMOSTEQUAL(xM,xS))) then
-      if (all(abs(xM-xS)<eps)) then
-        sameCoords = .TRUE.
-        return
-      end if
-      
-      ! Case of periodic boundaries
-      if ( (nblocSide == 1 .and. ijkS(3)==0   ) ) xS2 = xS + [ 0., 0., dl]
-      if ( (nblocSide == 2 .and. ijkS(2)==0   ) ) xS2 = xS + [ 0., dl, 0.]
-      if ( (nblocSide == 3 .and. ijkS(1)==PP_N) ) xS2 = xS + [-dl, 0., 0.]
-      if ( (nblocSide == 4 .and. ijkS(2)==PP_N) ) xS2 = xS + [ 0.,-dl, 0.]
-      if ( (nblocSide == 5 .and. ijkS(1)==0   ) ) xS2 = xS + [ dl, 0., 0.]
-      if ( (nblocSide == 6 .and. ijkS(3)==PP_N) ) xS2 = xS + [ 0., 0.,-dl]
-      
-!#      if (all(ALMOSTEQUAL(xM,xS2))) then
-      if (all(abs(xM-xS2)<eps)) then
-        sameCoords = .TRUE.
-        return
-      end if
-      
-    end function sameCoords
-  end subroutine Check_ExternalU
-  
 !===================================================================================================================================
 !> Corrects U and Ut after the Runge-Kutta stage
 !===================================================================================================================================
 #if NFVSE_CORR
   subroutine Apply_NFVSE_Correction_posit(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, PositCorrFactor, alpha_old, PositMaxIter
+    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, PositCorrFactor, alpha_old, PositMaxIter, maximum_alpha, amount_alpha, amount_alpha_steps
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Mesh_Vars          , only: sJ
     use MOD_Equation_Vars      , only: Get_Pressure, Get_dpdU
-    use MOD_NFVSE_MPI
     USE MOD_Globals
     implicit none
     !-arguments----------------------------------------------
@@ -1990,19 +1822,20 @@ contains
     real,intent(in)    :: t                                         !< Current time (in time step!)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real, parameter :: eps = 1.e-8
+    real, parameter :: eps = 1.e-14
+    real, parameter :: NEWTON_ABSTOL  = 1.e-8
+    real, parameter :: alpha_maxPosit = 1.0
     real    :: Usafe        (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
-    real    :: FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Finite Volume Ut minus DG Ut
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
     real    :: pres
     real    :: corr, corr1
-    real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_max for an element
+    real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_maxPosit for an element
     real    :: alphadiff
     real    :: alphacont  !container for alpha
     real    :: sdt
     real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
+    real    :: dp_dalpha
     integer :: eID
     integer :: i,j,k
     integer :: iter
@@ -2021,7 +1854,7 @@ contains
 !     ----------------------------------
 !     Check if it makes sense correcting
 !     ----------------------------------
-      alphadiff = alpha(eID) - alpha_max
+      alphadiff = alpha(eID) - alpha_maxPosit
       if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
       
 !     ----------------------------------------------------------
@@ -2029,11 +1862,8 @@ contains
 !     ----------------------------------------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
-        ! Compute Fsafe-Fblend
-        Fsafe_m_Fblen(:,i,j,k) = ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID)) ! Account for the sign change and the Jacobian division
-        
         ! Compute Usafe
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
+        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * FFV_m_FDG(:,i,j,k,eID) * (1. - alpha(eID))
         
         ! Check if this is a valid state
         call Get_Pressure(Usafe(:,i,j,k),p_safe(i,j,k))
@@ -2046,9 +1876,6 @@ contains
           stop
         end if
       end do       ; end do       ; end do ! i,j,k
-      
-      ! Compute F_FV-F_DG
-      FFV_m_FDG = -Fsafe_m_Fblen/alphadiff
       
 !     ---------------
 !     Correct density
@@ -2063,7 +1890,8 @@ contains
         ! Density correction
         a = (PositCorrFactor * Usafe(1,i,j,k) - U(1,i,j,k,eID))
         if (a > 0.) then ! This DOF needs a correction
-          corr1 = a / FFV_m_FDG(1,i,j,k)
+          if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
+          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
           corr = max(corr,corr1)
         end if
         
@@ -2079,17 +1907,17 @@ contains
         alpha(eID) = alpha(eID) + corr * sdt
         
         ! Change inconsistent alphas
-        if (alpha(eID) > alpha_max) then
-          alpha(eID) = alpha_max
-          corr = (alpha_max - alphacont ) * dt
+        if (alpha(eID) > alpha_maxPosit) then
+          alpha(eID) = alpha_maxPosit
+          corr = (alpha_maxPosit - alphacont ) * dt
         end if
         
         ! Correct!
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           ! Correct U
-          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
           ! Correct Ut
-          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
         end do       ; end do       ; enddo
           
       end if
@@ -2117,22 +1945,25 @@ contains
         
         ! Perform Newton iterations
         NewtonLoop: do iter=1, PositMaxIter
-          ! Evaluate dp/du
+          ! Evaluate dp/d(alpha)
           call Get_dpdU(U_curr,dpdU)
+          dp_dalpha = dot_product(dpdU,FFV_m_FDG(:,i,j,k,eID))
+          if ( abs(dp_dalpha)<eps ) exit NewtonLoop ! Nothing to do here!
           
           ! Update correction
-          corr1 = corr1 + ap / dot_product(dpdU,FFV_m_FDG(:,i,j,k))
+          corr1 = corr1 + ap / dp_dalpha
           
           ! Get new U and pressure
-          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k)
+          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
           call Get_Pressure(U_curr,pres)
           
           ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
           ap = p_goal-pres
-          if ( (ap <= 0.0) .and. (ap > -1.e-6*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
+          if ( (ap <= epsilon(p_goal)) .and. (ap > -NEWTON_ABSTOL*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
         end do NewtonLoop ! iter
         
         if (iter > PositMaxIter) notInIter =.TRUE.
+        
         corr = max(corr,corr1) ! Compute the element-wise maximum correction
       
       end do       ; end do       ; enddo !i,j,k
@@ -2150,22 +1981,28 @@ contains
         alpha(eID) = alpha(eID) + corr * sdt
         
         ! Change inconsistent alphas
-        if (alpha(eID) > alpha_max) then
-          alpha(eID) = alpha_max
-          corr = (alpha_max - alphacont ) * dt
+        if (alpha(eID) > alpha_maxPosit) then
+          alpha(eID) = alpha_maxPosit
+          corr = (alpha_maxPosit - alphacont ) * dt
         end if
         
         ! Correct!
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           ! Correct U
-          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k)
+          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
           ! Correct Ut
-          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k)
+          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
         end do       ; end do       ; enddo
           
       end if
       
     end do !eID
+    
+    maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
+    
+    amount_alpha = amount_alpha*amount_alpha_steps + sum(alpha-alpha_old)/size(alpha)
+    amount_alpha_steps = amount_alpha_steps+1
+    amount_alpha = amount_alpha/amount_alpha_steps
     
   end subroutine Apply_NFVSE_Correction_posit
 !===================================================================================================================================
@@ -2176,7 +2013,7 @@ contains
 !>            3) Memory use must be improved
 !===================================================================================================================================
   subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: Fsafe, Fblen, alpha, alpha_max, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr, Uprev
+    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, alpha_max, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr, Uprev
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, sWGP, rf_DG, rh_DG, rg_DG
 #endif /*LOCAL_ALPHA*/
@@ -2213,8 +2050,6 @@ contains
     real,allocatable    :: Ubar_xi       (:,:,:,:,:)
     real,allocatable    :: Ubar_eta      (:,:,:,:,:)
     real,allocatable    :: Ubar_zeta     (:,:,:,:,:)
-    real,allocatable    :: FFV_m_FDG     (:,:,:,:,:)  ! Finite Volume Ut minus DG Ut
-    real    :: Fsafe_m_Fblen(PP_nVar,0:PP_N,0:PP_N,0:PP_N)  ! Fsafe - Fblen
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: corr, corr1
 #if LOCAL_ALPHA
@@ -2271,8 +2106,6 @@ contains
 !   Allocate storage
 !    (it's not very efficient to do this here... Improve!)
 !   ******************************************************
-    
-    allocate( FFV_m_FDG    (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )  ! Finite Volume Ut minus DG Ut
 #if barStates
     allocate( Uprev_ext    (PP_nVar, 0:PP_N, 0:PP_N, 6,nElems) )
     allocate( Ubar_xi      (PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
@@ -2399,12 +2232,9 @@ contains
 !     ----------------------------------------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
-        ! Compute Fsafe-Fblend
-        Fsafe_m_Fblen(:,i,j,k) = ( Fsafe(:,i,j,k,eID) - Fblen(:,i,j,k,eID) ) * (-sJ(i,j,k,eID)) ! Account for the sign change and the Jacobian division
-        
 #if !(barStates)
         ! Compute Usafe
-        Usafe(:,i,j,k,eID) = U(:,i,j,k,eID) + dt * Fsafe_m_Fblen(:,i,j,k)
+        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * FFV_m_FDG(:,i,j,k,eID) * (1. - alpha(eID))
         
         ! Check if this is a valid state
         call Get_Pressure(Usafe(:,i,j,k,eID),p_safe)
@@ -2419,9 +2249,6 @@ contains
 #endif /*!(barStates)*/
       end do       ; end do       ; end do ! i,j,k
       
-      ! Compute F_FV-F_DG
-      FFV_m_FDG(:,:,:,:,eID) = -Fsafe_m_Fblen/alphadiff
-    
     end do !eID
   
     if(SemiDiscEntCorr) then
@@ -3161,6 +2988,7 @@ contains
     end do       ; end do       ; enddo
   end subroutine Perform_LocalCorrection
 #endif /*LOCAL_ALPHA*/
+
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
 !> Finalizes the NFVSE module
@@ -3168,7 +2996,7 @@ contains
   subroutine FinalizeNFVSE()
     use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, Compute_FVFluxes, alpha, alpha_Master, alpha_Slave
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars, only: Fsafe, Fblen, alpha_old, Usafe, EntPrev
+    use MOD_NFVSE_Vars, only: FFV_m_FDG, alpha_old, Usafe, EntPrev
 #endif /*NFVSE_CORR*/
     use MOD_NFVSE_Vars, only: U_ext, sdxR,sdxL,rR,rL
 #if MPI
@@ -3186,8 +3014,7 @@ contains
     SDEALLOCATE (MPIRequest_Umaster)
 #endif /*MPI*/
 #if NFVSE_CORR
-    SDEALLOCATE (Fsafe)
-    SDEALLOCATE (Fblen)
+    SDEALLOCATE (FFV_m_FDG)
     SDEALLOCATE (alpha_old)
     SDEALLOCATE (Usafe)
     SDEALLOCATE (EntPrev)

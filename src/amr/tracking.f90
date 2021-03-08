@@ -1,4 +1,4 @@
-!==================================================================================================================================
+!===================================================================================================================================
 ! Copyright (c) 2018 - 2020 Alexander Astanin
 ! Copyright (c) 2020 - 2020 Andrés Rueda
 !
@@ -10,7 +10,7 @@
 ! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
 !
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
-!==================================================================================================================================
+!===================================================================================================================================
 #include "defines.h"
 #include "amr_f.h"
 
@@ -30,26 +30,6 @@ MODULE MOD_AMR_tracking
     INTEGER :: Count = 0
 CONTAINS
 
-! FUNCTION GetShockCapturing(Uin) result(eta_dof)
-!     USE MOD_PreProc
-!     USE MOD_ChangeBasis,            ONLY : ChangeBasis3D
-!     IMPLICIT NONE
-!     REAL, DIMENSION(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), INTENT(IN) :: Uin
-!     REAL, DIMENSION(1:1, 0:PP_N, 0:PP_N, 0:PP_N) :: Umod
-!     REAL, DIMENSION(0:PP_N, 0:PP_N) :: Vdm_Leg, sVdm_Leg
-!     REAL :: LU, LUM1, LUM2, LU_N, LU_NM1!, eta_dof, eta_min, eta_max, eps0, RhoInf, Pinf, RhoMax, RhoMin, Xmin(3), Xmax(3), Abst
-!     REAL eta_dof
-!     CALL ChangeBasis3D(1, PP_N, PP_N, sVdm_Leg, Uin(1:1,:,:,:), Umod)
-!     LU = SUM(Umod(1, :, :, :)**2)
-!     LUM1 = SUM(Umod(1, 0:PP_N - 1, 0:PP_N - 1, 0:PP_N - 1)**2)
-!     LUM2 = SUM(Umod(1, 0:PP_N - 2, 0:PP_N - 2, 0:PP_N - 2)**2)
-!     LU_N = LU - LUM1
-!     LU_NM1 = LUM1 - LUM2
-!     ! DOF energy indicator
-!     eta_dof = LOG10(MAX(LU_N / LU, LU_NM1 / LUM1, TINY(1.0)))
-    
-! END FUNCTION 
-
 !==================================================================================================================================
 !> Specifies the initial AMR refinement
 !==================================================================================================================================
@@ -58,8 +38,6 @@ subroutine InitialAMRRefinement()
   use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel, IniHalfwidthAMR
   use MOD_AMR         , only: RunAMR
   use MOD_Mesh_Vars   , only: nElems, Elem_xGP
-  use MOD_DG_Vars , only: U
-  use MOD_Globals, only: MPIRoot
   implicit none
   !-local-variables-----------------------------------------
   real    :: r
@@ -118,9 +96,7 @@ end subroutine
 
 
     SUBROUTINE PerformAMR()
-        !   USE MOD_AMR_vars,            ONLY: P4EST_PTR, CONNECTIVITY_PTR
         USE MOD_PreProc
-        USE MOD_Globals,                ONLY : MPIroot
         USE MOD_DG_Vars,                ONLY : U
         USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
         USE MOD_Mesh_Vars,              ONLY : nElems
@@ -130,7 +106,6 @@ end subroutine
 #if SHOCK_NFVSE
         use MOD_NFVSE_Vars,             only: alpha, alpha_max, SpacePropFactor
 #endif /*SHOCK_NFVSE*/
-        ! USE MOD_Equation_Vars,      ONLY: kappaM1, RefStatePrim, IniRefState
         IMPLICIT NONE
         ! SAVE
         !Local variables

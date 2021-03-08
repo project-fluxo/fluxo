@@ -26,7 +26,8 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: Fsafe, Fblen, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, SemiDiscEntCorr, Uprev
+  public :: FFV_m_FDG, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, SemiDiscEntCorr, Uprev
+  public :: maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
   public :: IDPneedsUprev, DensityCorr
 #if LOCAL_ALPHA
@@ -107,8 +108,7 @@ module MOD_NFVSE_Vars
 ! For the positivity limiter
 ! --------------------------
 #if NFVSE_CORR
-  real, allocatable :: Fsafe(:,:,:,:,:)
-  real, allocatable :: Fblen(:,:,:,:,:)
+  real, allocatable :: FFV_m_FDG(:,:,:,:,:)
   real, allocatable :: Usafe(:,:,:,:,:)
   real, allocatable :: Uprev(:,:,:,:,:)
   logical           :: EntropyCorr
@@ -120,6 +120,9 @@ module MOD_NFVSE_Vars
   integer           :: PositMaxIter
   integer           :: FVCorrMethod
   procedure(i_sub_Correction), pointer :: Apply_NFVSE_Correction => null()
+  real              :: maximum_alpha     ! Maximum alpha for the analyze routines
+  real              :: amount_alpha
+  integer           :: amount_alpha_steps
 #endif /*NFVSE_CORR*/
   logical           :: DensityCorr   = .FALSE.
   logical           :: IDPneedsUprev = .FALSE.

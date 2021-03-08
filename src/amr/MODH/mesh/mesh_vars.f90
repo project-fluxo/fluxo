@@ -1,3 +1,15 @@
+!===================================================================================================================================
+! Copyright (c) 2018 - 2020 Alexander Astanin
+!
+! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+! of the License, or (at your option) any later version.
+!
+! FLUXO is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+! of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+!
+! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
+!===================================================================================================================================
 #include "../hopest_f.h"
 MODULE MODH_Mesh_Vars
     !===================================================================================================================================
@@ -21,10 +33,7 @@ MODULE MODH_Mesh_Vars
     !-----------------------------------------------------------------------------------------------------------------------------------
     ! GLOBAL VARIABLES
     !-----------------------------------------------------------------------------------------------------------------------------------
-    ! INTEGER,ALLOCATABLE              :: ElemToSide(:,:,:)
-    ! INTEGER,ALLOCATABLE              :: SideToElem(:,:)
     INTEGER, ALLOCATABLE :: BC(:)
-    ! INTEGER,ALLOCATABLE              :: AnalyzeSide(:)
     INTEGER, ALLOCATABLE :: BoundaryType(:, :)
     CHARACTER(LEN = 255), ALLOCATABLE :: BoundaryName(:)
     !-----------------------------------------------------------------------------------------------------------------------------------
@@ -33,16 +42,6 @@ MODULE MODH_Mesh_Vars
     INTEGER :: offsetElem = 0
     INTEGER :: nGlobalElems = 0      ! number of elements / quadrants in mesh
     INTEGER :: nElems = 0            ! local number of elements/ quadrants
-    ! INTEGER          :: nSides=0            ! =nInnerSides+nBCSides+nMPISides
-    ! INTEGER          :: nInnerSides=0       ! InnerSide index range: sideID \in [nBCSides+1:nBCSides+nInnerSides]
-    ! INTEGER          :: nBCSides=0          ! BCSide index range: sideID \in [1:nBCSides]
-    ! INTEGER          :: nMPISides=0
-    ! INTEGER          :: nMPISides_MINE=0
-    ! INTEGER          :: nMPISides_YOUR=0
-    ! INTEGER          :: SideID_minus_lower  ! lower side ID of array U_minus/GradUx_minus...
-    ! INTEGER          :: SideID_minus_upper  ! upper side ID of array U_minus/GradUx_minus...
-    ! INTEGER          :: SideID_plus_lower   ! lower side ID of array U_plus/GradUx_plus...
-    ! INTEGER          :: SideID_plus_upper   ! upper side ID of array U_plus/GradUx_plus...
     INTEGER :: nBCs = 0              ! number of BCs in mesh
     INTEGER :: nUserBCs = 0          ! number of BC in inifile
 
@@ -50,16 +49,7 @@ MODULE MODH_Mesh_Vars
     INTEGER :: nUniqueNodes = 0      ! number of unique nodes in mesh
     INTEGER :: nCurvedNodes = 0      ! number of curved nodes per element = (Ngeo+1)^3
     !-----------------------------------------------------------------------------------------------------------------------------------
-    ! INTEGER             :: nMortarSides=0      !
-    ! INTEGER             :: firstMortarSideID=0  !Set by mesh during initialization
-    ! INTEGER             :: lastMortarSideID=-1  !Set by mesh during initialization
-    ! INTEGER,ALLOCATABLE :: MortarType(:)        !Set by mesh during initialization,MortarType(firstMortarSideID:lastMortarSideID)
-    ! INTEGER,ALLOCATABLE :: Mortar_nbSideID(:,:) !Set by mesh during initialization,MortarType(1:4,firstMortarSideID:lastMortarSideID)
-    ! INTEGER,ALLOCATABLE :: Mortar_Flip(:,:)     !Set by mesh during initialization,MortarType(1:4,firstMortarSideID:lastMortarSideID)
-    !-----------------------------------------------------------------------------------------------------------------------------------
-    ! CHARACTER(LEN=255)               :: MeshFile        ! name of hdf5 meshfile (write with ending .h5!)
-    !-----------------------------------------------------------------------------------------------------------------------------------
-
+    
     ! USER DEFINED TYPES
     TYPE tNodePtr
         TYPE(tNode), POINTER :: np                     ! node pointer
