@@ -33,16 +33,6 @@ MODULE MODH_Mesh_Vars
     INTEGER :: offsetElem = 0
     INTEGER :: nGlobalElems = 0      ! number of elements / quadrants in mesh
     INTEGER :: nElems = 0            ! local number of elements/ quadrants
-    ! INTEGER          :: nSides=0            ! =nInnerSides+nBCSides+nMPISides
-    ! INTEGER          :: nInnerSides=0       ! InnerSide index range: sideID \in [nBCSides+1:nBCSides+nInnerSides]
-    ! INTEGER          :: nBCSides=0          ! BCSide index range: sideID \in [1:nBCSides]
-    ! INTEGER          :: nMPISides=0
-    ! INTEGER          :: nMPISides_MINE=0
-    ! INTEGER          :: nMPISides_YOUR=0
-    ! INTEGER          :: SideID_minus_lower  ! lower side ID of array U_minus/GradUx_minus...
-    ! INTEGER          :: SideID_minus_upper  ! upper side ID of array U_minus/GradUx_minus...
-    ! INTEGER          :: SideID_plus_lower   ! lower side ID of array U_plus/GradUx_plus...
-    ! INTEGER          :: SideID_plus_upper   ! upper side ID of array U_plus/GradUx_plus...
     INTEGER :: nBCs = 0              ! number of BCs in mesh
     INTEGER :: nUserBCs = 0          ! number of BC in inifile
 
@@ -50,16 +40,7 @@ MODULE MODH_Mesh_Vars
     INTEGER :: nUniqueNodes = 0      ! number of unique nodes in mesh
     INTEGER :: nCurvedNodes = 0      ! number of curved nodes per element = (Ngeo+1)^3
     !-----------------------------------------------------------------------------------------------------------------------------------
-    ! INTEGER             :: nMortarSides=0      !
-    ! INTEGER             :: firstMortarSideID=0  !Set by mesh during initialization
-    ! INTEGER             :: lastMortarSideID=-1  !Set by mesh during initialization
-    ! INTEGER,ALLOCATABLE :: MortarType(:)        !Set by mesh during initialization,MortarType(firstMortarSideID:lastMortarSideID)
-    ! INTEGER,ALLOCATABLE :: Mortar_nbSideID(:,:) !Set by mesh during initialization,MortarType(1:4,firstMortarSideID:lastMortarSideID)
-    ! INTEGER,ALLOCATABLE :: Mortar_Flip(:,:)     !Set by mesh during initialization,MortarType(1:4,firstMortarSideID:lastMortarSideID)
-    !-----------------------------------------------------------------------------------------------------------------------------------
-    ! CHARACTER(LEN=255)               :: MeshFile        ! name of hdf5 meshfile (write with ending .h5!)
-    !-----------------------------------------------------------------------------------------------------------------------------------
-
+    
     ! USER DEFINED TYPES
     TYPE tNodePtr
         TYPE(tNode), POINTER :: np                     ! node pointer

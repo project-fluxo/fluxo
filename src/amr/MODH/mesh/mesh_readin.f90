@@ -604,18 +604,7 @@ CONTAINS
         CHARACTER(LEN = 255) :: DataSets(9)
         !===================================================================================================================================
         CALL OpenDataFile(MeshFile_in, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
-        ! nDataSets=9
-        ! DataSets(1)= 'BCNames'
-        ! DataSets(2)='BCType'
-        ! DataSets(3)='ElemBarycenters'
-        ! DataSets(4)='ElemCounter'
-        ! DataSets(5)='ElemInfo'
-        ! DataSets(6)='ElemWeight'
-        ! DataSets(7)='NodeCoords'
-        ! DataSets(8)='GlobalNodeIDs'
-        ! DataSets(9)='SideInfo'
-
-
+        
         ! It is used short version check. P4fluxo created the short version of mesh file
         nDataSets = 5
         DataSets(1) = 'BCNames'
