@@ -26,7 +26,7 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: FFV_m_FDG, alpha_old, PositCorrFactor, PositMaxIter
+  public :: FFV_m_FDG, alpha_old, PositCorrFactor, PositMaxIter, maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
@@ -95,6 +95,9 @@ module MOD_NFVSE_Vars
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
   real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
   integer           :: PositMaxIter
+  real              :: maximum_alpha     ! Maximum alpha for the analyze routines
+  real              :: amount_alpha
+  integer           :: amount_alpha_steps
 #endif /*NFVSE_CORR*/
 
 ! For the FV method

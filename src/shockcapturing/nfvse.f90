@@ -1716,7 +1716,7 @@ contains
 !===================================================================================================================================
 #if NFVSE_CORR
   subroutine Apply_NFVSE_Correction(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, PositCorrFactor, alpha_old, PositMaxIter
+    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, PositCorrFactor, alpha_old, PositMaxIter, maximum_alpha, amount_alpha, amount_alpha_steps
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: Get_Pressure, Get_dpdU
@@ -1903,6 +1903,13 @@ contains
       end if
       
     end do !eID
+    
+    maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
+    
+    amount_alpha = amount_alpha*amount_alpha_steps + sum(alpha-alpha_old)/size(alpha)
+    amount_alpha_steps = amount_alpha_steps+1
+    amount_alpha = amount_alpha/amount_alpha_steps
+    
   end subroutine Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
