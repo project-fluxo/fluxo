@@ -806,7 +806,7 @@ CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
   prim(1)   = 1.     ! ambient density
   prim(2:4) = 0.     ! gas at rest initially
   prim(5)   = 1.     ! ambient pressure
-  newx = (x - [1.5, 1.5, 1.5])
+  newx = (x - IniCenter)
   
   r2 = SQRT(SUM(newx(1:dim_)*newx(1:dim_)))! the radius
   IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN ! 

@@ -265,6 +265,7 @@ END IF ! MPIroot
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
+iterTimeStart=CalcTimeStart ! is not reset
 
 
 iter = 0
