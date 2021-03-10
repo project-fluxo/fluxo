@@ -26,10 +26,9 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: FFV_m_FDG, alpha_old, PositCorrFactor, PositMaxIter, FVCorrMethod, Apply_NFVSE_Correction, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, SemiDiscEntCorr, Uprev
+  public :: alpha_old, PositCorrFactor, FVCorrMethod, Apply_NFVSE_Correction
   public :: maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
-  public :: IDPneedsUprev, DensityCorr
 #if LOCAL_ALPHA
   public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG
 #endif /*LOCAL_ALPHA*/
@@ -108,25 +107,18 @@ module MOD_NFVSE_Vars
 ! For the positivity limiter
 ! --------------------------
 #if NFVSE_CORR
-  real, allocatable :: FFV_m_FDG(:,:,:,:,:)
-  real, allocatable :: Usafe(:,:,:,:,:)
-  real, allocatable :: Uprev(:,:,:,:,:)
-  logical           :: EntropyCorr
-  logical           :: SpecEntropyCorr
-  logical           :: SemiDiscEntCorr
-  real, allocatable :: EntPrev(:,:,:,:,:)
+  
+  
+  !
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
   real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
-  integer           :: PositMaxIter
   integer           :: FVCorrMethod
   procedure(i_sub_Correction), pointer :: Apply_NFVSE_Correction => null()
   real              :: maximum_alpha     ! Maximum alpha for the analyze routines
   real              :: amount_alpha
   integer           :: amount_alpha_steps
 #endif /*NFVSE_CORR*/
-  logical           :: DensityCorr   = .FALSE.
-  logical           :: IDPneedsUprev = .FALSE.
-
+  
 ! For the FV method
 ! -----------------
   integer                                    :: SubFVMethod
@@ -173,12 +165,11 @@ module MOD_NFVSE_Vars
       integer                                        , intent(in)    :: iElem
     end subroutine i_sub_Compute_FVFluxes
 #if NFVSE_CORR
-    subroutine i_sub_Correction(U,Ut,t,dt)
+    subroutine i_sub_Correction(U,Ut,dt)
       use MOD_PreProc
       use MOD_Mesh_Vars          , only: nElems
       real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
       real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-      real,intent(in)    :: t                                         !< Current time (in time step!)
       real,intent(in)    :: dt     
     end subroutine i_sub_Correction
 #endif /*NFVSE_CORR*/

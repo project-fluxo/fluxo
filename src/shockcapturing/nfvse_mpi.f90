@@ -23,7 +23,7 @@ module MOD_NFVSE_MPI
   implicit none
   
   private
-  public ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
+  public ProlongBlendingCoeffToFaces, PropagateBlendingCoeff, Get_externalU
 contains
 !===================================================================================================================================
 !> Prolong the blending coefficient to the faces
@@ -230,4 +230,90 @@ contains
       END DO !iMortar
     END DO !MortarSideID
   end subroutine Alpha_Mortar
+!===================================================================================================================================
+!> Gets outer solution for the TVD reconstruction
+!> ATTENTION 1: Must be called after FinishExchangeMPIData
+!> ATTENTION 2: Mortar faces are not considered (TODO?)
+!===================================================================================================================================
+  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave,fluxSign)
+    use MOD_PreProc
+    use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
+    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
+    implicit none
+    !-arguments-----------------------------------------------
+    integer, intent(in) :: nVar
+    real, intent(out) :: U_ext   (nVar,0:PP_N,0:PP_N,6     ,nElems)
+    real, intent(in)  :: U       (nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
+    real, intent(in)  :: U_master(nVar,0:PP_N,0:PP_N,nSides)
+    real, intent(in)  :: U_slave (nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    logical, optional :: fluxSign
+    !-local-variables-----------------------------------------
+    integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
+    integer :: ax1, ax2
+    integer :: signIdx
+    integer, parameter :: signo(2) = [1, -1]
+    !---------------------------------------------------------
+    
+    if (present(fluxSign)) then
+      if (fluxSign) then
+        signIdx=2
+      else
+        signIdx=1
+      end if
+    else
+      signIdx=1
+    end if
+    
+    ! First assign the inner value on boundaries (we don't use an "external state")
+    do SideID=1, nBCSides
+      ElemID  = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+      locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+      flip    = 0 ! flip is 0 in master faces!
+      
+      ax1 = TanDirs1(locSide)
+      ax2 = TanDirs2(locSide)
+      DO q=0,PP_N; DO p=0,PP_N
+        ijk(:)=S2V(:,0,p,q,flip,locSide)
+        U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U(:,ijk(1),ijk(2),ijk(3),ElemID)
+      END DO; END DO !p,q=0,PP_N
+    end do !SideID=1, nBCSides
+    
+    ! TODO: Include routines for mortar faces here....
+    
+    ! Now do the rest
+    do SideID=firstInnerSide, lastMPISide_YOUR
+      
+!     Master side
+!     -----------
+      ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+      !master sides(ElemID,locSide and flip =-1 if not existing)
+      IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
+        locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+        flip    = 0 ! flip is 0 in master faces!
+        ax1 = TanDirs1(locSide)
+        ax2 = TanDirs2(locSide)
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,0,p,q,flip,locSide)
+          U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U_slave(:,p,q,SideID) ! Slave side is force-aligned with master
+        END DO; END DO !p,q=0,PP_N
+      end if !(ElemID.NE.-1)
+      
+!     Slave side
+!     ----------
+      nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+      IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
+        nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
+        nbFlip    = SideToElem(S2E_FLIP,SideID)
+        
+        ax1 = TanDirs1(nblocSide)
+        ax2 = TanDirs2(nblocSide)
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
+          U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=signo(signIdx)*U_master(:,p,q,SideID) ! Slave side is force-aligned with master
+        END DO; END DO !p,q=0,PP_N
+      end if !(nbElemID.NE.-1)
+      
+    end do ! SideID=firstInnerSide, lastMPISide_YOUR
+    
+  end subroutine Get_externalU
 end module MOD_NFVSE_MPI

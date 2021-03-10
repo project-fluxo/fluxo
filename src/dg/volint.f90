@@ -195,7 +195,8 @@ USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
 USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
 #if LOCAL_ALPHA
-use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG, SemiDiscEntCorr
+use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG
+use MOD_IDP_Vars  , only: IDPSemiDiscEnt
 use MOD_Interpolation_Vars , only: wGP
 USE MOD_DG_Vars   ,ONLY:D
 use MOD_Equation_Vars      , only: ConsToEntropy, GetEntropyPot
@@ -213,18 +214,15 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
 #if LOCAL_ALPHA
-REAL,DIMENSION(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems):: ftilde_DGloc
-REAL,DIMENSION(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems):: gtilde_DGloc
-REAL,DIMENSION(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems):: htilde_DGloc
 real :: entVar(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
 real :: entPot(3      ,0:PP_N,0:PP_N,0:PP_N)
 #endif /*LOCAL_ALPHA*/
 INTEGER                                           :: i,j,k,l,m,iElem
 !==================================================================================================================================
 #if LOCAL_ALPHA
-ftilde_DGloc=0.0
-htilde_DGloc=0.0
-gtilde_DGloc=0.0
+ftilde_DG=0.0
+htilde_DG=0.0
+gtilde_DG=0.0
 rf_DG = 0.0
 rg_DG = 0.0
 rh_DG = 0.0
@@ -243,23 +241,20 @@ DO iElem=1,nElems
     ! High-order fluxes:
     ! ******************
     do j=0, PP_N-1
-      ftilde_DGloc(:,j,:,:,iElem) = ftilde_DGloc(:,j-1,:,:,iElem)
-      gtilde_DGloc(:,:,j,:,iElem) = gtilde_DGloc(:,:,j-1,:,iElem)
-      htilde_DGloc(:,:,:,j,iElem) = htilde_DGloc(:,:,:,j-1,iElem)
+      ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j-1,:,:,iElem)
+      gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j-1,:,iElem)
+      htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j-1,iElem)
       
       do i=0, PP_N
-        ftilde_DGloc(:,j,:,:,iElem) = ftilde_DGloc(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
-        gtilde_DGloc(:,:,j,:,iElem) = gtilde_DGloc(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
-        htilde_DGloc(:,:,:,j,iElem) = htilde_DGloc(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
+        ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
+        gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
+        htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
       end do
     end do
-    ftilde_DG(:,0:PP_N-1,:,:,iElem) = ftilde_DGloc(:,0:PP_N-1,:,:,iElem)
-    gtilde_DG(:,:,0:PP_N-1,:,iElem) = gtilde_DGloc(:,:,0:PP_N-1,:,iElem)
-    htilde_DG(:,:,:,0:PP_N-1,iElem) = htilde_DGloc(:,:,:,0:PP_N-1,iElem)
       
     ! Entropy production
     ! ******************
-    if (SemiDiscEntCorr) then
+    if (IDPSemiDiscEnt) then
     
       ! Get entropy vars and potential
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -280,23 +275,23 @@ DO iElem=1,nElems
             rh_DG(l,m,j,iElem) = rh_DG(l,m,j,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,l,m,i)-entVar(:,l,m,j),htilde(:,i,l,m,j)) - 0.5*dot_product(metrics_hTilde(:,l,m,i,iElem)+metrics_hTilde(:,l,m,j,iElem),entPot(:,l,m,i)-entPot(:,l,m,j)) )
           end do       ; end do
         end do
-!#        !<<some debugging:
-!#        if (any((rf_DG(j,:,:,iElem))>1.e-14)) then
-!#          print*, iElem, j, 'rf'
-!#          print*, rf_DG(j,:,:,iElem)
-!#          read(*,*)
-!#        end if
-!#        if (any((rg_DG(:,j,:,iElem))>1.e-14)) then
-!#          print*, iElem, j, 'rg'
-!#          print*, rg_DG(:,j,:,iElem)
-!#          read(*,*)
-!#        end if
-!#        if (any((rh_DG(:,:,j,iElem))>1.e-14)) then
-!#          print*, iElem, j, 'rh'
-!#          print*, rh_DG(:,:,j,iElem)
-!#          read(*,*)
-!#        end if
-!#        !some debugging>>
+!        !<<some debugging:
+!        if (any((rf_DG(j,:,:,iElem))>1.e-14)) then
+!          print*, iElem, j, 'rf'
+!          print*, rf_DG(j,:,:,iElem)
+!          read(*,*)
+!        end if
+!        if (any((rg_DG(:,j,:,iElem))>1.e-14)) then
+!          print*, iElem, j, 'rg'
+!          print*, rg_DG(:,j,:,iElem)
+!          read(*,*)
+!        end if
+!        if (any((rh_DG(:,:,j,iElem))>1.e-14)) then
+!          print*, iElem, j, 'rh'
+!          print*, rh_DG(:,:,j,iElem)
+!          read(*,*)
+!        end if
+!        !some debugging>>
       end do
     end if
 #endif /*LOCAL_ALPHA*/

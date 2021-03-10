@@ -56,8 +56,6 @@ module MOD_NFVSE
 #if NFVSE_CORR
   public :: Apply_NFVSE_Correction
 #endif /*NFVSE_CORR*/
-
-#define barStates 1
   
 contains
 !===================================================================================================================================
@@ -65,6 +63,7 @@ contains
 !===================================================================================================================================
   subroutine DefineParametersNFVSE()
     use MOD_ReadInTools,  only: prms
+    use MOD_IDP        ,  only: DefineParameters_IDP
     implicit none
     
     call prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
@@ -102,13 +101,7 @@ contains
                                               "   2: Element-wise IDP."&
                                              ,"1")
     
-    call prms%CreateLogicalOption(   "EntropyCorr",  " For FVCorrMethod=2. IDP correction on entropy?", "F")
-    call prms%CreateLogicalOption("SpecEntropyCorr",  " For FVCorrMethod=2. IDP correction on specific entropy?", "F")
-    call prms%CreateLogicalOption("SemiDiscEntCorr",  " For FVCorrMethod=2. IDP correction on semi-discrete entropy balance?", "F")
-    call prms%CreateLogicalOption(   "DensityCorr",  " For FVCorrMethod=2. IDP(TVD) correction on density?", "F")
-    
-    call prms%CreateRealOption(   "PositCorrFactor",  " The correction factor for NFVSE", "0.1")
-    call prms%CreateIntOption(       "PositMaxIter",  " Maximum number of iterations for positivity limiter", "10")
+    call DefineParameters_IDP()
 #endif /*NFVSE_CORR*/
    
   end subroutine DefineParametersNFVSE
@@ -127,7 +120,11 @@ contains
 #endif /*USE_AMR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
+    use MOD_IDP_Vars           , only: IDPneedsUprev, IDPDensityTVD
 #endif /*MPI*/
+#if NFVSE_CORR
+    use MOD_IDP, only: Init_IDP, Apply_IDP
+#endif /*NFVSE_CORR*/
     implicit none
     !-local-variables---------------------------------------------------------------------------------------------------------------
     integer :: i
@@ -157,38 +154,6 @@ contains
     SpacePropSweeps  = GETINT    ('SpacePropSweeps','1')
     TimeRelFactor    = GETREAL   ('TimeRelFactor'  ,'0.0')
     ! ReconsBoundaries is read afterwards only if needed
-#if NFVSE_CORR
-    PositCorrFactor  = GETREAL   ('PositCorrFactor','0.1')
-    PositMaxIter     = GETINT    ('PositMaxIter','10')
-    FVCorrMethod     = GETINT    ('FVCorrMethod','1')
-    select case(FVCorrMethod)
-      case(1)
-        Apply_NFVSE_Correction => Apply_NFVSE_Correction_posit
-        SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
-      case(2)
-        EntropyCorr     = GETLOGICAL('EntropyCorr','F')
-        SpecEntropyCorr = GETLOGICAL('SpecEntropyCorr','F')
-        SemiDiscEntCorr = GETLOGICAL('SemiDiscEntCorr','F')
-#if !defined(LOCAL_ALPHA)
-        if (SemiDiscEntCorr) stop 'SemiDiscEntCorr needs LOCAL_ALPHA'
-#endif
-        DensityCorr     = GETLOGICAL('DensityCorr','F')
-        Apply_NFVSE_Correction => Apply_NFVSE_Correction_IDP
-        SWRITE(UNIT_stdOut,'(A)',advance='no') '    *NFVSE IDP correction activated'
-#if barStates
-        SWRITE(UNIT_stdOut,'(A)') ' with bar states'
-        IDPneedsUprev = .TRUE.
-#else
-        SWRITE(UNIT_stdOut,'(A)') ' without bar states'
-        if (EntropyCorr .or. SpecEntropyCorr .or. SemiDiscEntCorr) then
-          IDPneedsUprev = .TRUE.
-        end if
-#endif /*barStates*/
-      case default
-        SWRITE(*,*) 'ERROR :: FVCorrMethod not defined.'
-        stop
-    end select
-#endif /*NFVSE_CORR*/
     
     ! Initialize everything
     ! ---------------------
@@ -276,34 +241,29 @@ contains
         rR(i) = sumWm1 - xGP(i)
       end do
     end if
+    
 #if NFVSE_CORR
-    allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( alpha_old(nElems) )
-    allocate ( Usafe        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-    allocate ( Uprev        (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-    if (EntropyCorr .or. SpecEntropyCorr) then
-      allocate ( EntPrev          (1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-    end if
-    FFV_m_FDG = 0.
-    alpha_old = 0.
-#if LOCAL_ALPHA
-    allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( ftilde_FV(PP_nVar,0:PP_N-1,0:PP_N  ,0:PP_N  ,1:nElems) )
-    allocate ( gtilde_FV(PP_nVar,0:PP_N  ,0:PP_N-1,0:PP_N  ,1:nElems) )
-    allocate ( htilde_FV(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N-1,1:nElems) )
-    allocate ( ftilde_DG(PP_nVar,0:PP_N-1,0:PP_N  ,0:PP_N  ,1:nElems) )
-    allocate ( gtilde_DG(PP_nVar,0:PP_N  ,0:PP_N-1,0:PP_N  ,1:nElems) )
-    allocate ( htilde_DG(PP_nVar,0:PP_N  ,0:PP_N  ,0:PP_N-1,1:nElems) )
-    allocate ( rf_DG(-1:PP_N, 0:PP_N, 0:PP_N,1:nElems) )
-    allocate ( rg_DG( 0:PP_N,-1:PP_N, 0:PP_N,1:nElems) )
-    allocate ( rh_DG( 0:PP_N, 0:PP_N,-1:PP_N,1:nElems) )
-#endif /*LOCAL_ALPHA*/
+    call Init_IDP()
+    FVCorrMethod     = GETINT    ('FVCorrMethod','1')
+    select case(FVCorrMethod)
+      case(1)
+        Apply_NFVSE_Correction => Apply_NFVSE_Correction_posit
+        SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
+      case(2)
+        Apply_NFVSE_Correction => Apply_IDP
+        SWRITE(UNIT_stdOut,'(A)') '    *NFVSE IDP correction activated'
+        
+      case default
+        SWRITE(*,*) 'ERROR :: FVCorrMethod not defined.'
+        stop
+    end select
 #endif /*NFVSE_CORR*/
     
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. DensityCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. IDPDensityTVD) then
+      print*, 'alloc Umaster'
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -434,11 +394,13 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha_old
+    use MOD_NFVSE_Vars         , only: alpha_old
+    use MOD_IDP_Vars           , only: FFV_m_FDG
 #endif /*NFVSE_CORR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
-    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries, RECONS_NEIGHBOR, DensityCorr, IDPneedsUprev
+    use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries, RECONS_NEIGHBOR
+    use MOD_IDP_Vars           , only: IDPneedsUprev, IDPDensityTVD
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
@@ -514,7 +476,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. DensityCorr) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. IDPDensityTVD) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
@@ -529,9 +491,10 @@ contains
     use MOD_PreProc
     use MOD_DG_Vars            , only: U, U_master, U_slave
     use MOD_Mesh_Vars          , only: nElems, sJ
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext, IDPneedsUprev
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
+    use MOD_IDP_Vars           , only: IDPneedsUprev, Uprev
 #if NFVSE_CORR
-    use MOD_NFVSE_Vars         , only: FFV_m_FDG, Uprev
+    use MOD_IDP_Vars           , only: FFV_m_FDG
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV!, ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
@@ -543,6 +506,7 @@ contains
     use MOD_MPI                , only: FinishExchangeMPIData
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
+    use MOD_NFVSE_MPI          , only: Get_externalU
     implicit none
     !-arguments---------------------------------------------------------------------------------------------------------------------
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
@@ -603,9 +567,9 @@ contains
 #endif /*NONCONS*/
                                                SubCellMetrics(iElem), iElem )
 #if LOCAL_ALPHA
-      ftilde_FV(:,:,:,:,iElem) = ftilde(:,0:PP_N-1,0:PP_N  ,0:PP_N  )
-      gtilde_FV(:,:,:,:,iElem) = gtilde(:,0:PP_N  ,0:PP_N-1,0:PP_N  )
-      htilde_FV(:,:,:,:,iElem) = htilde(:,0:PP_N  ,0:PP_N  ,0:PP_N-1)
+      ftilde_FV(:,:,:,:,iElem) = ftilde
+      gtilde_FV(:,:,:,:,iElem) = gtilde
+      htilde_FV(:,:,:,:,iElem) = htilde
 #endif /*LOCAL_ALPHA*/
 !     Update Ut
 !     ---------
@@ -1660,6 +1624,7 @@ contains
     USE MOD_MPI_Vars
     use MOD_DG_Vars            , only: U_master
 #endif /*MPI*/
+    use MOD_IDP_Vars , only: IDPneedsUprev
     implicit none
     ! Arguments
     !---------------------------------------------------------------------------------------------------------------------------------
@@ -1720,97 +1685,12 @@ contains
     
   end subroutine CalcBlendingCoefficient
 !===================================================================================================================================
-!> Gets outer solution for the TVD reconstruction
-!> ATTENTION 1: Must be called after FinishExchangeMPIData
-!> ATTENTION 2: Mortar faces are not considered (TODO?)
-!===================================================================================================================================
-  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave,fluxSign)
-    use MOD_PreProc
-    use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
-    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
-    implicit none
-    !-arguments-----------------------------------------------
-    integer, intent(in) :: nVar
-    real, intent(out) :: U_ext   (nVar,0:PP_N,0:PP_N,6     ,nElems)
-    real, intent(in)  :: U       (nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
-    real, intent(in)  :: U_master(nVar,0:PP_N,0:PP_N,nSides)
-    real, intent(in)  :: U_slave (nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
-    logical, optional :: fluxSign
-    !-local-variables-----------------------------------------
-    integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
-    integer :: ax1, ax2
-    integer :: signIdx
-    integer, parameter :: signo(2) = [1, -1]
-    !---------------------------------------------------------
-    
-    if (present(fluxSign)) then
-      if (fluxSign) then
-        signIdx=2
-      else
-        signIdx=1
-      end if
-    else
-      signIdx=1
-    end if
-    
-    ! First assign the inner value on boundaries (we don't use an "external state")
-    do SideID=1, nBCSides
-      ElemID  = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-      locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
-      flip    = 0 ! flip is 0 in master faces!
-      
-      ax1 = TanDirs1(locSide)
-      ax2 = TanDirs2(locSide)
-      DO q=0,PP_N; DO p=0,PP_N
-        ijk(:)=S2V(:,0,p,q,flip,locSide)
-        U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U(:,ijk(1),ijk(2),ijk(3),ElemID)
-      END DO; END DO !p,q=0,PP_N
-    end do !SideID=1, nBCSides
-    
-    ! TODO: Include routines for mortar faces here....
-    
-    ! Now do the rest
-    do SideID=firstInnerSide, lastMPISide_YOUR
-      
-!     Master side
-!     -----------
-      ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-      !master sides(ElemID,locSide and flip =-1 if not existing)
-      IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
-        locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
-        flip    = 0 ! flip is 0 in master faces!
-        ax1 = TanDirs1(locSide)
-        ax2 = TanDirs2(locSide)
-        DO q=0,PP_N; DO p=0,PP_N
-          ijk(:)=S2V(:,0,p,q,flip,locSide)
-          U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U_slave(:,p,q,SideID) ! Slave side is force-aligned with master
-        END DO; END DO !p,q=0,PP_N
-      end if !(ElemID.NE.-1)
-      
-!     Slave side
-!     ----------
-      nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
-      IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
-        nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
-        nbFlip    = SideToElem(S2E_FLIP,SideID)
-        
-        ax1 = TanDirs1(nblocSide)
-        ax2 = TanDirs2(nblocSide)
-        DO q=0,PP_N; DO p=0,PP_N
-          ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
-          U_ext(:,ijk(ax1),ijk(ax2),nblocSide,nbElemID)=signo(signIdx)*U_master(:,p,q,SideID) ! Slave side is force-aligned with master
-        END DO; END DO !p,q=0,PP_N
-      end if !(nbElemID.NE.-1)
-      
-    end do ! SideID=firstInnerSide, lastMPISide_YOUR
-    
-  end subroutine Get_externalU
-!===================================================================================================================================
 !> Corrects U and Ut after the Runge-Kutta stage
 !===================================================================================================================================
 #if NFVSE_CORR
-  subroutine Apply_NFVSE_Correction_posit(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, PositCorrFactor, alpha_old, PositMaxIter, maximum_alpha, amount_alpha, amount_alpha_steps
+  subroutine Apply_NFVSE_Correction_posit(U,Ut,dt)
+    use MOD_NFVSE_Vars         , only: alpha, PositCorrFactor, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
+    use MOD_IDP_Vars           , only: FFV_m_FDG, IDPMaxIter
     use MOD_Mesh_Vars          , only: nElems, offsetElem
     use MOD_Basis              , only: ALMOSTEQUAL
     use MOD_Equation_Vars      , only: Get_Pressure, Get_dpdU
@@ -1819,7 +1699,6 @@ contains
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
     real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-    real,intent(in)    :: t                                         !< Current time (in time step!)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real, parameter :: eps = 1.e-14
@@ -1944,7 +1823,7 @@ contains
         corr1 = 0.0
         
         ! Perform Newton iterations
-        NewtonLoop: do iter=1, PositMaxIter
+        NewtonLoop: do iter=1, IDPMaxIter
           ! Evaluate dp/d(alpha)
           call Get_dpdU(U_curr,dpdU)
           dp_dalpha = dot_product(dpdU,FFV_m_FDG(:,i,j,k,eID))
@@ -1962,14 +1841,14 @@ contains
           if ( (ap <= epsilon(p_goal)) .and. (ap > -NEWTON_ABSTOL*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
         end do NewtonLoop ! iter
         
-        if (iter > PositMaxIter) notInIter =.TRUE.
+        if (iter > IDPMaxIter) notInIter =.TRUE.
         
         corr = max(corr,corr1) ! Compute the element-wise maximum correction
       
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
       end if
       
 !       Do the correction if needed
@@ -2005,989 +1884,6 @@ contains
     amount_alpha = amount_alpha/amount_alpha_steps
     
   end subroutine Apply_NFVSE_Correction_posit
-!===================================================================================================================================
-!> Element-wise invariant domain preserving FCT correction of 
-!>    Pazner, Will. "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting"
-!> ATTENTION: 1) Density correction uses BLOCKING communication (not optimal)
-!>            2) We use U_master and U_slave for the Usafe transfer... This works because this is done outside of DGTimeDerivative_weakForm
-!>            3) Memory use must be improved
-!===================================================================================================================================
-  subroutine Apply_NFVSE_Correction_IDP(U,Ut,t,dt)
-    use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha, alpha_max, alpha_old, PositMaxIter, Usafe, EntPrev, EntropyCorr, SpecEntropyCorr, DensityCorr, SemiDiscEntCorr, Uprev
-#if LOCAL_ALPHA
-    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG, sWGP, rf_DG, rh_DG, rg_DG
-#endif /*LOCAL_ALPHA*/
-    use MOD_DG_Vars            , only: U_master,U_slave, Flux_master, Flux_slave
-    use MOD_Mesh_Vars          , only: nElems, offsetElem, firstSlaveSide, LastSlaveSide, nSides
-    use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: Get_MathEntropy, Get_SpecEntropy, ConsToEntropy, ConsToSpecEntropy, GetEntropyPot
-    use MOD_Mesh_Vars          , only: sJ
-    use MOD_Equation_Vars      , only: Get_Pressure
-    use MOD_ProlongToFace      , only: ProlongToFace
-    use MOD_NFVSE_MPI
-    USE MOD_Globals
-#if MPI
-    USE MOD_MPI_Vars           , only: MPIRequest_U, DataSizeSide, nNbProcs
-    use MOD_NFVSE_Vars         , only: MPIRequest_Umaster
-    USE MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
-#endif /*MPI*/
-    implicit none
-    !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-    real,intent(in)    :: t                                         !< Current time (in time step!)
-    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
-    !-local-variables----------------------------------------
-    real, parameter :: eps = 1.e-10           ! Very small value
-    real, parameter :: NEWTON_RELTOL = 1.e-12 ! Relative tolerance to exit Newton loop
-    real, parameter :: NEWTON_ABSTOL = 1.e-8  ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
-    real,allocatable    :: Usafe_ext     (:,:,:,:,:)
-    real,allocatable    :: Uprev_ext     (:,:,:,:,:)
-    real,allocatable    :: Flux_ext      (:,:,:,:,:)
-    real,allocatable    :: EntPrev_master(:,:,:,:)
-    real,allocatable    :: EntPrev_slave (:,:,:,:)
-    real,allocatable    :: EntPrev_ext   (:,:,:,:,:)
-    real,allocatable    :: Ubar_xi       (:,:,:,:,:)
-    real,allocatable    :: Ubar_eta      (:,:,:,:,:)
-    real,allocatable    :: Ubar_zeta     (:,:,:,:,:)
-    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
-    real    :: corr, corr1
-#if LOCAL_ALPHA
-    real    :: corr_loc     (0:PP_N,0:PP_N,0:PP_N)
-#endif /*LOCAL_ALPHA*/
-    real    :: p_safe ! pressure obtained with alpha_max for an element
-    real    :: alphadiff
-    real    :: alphacont  !container for alpha
-    real    :: sdt
-    real    :: rho_min, rho_max, rho_safe
-    real    :: s_max, s_min, as, U_curr(PP_nVar), dSdalpha
-    logical :: notInIter
-    integer :: eID, sideID
-    integer :: i,j,k, l
-    integer :: iter
-    integer :: idx_p1(0:PP_N)
-    integer :: idx_m1(0:PP_N)
-    real    :: corr_old
-    
-    real :: Ent_Jump(PP_nVar), Psi_Jump, newAlpha, r, rFV
-    real :: entVar(PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-    real :: entPot(3      ,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-    
-    real :: rf_FV(-1:PP_N, 0:PP_N, 0:PP_N)
-    real :: rg_FV( 0:PP_N,-1:PP_N, 0:PP_N)
-    real :: rh_FV( 0:PP_N, 0:PP_N,-1:PP_N)
-    !--------------------------------------------------------
-
-!   Some definitions
-!   ****************
-    rf_FV = 0.0
-    rg_FV = 0.0
-    rh_FV = 0.0
-    
-!#    !FV inner stencil
-!#    idx_p1 = 1
-!#    idx_p1(PP_N) = 0
-    
-!#    idx_m1 = -1
-!#    idx_m1(0) = 0
-    
-!#    !FV stencil
-!#    idx_p1 = 1
-!#    idx_m1 = -1
-    
-!#    !DG stencil
-!#    idx_p1 = (/(PP_N-i, i=0, PP_N)/)
-!#    idx_m1 = (/(-i, i=0, PP_N)/)
-!#    idx_p1(PP_N) = 1
-!#    idx_m1(0)    =-1
-    alpha_old = alpha 
-    sdt = 1./dt
-    
-!   Allocate storage
-!    (it's not very efficient to do this here... Improve!)
-!   ******************************************************
-#if barStates
-    allocate( Uprev_ext    (PP_nVar, 0:PP_N, 0:PP_N, 6,nElems) )
-    allocate( Ubar_xi      (PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
-    allocate( Ubar_eta     (PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
-    allocate( Ubar_zeta    (PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
-#else
-    if (EntropyCorr .or. SpecEntropyCorr) then
-      allocate( EntPrev_master(     1,0:PP_N,0:PP_N,nSides) )
-      allocate( EntPrev_slave (     1,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) )
-      allocate( EntPrev_ext   (     1,0:PP_N,0:PP_N,6,nElems) )
-    end if
-    if (DensityCorr) then
-      allocate( Usafe_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
-    end if
-#endif /*barStates*/
-    if (SemiDiscEntCorr) then
-      allocate( Flux_ext     (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
-      if (.not. allocated(Uprev_ext)) then
-        allocate( Uprev_ext    (PP_nVar,0:PP_N,0:PP_N,6,nElems) )
-      end if
-    end if
-    
-!   Get the previous solution in place if needed!
-!   *********************************************
-    if ( allocated(Uprev_ext) ) then
-      ! Gather the external Uprev in the right location
-      call Get_externalU(PP_nVar,Uprev_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
-      ! FIll Uprev with info
-      do eID=1, nElems
-        Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,5,eID)
-        Uprev(:,PP_N+1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,3,eID)
-        Uprev(:,0:PP_N,    -1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,2,eID)
-        Uprev(:,0:PP_N,PP_N+1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,4,eID)
-        Uprev(:,0:PP_N,0:PP_N,    -1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,1,eID)
-        Uprev(:,0:PP_N,0:PP_N,PP_N+1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,6,eID)
-      end do !eID
-    end if !allocated(Uprev_ext)
-    
-!   Get the bar states if needed!
-!   *****************************
-#if barStates
-    do eID=1, nElems
-      associate (SCM => SubCellMetrics(eID))
-      do i=-1, PP_N ! i goes through the interfaces
-        do k=0, PP_N  ; do j=0, PP_N ! j and k go through DOFs
-          !xi
-          Ubar_xi  (:,i,j,k,eID) = GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i+1,j,k,eID),SCM % xi   % nv (:,j,k,i),SCM % xi   % t1 (:,j,k,i),SCM % xi   % t2 (:,j,k,i),SCM % xi   % norm(j,k,i) )
-          !eta
-          Ubar_eta (:,j,i,k,eID) = GetBarStates(Uprev(:,j,i,k,eID),Uprev(:,j,i+1,k,eID),SCM % eta  % nv (:,j,k,i),SCM % eta  % t1 (:,j,k,i),SCM % eta  % t2 (:,j,k,i),SCM % eta  % norm(j,k,i) )
-          !zeta
-          Ubar_zeta(:,j,k,i,eID) = GetBarStates(Uprev(:,j,k,i,eID),Uprev(:,j,k,i+1,eID),SCM % zeta % nv (:,j,k,i),SCM % zeta % t1 (:,j,k,i),SCM % zeta % t2 (:,j,k,i),SCM % zeta % norm(j,k,i) )
-        end do        ; end do  ! j,k
-      end do
-      end associate
-    end do !eID
-#else
-!   Otherwise get the previous entropy if needed
-!   ********************************************
-    ! Mathematical entropy
-    if (EntropyCorr) then
-      do eID=1, nElems
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          EntPrev(1,i,j,k,eID) = Get_MathEntropy(Uprev(:,i,j,k,eID))
-        end do       ; end do       ; end do ! i,j,k
-      end do !eID
-      do sideID=1, nSides
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_master(1,i,j,sideID) = Get_MathEntropy(U_master(:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-      do sideID=firstSlaveSide, LastSlaveSide
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_slave (1,i,j,sideID) = Get_MathEntropy(U_slave (:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-    ! Specific entropy
-    elseif (SpecEntropyCorr) then
-      do eID=1, nElems
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          EntPrev(1,i,j,k,eID) = Get_SpecEntropy(Uprev(:,i,j,k,eID))
-        end do       ; end do       ; end do ! i,j,k
-      end do !eID
-      do sideID=1, nSides
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_master(1,i,j,sideID) = Get_SpecEntropy(U_master(:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-      do sideID=firstSlaveSide, LastSlaveSide
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_slave (1,i,j,sideID) = Get_SpecEntropy(U_slave (:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-    end if
-    
-    if (EntropyCorr .or. SpecEntropyCorr) then
-      ! Get neighbor info
-      ! *****************
-    
-      ! Gather the external math entropy in the right location
-      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
-      ! FIll EntPrev with info
-      do eID=1, nElems
-        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
-        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
-        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
-        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
-        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
-        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
-      end do !eID
-    end if
-#endif /*barStates*/
-    
-!   Iterate over the elements
-!   *************************
-    do eID=1, nElems
-      
-!     ----------------------------------
-!     Check if it makes sense correcting
-!     ----------------------------------
-      alphadiff = alpha(eID) - alpha_max
-      
-!     ----------------------------------------------------------
-!     Get Usafe for each point of the element and check validity
-!     ----------------------------------------------------------
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        
-#if !(barStates)
-        ! Compute Usafe
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * FFV_m_FDG(:,i,j,k,eID) * (1. - alpha(eID))
-        
-        ! Check if this is a valid state
-        call Get_Pressure(Usafe(:,i,j,k,eID),p_safe)
-        if (p_safe < 0.) then
-          print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe
-          stop
-        end if
-        if (Usafe(1,i,j,k,eID) < 0.) then
-          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k,eID)
-          stop
-        end if
-#endif /*!(barStates)*/
-      end do       ; end do       ; end do ! i,j,k
-      
-    end do !eID
-  
-    if(SemiDiscEntCorr) then
-#if LOCAL_ALPHA
-      ! ATTENTION: 1) we are supposing that alpha=0 before limiting
-      
-      ! Get the boundary entropy production (same for FV and DG)
-      ! ********************************************************
-      
-      
-      ! TODO: Send the F_master across MPI interfaces
-#if MPI
-      if (nProcessors > 1) then
-        stop 'SemiDiscEntCorr not working in parallel.. Send Flux_master!!'
-      end if
-#endif /*MPI*/
-      
-      ! Get the external fluxes in place (only working without BCs!!! TODO..)
-      call Get_externalU(PP_nVar,Flux_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),Flux_master,Flux_slave,fluxSign=.TRUE.)
-      
-      do eID=1, nElems
-        
-        ! Get entropy vars and potential
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          entVar(:,i,j,k) = ConsToEntropy(Uprev(:,i,j,k,eID))
-          entPot(:,i,j,k) = GetEntropyPot(Uprev(:,i,j,k,eID),entVar(:,i,j,k))
-        end do       ; end do       ; end do !i,j,k
-        
-        ! Get entropy vars and potential (boundaries)
-        do k=0, PP_N ; do j=0, PP_N
-          !xi-
-          entVar(:,-1,j,k) = ConsToEntropy(Uprev(:,-1,j,k,eID))
-          entPot(:,-1,j,k) = GetEntropyPot(Uprev(:,-1,j,k,eID),entVar(:,-1,j,k))
-          !xi+
-          entVar(:,PP_N+1,j,k) = ConsToEntropy(Uprev(:,PP_N+1,j,k,eID))
-          entPot(:,PP_N+1,j,k) = GetEntropyPot(Uprev(:,PP_N+1,j,k,eID),entVar(:,PP_N+1,j,k))
-          !eta-
-          entVar(:,j,-1,k) = ConsToEntropy(Uprev(:,j,-1,k,eID))
-          entPot(:,j,-1,k) = GetEntropyPot(Uprev(:,j,-1,k,eID),entVar(:,j,-1,k))
-          !eta+
-          entVar(:,j,PP_N+1,k) = ConsToEntropy(Uprev(:,j,PP_N+1,k,eID))
-          entPot(:,j,PP_N+1,k) = GetEntropyPot(Uprev(:,j,PP_N+1,k,eID),entVar(:,j,PP_N+1,k))
-          !zeta-
-          entVar(:,j,k,-1) = ConsToEntropy(Uprev(:,j,k,-1,eID))
-          entPot(:,j,k,-1) = GetEntropyPot(Uprev(:,j,k,-1,eID),entVar(:,j,k,-1))
-          !zeta+
-          entVar(:,j,k,PP_N+1) = ConsToEntropy(Uprev(:,j,k,PP_N+1,eID))
-          entPot(:,j,k,PP_N+1) = GetEntropyPot(Uprev(:,j,k,PP_N+1,eID),entVar(:,j,k,PP_N+1))
-        end do          ; end do !j,k
-        
-        ! Compute boundary entropy production
-        ! -----------------------------------
-        do k=0, PP_N  ; do j=0, PP_N
-          !xi- (minus flux)
-          Ent_Jump = entVar(:,0,j,k) - entVar(:,-1,j,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,-1  )*SubCellMetrics(eID) % xi % norm(j,k,-1  ), entPot(:,0     ,j,k) - entPot(:,-1  ,j,k) )
-          rf_DG(-1,j,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,5,eID)) - Psi_Jump
-          rf_FV(-1,j,k)     = rf_DG(-1,j,k,eID)
-          !xi+
-          Ent_Jump = entVar(:,PP_N+1,j,k) - entVar(:,PP_N,j,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,PP_N)*SubCellMetrics(eID) % xi % norm(j,k,PP_N), entPot(:,PP_N+1,j,k) - entPot(:,PP_N,j,k) )
-          rf_DG(PP_N,j,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,3,eID)) - Psi_Jump
-          rf_FV(PP_N,j,k)     = rf_DG(PP_N,j,k,eID)
-          !eta- (minus flux)
-          Ent_Jump = entVar(:,j,0,k) - entVar(:,j,-1,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,-1  )*SubCellMetrics(eID) % eta % norm(j,k,-1  ), entPot(:,j,0     ,k) - entPot(:,j,-1  ,k) )
-          rg_DG(j,-1,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,2,eID)) - Psi_Jump
-          rg_FV(j,-1,k)     = rg_DG(j,-1,k,eID)
-          !eta+
-          Ent_Jump = entVar(:,j,PP_N+1,k) - entVar(:,j,PP_N,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % eta % norm(j,k,PP_N), entPot(:,j,PP_N+1,k) - entPot(:,j,PP_N,k) )
-          rg_DG(j,PP_N,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,4,eID)) - Psi_Jump
-          rg_FV(j,PP_N,k)     = rg_DG(j,PP_N,k,eID)
-          !zeta- (minus flux)
-          Ent_Jump = entVar(:,j,k,0) - entVar(:,j,k,-1)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,-1  )*SubCellMetrics(eID) % zeta % norm(j,k,-1  ), entPot(:,j,k,0     ) - entPot(:,j,k,-1  ) )
-          rh_DG(j,k,-1,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,1,eID)) - Psi_Jump
-          rh_FV(j,k,-1)     = rh_DG(j,k,-1,eID)
-          !zeta+
-          Ent_Jump = entVar(:,j,k,PP_N+1) - entVar(:,j,k,PP_N)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % zeta % norm(j,k,PP_N), entPot(:,j,k,PP_N+1) - entPot(:,j,k,PP_N) )
-          rh_DG(j,k,PP_N,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,6,eID)) - Psi_Jump
-          rh_FV(j,k,PP_N)     = rh_DG(j,k,PP_N,eID)
-        end do        ; end do
-        
-        ! compute entropy production of FV
-        ! --------------------------------
-        !xi
-        do i=0, PP_N-1
-          do k=0, PP_N ; do j=0, PP_N
-            ! Jumps
-            Ent_Jump = entVar(:,i+1,j,k) - entVar(:,i,j,k)
-            Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,i)*SubCellMetrics(eID) % xi % norm(j,k,i), entPot(:,i+1,j,k) - entPot(:,i,j,k) )
-            ! Compute entropy production
-            rf_FV(i,j,k) = dot_product(Ent_Jump, ftilde_FV(:,i,j,k,eID)) - Psi_Jump
-          end do       ; end do !j,k
-        end do !i
-        !Eta
-        do j=0, PP_N-1
-          do k=0, PP_N ; do i=0, PP_N
-            ! Jumps
-            Ent_Jump = entVar(:,i,j+1,k) - entVar(:,i,j,k)
-            Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,i,k,j)*SubCellMetrics(eID) % eta % norm(i,k,j), entPot(:,i,j+1,k) - entPot(:,i,j,k) )
-            ! Compute entropy production
-            rg_FV(i,j,k) = dot_product(Ent_Jump, gtilde_FV(:,i,j,k,eID)) - Psi_Jump
-          end do       ; end do !j,k
-        end do !i
-        !Zeta
-        do k=0, PP_N-1
-          do j=0, PP_N ; do i=0, PP_N
-            ! Jumps
-            Ent_Jump = entVar(:,i,j,k+1) - entVar(:,i,j,k)
-            Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,i,j,k)*SubCellMetrics(eID) % zeta % norm(i,j,k), entPot(:,i,j,k+1) - entPot(:,i,j,k) )
-            ! Compute entropy production
-            rh_FV(i,j,k) = dot_product(Ent_Jump, htilde_FV(:,i,j,k,eID)) - Psi_Jump
-          end do       ; end do !j,k
-        end do !i
-        
-        ! Get corr factors!!!!
-        corr = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-        corr_loc = 0.0
-#endif /*LOCAL_ALPHA*/
-
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-          ! Get the total DG production
-          !****************************
-          r = rf_DG(i,j,k,eID) + rf_DG(i-1,j,k,eID) + &
-              rg_DG(i,j,k,eID) + rg_DG(i,j-1,k,eID) + &
-              rh_DG(i,j,k,eID) + rh_DG(i,j,k-1,eID) 
-          
-          if (r < eps) cycle
-          
-          rFV = rf_FV(i,j,k) + rf_FV(i-1,j,k) + &
-                rg_FV(i,j,k) + rg_FV(i,j-1,k) + &
-                rh_FV(i,j,k) + rh_FV(i,j,k-1) 
-          
-          if (rFV > eps) then
-            print*, 'WARNING: Low-order method is not entropy dissipative!!', eID, i,j,k
-            stop
-          end if
-          
-          rFV = r - rFV
-          if (abs(rFV) < eps) cycle !nothing to do here
-          
-          ! correction
-          corr1 = r*dt/rFV
-#if LOCAL_ALPHA
-          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
-          corr = max(corr,corr1)
-          
-        end do       ; end do       ; end do ! i,j,k
-        
-!       Do the correction if needed
-!       ---------------------------
-        
-        if ( corr > 0. ) then
-          
-          ! Change the alpha for output
-          alphacont  = alpha(eID)
-          alpha(eID) = alpha(eID) + corr * sdt
-          
-          ! Change inconsistent alphas
-          if (alpha(eID) > alpha_max) then
-            alpha(eID) = alpha_max
-            corr = (alpha_max - alphacont ) * dt
-          end if
-          
-#if LOCAL_ALPHA
-          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)  ! TODO: See if the local correction is consistent with the entropy balance
-#else
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-            ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-          end do       ; end do       ; enddo
-#endif
-        end if
-        
-      end do !nElems
-#else
-      stop 'SemiDiscEntCorr only for local alpha'
-#endif /*LOCAL_ALPHA*/
-    end if
-  
-  if (DensityCorr) then
-    
-#if !(barStates)
-!   Get the safe (FV) solution in place (if not using bar states)
-!   *************************************************************
-    
-    ! MPI communication.... Blocking :(
-#if MPI
-    ! receive the slave
-    CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
-                             MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
-    
-    ! prolong MPI sides and do the mortar on the MPI sides
-    CALL ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,doMPISides=.TRUE.)
-    !Mortars are not really working yet!!
-    !CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
-    
-    ! send the slave
-    CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
-                          MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
-    
-    ! receive the master
-    call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
-                             MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
-    
-#endif /* MPI */
-    ! Get external Usafe
-    call ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,doMPISides=.FALSE.)
-    ! TODO: Add mortars!!
-#if MPI
-    ! Send the master
-    call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
-                             MPIRequest_Umaster(:,2),SendID=1) 
-    
-    
-    call FinishExchangeMPIData(2*nNbProcs,MPIRequest_U) 
-    call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
-    
-#endif /* MPI */
-    ! Gather the external Usafe in the right location
-    call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
-    ! FIll Usafe with info
-    do eID=1, nElems
-      Usafe(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)
-      Usafe(:,PP_N+1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,3,eID)
-      Usafe(:,0:PP_N,    -1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,2,eID)
-      Usafe(:,0:PP_N,PP_N+1,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,4,eID)
-      Usafe(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
-      Usafe(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
-    end do !eID
-#endif /*!(barStates)*/
-    
-!     ----------------------------
-!     Density TVD correction
-!     ----------------------------
-    
-    do eID=1, nElems
-      
-        corr = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-        corr_loc = 0.0
-#endif /*LOCAL_ALPHA*/
-!       Compute correction factors
-!       --------------------------
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-          ! Get the limit states
-          !*********************
-          rho_min =  huge(1.0)
-          rho_max = -huge(1.0)
-          
-#if barStates
-          !xi
-          do l=i-1, i
-            rho_min = min(rho_min, Ubar_xi  (1,l  ,j  ,k  ,eID))
-            rho_max = max(rho_max, Ubar_xi  (1,l  ,j  ,k  ,eID))
-          end do
-          !eta
-          do l=j-1, j
-            rho_min = min(rho_min, Ubar_eta (1,i  ,l  ,k  ,eID))
-            rho_max = max(rho_max, Ubar_eta (1,i  ,l  ,k  ,eID))
-          end do
-          !zeta
-          do l=k-1, k
-            rho_min = min(rho_min, Ubar_zeta(1,i  ,j  ,l  ,eID))
-            rho_max = max(rho_max, Ubar_zeta(1,i  ,j  ,l  ,eID))
-          end do
-#else
-          ! check stencil in xi
-!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
-          do l = i-1, i+1
-            rho_min = min(rho_min, Usafe(1,l,j,k,eID))
-            rho_max = max(rho_max, Usafe(1,l,j,k,eID))
-          end do
-          ! check stencil in eta
-!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
-          do l = j-1, j+1
-            rho_min = min(rho_min, Usafe(1,i,l,k,eID))
-            rho_max = max(rho_max, Usafe(1,i,l,k,eID))
-          end do
-          ! check stencil in zeta
-!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
-          do l = k-1, k+1
-            rho_min = min(rho_min, Usafe(1,i,j,l,eID))
-            rho_max = max(rho_max, Usafe(1,i,j,l,eID))
-          end do
-#endif /*barStates*/
-          
-          ! If U is in that range... nothing to correct
-          !********************************************
-          if ( U(1,i,j,k,eID) < rho_min*(1.-NEWTON_ABSTOL)) then
-            rho_safe = rho_min
-          elseif (U(1,i,j,k,eID) > rho_max*(1.+NEWTON_ABSTOL)) then
-            rho_safe = rho_max
-          else
-            cycle
-          end if
-          
-          if ( abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle !nothing to do here!
-          
-          ! Density correction
-          a = (rho_safe - U(1,i,j,k,eID))
-          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
-#if LOCAL_ALPHA
-          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
-          corr = max(corr,corr1)
-          
-        end do       ; end do       ; end do ! i,j,k
-        
-!       Do the correction if needed
-!       ---------------------------
-        
-        if ( corr > 0. ) then
-          
-          ! Change the alpha for output
-          alphacont  = alpha(eID)
-          alpha(eID) = alpha(eID) + corr * sdt
-          
-          ! Change inconsistent alphas
-          if (alpha(eID) > alpha_max) then
-            alpha(eID) = alpha_max
-            corr = (alpha_max - alphacont ) * dt
-          end if
-          
-#if LOCAL_ALPHA
-          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)
-#else
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-            ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-          end do       ; end do       ; enddo
-#endif
-        end if
-      
-    end do !eID
-  end if ! DensityCorr
-!     ----------------------------
-!     Entropy correction
-!     ----------------------------
-    if (EntropyCorr) then
-      
-      do eID=1, nElems
-      
-        corr = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-        corr_loc = 0.0
-#endif /*LOCAL_ALPHA*/
-!       Compute correction factors
-!       --------------------------
-        notInIter = .FALSE.
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-          ! Get the limit states
-          !*********************
-          s_max = -huge(1.0)
-          
-#if barStates
-          !xi+
-          s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
-          !xi-
-          s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
-          !eta+
-          s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
-          !eta-
-          s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
-          !zeta+
-          s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
-          !zeta-
-          s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
-#else
-          ! check stencil in xi
-!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
-          do l = i-1, i+1
-            s_max = max(s_max, EntPrev(1,l,j,k,eID))
-          end do
-          ! check stencil in eta
-!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
-          do l = j-1, j+1
-            s_max = max(s_max, EntPrev(1,i,l,k,eID))
-          end do
-          ! check stencil in zeta
-!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
-          do l = k-1, k+1
-            s_max = max(s_max, EntPrev(1,i,j,l,eID))
-          end do
-#endif /*barStates*/
-          
-          ! Difference between goal entropy and current entropy
-          as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
-
-          if (as >= -max(eps,abs(s_max)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
-        
-          ! Newton initialization:
-          U_curr = U(:,i,j,k,eID)
-          corr1 = 0.0
-          
-          ! Perform Newton iterations
-          NewtonLoop: do iter=1, PositMaxIter
-            corr_old = corr1
-            
-            ! Evaluate dS/d(alpha)
-            dSdalpha = dot_product(ConsToEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
-            
-            if ( abs(dSdalpha)<eps ) exit NewtonLoop ! Nothing to do here!
-            
-            ! Update correction
-            corr1 = corr1 + as / dSdalpha
-            if (alpha(eID) + corr1 * sdt > alpha_max) then
-              corr1 = (alpha_max - alpha(eID) ) * dt
-            end if
-            if (corr1<0) corr1=0.0
-            
-            ! Check relative tolerance
-            if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoop
-            
-            ! Get new U
-            U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
-            
-            ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-            as = s_max-Get_MathEntropy(U_curr)
-            
-            ! Check absolute tolerance
-            if ( abs(as) < max(eps,abs(s_max)*NEWTON_ABSTOL) ) exit NewtonLoop  
-            
-          end do NewtonLoop ! iter
-          
-          if (iter > PositMaxIter) notInIter =.TRUE.
-          
-#if LOCAL_ALPHA
-          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
-          corr = max(corr,corr1) ! Compute the element-wise maximum correction
-        end do       ; end do       ; enddo !i,j,k
-        
-        if (notInIter) then
-          write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
-        end if
-        
-!       Do the correction if needed
-!       ---------------------------
-        if ( corr > 0. ) then
-          
-          ! Change the alpha for output
-          alphacont  = alpha(eID)
-          alpha(eID) = alpha(eID) + corr * sdt
-
-          ! Change inconsistent alphas
-          if (alpha(eID) > alpha_max) then
-            alpha(eID) = alpha_max
-            corr = (alpha_max - alphacont ) * dt
-          end if
-          
-#if LOCAL_ALPHA
-          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)
-#else
-          
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-            ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-          end do       ; end do       ; enddo
-#endif /*LOCAL_ALPHA*/
-          
-        end if
-      
-      end do !eID
-    end if
-    
-    if (SpecEntropyCorr) then
-      
-      do eID=1, nElems
-      
-        corr = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-        corr_loc = 0.0
-#endif /*LOCAL_ALPHA*/
-!       Compute correction factors
-!       --------------------------
-        notInIter = .FALSE.
-        
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-          ! Get the limit states
-          !*********************
-          s_min = huge(1.0)
-          
-#if barStates
-          !xi+
-          s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
-          !xi-
-          s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
-          !eta+
-          s_min = min(s_min, Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
-          !eta-
-          s_min = min(s_min, Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
-          !zeta+
-          s_min = min(s_min, Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
-          !zeta-
-          s_min = min(s_min, Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
-#else
-          ! check stencil in xi
-!#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
-          do l = i-1, i+1
-            s_min = min(s_min, EntPrev(1,l,j,k,eID))
-          end do
-          ! check stencil in eta
-!#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
-          do l = j-1, j+1
-            s_min = min(s_min, EntPrev(1,i,l,k,eID))
-          end do
-          ! check stencil in zeta
-!#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
-          do l = k-1, k+1
-            s_min = min(s_min, EntPrev(1,i,j,l,eID))
-          end do
-#endif /*barStates*/
-          
-          ! Difference between goal entropy and current entropy
-          as = (s_min - Get_SpecEntropy(U(:,i,j,k,eID)))
-
-          if (as <= max(eps,abs(s_min)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
-        
-          ! Newton initialization:
-          U_curr = U(:,i,j,k,eID)
-          corr1 = 0.0
-          
-          ! Perform Newton iterations
-          NewtonLoopSpec: do iter=1, PositMaxIter
-            corr_old = corr1
-            
-            ! Evaluate dS/d(alpha)
-            dSdalpha = dot_product(ConsToSpecEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
-            
-            if ( abs(dSdalpha)<eps) exit NewtonLoopSpec ! Nothing to do here!
-            
-            ! Update correction
-            corr1 = corr1 + as / dSdalpha
-            if (alpha(eID) + corr1 * sdt > alpha_max) then
-              corr1 = (alpha_max - alpha(eID) ) * dt
-            end if
-            if (corr1<0) corr1=0.0
-            
-            ! Check relative tolerance
-            if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
-            
-            ! Get new U
-            U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
-            
-            ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-            as = s_min-Get_SpecEntropy(U_curr)
-            
-            ! Check absolute tolerance
-            if ( abs(as) < max(eps,abs(s_min)*NEWTON_ABSTOL) ) exit NewtonLoopSpec  
-            
-          end do NewtonLoopSpec ! iter
-          
-          if (iter > PositMaxIter) notInIter =.TRUE.
-          
-#if LOCAL_ALPHA
-          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
-          corr = max(corr,corr1) ! Compute the element-wise maximum correction
-        end do       ; end do       ; enddo !i,j,k
-        
-        if (notInIter) then
-          write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', PositMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
-        end if
-        
-!       Do the correction if needed
-!       ---------------------------
-        if ( corr > 0. ) then
-          
-          ! Change the alpha for output
-          alphacont  = alpha(eID)
-          alpha(eID) = alpha(eID) + corr * sdt
-
-          ! Change inconsistent alphas
-          if (alpha(eID) > alpha_max) then
-            alpha(eID) = alpha_max
-            corr = (alpha_max - alphacont ) * dt
-          end if
-          
-#if LOCAL_ALPHA
-          call Perform_LocalCorrection(corr_loc,U(:,:,:,:,eID),Ut(:,:,:,:,eID),alpha_loc(:,:,:,eID),dt,sdt,eID)
-#else
-          
-          ! Correct!
-          do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-            ! Correct U
-            U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-            ! Correct Ut
-            Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-          end do       ; end do       ; enddo
-#endif /*LOCAL_ALPHA*/
-          
-        end if
-      
-      end do !eID
-    end if
-    
-    SDEALLOCATE( Usafe_ext )
-    SDEALLOCATE( Uprev_ext )
-    SDEALLOCATE( EntPrev_master)
-    SDEALLOCATE( EntPrev_slave )
-    SDEALLOCATE( EntPrev_ext   )
-    SDEALLOCATE( FFV_m_FDG  )
-    SDEALLOCATE( Flux_ext  )
-    SDEALLOCATE( Ubar_xi  )
-    SDEALLOCATE( Ubar_eta  )
-    SDEALLOCATE( Ubar_zeta  )
-    
-  end subroutine Apply_NFVSE_Correction_IDP
-  
-  pure function GetBarStates(UL,UR,nv,t1,t2,norm) result(Ubar)
-    use MOD_Riemann       , only: RotateState, RotateFluxBack
-    use MOD_Equation_Vars , only: SoundSpeed2
-    USE MOD_Flux          , only: EvalOneEulerFlux1D
-    implicit none
-    !-arguments----------------------------------------
-    real, intent(in) :: UL  (PP_nVar)
-    real, intent(in) :: UR  (PP_nVar)
-    real, intent(in) :: nv  (3)
-    real, intent(in) :: t1  (3)
-    real, intent(in) :: t2  (3)
-    real, intent(in) :: norm
-    real             :: Ubar(PP_nVar)
-    !-local-variables----------------------------------
-    real :: UL_r(PP_nVar) ! Rotated left state
-    real :: UR_r(PP_nVar) ! Rotated right state
-    real :: FL_r(PP_nVar) ! Rotated left flux
-    real :: FR_r(PP_nVar) ! Rotated right flux
-    real :: lambdamax
-    !--------------------------------------------------
-    
-    UL_r = RotateState(UL,nv,t1,t2)
-    UR_r = RotateState(UR,nv,t1,t2)
-    
-    lambdamax = MAX(ABS(UL_r(2)/UL_r(1)),ABS(UR_r(2)/UR_r(1))) + SQRT(MAX(SoundSpeed2(UL_r),SoundSpeed2(UR_r)) )
-    
-    call EvalOneEulerFlux1D(UL_r, FL_r)
-    call EvalOneEulerFlux1D(UR_r, FR_r)
-    
-    Ubar = 0.5*( UL_r + UR_r ) - (0.5/(lambdamax)) * (FR_r-FL_r)
-    
-    call RotateFluxBack(Ubar,nv,t1,t2)
-  end function GetBarStates
-!===================================================================================================================================
-!> Takes corr_loc U and Ut, and outputs the corrected U and Ut, and alpha_loc for visu
-!===================================================================================================================================
-#if LOCAL_ALPHA
-  pure subroutine Perform_LocalCorrection(corr_loc,U,Ut,alpha_loc,dt,sdt,eID)
-    use MOD_NFVSE_Vars, only: alpha_max, sWGP, ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
-    use MOD_Mesh_Vars , only: sJ
-    implicit none
-    !-arguments--------------------------------------
-    real, intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real, intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real, intent(inout) :: corr_loc  (0:PP_N,0:PP_N,0:PP_N) !
-    real, intent(inout) :: alpha_loc (0:PP_N,0:PP_N,0:PP_N) ! Alpha for visualization
-    real, intent(in)    :: dt,sdt                          ! time step and inverse
-    integer, intent(in) :: eID
-    !-local-variables--------------------------------
-    real :: alphacont_loc ! A container
-    real :: my_corr(PP_nVar)
-    integer :: i,j,k
-    !------------------------------------------------
-    
-    ! Change the alpha for output
-    do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-      alphacont_loc    = alpha_loc(i,j,k)
-      alpha_loc(i,j,k) = alpha_loc(i,j,k) + corr_loc(i,j,k)* sdt
-      if (alpha_loc(i,j,k) > alpha_max) then
-        alpha_loc(i,j,k) = alpha_max
-        corr_loc (i,j,k) = (alpha_max - alphacont_loc ) * dt
-      end if
-    end do       ; end do       ; enddo
-    
-    ! Correct!
-    do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-      ! xi correction
-      ! -------------
-      ! left
-      if (i /= 0) then
-        my_corr=-max(corr_loc(i-1,j  ,k  ),corr_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr 
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-      ! right
-      if (i /= PP_N) then
-        my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr 
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-      ! eta correction
-      ! --------------
-      ! left
-      if (j /= 0) then
-        my_corr=-max(corr_loc(i  ,j-1,k  ),corr_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-      ! right
-      if (j /= PP_N) then
-        my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-      ! zeta correction
-      ! ---------------
-      ! left
-      if (k /= 0) then
-        my_corr=-max(corr_loc(i  ,j  ,k-1),corr_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-      ! right
-      if (k /= PP_N) then
-        my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-        U (:,i,j,k) = U (:,i,j,k) + my_corr
-        Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
-      end if
-    end do       ; end do       ; enddo
-  end subroutine Perform_LocalCorrection
-#endif /*LOCAL_ALPHA*/
 
 #endif /*NFVSE_CORR*/
 !===================================================================================================================================
@@ -2995,9 +1891,7 @@ contains
 !===================================================================================================================================
   subroutine FinalizeNFVSE()
     use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, Compute_FVFluxes, alpha, alpha_Master, alpha_Slave
-#if NFVSE_CORR
-    use MOD_NFVSE_Vars, only: FFV_m_FDG, alpha_old, Usafe, EntPrev
-#endif /*NFVSE_CORR*/
+    use MOD_IDP       , only: Finalize_IDP
     use MOD_NFVSE_Vars, only: U_ext, sdxR,sdxL,rR,rL
 #if MPI
     use MOD_NFVSE_Vars, only: MPIRequest_alpha
@@ -3014,10 +1908,7 @@ contains
     SDEALLOCATE (MPIRequest_Umaster)
 #endif /*MPI*/
 #if NFVSE_CORR
-    SDEALLOCATE (FFV_m_FDG)
-    SDEALLOCATE (alpha_old)
-    SDEALLOCATE (Usafe)
-    SDEALLOCATE (EntPrev)
+    call Finalize_IDP()
 #endif /*NFVSE_CORR*/
     
     Compute_FVFluxes => null()
