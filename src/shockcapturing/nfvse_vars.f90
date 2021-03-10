@@ -26,7 +26,7 @@ module MOD_NFVSE_Vars
   public :: MPIRequest_alpha
 #endif /*MPI*/
 #if NFVSE_CORR
-  public :: alpha_old, PositCorrFactor, FVCorrMethod, Apply_NFVSE_Correction
+  public :: alpha_old, PositCorrFactor
   public :: maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
@@ -107,13 +107,8 @@ module MOD_NFVSE_Vars
 ! For the positivity limiter
 ! --------------------------
 #if NFVSE_CORR
-  
-  
-  !
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
   real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
-  integer           :: FVCorrMethod
-  procedure(i_sub_Correction), pointer :: Apply_NFVSE_Correction => null()
   real              :: maximum_alpha     ! Maximum alpha for the analyze routines
   real              :: amount_alpha
   integer           :: amount_alpha_steps
@@ -164,15 +159,6 @@ module MOD_NFVSE_Vars
       type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
       integer                                        , intent(in)    :: iElem
     end subroutine i_sub_Compute_FVFluxes
-#if NFVSE_CORR
-    subroutine i_sub_Correction(U,Ut,dt)
-      use MOD_PreProc
-      use MOD_Mesh_Vars          , only: nElems
-      real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-      real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-      real,intent(in)    :: dt     
-    end subroutine i_sub_Correction
-#endif /*NFVSE_CORR*/
   end interface
 !===================================================================================================================================
   contains

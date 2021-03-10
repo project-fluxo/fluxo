@@ -53,9 +53,6 @@ module MOD_NFVSE
   public :: DefineParametersNFVSE
   public :: InitNFVSEAfterAdaptation
   public :: CalcBlendingCoefficient
-#if NFVSE_CORR
-  public :: Apply_NFVSE_Correction
-#endif /*NFVSE_CORR*/
   
 contains
 !===================================================================================================================================
@@ -63,7 +60,9 @@ contains
 !===================================================================================================================================
   subroutine DefineParametersNFVSE()
     use MOD_ReadInTools,  only: prms
+#if NFVSE_CORR
     use MOD_IDP        ,  only: DefineParameters_IDP
+#endif /*NFVSE_CORR*/
     implicit none
     
     call prms%CreateIntOption     (   "SubFVMethod",  " Specifies subcell Finite-Volume method to be used:\n"//&
@@ -96,11 +95,6 @@ contains
                                                        ,"1")
 
 #if NFVSE_CORR
-    call prms%CreateIntOption(       "FVCorrMethod",  " Method for the FV correction:\n"//&
-                                              "   1: Positivity limiter\n"//&
-                                              "   2: Element-wise IDP."&
-                                             ,"1")
-    
     call DefineParameters_IDP()
 #endif /*NFVSE_CORR*/
    
@@ -244,19 +238,6 @@ contains
     
 #if NFVSE_CORR
     call Init_IDP()
-    FVCorrMethod     = GETINT    ('FVCorrMethod','1')
-    select case(FVCorrMethod)
-      case(1)
-        Apply_NFVSE_Correction => Apply_NFVSE_Correction_posit
-        SWRITE(UNIT_stdOut,'(A,ES16.7)') '    *NFVSE correction activated with PositCorrFactor=', PositCorrFactor
-      case(2)
-        Apply_NFVSE_Correction => Apply_IDP
-        SWRITE(UNIT_stdOut,'(A)') '    *NFVSE IDP correction activated'
-        
-      case default
-        SWRITE(*,*) 'ERROR :: FVCorrMethod not defined.'
-        stop
-    end select
 #endif /*NFVSE_CORR*/
     
 #if MPI
@@ -496,7 +477,7 @@ contains
 #if NFVSE_CORR
     use MOD_IDP_Vars           , only: FFV_m_FDG
 #if LOCAL_ALPHA
-    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV!, ftilde_DG, gtilde_DG, htilde_DG
+    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV
 #endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
@@ -1685,213 +1666,13 @@ contains
     
   end subroutine CalcBlendingCoefficient
 !===================================================================================================================================
-!> Corrects U and Ut after the Runge-Kutta stage
-!===================================================================================================================================
-#if NFVSE_CORR
-  subroutine Apply_NFVSE_Correction_posit(U,Ut,dt)
-    use MOD_NFVSE_Vars         , only: alpha, PositCorrFactor, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
-    use MOD_IDP_Vars           , only: FFV_m_FDG, IDPMaxIter
-    use MOD_Mesh_Vars          , only: nElems, offsetElem
-    use MOD_Basis              , only: ALMOSTEQUAL
-    use MOD_Equation_Vars      , only: Get_Pressure, Get_dpdU
-    USE MOD_Globals
-    implicit none
-    !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
-    !-local-variables----------------------------------------
-    real, parameter :: eps = 1.e-14
-    real, parameter :: NEWTON_ABSTOL  = 1.e-8
-    real, parameter :: alpha_maxPosit = 1.0
-    real    :: Usafe        (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
-    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
-    real    :: pres
-    real    :: corr, corr1
-    real    :: p_safe(0:PP_N,0:PP_N,0:PP_N) ! pressure obtained with alpha_maxPosit for an element
-    real    :: alphadiff
-    real    :: alphacont  !container for alpha
-    real    :: sdt
-    real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
-    real    :: dp_dalpha
-    integer :: eID
-    integer :: i,j,k
-    integer :: iter
-    logical :: notInIter
-    !--------------------------------------------------------
-    
-!   Some definitions
-!   ****************
-    alpha_old = alpha 
-    sdt = 1./dt
-    
-!   Iterate over the elements
-!   *************************
-    do eID=1, nElems
-      
-!     ----------------------------------
-!     Check if it makes sense correcting
-!     ----------------------------------
-      alphadiff = alpha(eID) - alpha_maxPosit
-      if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
-      
-!     ----------------------------------------------------------
-!     Get Usafe for each point of the element and check validity
-!     ----------------------------------------------------------
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        
-        ! Compute Usafe
-        Usafe(:,i,j,k) = U(:,i,j,k,eID) + dt * FFV_m_FDG(:,i,j,k,eID) * (1. - alpha(eID))
-        
-        ! Check if this is a valid state
-        call Get_Pressure(Usafe(:,i,j,k),p_safe(i,j,k))
-        if (p_safe(i,j,k) < 0.) then
-          print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k)
-          stop
-        end if
-        if (Usafe(1,i,j,k) < 0.) then
-          print*, 'ERROR: safe dens not safe el=', eID+offsetElem, Usafe(1,i,j,k)
-          stop
-        end if
-      end do       ; end do       ; end do ! i,j,k
-      
-!     ---------------
-!     Correct density
-!     ---------------
-      
-      corr = -eps ! Safe initialization
-        
-!     Compute correction factors
-!     --------------------------
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        
-        ! Density correction
-        a = (PositCorrFactor * Usafe(1,i,j,k) - U(1,i,j,k,eID))
-        if (a > 0.) then ! This DOF needs a correction
-          if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
-          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
-          corr = max(corr,corr1)
-        end if
-        
-      end do       ; end do       ; end do ! i,j,k
-        
-      
-!       Do the correction if needed
-!       ---------------------------
-      if ( corr > 0. ) then
-        
-        ! Change the alpha for output
-        alphacont  = alpha(eID)
-        alpha(eID) = alpha(eID) + corr * sdt
-        
-        ! Change inconsistent alphas
-        if (alpha(eID) > alpha_maxPosit) then
-          alpha(eID) = alpha_maxPosit
-          corr = (alpha_maxPosit - alphacont ) * dt
-        end if
-        
-        ! Correct!
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          ! Correct U
-          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-          ! Correct Ut
-          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-        end do       ; end do       ; enddo
-          
-      end if
-      
-!     ---------------
-!     Correct pressure
-!     ---------------
-      
-      corr = -eps ! Safe initialization
-      
-!     Compute correction factors
-!     --------------------------
-      notInIter = .FALSE.
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        ! Current pressure and goal
-        call Get_Pressure(U(:,i,j,k,eID),pres)
-        p_goal = PositCorrFactor * p_safe(i,j,k)
-        ap = (p_goal - pres)
-        
-        if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
-        
-        ! Newton initialization:
-        U_curr = U(:,i,j,k,eID)
-        corr1 = 0.0
-        
-        ! Perform Newton iterations
-        NewtonLoop: do iter=1, IDPMaxIter
-          ! Evaluate dp/d(alpha)
-          call Get_dpdU(U_curr,dpdU)
-          dp_dalpha = dot_product(dpdU,FFV_m_FDG(:,i,j,k,eID))
-          if ( abs(dp_dalpha)<eps ) exit NewtonLoop ! Nothing to do here!
-          
-          ! Update correction
-          corr1 = corr1 + ap / dp_dalpha
-          
-          ! Get new U and pressure
-          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
-          call Get_Pressure(U_curr,pres)
-          
-          ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
-          ap = p_goal-pres
-          if ( (ap <= epsilon(p_goal)) .and. (ap > -NEWTON_ABSTOL*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
-        end do NewtonLoop ! iter
-        
-        if (iter > IDPMaxIter) notInIter =.TRUE.
-        
-        corr = max(corr,corr1) ! Compute the element-wise maximum correction
-      
-      end do       ; end do       ; enddo !i,j,k
-      
-      if (notInIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
-      end if
-      
-!       Do the correction if needed
-!       ---------------------------
-      if ( corr > 0. ) then
-        
-        ! Change the alpha for output
-        alphacont  = alpha(eID)
-        alpha(eID) = alpha(eID) + corr * sdt
-        
-        ! Change inconsistent alphas
-        if (alpha(eID) > alpha_maxPosit) then
-          alpha(eID) = alpha_maxPosit
-          corr = (alpha_maxPosit - alphacont ) * dt
-        end if
-        
-        ! Correct!
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          ! Correct U
-          U (:,i,j,k,eID) = U (:,i,j,k,eID) + corr * FFV_m_FDG(:,i,j,k,eID)
-          ! Correct Ut
-          Ut(:,i,j,k,eID) = Ut(:,i,j,k,eID) + (alpha(eID)-alphacont) * FFV_m_FDG(:,i,j,k,eID)
-        end do       ; end do       ; enddo
-          
-      end if
-      
-    end do !eID
-    
-    maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
-    
-    amount_alpha = amount_alpha*amount_alpha_steps + sum(alpha-alpha_old)/size(alpha)
-    amount_alpha_steps = amount_alpha_steps+1
-    amount_alpha = amount_alpha/amount_alpha_steps
-    
-  end subroutine Apply_NFVSE_Correction_posit
-
-#endif /*NFVSE_CORR*/
-!===================================================================================================================================
 !> Finalizes the NFVSE module
 !===================================================================================================================================
   subroutine FinalizeNFVSE()
     use MOD_NFVSE_Vars, only: SubCellMetrics, sWGP, Compute_FVFluxes, alpha, alpha_Master, alpha_Slave
+#if NFVSE_CORR
     use MOD_IDP       , only: Finalize_IDP
+#endif /*NFVSE_CORR*/
     use MOD_NFVSE_Vars, only: U_ext, sdxR,sdxL,rR,rL
 #if MPI
     use MOD_NFVSE_Vars, only: MPIRequest_alpha

@@ -11,13 +11,13 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 !
-! This module includes IDP correction routines
+! This module includes IDP correction routines that rely on the native LGL subcell FV discretization
 !
 !==================================================================================================================================
-#if NFVSE_CORR
 #include "defines.h"
 #define barStates 1
 module MOD_IDP
+#if NFVSE_CORR
   implicit none
   
   private
@@ -143,6 +143,7 @@ contains
     ! Usafe = U_FV (with external DOFs)
     if (IDPneedsUsafe) then
       allocate ( Usafe      (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+      allocate ( p_safe             ( 0:PP_N  , 0:PP_N  , 0:PP_N  ,nElems) )
     end if
     
     ! Solution in the previous step (with external DOFs)
@@ -252,7 +253,7 @@ contains
     use MOD_Analyze_Vars, only: wGPVol, Vol
     use MOD_Mesh_Vars   , only: nElems, sJ
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPSemiDiscEnt
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPSemiDiscEnt, IDPPositivity
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -279,6 +280,7 @@ contains
     if (IDPDensityTVD)  call IDP_LimitDensityTVD (U,Ut,dt,sdt)
     if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U,Ut,dt,sdt)
     if (IDPMathEntropy) call IDP_LimitMathEntropy(U,Ut,dt,sdt)
+    if (IDPPositivity)  call IDP_LimitPositivity (U,Ut,dt,sdt)
     
 !   Update variables for the analyze routines
 !   -----------------------------------------
@@ -312,7 +314,7 @@ contains
     use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: Uprev_ext,Uprev
-    use MOD_IDP_Vars      , only: Usafe, Usafe_ext
+    use MOD_IDP_Vars      , only: Usafe, p_safe
 #if barStates
     use MOD_IDP_Vars      , only: IDPneedsUbar
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
@@ -339,7 +341,6 @@ contains
     !-local-variables------------------------------------------------------
     integer :: i,j,k
     integer :: eID, sideID
-    real    :: p_safe
     !----------------------------------------------------------------------
     
 !   Get the previous solution in place if needed!
@@ -444,9 +445,9 @@ contains
           Usafe(:,i,j,k,eID) = U(:,i,j,k,eID) + dt * FFV_m_FDG(:,i,j,k,eID) * (1. - alpha(eID))
           
           ! Check if this is a valid state
-          call Get_Pressure(Usafe(:,i,j,k,eID),p_safe)
-          if (p_safe < 0.) then
-            print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe
+          call Get_Pressure(Usafe(:,i,j,k,eID),p_safe(i,j,k,eID))
+          if (p_safe(i,j,k,eID) < 0.) then
+            print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k,eID)
             stop
           end if
           if (Usafe(1,i,j,k,eID) < 0.) then
@@ -1158,6 +1159,159 @@ contains
     
   end subroutine IDP_LimitMathEntropy
 !===================================================================================================================================
+!> Density and pressure positivity limiter. As explained in:
+!> * Rueda-Ramírez, A. M., & Gassner, G. J. (2021). A Subcell Finite Volume Positivity-Preserving Limiter for DGSEM Discretizations of the Euler Equations. arXiv preprint arXiv:2102.06017.
+!>    ... But with the possibility to be used locally
+!===================================================================================================================================
+  subroutine IDP_LimitPositivity(U,Ut,dt,sdt)
+    use MOD_PreProc       , only: PP_N
+    use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
+    use MOD_Mesh_Vars     , only: nElems, offsetElem
+#if LOCAL_ALPHA
+    use MOD_NFVSE_Vars    , only: alpha_loc
+#endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars      , only: Usafe, p_safe
+    use MOD_IDP_Vars      , only: FFV_m_FDG
+    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL
+    use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
+    implicit none
+    !-arguments----------------------------------------------
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
+    real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    !-local-variables----------------------------------------
+    real    :: corr, corr1
+#if LOCAL_ALPHA
+    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+#endif /*LOCAL_ALPHA*/
+    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
+    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
+    real    :: pres
+    real    :: alphadiff
+    real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
+    real    :: dp_dalpha
+    integer :: eID
+    integer :: i,j,k, iter
+    logical :: NotInIter
+    real, parameter :: eps = 1.e-14           ! Very small value
+    !--------------------------------------------------------
+    
+    do eID=1, nElems
+      
+!     ----------------------------------
+!     Check if it makes sense correcting
+!     ----------------------------------
+      alphadiff = alpha(eID) - alpha_maxIDP
+      if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
+      
+!     ---------------
+!     Correct density
+!     ---------------
+      
+      corr = -epsilon(1.0) ! Safe initialization
+#if LOCAL_ALPHA
+      corr_loc = 0.0
+#endif /*LOCAL_ALPHA*/
+        
+!     Compute correction factors
+!     --------------------------
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        
+        ! Density correction
+        a = (PositCorrFactor * Usafe(1,i,j,k,eID) - U(1,i,j,k,eID))
+        if (a > 0.) then ! This DOF needs a correction
+          if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
+          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
+#if LOCAL_ALPHA
+          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+#endif /*LOCAL_ALPHA*/
+          corr = max(corr,corr1)
+        end if
+        
+      end do       ; end do       ; end do ! i,j,k
+        
+      
+!       Do the correction if needed
+!       ---------------------------
+      if ( corr > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+#if LOCAL_ALPHA
+                                                              corr_loc,alpha_loc(:,:,:,eID), &
+#endif /*LOCAL_ALPHA*/
+                                                              dt,sdt,eID)
+      end if
+      
+!     ---------------
+!     Correct pressure
+!     ---------------
+      
+      corr = -epsilon(1.0) ! Safe initialization
+#if LOCAL_ALPHA
+      corr_loc = 0.0
+#endif /*LOCAL_ALPHA*/
+      
+!     Compute correction factors
+!     --------------------------
+      notInIter = .FALSE.
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        ! Current pressure and goal
+        call Get_Pressure(U(:,i,j,k,eID),pres)
+        p_goal = PositCorrFactor * p_safe(i,j,k,eID)
+        ap = (p_goal - pres)
+        
+        if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
+        
+        ! Newton initialization:
+        U_curr = U(:,i,j,k,eID)
+        corr1 = 0.0
+        
+        ! Perform Newton iterations
+        NewtonLoop: do iter=1, IDPMaxIter
+          ! Evaluate dp/d(alpha)
+          call Get_dpdU(U_curr,dpdU)
+          dp_dalpha = dot_product(dpdU,FFV_m_FDG(:,i,j,k,eID))
+          if ( abs(dp_dalpha)<eps ) exit NewtonLoop ! Nothing to do here!
+          
+          ! Update correction
+          corr1 = corr1 + ap / dp_dalpha
+          
+          ! Get new U and pressure
+          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
+          call Get_Pressure(U_curr,pres)
+          
+          ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
+          ap = p_goal-pres
+          if ( (ap <= epsilon(p_goal)) .and. (ap > -NEWTON_ABSTOL*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
+        end do NewtonLoop ! iter
+        
+        if (iter > IDPMaxIter) notInIter =.TRUE.
+        
+#if LOCAL_ALPHA
+        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+#endif /*LOCAL_ALPHA*/
+        corr = max(corr,corr1) ! Compute the element-wise maximum correction
+      
+      end do       ; end do       ; enddo !i,j,k
+      
+      if (notInIter) then
+        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+      end if
+      
+!       Do the correction if needed
+!       ---------------------------
+      if ( corr > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+#if LOCAL_ALPHA
+                                                              corr_loc,alpha_loc(:,:,:,eID), &
+#endif /*LOCAL_ALPHA*/
+                                                              dt,sdt,eID)
+      end if
+      
+    end do !eID
+    
+  end subroutine IDP_LimitPositivity
+!===================================================================================================================================
 !> Takes corr/corr_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
 !===================================================================================================================================
   pure subroutine PerformCorrection(U,Ut,corr    ,alpha    , &
@@ -1312,6 +1466,7 @@ contains
     SDEALLOCATE (FFV_m_FDG)
     
     SDEALLOCATE (Usafe)
+    SDEALLOCATE (p_safe)
     SDEALLOCATE (UPrev)
     
     SDEALLOCATE (EntPrev)
@@ -1340,6 +1495,6 @@ contains
 #endif /*LOCAL_ALPHA*/
     
   end subroutine Finalize_IDP
-  
+#endif /*NFVSE_CORR*/  
 end module MOD_IDP
-#endif /*NFVSE_CORR*/
+

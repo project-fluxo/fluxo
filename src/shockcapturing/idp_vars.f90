@@ -36,6 +36,7 @@ module MOD_IDP_Vars
   real,allocatable    :: Uprev_ext     (:,:,:,:,:)
   
   real,allocatable    :: Usafe         (:,:,:,:,:)
+  real,allocatable    :: p_safe          (:,:,:,:)
   real,allocatable    :: Usafe_ext     (:,:,:,:,:)
   
   real,allocatable    :: Flux_ext      (:,:,:,:,:)

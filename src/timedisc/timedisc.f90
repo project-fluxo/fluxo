@@ -430,7 +430,7 @@ USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
 #if NFVSE_CORR
-use MOD_NFVSE                 , only: Apply_NFVSE_Correction
+use MOD_IDP                 , only: Apply_IDP
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
@@ -455,7 +455,7 @@ CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
 #if NFVSE_CORR
-call Apply_NFVSE_Correction(U,Ut,b_dt(1))
+call Apply_IDP(U,Ut,b_dt(1))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
 CALL MakeSolutionPositive(U)
@@ -469,7 +469,7 @@ DO iStage=2,nRKStages
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,b_dt(iStage))
+  call Apply_IDP(U,Ut,b_dt(iStage))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -556,7 +556,7 @@ subroutine TimeStepBySSPRK2(t)
   use MOD_MESH_Vars    , only: nElems
   use MOD_DG           , only: DGTimeDerivative
 #if NFVSE_CORR
-  use MOD_NFVSE        , only: Apply_NFVSE_Correction
+  use MOD_IDP          , only: Apply_IDP
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
 USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
@@ -581,7 +581,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   CALL DGTimeDerivative(tStage) ! Computes Ut
   U = U + Ut*b_dt(1)
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,b_dt(1))
+  call Apply_IDP(U,Ut,b_dt(1))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -595,7 +595,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
     U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
     
 #if NFVSE_CORR
-    call Apply_NFVSE_Correction(U,Ut,b_dt(iStage))
+    call Apply_IDP(U,Ut,b_dt(iStage))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -617,7 +617,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
   
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,b_dt(nRKStages))
+  call Apply_IDP(U,Ut,b_dt(nRKStages))
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -635,7 +635,7 @@ subroutine TimeStepByShuSSPRK(t)
   use MOD_MESH_Vars    , only: nElems
   use MOD_DG           , only: DGTimeDerivative
 #if NFVSE_CORR
-  use MOD_NFVSE        , only: Apply_NFVSE_Correction
+  use MOD_IDP          , only: Apply_IDP
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
@@ -665,7 +665,7 @@ subroutine TimeStepByShuSSPRK(t)
     
   ! Correct the solution if needed
 #if NFVSE_CORR
-  call Apply_NFVSE_Correction(U,Ut,dt)
+  call Apply_IDP(U,Ut,dt)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -685,7 +685,7 @@ subroutine TimeStepByShuSSPRK(t)
     
     ! Correct the solution if needed
 #if NFVSE_CORR
-    call Apply_NFVSE_Correction(U,Ut,dt)
+    call Apply_IDP(U,Ut,dt)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
     CALL MakeSolutionPositive(U)
