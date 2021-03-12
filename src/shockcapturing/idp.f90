@@ -294,9 +294,9 @@ contains
         curr_amount_alpha = curr_amount_alpha + (alpha_loc(i,j,k,eID)-alpha_old(eID))*wGPVol(i,j,k)/sJ(i,j,k,eID)
       end do       ; end do       ; end do
     end do
-    amount_alpha = amount_alpha + curr_amount_alpha/Vol
+    amount_alpha = amount_alpha + curr_amount_alpha
 #else
-    amount_alpha = amount_alpha + sum(alpha-alpha_old)/size(alpha)
+    amount_alpha = amount_alpha + sum(alpha-alpha_old)
 #endif /*LOCAL_ALPHA*/
     amount_alpha_steps = amount_alpha_steps+1
     amount_alpha = amount_alpha/amount_alpha_steps

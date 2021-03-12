@@ -244,7 +244,6 @@ contains
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
     if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. IDPDensityTVD) then
-      print*, 'alloc Umaster'
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
