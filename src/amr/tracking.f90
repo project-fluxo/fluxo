@@ -56,7 +56,7 @@ subroutine InitialAMRRefinement()
         call InitData()
       end do
     
-    case(1) ! Refine any element containing a node in the spherewith radius r=IniHalfwidthAMR to the MaxLevel
+    case(1) ! Refine any element containing a node in the sphere with radius r=IniHalfwidthAMR to the MaxLevel
       do iter = 1,MaxLevel
         allocate (ElemToRefineAndCoarse(1:nElems))!
         

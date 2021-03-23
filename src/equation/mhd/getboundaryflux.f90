@@ -297,30 +297,9 @@ DO iBC=1,nBCs
       END DO !iSide=1,nBCloc
     END IF !BCState=0
 
-  CASE(3) ! outflow
-      DO iSide=1,nBCLoc
-        SideID=BCSideID(iBC,iSide)
-
-!        DO q=0,PP_N
-!          DO p=0,PP_N
-!            ! get pressure from Exactfunction
-!            U_loc = U_master(:,p,q,SideID)
-!            CALL ConsToPrim(PrimL,U_loc)
-!            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
-!            PrimL(5) = U_Face_loc(5,p,q)
-!            ! U_loc contains now the state with pressure from outside (Exactfunc)
-!            CALL PrimToCons(PrimL,U_loc)
-!            ! transform state into normal system
-!            U_Face_loc(1,p,q)= U_loc(1)
-!            U_Face_loc(5,p,q)= U_loc(5)
-!            U_Face_loc(2,p,q)= SUM(U_loc(2:4)*NormVec(:,p,q,SideID))
-!            U_Face_loc(3,p,q)= SUM(U_loc(2:4)*TangVec1(:,p,q,SideID))
-!            U_Face_loc(4,p,q)= SUM(U_loc(2:4)*TangVec2(:,p,q,SideID))
-!            U_Face_loc(6,p,q)= SUM(U_loc(6:8)*NormVec(:,p,q,SideID))
-!            U_Face_loc(7,p,q)= SUM(U_loc(6:8)*TangVec1(:,p,q,SideID))  
-!            U_Face_loc(8,p,q)= SUM(U_loc(6:8)*TangVec2(:,p,q,SideID))
-!        END DO ! p
-!      END DO ! q 
+  CASE(3) ! Supersonic/superalfvénic outflow with internal solution
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
 
       CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
 #if PARABOLIC
@@ -330,11 +309,11 @@ DO iBC=1,nBCs
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #if NONCONS
-        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
+      CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #endif
  
-   END DO !iSide=1,nBCLoc
+    END DO !iSide=1,nBCLoc
 
 
   
