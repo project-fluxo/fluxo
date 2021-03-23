@@ -964,5 +964,21 @@ def job_definition():
                        **run_opt_fsp_p4est,
                       }
          }
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_nopara_Zhang-Shu_posit']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','positivity','Zhang-Shu'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_POSITIVITYPRES"   :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf,
+                       **run_opt_shock_posit,
+                      }
+         }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    return jobs
