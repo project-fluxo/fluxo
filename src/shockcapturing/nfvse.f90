@@ -1043,14 +1043,6 @@ contains
       real :: Dmat (PP_nVar)
       real :: Rmat (PP_nVar,PP_nVar)
       real :: RmatT(PP_nVar,PP_nVar)
-      ! for the continuous (RELU) switch
-      !real :: alpha
-!#      ! For second variant of fix
-!#      real :: Dmat_r (PP_nVar)
-!#      real :: Rmat_r (PP_nVar,PP_nVar)
-!#      real :: RmatT_r(PP_nVar,PP_nVar)
-!#      real :: RT_Dv2 (PP_nVar), RT_Dv2_r(PP_nVar)
-!#      real :: Fstar_r(PP_nVar)
       !---------------------------------------------------------------------
       
       ! Loop over the face and get the ES flux
@@ -1084,38 +1076,6 @@ contains
         else  ! Reconstructed is ES
           F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv_r)
         end if
-        ! Continuous switch
-!        alpha = minval(RT_Vjump*RT_Vjump_r)
-!        if (alpha <= 0.0) then
-!          alpha = 0.0
-!        elseif(alpha <= 1000.0*epsilon(1.0)) then
-!          alpha = alpha*0.001/epsilon(1.0)
-!        else
-!          alpha = 1. !exp(-epsilon(1.0)/(alpha))
-!        end if
-!        Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix, alpha*RT_Vjump_r + (1.-alpha)*RT_Vjump  ))
-        
-!#        ! Check sign condition and compute flux
-!#        ! Second variant: Use the dissipation matrices computed with the reconstructed states
-!#        !     *This does not seem to work very well (the method falls to first order almost always!!)
-!#        ! ***********************************************************************************
-        
-!#        ! Get dissipation matrices for reconstructed state
-!#        call RiemannVolFluxAndDissipMatrices(U_L_r,U_R_r,Fstar_r,Dmat_r,Rmat_r)
-!#        RmatT_r = TRANSPOSE(Rmat_r)
-        
-!#        ! Scale entropy jump with the right-eigV mat
-!#        RT_Dv2   = matmul(RmatT_r,RT_Dv)
-!#        RT_Dv2_r = matmul(RmatT_r,RT_Dv_r)
-        
-!#        ! Discrete switch    
-!#        if ( any(RT_Dv2*RT_Dv2_r < -1.e-10) ) then ! Reconstructed is not ES
-!#          ! Now we need to compute the scaled entropy vars jump with the nodal matrix
-!#          RT_Dv    = matmul(RmatT,RT_Dv)
-!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv)
-!#        else  ! Reconstructed is ES
-!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat_r,Dmat_r*RT_Dv2_r)
-!#        end if
         
         ! Rotate flux back to 3D frame
         ! ----------------------------
