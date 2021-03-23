@@ -12,8 +12,6 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
-! #include "amr_f.h"
-! #include "mpif.h"
 #if USE_AMR
 !==================================================================================================================================
 !> Contains control routines for AMR
@@ -85,31 +83,31 @@ SUBROUTINE DefineParametersAMR()
   character(len=255) :: IndicatorQuantities,fmt
   !==================================================================================================================================
   CALL prms%SetSection("AMR")
-  CALL prms%CreateLogicalOption( 'UseAMR',          "Use AMR for solution.",&
+  CALL prms%CreateLogicalOption( 'UseAMR',              " Use AMR?",&
                                                       '.FALSE.')
-  CALL prms%CreateStringOption('p4estFile', "(relative) path to p4ests connectivity file (mandatory).")
+  CALL prms%CreateStringOption('p4estFile',             " Path to p4est's connectivity file (mandatory).")
   
   write(fmt,'(A,I0,A)') '(',nIndVar,'A)'
   write(IndicatorQuantities,fmt) ('  * '//trim(IndicatorQuantityNames(i))//'\n', i=1, nIndVar)
 
   CALL prms%CreateStringOption("AMRIndicatorQuantity",  " Specifies the quantity to be used for the AMR indicator. One of the following:\n"//&
-                                                        trim(IndicatorQuantities)&
-                                             ,"DensityTimesPressure")
- CALL prms%CreateRealOption(  'RefineVal',       "The value to refine Element", "0")
- CALL prms%CreateRealOption(  'CoarseVal',       "The value to Coarse 8 Elements", "0")
+                                                          trim(IndicatorQuantities)&
+                                             ,                "DensityTimesPressure")
+ CALL prms%CreateRealOption(  'RefineVal',              " The value of the AMR indicator above which an element has to be subdivided (refinement)", "-1.0")
+ CALL prms%CreateRealOption(  'CoarseVal',              " The value of the AMR indicator below which elements can be merged (coarsening)", "-2.0")
  
- CALL prms%CreateIntOption(  'MinLevel',       "Minimum refinment level of the forest", "0")
- CALL prms%CreateIntOption(  'MaxLevel',       "Maximum refinemen level ", "0")
- CALL prms%CreateIntOption(  'nWriteDataAMR',     "Interval as multiple of nWriteData at which Mesh and p4est files"//&
-                                                  "(_mesh.h5 and .p4est) are written.",&
+ CALL prms%CreateIntOption(  'MinLevel',                " Minimum refinment level of the mesh with respect to base mesh", "0")
+ CALL prms%CreateIntOption(  'MaxLevel',                " Maximum refinemen level of the mesh with respect to base mesh", "0")
+ CALL prms%CreateIntOption(  'nWriteDataAMR',           " Interval as multiple of nWriteData at which Mesh and p4est files"//&
+                                                        " (_mesh.h5 and .p4est) are written.",&
+                                                              '1')
+ CALL prms%CreateIntOption(  'nDoAMR'           ,       " Time-step interval to call the AMR routines.",&
                                                   '1')
- CALL prms%CreateIntOption(  'nDoAMR'       ,     "Time-step interval to call the AMR routines.",&
-                                                  '1')
- CALL prms%CreateIntOption(  'InitialRefinement', "Initial refinement to be used "//&
-                                                  "  0: Use the custom indicator"//&
-                                                  "  1: Refine the elements in the sphere with r=IniHalfwidthAMR",&
+ CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used "//&
+                                                        "  0: Use the custom indicator"//&
+                                                        "  1: Refine the elements in the sphere with r=IniHalfwidthAMR",&
                                                   '0')
- CALL prms%CreateRealOption(   'IniHalfwidthAMR', " For InitialRefinement: Halfwidth","0.1")
+ CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR
 
 
@@ -170,6 +168,22 @@ SUBROUTINE InitAMR()
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
+    
+    ! Do some checks
+    if (MinLevel > MaxLevel) then
+      CALL CollectiveStop(__STAMP__,&
+          'AMR: MinLevel must be less than or equal to MaxLevel.')
+    end if
+    if (MinLevel < 0) then
+      CALL CollectiveStop(__STAMP__,&
+          'AMR: MinLevel must be >=0.')
+    end if
+    if (RefineVal < CoarseVal) then
+      CALL CollectiveStop(__STAMP__,&
+          'AMR: RefineVal must be greater than or equal to MaxLevel.')
+    end if
+    
+    ! Construct AMR indicator
     call AMR_Indicator % construct(AMRIndicatorQuantity,.TRUE.)
     
 #if MPI 
@@ -244,7 +258,6 @@ SUBROUTINE InitAMR_Connectivity()
    !----------------------------------------------------------------------------------------------------------------------------------
    ! LOCAL VARIABLES
    !==================================================================================================================================
-   ! MeshFile = GETSTR('MeshFile')
    
    CONN_OWNER=0;
     CALL InitMesh()
@@ -385,26 +398,19 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   DATAPtr = C_LOC(FortranData)
   
-
-  
   FortranData%nElems = GetNElems(p4est_ptr)
-  ! print *, "old nElems = ", nElemsOld ,"=>", FortranData%nElems
 
   ALLOCATE(ChangeElem(8,FortranData%nElems))
   FortranData%ChngElmPtr = C_LOC(ChangeElem)
   
   CALL FillElemsChanges(p4est_ptr, DATAPtr)
-
-
-  ! CALL C_F_POINTER(DataPtr, FortranData)
-  ! PRINT *, size(ChangeElem(1,:))
+  
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
     ALLOCATE(Elem_xGP_New(3      ,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
     ALLOCATE(U_New       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
     allocate(ElemWasCoarsened(FortranData%nElems) )
     ElemWasCoarsened = 0
     iElem=0;
-    !  DO iElem=1,FortranData%nElems
     DO 
       iElem=iElem+1;
       IF (iElem .GT. FortranData%nElems) EXIT
@@ -435,32 +441,26 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     END DO
       CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
       CALL MOVE_ALLOC(U_New, U)
-   ENDIF
-
-  !  doLBalance = doLBalance + 1
-  !  IF (doLBalance .EQ. 1) THEN
-  !     doLBalance = 0;
-      ! IF (doLBalance .EQ. 0) 
-        CALL LoadBalancingAMR(ElemWasCoarsened,new_nElems)
+  ENDIF
+   
+  CALL LoadBalancingAMR(ElemWasCoarsened,new_nElems)
 
 #if MPI 
-        
-                
-        call MPI_Reduce(new_nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
-        call MPI_Reduce(new_nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
-        call MPI_Reduce(new_nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
+  
+          
+  call MPI_Reduce(new_nElems, max_nElems, 1 , MPI_INT, MPI_MAX, 0, MPI_Comm_WORLD, i)
+  call MPI_Reduce(new_nElems, min_nElems, 1 , MPI_INT, MPI_MIN, 0, MPI_Comm_WORLD, i)
+  call MPI_Reduce(new_nElems, sum_nElems, 1 , MPI_INT, MPI_SUM, 0, MPI_Comm_WORLD, i)
 
 #endif  /*MPI*/        
-        IF (MPIRoot) THEN
-          WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", sum_nElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
-        ENDIF
-  !  ENDIF
+  IF (MPIRoot) THEN
+    WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", sum_nElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
+  ENDIF
 
-   CALL GetnNBProcs(p4est_ptr, DATAPtr)
+ CALL GetnNBProcs(p4est_ptr, DATAPtr)
 
 #if MPI 
-        
-IF (nProcessors .GT. 1) THEN
+  IF (nProcessors .GT. 1) THEN
     nNbProcs=FortranData%nNBProcs
     IF (ALLOCATED(NbProc)) THEN 
       SDEALLOCATE(NbProc); ALLOCATE(NbProc(1:nNbProcs))
@@ -709,13 +709,6 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
       ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
     ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
   
-    ! ALLOCATE(ElementToCalc(FortranData%nElems))
-  ! do j=1,FortranData%nElems
-  !   ElementToCalc(j)=j;
-  ! enddo
-
-
-
   CALL CalcMetrics((/0/))
   
   IF (PRESENT(ElemToRefineAndCoarse)) THEN
@@ -782,8 +775,7 @@ END SUBROUTINE RunAMR
         firstMPISide_MINE    = firstInnerSide      +nInnerSides
         firstMPISide_YOUR    = firstMPISide_MINE   +nMPISides_MINE
         firstMortarMPISide   = firstMPISide_YOUR   +nMPISides_YOUR
-        ! print *, "nMPISides_MINE = ", nMPISides_MINE
-        ! print *, "nMPISides_YOUR = ", nMPISides_YOUR
+        
         lastBCSide           = firstMortarInnerSide-1
         lastMortarInnerSide  = firstInnerSide    -1
         lastInnerSide        = firstMPISide_MINE -1
@@ -1003,8 +995,6 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
   
   CALL p4est_ResetElementNumber(P4EST_PTR)
   
-  ! CALL RunAMR()
-  
 END SUBROUTINE LoadBalancingAMR
 !============================================================================================================================
 !> Save mesh to HDF5 file
@@ -1046,9 +1036,6 @@ SUBROUTINE SaveMesh(FileString)
   REAL,ALLOCATABLE               :: NodeCoordsTMP(:,:,:,:)
   REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:)
   integer                        :: NGeo_new
-
-  ! REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
-  ! CHARACTER(LEN=255)             :: MeshFile255
   !============================================================================================================================
   ! 
   
@@ -1061,7 +1048,6 @@ SUBROUTINE SaveMesh(FileString)
   IF(MPIRoot)THEN
     WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE MESH TO _MESH.H5 FILE: '
     WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileString)
-    ! GETTIME(StartT)
   END IF
 
   mpisize = nProcessors
@@ -1088,18 +1074,15 @@ SUBROUTINE SaveMesh(FileString)
 
   ElInfoF(3,:) = ElInfoF(3,:) + OffsetSideArrIndexMPI(Myrank)
   ElInfoF(4,:) = ElInfoF(4,:) + OffsetSideArrIndexMPI(Myrank)
-  ! IF(PP_nVar_Avg.GT.0)THEN
-  ! FileName=TRIM(TIMESTAMP(TRIM(ProjectName)//'_TimeAvg',OutputTime))//'.h5'
-! 1. Create Mesh file
+  
+  ! 1. Create Mesh file
   !Generate skeleton for the file with all relevant data on a single proc (MPIRoot)
 
   IF(MPIRoot)THEN
    ! Create file
    FileName=TRIM(FileString)//'.h5'
-  !  print *, "FileName = ", TRIM(FileName), FileName, TRIM(FileName)
    TypeString = FileName
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
-    ! CALL WriteHeader(TRIM(TypeString),File_ID)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
     CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=NGeo_new)
     CALL WriteAttribute(File_ID,'nElems',1,IntScalar=nGlobalElems)
@@ -1136,15 +1119,7 @@ SUBROUTINE SaveMesh(FileString)
     ! Close the filespace and the dataset
     CALL H5DCLOSE_F(Dset_id, iError)
     CALL H5SCLOSE_F(FileSpace, iError)  
-
-    ! CALL WriteAttribute(File_ID,'nNodes',1,IntScalar=5)
-  !   CALL GenerateFileSkeleton(TRIM(FileName),'TimeAvg',PP_nVar_Avg,PP_N,VarNamesAvg,MeshFileName,OutputTime,FutureTime)
-  !   CALL OpenDataFile(FileName,create=.FALSE.,single=.TRUE.,readOnly=.FALSE.)
-  !   CALL WriteAttribute(File_ID,'AvgTime',1,RealScalar=dtAvg)
-
-
-  ! ALLOCATE(BoundaryName(nBCs))
-! ALLOCATE(BoundaryType(nBCs,3))
+  
   ALLOCATE(BCType(4,nBCs))
 
   ALLOCATE(BCNames(nBCs))
@@ -1162,16 +1137,9 @@ SUBROUTINE SaveMesh(FileString)
     CALL H5DCLOSE_F(Dset_id, iError)
     CALL H5SCLOSE_F(FileSpace, iError)  
 
-! SWRITE(UNIT_StdOut,'(132("."))')
-! SWRITE(Unit_StdOut,'(A,A16,A20,A10,A10,A10)')'BOUNDARY CONDITIONS','|','Name','Type','State','Alpha'
-! DO iBC=1,nBCs
-!   SWRITE(*,'(A,A33,A20,I10,I10,I10)')' |','|',TRIM(BoundaryName(iBC)),BoundaryType(iBC,:)
-! END DO
-! SWRITE(UNIT_StdOut,'(132("."))')
   CALL WriteArray('BCType',2,(/4, nBCs/),(/4, nBCs/),&
                                                 (/0, 0/),collective = .FALSE.,IntArray =BCType)
 
-  ! CALL ReadArray('BCNames',1,(/nBCs/),Offset,1,StrArray=BCNames)  ! Type is a dummy type only
   CALL WriteArray('BCNames',1,(/nBCs/),(/nBCs/),&
                                                 (/0/),collective = .FALSE.,StrArray =BCNames)
                                                 
@@ -1182,17 +1150,6 @@ SUBROUTINE SaveMesh(FileString)
 #if MPI
     CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
-! 2. Save File
-  ! Reopen file and write ElemInfo
-  ! CALL OpenDataFile(TRIM(FileString),create=.FALSE.,single=.FALSE.,readOnly=.FALSE.)
-  ! ! IF(PRESENT(RealArray)) CALL WriteArray(DataSetName,rank,nValGlobal,nVal,&
-  !                                             !  offset,collective,RealArray=RealArray)
-  ! ! IF(PRESENT(IntArray)) 
-  !  CALL WriteArray('ElemInfo',  2,                (/6,nGlobalElems/),&
-  !                                               (/6,nElems/),&
-  !                                               (/0, offsetElem/),&
-  !                                              .TRUE.,IntArray =ElInfoF)
-  ! CALL CloseDataFile()
 
 DO iElem = 1, nElems
   ElInfoF(5,iElem) = (iElem + offsetElem - 1)*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)
@@ -1226,25 +1183,14 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
 ALLOCATE(NodeCoords(3,nElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)))
 ALLOCATE(NodeCoordsTMP(3,0:NGeo_new,0:NGeo_new,0:NGeo_new))
 ALLOCATE(Vdm_FromNodeType_toNVisu(0:NGeo_new,0:PP_N))
-! ALLOCATE(Vdm_GLN_EQN(0:PP_N,0:PP_N))
-! ALLOCATE(Vdm_N_GLN(0:PP_N,0:PP_N))
-! ALLOCATE(XGL_N(3,  0:PP_N,0:PP_N,0:PP_N))          
-    
-    ! 1.a) NodeCoords: EQUI Ngeo to GLNgeo and GLN
-! CALL GetVandermonde(    PP_N   ,NodeTypeGL , PP_N    ,NodeTypeVISU, Vdm_GLN_EQN , modal=.FALSE.)
-
-! CALL GetVandermonde(    PP_N   ,NodeType , PP_N    ,NodeTypeGL, Vdm_N_GLN , modal=.FALSE.)
 
 CALL GetVandermonde(PP_N, NodeType, NGeo_new,      NodeTypeVISU, Vdm_FromNodeType_toNVisu)
     
 
 index = 1
-! print *, "index = ", index
 DO iElem=1,nElems
  
-  CALL ChangeBasis3D(3,PP_N,NGeo_new,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N)! Octant%Elems(1)%ElemID))
-  ! CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_EQN,XGL_N, NodeCoordsTMP(:,:,:,:))
+  CALL ChangeBasis3D(3,PP_N,NGeo_new,Vdm_FromNodeType_toNVisu,Elem_xGP(:,:,:,:,iElem),NodeCoordsTMP(:,:,:,:))
   DO k=0,NGeo_new
     DO j=0,NGeo_new
       DO i=0,NGeo_new
@@ -1278,7 +1224,6 @@ SDEALLOCATE(Vdm_FromNodeType_toNVisu)
   NULLIFY(SiInfoF)
   NULLIFY(OffSideMPIF)
   NULLIFY(OffSideArrIndMPIF)
-  ! CALL EXIT()
 END SUBROUTINE SaveMesh
 
 !============================================================================================================================
@@ -1292,8 +1237,6 @@ use MOD_Indicators
 IMPLICIT NONE
 !============================================================================================================================
 ! Deallocate global variables, needs to go somewhere else later
-  !INTEGER A=0
-! returngit ..
 IF (.NOT. UseAMR) THEN
   RETURN;
 ENDIF

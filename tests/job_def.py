@@ -606,7 +606,7 @@ def job_definition():
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    # New test: Soft blast with shock capturing and AMR
    run_opt_p4est_SC={'runs/mhd/softBlast/p4est_SC':
-         {'tags': ['mhd','freestream','nonconforming','p4est','SC'] ,
+         {'tags': ['mhd','freestream','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
                                                     'to_be': [0.20843974245430472, 0.16163638839069047, 0.11036650636467360, 0.13146725568430423, 0.29599931757632236, 0.12065374311914598, 0.17516347069271623, 0.12596313999327302, 4.9235758173196982E-002],
@@ -618,7 +618,7 @@ def job_definition():
    caseID=caseID+1
    jobs['mhd_split_glm_noncons_nopara_p4est_SC']={
           'case': caseID ,
-          'tags': ['mhd','split-form','SC','GL','GLM','NONCONS'] ,
+          'tags': ['mhd','split-form','SC','GL','GLM','NONCONS','p4est','amr'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
