@@ -66,11 +66,6 @@ CONTAINS
 
         MeshFile = GETSTR('MeshFile')
 
-        ! Deform = GETINT('Deform','0')
-
-
-        ! doSplineInterpolation = GETLOGICAL('doSplineInterpolation','.FALSE.')
-
         SWRITE(UNIT_stdOut, '(A)')' INIT AMR MESH DONE!'
         SWRITE(UNIT_StdOut, '(132("-"))')
     END SUBROUTINE InitMesh

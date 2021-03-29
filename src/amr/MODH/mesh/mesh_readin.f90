@@ -79,6 +79,7 @@ CONTAINS
     END SUBROUTINE ReadBCs
 
     ! BC must be set by FLUXO
+    ! TODO: This routine does nothing but is being kept because it might be important for user-defined BCs. Check this!
     SUBROUTINE SetUserBCs()
         !===================================================================================================================================
         ! The user can redefine boundaries in the ini file. We create the mappings for the boundaries.
@@ -147,7 +148,6 @@ CONTAINS
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
         USE MOD_Mesh_Vars, ONLY : nElems, Ngeo, isMortarMesh
-        ! USE MODH_Mesh,     ONLY: SetCurvedInfo
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
         !-----------------------------------------------------------------------------------------------------------------------------------
@@ -164,9 +164,7 @@ CONTAINS
         IF(.NOT.isMesh) CALL abort(__STAMP__, &
                 'ERROR: Given file ' // TRIM(FileString) // ' is no valid mesh file.')
 
-        ! print *, "READ IN PROGRESS"
         !Create a Communicator with MPI root processor
-        
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
@@ -189,16 +187,12 @@ CONTAINS
         nGlobalTrees = nGlobalTrees1
         nElems = nGlobalTrees1
         nGeo = Ngeo1
-        ! CALL SetCurvedInfo()
-        ! useCurveds=.TRUE. ! TODO: maybe implement as optional parameter
-
+        
         CALL GetDataSize(File_ID, 'NodeCoords', nDims, HSize)
-        ! nDims=3
+        
         IF(HSize(2).NE.(NGeo + 1)**3 * nGlobalTrees) CALL abort(__STAMP__, &
                 'ERROR: Number of nodes in NodeCoords is not consistent with nTrees and NGeo.')
         DEALLOCATE(HSize)
-
-        ! RETURN
 
         CALL readBCs()
 
@@ -221,9 +215,7 @@ CONTAINS
         USE MOD_Mesh_Vars, ONLY : NGeo
         USE MOD_AMR_Vars, ONLY : H2P_VertexMap, H2P_FaceMap
         USE MOD_AMR_Vars, ONLY : connectivity_ptr
-        ! USE MODH_P4EST_Binding, ONLY: p4_connectivity_treevertex
         USE MOD_P4EST, ONLY : p4_connectivity_treevertex, p4_build_bcs
-        ! USE MODH_P4EST,           ONLY: getHFlip
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
         !-----------------------------------------------------------------------------------------------------------------------------------
@@ -416,25 +408,13 @@ CONTAINS
                     IF(bSide%ind.NE.aSide%ind)&
                             CALL abort(__STAMP__, &
                                     'SideInfo: Index of side and neighbor side have to be identical!')
-                ELSE !MPI
-                    ! #ifdef MPI
-                    !       aSide%connection=>GETNEWSIDE()
-                    !       aSide%connection%flip=aSide%flip
-                    !       aSide%connection%Elem=>GETNEWELEM()
-                    !       aSide%NbProc = ELEMIPROC(elemID)
-                    ! #else
-                    !       CALL abort(__STAMP__, &
-                    !         ' elemID of neighbor not in global Elem list ')
-                    ! #endif
                 END IF
             END DO !iLocSide
         END DO !iElem
 
         DEALLOCATE(ElemInfo, SideInfo)
-        ! ENDIF ! MPIRoot
+        
         CALL CloseDataFile()
-        ! IF (MPIRoot) THEN
-
 
         !----------------------------------------------------------------------------------------------------------------------------
         !                  P4EST MESH CONNECTIVITY
@@ -521,15 +501,12 @@ CONTAINS
             END DO !iTree
         END IF !num_periodics>0
 
-        ! IF (MPIRoot) THEN
         CALL p4_connectivity_treevertex(num_vertices, num_trees, vertices, tree_to_vertex, &
                 num_periodics, JoinFaces, connectivity_ptr)
-        ! ENDIF
 
         DEALLOCATE(Vertices, tree_to_vertex)
         IF(num_periodics.GT.0) DEALLOCATE(JoinFaces)
 
-        ! INTEGER(KIND=C_INT32_T) :: TreeToBC(0:5,nTrees)
         ALLOCATE(TreeToBC(0:5, nTrees))
         ! Now pack BC to the tree_to_attr in Connectivity
         TreeToBC = -1
@@ -540,53 +517,9 @@ CONTAINS
                 TreeToBC(H2P_FaceMap(iSide), iTree) = aSide%BCIndex
             END DO
         END DO
-        !Print *, TreeToBC(:,1)
         CALL p4_build_bcs(connectivity_ptr, nTrees, TreeToBC)
 
         DEALLOCATE(TreeToBC)
-        ! COUNT SIDES
-
-        ! nBCSides=0
-        ! nSides=0
-        ! nPeriodicSides=0
-        ! DO iTree=1,nTrees
-        !   aElem=>Trees(iTree)%ep
-        !   DO iLocSide=1,6
-        !     aSide=>aElem%Side(iLocSide)%sp
-        !     aSide%tmp=0
-        !   END DO !iLocSide
-        ! END DO !iTree
-        ! DO iTree=1,nTrees
-        !   aElem=>Trees(iTree)%ep
-        !   DO iLocSide=1,6
-        !     aSide=>aElem%Side(iLocSide)%sp
-
-        !     IF(aSide%tmp.EQ.0)THEN
-        !       nSides=nSides+1
-        !       aSide%tmp=-1 !used as marker
-        !       IF(ASSOCIATED(aSide%connection)) aSide%connection%tmp=-1
-        !       IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
-        !         IF(ASSOCIATED(aSide%connection))THEN
-        !           nPeriodicSides=nPeriodicSides+1
-        !         ELSE
-        !           nBCSides=nBCSides+1
-        !         END IF
-        !       END IF
-        !     END IF
-        !   END DO !iLocSide
-        ! END DO !iTree
-
-
-        ! WRITE(*,*)'-------------------------------------------------------'
-        ! WRITE(*,'(A22,I8)' )'NGeo:',NGeo
-        ! WRITE(*,'(A22,X7L)')'useCurveds:',useCurveds
-        ! WRITE(*,'(A22,I8)' )'nTrees:',nTrees
-        ! WRITE(*,'(A22,I8)' )'nNodes:',nNodes
-        ! WRITE(*,'(A22,I8)' )'nSides:',nSides
-        ! WRITE(*,'(A22,I8)' )'nBCSides:',nBCSides
-        ! WRITE(*,'(A22,I8)' )'nPeriodicSides:',nPeriodicSides
-        ! WRITE(*,*)'-------------------------------------------------------'
-        ! ENDIF !MPIRoot
     END SUBROUTINE ReadMeshFromHDF5
 
 

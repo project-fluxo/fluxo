@@ -65,8 +65,6 @@ PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
 PUBLIC::DefineParametersAMR
 PUBLIC::LoadBalancingAMR
-! PUBLIC::LoadBalancingAMRold
-! INTEGER :: COUNT =0 
 CONTAINS
 
 !==================================================================================================================================
@@ -128,7 +126,6 @@ SUBROUTINE InitAMR()
     use MOD_Interpolation_Vars  ,only: NodeType
     use MOD_Basis               ,only: InitializeVandermonde
     use MOD_Interpolation       ,only: GetNodesAndWeights
-    ! USE MOD_P4EST_Binding, ONLY: p4_initvars
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
     !----------------------------------------------------------------------------------------------------------------------------------
@@ -147,9 +144,6 @@ SUBROUTINE InitAMR()
 
     SWRITE(UNIT_StdOut,'(132("-"))')
     SWRITE(UNIT_stdOut,'(A)') ' INIT AMR...'
-
-    ! CALL p4_initvars(IntSize)
- 
 
     UseAMR = GETLOGICAL('UseAMR','.FALSE.')
     IF (UseAMR) THEN
@@ -242,14 +236,10 @@ SUBROUTINE InitAMR_Connectivity()
    ! MODULES
    USE MOD_Globals
    USE MOD_Mesh_Vars,             ONLY: MeshFile
-   ! USE MOD_P4Mesh_ReadIn,         ONLY: P4ReadMesh,ReadMeshHeader
    USE MOD_P4EST
    USE MOD_AMR_Vars,              ONLY: connectivity_ptr
    USE MODH_Mesh,                 ONLY: InitMesh, FinalizeMesh
    USE MODH_Mesh_ReadIn,        ONLY: ReadMeshHeader,ReadMeshFromHDF5
-   ! USE MOD_IO_HDF5,              ONLY: nDims
-   ! USE MODH_Mesh_ReadIn,        ONLY: ReadMeshFromHDF5,ReadMeshHeader
-   !  USE MOD_P4EST_Binding, ONLY: p4_initvars
    USE, INTRINSIC :: ISO_C_BINDING
    IMPLICIT NONE
    INTEGER CONN_OWNER
@@ -266,7 +256,6 @@ SUBROUTINE InitAMR_Connectivity()
    CALL ReadMeshFromHDF5(MeshFile)
   
    ! The result is connectivity PTR
-
 #if MPI 
     connectivity_ptr=P4EST_CONN_BCAST(connectivity_ptr, CONN_OWNER, MPI_COMM_WORLD)
 #else  /*MPI*/
@@ -352,7 +341,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif  /*MPI*/
 
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
-  USE MOD_Mesh_Vars,          ONLY: nGlobalElems
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
   use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
@@ -377,7 +365,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
   INTEGER :: i,j,k,iElem, nMortarSides, NGeoRef
-  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld, doLBalance
+  INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld
   integer, allocatable :: ElemWasCoarsened(:)
   integer :: max_nElems, min_nElems, sum_nElems
   integer :: new_nElems
@@ -385,7 +373,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
- 
   
   nElemsOld = nElems;
   nSidesOld = nSides
@@ -564,8 +551,6 @@ FortranData%EtSPtr = C_LOC(ElemToSide)
 FortranData%StEPtr = C_LOC(SideToElem)
 FortranData%MTPtr = C_LOC(MortarType)
 
-! ALLOCATE(ChangeElem(8,FortranData%nElems))
-! FortranData%ChngElmPtr = C_LOC(ChangeElem)
 CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
   
@@ -748,13 +733,11 @@ END SUBROUTINE RunAMR
         USE MOD_MPI_Vars,             ONLY:  offsetElemMPI
         
 #endif  /*MPI*/        
-        ! USE MOD_AMR_vars,            ONLY: P4EST_PTR, p4est_mpi_data
         USE MOD_Globals,             ONLY:  myrank
         USE MOD_P4est,               ONLY: p4estGetMPIData
 
         IMPLICIT NONE
         TYPE(p4est_fortran_data) :: FortranData
-        ! TYPE(C_PTR) :: DataPtr;
         INTEGER     ::firstMasterSide, lastMasterSide, nMortarMPISide
 
         nBCSides            =   FortranData%nBCSides
@@ -1011,8 +994,6 @@ SUBROUTINE SaveMesh(FileString)
   USE MOD_Interpolation_Vars, ONLY: NodeType,NodeTypeVISU
   USE MOD_Interpolation,      ONLY: GetVandermonde
   USE MOD_ChangeBasis,        ONLY: ChangeBasis3D
-
-  ! USE MOD_Mesh_Vars,           ONLY:Vdm_GLN_N
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1037,11 +1018,9 @@ SUBROUTINE SaveMesh(FileString)
   REAL,ALLOCATABLE               :: Vdm_FromNodeType_toNVisu(:,:)
   integer                        :: NGeo_new
   !============================================================================================================================
-  ! 
   
   ! Set NGeo of the mesh to save
   NGeo_new = min(PP_N,NGeo)
-
   
   IF (.NOT. UseAMR) RETURN;
 
@@ -1246,10 +1225,6 @@ CALL p4est_finalize()
 call AMR_Indicator % destruct
 AMRInitIsDone = .FALSE.
 END SUBROUTINE FinalizeAMR
-
-
-
-
 
 END MODULE MOD_AMR
 #endif

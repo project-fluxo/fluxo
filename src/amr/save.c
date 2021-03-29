@@ -21,7 +21,6 @@ SaveMeshSetElement_number(p4est_iter_volume_info_t *info, void *user_data) {
     p4est_t *p4est = info->p4est;
     int *iElem = (int *) user_data;
     int i, j;
-    // p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
     (*iElem)++;
     dataquad->ElementID = (*iElem);
     for (i = 0; i < 6; i++) {
@@ -45,13 +44,11 @@ SaveMeshSidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     int ghost = 0;
     p4est_iter_face_side_t *side[2] = {NULL, NULL};
     sc_array_t *sides = &(info->sides);
-    // int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
 
     if (sides->elem_count == 1) {
         (*nSides)++;
         return;
     }
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
@@ -65,12 +62,7 @@ SaveMeshSidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
-                    // int ghostid = side[iSmallSide]->is.hanging.quadid[j];
-                    // int proc=data->ghost_to_proc[ghostid];
-                    // data->nMPISides_Proc[proc]++;
                 } else {
                     //Not MPI Side
                     (*nSides)++;
@@ -81,16 +73,11 @@ SaveMeshSidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
         } else { //We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
                 } else {
                     (*nSides)++;
                 }
             }
-
-            // data->nSides += (4 - ghost);    //Small sides are MPI sides. Ghost is for another proc.
-            // data->nMPISides += (4 - ghost); //Small sides  are MPI Sides
         }
     } else //Then it is a one side
     {
@@ -110,10 +97,7 @@ SaveMeshSidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
                 (*nSides)++; // This side is  mine
         } else //Not Ghost
         {
-            // quad = side[i]->is.full.quad;
             (*nSides)++;
-            // nSides++;
-            // data->nInnerSides++;
         }
     }
 }
@@ -134,9 +118,6 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
     sc_array_t *sides = &(info->sides);
     savemesh_inner_data_t *dataquad, *dataBigquad;
 
-    // int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
-
-    // return; //DEBUG
     if (sides->elem_count == 1) {
         (*nSides)++;
         side[0] = p4est_iter_fside_array_index_int(sides, 0);
@@ -152,13 +133,10 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
         dataquad->nbElementID[HFace][0] = ((int32_t *) conn->tree_to_attr)[treeid * 6 + face];
         return;
     }
-    // return; //DEBUG
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     int minus = side[0]->face % 2;
     if (side[0]->is_hanging || side[1]->is_hanging) {
-        // return; //DEBUG
         //One Side is Mortar
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
@@ -169,7 +147,6 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
         int flip = GetHFlip(BigFace, SmallFace, orientation);
         if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
         {
-            // return; //DEBUG
             (*nSides)++;                     //Big Side
             quad = side[iBigSide]->is.full.quad;
             dataBigquad = (savemesh_inner_data_t *) quad->p.user_data;
@@ -183,7 +160,6 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
                 int Pside = BigFace;
                 int PnbSide = SmallFace;
                 int PFlip = orientation;
-                // if (KKK==0){
                 jIndex = GetHMortar(j, Pside, PnbSide, PFlip) - 1; // HOPR index
 
                 dataBigquad->MortarSides[BigFaceH][jIndex] = ++(*nSides);
@@ -192,66 +168,37 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
-                    // int ghostid = side[iSmallSide]->is.hanging.quadid[j];
-                    // int proc=data->ghost_to_proc[ghostid];
-                    // data->nMPISides_Proc[proc]++;
+                    // Do nothing
                 } else {
                     //Not MPI Side
-                    // (*nSides)++;
                     int jIndex = 0; //f(j); //Convert index from P4 to H
                     int Pside = BigFace;
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
-                    // if (KKK==0){
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip) - 1; // HOPR index
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (savemesh_inner_data_t *) quad->p.user_data;
-                    // dataquad->SidesID[SmallFaceH] = -(*nSides);
                     dataquad->SidesID[SmallFaceH] = -1 * (dataBigquad->MortarSides[BigFaceH][jIndex]);
                     dataquad->flips[SmallFaceH] = -flip - 10 * (BigFaceH + 1); //??????
                 }
             }
-            // if (ghost == 0) //There is no small mpi sides. Add Mortar inner side
-            // {
-            //     nSides++;
-            // }
-            // else //One or more small mpi sides. Add Big side as MPIMortar
-            // {
-            //     data->nMortarMPISides++;
-            // }
-            // data->nMPISides += ghost;       //Increase number of small MPISides
-            // data->nSides += 4;              //Total nmber of sides
-            // data->nSides++;                 //Add also a MortarSide to nSides
-            // data->nInnerSides += 4 - ghost; //Number of inner sides
         } else { //We use only 4 small sides and don't take into account the big side
-            // return; //DEBUG
-
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
                 } else {
                     (*nSides)++;
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (savemesh_inner_data_t *) quad->p.user_data;
-                    // dataquad->SidesID[SmallFaceH] = -(*nSides);
                     dataquad->flips[SmallFaceH] = -flip - 10 * (BigFaceH + 1); //??????
                 }
             }
-
-
-            // data->nSides += (4 - ghost);    //Small sides are MPI sides. Ghost is for another proc.
-            // data->nMPISides += (4 - ghost); //Small sides  are MPI Sides
         }
     } else //Then it is a one side
     {
 
         if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost) {
-            // return; //DEBUG
             //One is Ghost Side
             int SideIn = 0;
             int SideGhost = 1;
@@ -273,25 +220,15 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
                 dataquad = (savemesh_inner_data_t *) quad->p.user_data;
                 dataquad->SidesID[faceInH] = (*nSides);
                 dataquad->flips[faceInH] = GetHFlip(faceIn, faceGhost, orientation) + 10 * (faceGhostH + 1);
-                // if (p4est->mpirank == 2)
-                // {
-                //     printf("dataquad->flips[%d] = %d \n", faceInH, dataquad->flips[faceInH]);
-                // }
             } else {
                 // This side is not mine
                 dataquad = (savemesh_inner_data_t *) quad->p.user_data;
                 dataquad->SidesID[faceInH] = 0;
                 dataquad->flips[faceInH] = -GetHFlip(faceIn, faceGhost, orientation) - 10 * (faceGhostH + 1);
-                // if (p4est->mpirank == 2)
-                // {
-                //     printf("dataquad->flips[%d] = %d \n", faceInH, dataquad->flips[faceInH]);
-                // }
                 ; //Will be Set up later
             }
         } else //Not Ghost
         {
-            // quad = side[i]->is.full.quad;
-            // return; //DEBUG
             (*nSides)++;
             quad = side[0]->is.full.quad;
             quad1 = side[1]->is.full.quad;
@@ -310,7 +247,6 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
                 dataquad->flips[faceH] = flip + 10 * (face1H + 1);
             else
                 dataquad->flips[faceH] = flip - 10 * (face1H + 1);
-            // printf("faceH = flip %d, face1H = %d , flip = %d\n",dataquad->flips[faceH], face1H, flip);
 
             dataquad = (savemesh_inner_data_t *) quad1->p.user_data;
             dataquad->SidesID[face1H] = (*nSides);
@@ -318,7 +254,6 @@ SaveMeshRenumerateSideCounter_iter(p4est_iter_face_info_t *info, void *user_data
                 dataquad->flips[face1H] = -flip - 10 * (faceH + 1);
             else
                 dataquad->flips[face1H] = -flip + 10 * (faceH + 1);
-            // printf("face1H flip = %d, \n", dataquad->flips[face1H]);
         }
     }
 }
@@ -339,9 +274,7 @@ SaveMeshGhostCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     savemesh_inner_data_t *dataquad;
 
     if (sides->elem_count == 1) {
-        // (*nSides)++;
         side[0] = p4est_iter_fside_array_index_int(sides, 0);
-        // direction = side[0]->face / 2; /* 0 == x, 1 == y, 2 == z */
         quad = side[0]->is.full.quad;
         which_face = side[0]->face;
         dataquad = (savemesh_inner_data_t *) quad->p.user_data;
@@ -375,19 +308,13 @@ SaveMeshGhostCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
                 int Pside = BigFace;
                 int PnbSide = SmallFace;
                 int PFlip = orientation;
-                // if (KKK==0){
                 jIndex = GetHMortar(j, Pside, PnbSide, PFlip) - 1;
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
                     int ghostid = side[iSmallSide]->is.hanging.quadid[j];
 
-
-                    // data->nMPISides_Proc[proc]++;
                     BigQuadData->nbElementID[BigFaceH][jIndex] = ghost_data[ghostid].ElementID;
                 } else {
                     //Not MPI Side
-
 
                     quad = side[iSmallSide]->is.hanging.quad[j];
                     dataquad = (savemesh_inner_data_t *) quad->p.user_data;
@@ -403,9 +330,8 @@ SaveMeshGhostCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
 
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
+                    // Do nothing
                 } else {
 
                     int jIndex = 0; //f(j); //Convert index from P4 to H
@@ -438,7 +364,6 @@ SaveMeshGhostCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
             }
             p4est_quadrant_t *quadIn;
             quadIn = side[SideIn]->is.full.quad;
-            // p4est_quadrant_t *quadIn = side[SideIn]->is.full.quad;
             int faceIn = side[SideIn]->face;
             int faceGhost = side[SideGhost]->face;
 
@@ -496,15 +421,12 @@ SaveMeshFillArray_iter(p4est_iter_volume_info_t *info, void *user_data) {
     int i, j = 0, nSidesHere = 0, A;
     static int SIndex = 0;
     int EIndex;
-    // p4est->mpirank
-    // p4est->global_first_quadrant[p4est->mpirank];
     int Offset = p4est->global_first_quadrant[p4est->mpirank];
     EIndex = dataquad->ElementID - Offset - 1;
 
     (*iElem)++;
     data->nLocalSides++;
     int ElemID = data->nLocalSides;
-    // SideInfo[(iSide - 1) * 5 + (i - 1)] = ;
     // 1. Count the number of the sides from 6 to (4+1)*6 *every Big Side is 5 side (1 Big Side + 4 SmallMortar master)
     for (iLocalSide = 0; iLocalSide < 6; iLocalSide++) {
         if (dataquad->nbElementID[iLocalSide][1] != 0) {
@@ -526,10 +448,6 @@ SaveMeshFillArray_iter(p4est_iter_volume_info_t *info, void *user_data) {
     SIndex += nSidesHere;
     ElemInfo[(EIndex) * 6 + (i - 1)] = SIndex; // lastIndSIDE
     i = 5;
-    // if (p4est->mpirank == 0) printf("EIndex = %d , dataquad->ElementID = %d \n", EIndex, dataquad->ElementID);
-    // printf(" (EIndex - 1) * 6 + (i - 1) = %d , i = %d \n", (EIndex - 1) * 6 + (i - 1), i);
-    // fflush(stdout);
-    // ElemInfo[(8 - 1) * 6 + (6 - 1)] = 0;
     ElemInfo[(EIndex) * 6 + (i - 1)] = 0; // offsetIndNODE is filled up in FLUXO
     i = 6;
     ElemInfo[(EIndex) * 6 + (i - 1)] = 0; // lastIndNODE is filled up in FLUXO
@@ -549,15 +467,12 @@ SaveMeshFillArray2_iter(p4est_iter_volume_info_t *info, void *user_data) {
     savemesh_inner_data_t *dataquad = (savemesh_inner_data_t *) q->p.user_data;
     p4est_t *p4est = info->p4est;
     p4est_savef_data_t *data = (p4est_savef_data_t *) user_data;
-    // int *iElem = p4est->user_pointer;
     int *ElemInfo = data->ElemInfo;
     int *SideInfo = data->SideInfo;
     int iLocalSide = 0;
     int i, j = 0, nSidesHere = 0, A;
     static int SIndex = 0;
     int EIndex;
-    // p4est->mpirank
-    // p4est->global_first_quadrant[p4est->mpirank];
     int Offset = p4est->global_first_quadrant[p4est->mpirank];
     EIndex = dataquad->ElementID - Offset - 1;
 
@@ -566,12 +481,10 @@ SaveMeshFillArray2_iter(p4est_iter_volume_info_t *info, void *user_data) {
 
         if (dataquad->nbElementID[iLocalSide][1] != 0) {
             // Mortar => 5 Sides.
-            // printf("ElementID = %d , Mortar Side %d \n", dataquad->ElementID, iLocalSide);
             // First Big Mortar Side
             i = 1;
             SideInfo[(SIndex) * 5 + (i - 1)] = 4; //Side Type = HexaHedron non-linear
             i = 2;
-            // if (dataquad->SidesID[iLocalSide] <0) Mortar Big Side
             SideInfo[(SIndex) * 5 + (i - 1)] = fabs(
                     dataquad->SidesID[iLocalSide]); // GlobalSideID positive (master) and negative (slave)
 
@@ -673,26 +586,20 @@ void count_parallel_sides(p4est_t *p4est) {
     p4est_savef_data_t *p4est_savef_data = (p4est_savef_data_t *) p4est->user_pointer;
 
     int local = p4est_savef_data->nLocalSides;
-    // p4est_gloidx_t *global_first_quadrant = p4est->global_first_quadrant;
     int i;
     const int num_procs = p4est->mpisize;
 
     p4est_savef_data->OffsetSideMPI[0] = 0;
-    // global_first_quadrant[0] = 0;
 #if MPI 
     mpiret = sc_MPI_Allgather(&local, 1, MPI_INT,
                               p4est_savef_data->OffsetSideMPI + 1, 1, MPI_INT,
                               p4est->mpicomm);
-    // mpiret = sc_MPI_Allgather(qlocal, 1, P4EST_MPI_GLOIDX,
-    //                           global_first_quadrant + 1, 1, P4EST_MPI_GLOIDX,
-    //                           p4est->mpicomm);
     SC_CHECK_MPI(mpiret);
 #endif  /*MPI*/
     for (i = 0; i < num_procs; ++i) {
         p4est_savef_data->OffsetSideMPI[i + 1] += p4est_savef_data->OffsetSideMPI[i];
     }
     p4est_savef_data->nGlobalSides = p4est_savef_data->OffsetSideMPI[num_procs];
-    // p4est->global_num_quadrants = global_first_quadrant[num_procs];
 }
 
 void count_parallel_index_sides(p4est_t *p4est) {
@@ -700,19 +607,14 @@ void count_parallel_index_sides(p4est_t *p4est) {
     p4est_savef_data_t *p4est_savef_data = (p4est_savef_data_t *) p4est->user_pointer;
 
     int local = p4est_savef_data->nSidesArrIndex;
-    // p4est_gloidx_t *global_first_quadrant = p4est->global_first_quadrant;
     int i;
     const int num_procs = p4est->mpisize;
 
     p4est_savef_data->OffsetSideArrIndexMPI[0] = 0;
-    // global_first_quadrant[0] = 0;
 #if MPI 
     mpiret = sc_MPI_Allgather(&local, 1, MPI_INT,
                               p4est_savef_data->OffsetSideArrIndexMPI + 1, 1, MPI_INT,
                               p4est->mpicomm);
-    // mpiret = sc_MPI_Allgather(qlocal, 1, P4EST_MPI_GLOIDX,
-    //                           global_first_quadrant + 1, 1, P4EST_MPI_GLOIDX,
-    //                           p4est->mpicomm);
     SC_CHECK_MPI(mpiret);
 #endif  /*MPI*/
 
@@ -720,7 +622,6 @@ void count_parallel_index_sides(p4est_t *p4est) {
         p4est_savef_data->OffsetSideArrIndexMPI[i + 1] += p4est_savef_data->OffsetSideArrIndexMPI[i];
     }
     p4est_savef_data->nGlobalSides = p4est_savef_data->OffsetSideArrIndexMPI[num_procs];
-    // p4est->global_num_quadrants = global_first_quadrant[num_procs];
 }
 
 p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
@@ -731,9 +632,7 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
     int nLocalSides = 0;
     // Iterator other sides
     int rank = 0;
-    // int nNBProcs = 0;
     int *ghost_to_proc = NULL;
-    // if (p4est->mpisize > 1)
 
     //Set New data
     p4est = p8est_copy(p4est1, 0);
@@ -871,8 +770,6 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
     // Save HDF5 Mesh
     // Add NODE Index
     // Check the Unique... Stuff
-    // // p8est_ghost_destroy(ghost); // Should I create a new GHOST???
-    // ghost = p8est_ghost_new(p4est, P8EST_CONNECT_FACE);
     p4est_savef_data->nLocalSides = nSave;
     p4est_savef_data->nGlobalSides = nGlobalSideSave;
     free(ghost_data);

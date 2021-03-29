@@ -79,7 +79,6 @@ int GetHFlip(int PSide0, int PSide1, int PFlip)
     
     int HSide0 = P2H_side[PSide0];
     // !2. First node CGNS -> p4est
-    // int PNode0=H2P_FaceNodeMap[1][HSide0];
     int PNode0 = H2P_FaceNodeMap[HSide0][1];
     // !3. Get oriented node on neighbour side, formula and matrices see paper Burstedde p4est, 2011
     int PNode1 = Pmatrix[ Qmatrix[ Rmatrix[PSide0][PSide1] ][PFlip] ][PNode0];
@@ -96,7 +95,6 @@ int GetHMortar(int PMortar, int PSide, int PnbSide, int PFlip)
     int PNodeB = Pmatrix[Qmatrix[Rmatrix[PnbSide][PSide]][PFlip]][1];
     int HNode1 = P2H_FaceNodeMap[PSide][PNodeA];
     int HNode2 = P2H_FaceNodeMap[PSide][PNodeB];
-    // GetHMortar = P2H_MortarMap(PMortar, H_MortarCase(HNode1, HNode2));
     int GetHMortar = P2H_MortarMap[H_MortarCase[HNode1][HNode2]][PMortar];
     return GetHMortar;
 }

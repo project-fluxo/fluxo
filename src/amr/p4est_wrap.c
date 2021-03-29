@@ -13,13 +13,8 @@
 #include "optimisation.h"
 #include "connectivity.h"
 #include "p4fluxo.h"
-// #include "ready.fc"
 #include "optimisation.c"
 #include "p8est_communication.h"
-//#define NON_OPTIMIZED //Optimized Variant not ready yet
-
-//#ifndef NON_OPTIMIZED
-
 //Begin of ready.fc
 
 void p4est_destroy_f(p4est_t **p4est) {
@@ -35,7 +30,6 @@ static void
 ElementCounterSetOldToZero_iter(p4est_iter_volume_info_t *info, void *user_data) {
     p4est_quadrant_t *q = info->quad;
     p4est_inner_data_t *dataquad = (p4est_inner_data_t *) q->p.user_data;
-    // p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
     int i;
     //ElementID must be set in previous function (for example getData444)
 
@@ -97,18 +91,12 @@ ElementCounterNew_iter(p4est_iter_volume_info_t *info, void *user_data) {
         dataquad->OldSidesID[i] = -1;
 #endif
         dataquad->flips[i] = -1;
-        // dataquad->SidesRatio[i] = 0;
     }
-    // printf("dataquad->ElementID = %d \n", dataquad->ElementID);
-    // fflush(stdout);
-
-    // data->nElems++;
     return;
 }
 
 
 int p4est_init_f(int mpicomm1) {
-    // int mpiret = 0;
 
     /* Initialize MPI; see sc_mpi.h.
    * If configure --enable-mpi is given these are true MPI calls.
@@ -121,17 +109,10 @@ int p4est_init_f(int mpicomm1) {
 #else  /*MPI*/
     mpicomm = sc_MPI_COMM_WORLD;
 #endif  /*MPI*/
-    // printf("mpicomm1 = %d, size = %d\n", mpicomm1, sizeof(mpicomm1));
-    //  printf("mpicomm!!! %d \n",mpicomm);
-    
-    // printf("mpicomm = %d, size = %d \n", mpicomm, sizeof(mpicomm));
-    // fflush(stdout);
     /* These functions are optional.  If called they store the MPI rank as a
    * static variable so subsequent global p4est log messages are only issued
    * from processor zero.  Here we turn off most of the logging; see sc.h. */
-    // sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR sc.h. */
     sc_init(mpicomm, 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , SC_LP_ERROR
-    // sc_init(MPI_Comm_f2c(mpicomm1), 1, 1, NULL, SC_LP_ESSENTIAL); //SC_LP_SILENT , C_LP_ERROR
 
     p4est_init(NULL, SC_LP_ERROR); //SC_LP_SILENT , SC_LP_ERROR
    
@@ -197,7 +178,6 @@ void p4estDelMPIData_f(p4est_mpi_data_t *data) {
 }
 
 void save_p4est(p4est_t *p4est, char in[]) {
-    // printf("save p4est!! \n%s!\n", in);//p4est->local_num_quadrants);
     p4est_save_ext(in, p4est, 0, 0);
     return;
 };
@@ -215,7 +195,6 @@ p4est_t *load_p4est(int mpicomm1, char *in) {
 #else  /*MPI*/
     mpicomm = sc_MPI_COMM_WORLD;      
 #endif  /*MPI*/
-    // MPI_Comm_rank(mpicomm, &myrank);
     p4est = p8est_load_ext(in,      //const char *filename,
                            mpicomm, //sc_MPI_Comm mpicomm,
                            0,       //size_t data_size,
@@ -238,13 +217,10 @@ p4est_t *load_p4est(int mpicomm1, char *in) {
                   NULL,                   /* there is no callback for the
                                              edges between quadrants */
                   NULL);
-    // printf("Connectivity!! %d \n", p4est->connectivity->num_trees);
-    // exit(0);
     return p4est;
 };
 
 p8est_connectivity_t *GetConnectivity(p4est_t *p4est) {
-    // printf("p4est->connectivity = %p \n", p4est->connectivity);
     return p4est->connectivity;
 };
 p4est_connectivity_t *p8est_connectivity_new_periodic_f() {
@@ -253,8 +229,6 @@ p4est_connectivity_t *p8est_connectivity_new_periodic_f() {
 
 // end of ready.fc
 
-//#endif
-// int KKK = 0; // Trigger for debugging. Delete after debugging 
 //  * \return 1 if \a q should be refined,   0 otherwise.           * /
 static int
 refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
@@ -266,12 +240,8 @@ refine_fn(p4est_t *p4est, p4est_topidx_t which_tree,
     ! {
          exit(1);
      }*/
-    // if (ToRefine[dataquad->ElementID - 1] > 0)
-    // printf("ToRefine[dataquad->ElementID - 1] %d \n", ToRefine[dataquad->ElementID - 1]);
-    // printf(" q->level %d \n",  q->level);
     if ((ToRefine[dataquad->ElementID - 1] > 0 && ToRefine[dataquad->ElementID - 1] > q->level)
         || (-ToRefine[dataquad->ElementID - 1] - 1 > q->level)) {
-        // printf("REFINE!!!!!!!!!!!!!!! \n");
         return 1;
     } else {
         return 0;
@@ -327,7 +297,6 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
 
 
     p4est_inner_data_t *parentquaddata, *childquaddata; // = (p4est_inner_data_t *)q->p.user_data;
-    // return;
 
     if (num_outgoing > 1) {
         /* this is coarsening */
@@ -338,7 +307,6 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
 
         for (i = 0; i < P8EST_CHILDREN; i++) {
             childquaddata = (p4est_inner_data_t *) outgoing[i]->p.user_data;
-            // parentquaddata->ElementID=0;
             parentquaddata->OldElementID[i] = childquaddata->OldElementID[0];
 
         }
@@ -350,7 +318,6 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
         if (parentquaddata->OldElementID[1] > 0)
             //This quad was Coarsed but Refined again by balance 2:1
         {
-            // printf("refine Again\n");
             for (i = 0; i < P8EST_CHILDREN; i++) {
                 childquaddata = (p4est_inner_data_t *) incoming[i]->p.user_data;
                 childquaddata->OldElementID[0] = parentquaddata->OldElementID[i];
@@ -360,14 +327,6 @@ replace_quads(p4est_t *p4est, p4est_topidx_t which_tree,
                     childquaddata->OldElementID[i1] = 0;
                 }
 
-
-#ifndef NON_OPTIMIZED
-                // for (i1 = 0; i1 < 6; i1++)
-                // // Safe for redefinition of Element. Insist on Metrics recalculation
-                // {
-                //     childquaddata->OldSidesID[i1]=-1;
-                // }
-#endif
             }
         } else {
             for (i = 0; i < P8EST_CHILDREN; i++) {
@@ -413,13 +372,11 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data) {
         return;
     }
 
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     direction = side[0]->face / 2; /* 0 == x, 1 == y, 2 == z */
     minus = side[0]->face % 2;
     if (side[0]->is_hanging || side[1]->is_hanging) { //TODO: Complete Mortar Faces
-        // ThereisMortar++;
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
         int BigFace = side[iBigSide]->face;
@@ -430,7 +387,6 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data) {
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
                     int CurrentSide = data->CurrentInnerSide++;
                     quad = side[iSmallSide]->is.hanging.quad[j];
@@ -443,7 +399,6 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data) {
                         exit(1);
                     }
                     dataquad->flips[SmallFace] = flip;
-                    //ghost_data[ghostid] -> SideID[direction];
                 }
                     //
                 else {
@@ -476,7 +431,6 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int CurrentSide = data->CurrentMPIMortarSide++;
                     dataquad->SidesID[BigFace] = CurrentSide;
                     dataquad->flips[BigFace] = 0;
-                    //dataquad->weight += MORTAR_SIDE_WEIGHT;
                 }
                 if (dataquad->SidesID[BigFace] <= 0) {
                     printf("******************* ERROR!!! \n");
@@ -491,7 +445,6 @@ SetSides_iter(p4est_iter_face_info_t *info, void *user_data) {
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) { // Set up when MPI MINE and MPI YOUR
                 }
                     //
@@ -547,7 +500,6 @@ Elm_iter(p4est_iter_volume_info_t *info, void *user_data) {
     p4est_quadrant_t *q = info->quad;
     p4est_inner_data_t *dataquad = (p4est_inner_data_t *) q->p.user_data;
     p4est_t *p4est = info->p4est;
-    // p4est_fortran_data_t *data = (p4est_fortran_data_t *)user_data;
     int i, j = 0;
     for (i = 0; i < 8; i++) {
         //         {
@@ -556,10 +508,8 @@ Elm_iter(p4est_iter_volume_info_t *info, void *user_data) {
             printf("!!!!!!!! refine \n dataquad->OldElementID[0] = %d\n", dataquad->OldElementID[0]);
             printf("!!!!!!!!111 refine \n dataquad->OldElementID[%d] = %d\n", i, dataquad->OldElementID[i]);
             printf("!!!!!!1 refine \n dataquad->ElementID = %d\n", dataquad->ElementID);
-            // exit(1);
         };
     }
-    // if (dataquad->ElementID == 4 && p4est->mpirank == 1 && KKK>0)
     if (dataquad->OldElementID[0] == 0) {
         printf("Elm_iter Error in Numeration!!! ElemntId = %d \n", dataquad->ElementID);
         exit(1);
@@ -598,19 +548,15 @@ SetElementToSide_iter(p4est_iter_volume_info_t *info, void *user_data) {
         {
 
             j = 1;
-            // fflush(stdout);
             j = 2;
             StE[(iSide - 1) * 5 + (j - 1)] = dataquad->ElementID;
-            // i = 3;
-            // SideToElement[(iSide - 1) * 5 + (i - 1)] = P2H_side[i];
             j = 4;
             StE[(iSide - 1) * 5 + (j - 1)] = P2H_side[i];
             j = 5;
             StE[(iSide - 1) * 5 + (j - 1)] = dataquad->flips[i];
             // }
         }
-        // TODO!
-        // IF(aSide%sideID .LE. nBCSides) BC(aSide%sideID)=aSide%BCIndex
+        // TODO! // IF(aSide%sideID .LE. nBCSides) BC(aSide%sideID)=aSide%BCIndex
     }
     return;
 }
@@ -651,8 +597,6 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
 
         return;
     }
-    // printf("Next Side!!\n");
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     if (side[0]->is_hanging || side[1]->is_hanging) { //TODO: Complete Mortar Faces
@@ -666,15 +610,6 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *) quad->p.user_data;
             int BigSideID = dataquad->SidesID[BigFace];
-            // firstBCSide          = 1
-            // firstMortarInnerSide = firstBCSide         +nBCSides
-            //             firstInnerSide       = firstMortarInnerSide+nMortarInnerSides
-            // firstMPISide_MINE    = firstInnerSide      +nInnerSides
-            // firstMPISide_YOUR    = firstMPISide_MINE   +nMPISides_MINE
-            // firstMortarMPISide   = firstMPISide_YOUR   +nMPISides_YOUR
-
-            // lastBCSide           = firstMortarInnerSide-1
-            // lastMortarInnerSide  = firstInnerSide    -1
             int ADD = 0;
             int firstMortarInnerSide = 1 + data->nBCSides; //1
             int firstInnerSide = firstMortarInnerSide + data->nMortarInnerSides; //1 + 0 = 1
@@ -700,32 +635,25 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
                 if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) {
-                    // Smalldataquads[j] = (p4est_inner_data_t *)side[iSmallSides]->is.hanging.quad[j]->p.user_data;
 
                     quad = side[iSmallSides]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *) quad->p.user_data;
                     int iSide = dataquad->SidesID[SmallFace];
                     int flip = dataquad->flips[SmallFace];
-                    // iSide = Smalldataquads[j]->SidesID[SmallFace];
-                    // int GetHMortar(int PMortar, int PSide, int PnbSide, int PFlip)
                     int jIndex = 0; //f(j); //Convert index from P4 to H
                     int Pside = BigFace;
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
-                    // if (KKK==0){
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
                     i = 1;
                     MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
                     i = 2;
                     MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = 0 * flip;
-                    // }
                 } else {
                     /// Use GHOST DATA
                     int ghostid = side[iSmallSides]->is.hanging.quadid[j];
                     int iSide = ghost_data[ghostid].SidesID[SmallFace];
                     int flip = ghost_data[ghostid].flips[SmallFace];
-                    // iSide = Smalldataquads[j]->SidesID[SmallFace];
-                    // int GetHMortar(int PMortar, int PSide, int PnbSide, int PFlip)
                     int jIndex = 0; //f(j); //Convert index from P4 to H
                     int Pside = BigFace;
                     int PnbSide = SmallFace;
@@ -762,17 +690,13 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     int ghost = 0;
     p4est_iter_face_side_t *side[2] = {NULL, NULL};
     sc_array_t *sides = &(info->sides);
-    // int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
 
     if (sides->elem_count == 1) {
-        //printf("BCSide!!! info->tree_boundary = %d \n", info->tree_boundary );
-        //  printf("BCSide!!! sides->elem_count = %d \n", sides->elem_count );
 
         data->nSides++;
         data->nBCSides++;
         return;
     }
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
@@ -786,7 +710,6 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
                     ghost++;
                 }
@@ -805,7 +728,6 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
         } else { //We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
                     ghost++;
                 }
@@ -833,7 +755,6 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
 
         } else //Not Ghost
         {
-            // quad = side[i]->is.full.quad;
             data->nSides++;
             data->nInnerSides++;
         }
@@ -858,7 +779,6 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
 
         return;
     }
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
@@ -872,9 +792,7 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
 
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
-                    // ghost++;
                     int ghostid = side[iSmallSide]->is.hanging.quadid[j];
                     int proc = data->ghost_to_proc[ghostid];
                     data->nMPISidesCount[proc]++;
@@ -884,9 +802,7 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
         } else { //We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
-                    // ghost++;
                     int ghostid = side[iBigSide]->is.full.quadid;
                     int proc = data->ghost_to_proc[ghostid];
                     data->nMPISidesCount[proc]++;
@@ -947,7 +863,6 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data) {
         return;
     }
 
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     direction = side[0]->face / 2; /* 0 == x, 1 == y, 2 == z */
@@ -964,7 +879,6 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data) {
         {
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
                     // Here Set UP
                     int ghostid = side[iSmallSide]->is.hanging.quadid[j];
@@ -1004,7 +918,6 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data) {
         { //We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
                     // Here Set UP
                     int ghostid = side[iBigSide]->is.full.quadid;
@@ -1115,7 +1028,6 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data) {
                     dataquad->SidesID[face] += offsetMPISides_YOUR[iNBProc];
                     dataquad->flips[face] = flip;
 
-                    // dataquad->flips[face] = 0;
                     if (dataquad->SidesID[face] <= 0) {
                         printf("******************* ERROR!!! \n");
                         fflush(stdout);
@@ -1168,7 +1080,6 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
         dataquad->SidesRatio[face] = 0;// For Boundary always 0.
         return;
     }
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     if (side[0]->is_hanging || side[1]->is_hanging)
@@ -1180,10 +1091,8 @@ SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
         int SmallFace = side[iSmallSide]->face;
         if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
         {
-            // int flip = GetHFlip(BigFace, SmallFace, orientation);
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
                 {
                     // not ghost side, but local
@@ -1288,10 +1197,8 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
         int SmallFace = side[iSmallSide]->face;
         if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
         {
-            // int flip = GetHFlip(BigFace, SmallFace, orientation);
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
                 {
                      // not ghost side, but local
@@ -1303,7 +1210,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
                         || (dataquad->OldSidesID[SmallFace]<=0))
                         dataquad->IsChanged++;
 
-                    // continue;
                 }
                 else
                 {
@@ -1313,8 +1219,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
             }
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            // dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            // quad = side[iSmallSide]->is.hanging.quad[j];
             if ((dataquad->SidesRatio[Bigface] != 1) 
                 || (dataquad->OldElementID[0] < 0) 
                 || (dataquad->OldElementID[1] > 0) 
@@ -1329,7 +1233,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
             // Nothing to do
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
                 {
                     // not ghost side, but local
@@ -1341,7 +1244,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
                         || (dataquad->OldElementID[1] > 0) 
                         || (dataquad->OldSidesID[SmallFace] <= 0))
                         dataquad->IsChanged++;
-                    // continue;
                 }
             }
             return;
@@ -1373,7 +1275,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
             int face = side[0]->face;
             quad = side[0]->is.full.quad;
             dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            // dataquad->SidesRatio[face] = 0;
             if ((dataquad->SidesRatio[face] != 0) 
             || (dataquad->OldElementID[0] < 0) 
             || (dataquad->OldElementID[1] > 0) 
@@ -1388,7 +1289,6 @@ CheckChanges(p4est_iter_face_info_t *info, void *user_data)
             || (dataquad->OldElementID[1] > 0) 
             || (dataquad->OldSidesID[face] <= 0))
                 dataquad->IsChanged++;
-            // dataquad->SidesRatio[face] = 0;
         }
 
         return;
@@ -1417,7 +1317,6 @@ ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
         // There is nothing to do here with bounadry;
         return;
     }
-    // side[i]->is.hanging.quad[j]->p.user_data;
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
@@ -1440,7 +1339,6 @@ ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
                     if (dataquad->SidesID[SmallFace] > 0)
                         dataquad->SidesID[SmallFace] += AddToMortarInnerSide;
                     //It must be Error here, because SidesID =0 as default and not changed yet 
-                    // continue;
                 } else {
                     int ghostid = side[iSmallSide]->is.hanging.quadid[j];
                     if (ghost_data[ghostid].SidesID[SmallFace] > 0)
@@ -1458,7 +1356,6 @@ ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
                     dataquad = quad->p.user_data;
                     if (dataquad->SidesID[SmallFace] > 0)
                         dataquad->SidesID[SmallFace] += AddToMortarInnerSide;
-                    // continue;
                 } else {
                     //Nothing to do with SmallMPI Sides in this case
                     // MPI MINE Side;
@@ -1475,7 +1372,6 @@ ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
             SideGhost = 0;
         }
         int face = side[SideIn]->face;
-        // int ghostid = side[SideGhost]->is.full.quadid;
 
         quad = side[SideIn]->is.full.quad;
         dataquad = (p4est_inner_data_t *) quad->p.user_data;
@@ -1486,10 +1382,8 @@ ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
 }
 
 p4est_t *p4est_new_f(p4est_connectivity_t **conn) {
-    // printf("conn %p \n",conn);s
     fflush(stdout);
     p4est_t *p4;
-    // p4 = p4est_new(mpicomm, *conn, 0, NULL, NULL);
     p4 = p4est_new_ext(mpicomm,                    /* communicator */
                        *conn,                      /* connectivity */
                        0,                          /* minimum quadrants per MPI process */
@@ -1499,7 +1393,6 @@ p4est_t *p4est_new_f(p4est_connectivity_t **conn) {
                        NULL,                       /* initializes data function*/
                        NULL);                      /* context */
     int nElems = 0;
-    // #ifndef NON_OPTIMIZED
     p4est_iterate(p4,                     /* the forest */
                   NULL,                   /* the ghost layer May be LAter!!! */
                   (void *) &nElems,         /* the synchronized ghost data */
@@ -1511,10 +1404,7 @@ p4est_t *p4est_new_f(p4est_connectivity_t **conn) {
                                              edges between quadrants */
                   NULL);                  /* there is no callback for the
                                              corners between quadrants */
-    // free(p4est_fortran_data);
-// #endif //  NON_OPTIMIZED
     return p4;
-    // return NULL;
 }
 
 static void
@@ -1529,28 +1419,12 @@ ElementNumberChanges(p4est_iter_volume_info_t *info, void *user_data) {
     for (i = 0; i < 8; ++i) {
         ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldElementID[i];
     }
-#ifndef NON_OPTIMIZED
-    // if (dataquad->IsChanged == 0)
-    // {
-    //     // Not Changed
-    //     i=1;
-    //     ChangeElements[(iElem - 1) * 8 + (i)] = -1;
-    //     for (i = 2; i < 8; i++)
-    //     { /// Convertion of Sides!!!!!!!!!
-    //         Fside = P2H_side[i-2]; //Hopr ID of Side 1..6
-    //         ChangeElements[(iElem - 1) * 8 + (i)] = dataquad->OldSidesID[Fside-1];
-    //     }
-    // }
-#endif //  NON_OPTIMIZED
 
-    // printf("iElem = %d, i = %d\n", iElem, dataquad->OldElementID[0]);
-    // fflush(stdout);
     return;
 }
 
 p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void *FortranData) {
     p4est_fortran_data_t *p4est_fortran_data = (p4est_fortran_data_t *) FortranData;
-    // p4est_fortran_data = (p4est_fortran_data_t *)malloc(sizeof(p4est_fortran_data_t));
     p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr = p8est_ghost_new(p4est, P8EST_CONNECT_FACE);
     p4est_fortran_data->ghost_data_ptr = (p4est_inner_data_t *) malloc(
             ghost->ghosts.elem_count * sizeof(p4est_inner_data_t));
@@ -1574,7 +1448,6 @@ p4est_fortran_data_t *GetnNBProcs(p4est_t *p4est, void *FortranData) {
     int iGh;
     for (iGh = 1; iGh < num_ghost; ++iGh) {
         if (p4est_fortran_data->ghost_to_proc[iGh] != p4est_fortran_data->ghost_to_proc[iGh - 1])
-            // if (ghost->proc_offsets[rank + 1] != ghost->proc_offsets[rank])
             nNBProcs++;
     }
 
@@ -1612,7 +1485,6 @@ void FillElemsChange(p4est_t *p4est, void *FortranData){
                   NULL,
                   NULL);
 
-   // p4est_fortran_data->nElems = p4est->local_num_quadrants;
     return;
 }   
 
@@ -1630,21 +1502,12 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr;
 
     int *EtS = p4est_fortran_data->EtSPtr;//= (int *)malloc(2 * 6 * nElems * sizeof(int));
-    // for (iElem = 1; iElem <= nElems; ++iElem)
-    //     for (j = 1; j <= 6; j++)
-    //         for (i = 1; i <= 2; i++)
-    //         {
-    //             // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-    //             EtS[(iElem - 1) * 6 * 2 + (j - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
-    //         }
 
     int *StE = p4est_fortran_data->StEPtr;//! = (int *)malloc(5 * nSides * sizeof(int));
     StE[1] = -1;
-    // printf("Pointer  = %p \n!!", StE);
 
     for (iSide = 1; iSide <= nSides; ++iSide)
         for (i = 1; i <= 5; i++) {
-            // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
             StE[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
 
@@ -1652,7 +1515,6 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     int *MoTy = p4est_fortran_data->MTPtr;//! = (int *)malloc(2 * nSides * sizeof(int));
     for (iSide = 1; iSide <= nSides; ++iSide)
         for (i = 1; i <= 2; i++) {
-            // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
             MoTy[(iSide - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
 
@@ -1663,8 +1525,6 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     for (iSide = 1; iSide <= nMortarSides; ++iSide)
         for (i = 1; i <= 2; i++)
             for (j = 1; i <= 4; i++) {
-                // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-                // MoInf[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
                 MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
             }
 
@@ -1684,32 +1544,6 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
                               edges between quadrants */
                   NULL);
     p4est->user_pointer = NULL;
-//     int *ChangeElements = p4est_fortran_data->ChngElementPtr;// = (int*) malloc(8 * nElems * sizeof(int));
-//     for (iElem = 1; iElem <= nElems; ++iElem)
-//         for (i = 1; i <= 8; i++) {
-//             // EtS[i-1+(j-1)*6+(iElem-1)*6*2]=i+j*10+iElem*1000;
-//             ChangeElements[(iElem - 1) * 8 + (i - 1)] = 0; //iElem + j*1000 + i * 10000;
-//         }
-// #ifndef NON_OPTIMIZED
-//     // p4est_iterate(p4est,
-//     //               NULL,
-//     //               (void *)p4est_fortran_data,
-//     //               NULL,
-
-//     //               CheckChanges,
-
-//     //               NULL,
-
-//     //               NULL);
-// #endif
-
-//     p4est_iterate(p4est,
-//                   NULL,
-//                   (void *) p4est_fortran_data,
-//                   ElementNumberChanges,
-//                   NULL,
-//                   NULL,
-//                   NULL);
 
     pfree(ghost_data);
     p8est_ghost_destroy(ghost);
@@ -1796,7 +1630,6 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
         SetMPISideData->nMPISides_Proc = p4est_fortran_data->nMPISides_Proc;
         SetMPISideData->ghost_to_proc = ghost_to_proc;
         SetMPISideData->nMPISidesCount = (int *) malloc(p4est->mpisize * sizeof(int));
-        // int INBProc = 0;
         for (rank = 0; rank < p4est->mpisize; rank++) {
             SetMPISideData->nMPISidesCount[rank] = 0;
         }
@@ -1827,7 +1660,6 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
                 int iNBProc = p4est_fortran_data->nNbProc[iNB];
 
                 SetMPISideData->nMPISides_Proc[iNB] = SetMPISideData->nMPISidesCount[rank];
-                // printf("!==!==!= iNB = %d , SetMPISideData->nMPISides_Proc[iNB] = %d , iNBProc = %d \n", iNB, SetMPISideData->nMPISides_Proc[iNB], iNBProc);
             };
         }
 
@@ -1853,7 +1685,6 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
         }
         SetMPISideData->nMPISides_MINE = 0;
         SetMPISideData->nMPISides_YOUR = 0;
-        //nMPISides_MINE = SUM(nMPISides_MINE_Proc)
         // nMPISides_YOUR = SUM(nMPISides_YOUR_Proc)
         for (iNbProc = 0; iNbProc < nNBProcs; iNbProc++) {
             SetMPISideData->nMPISides_MINE += SetMPISideData->nMPISides_MINE_Proc[iNbProc];
@@ -2027,11 +1858,8 @@ void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
 
 void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
     int *ElemToRefineCoarse = (int *) ElemToRC;
-    // p4est_fortran_data_t *back;
     // Refine And Coarse
     p4est->user_pointer = ElemToRC;
-// #ifndef NON_OPTIMIZED
-   
 
     p4est_iterate(p4est,                           /* the forest */
                   NULL,                            /* the ghost layer May be LAter!!! */
@@ -2044,7 +1872,6 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
                                              edges between quadrants */
                   NULL);
 
-// #endif //  NON_OPTIMIZED
     int recursive = 0;
     int Callbackorphans = 0;
     int allowed_level = P4EST_QMAXLEVEL;
@@ -2056,8 +1883,6 @@ void RefineCoarse(p4est_t *p4est, void *ElemToRC) {
                       coarse_fn, NULL, replace_quads);
     p4est_balance_ext(p4est, P4EST_CONNECT_FULL, NULL,
                       replace_quads);
-    // p4est_balance_ext(p4est, P4EST_CONNECT_FACE, NULL,
-    //                   replace_quads);
     p4est->user_pointer = NULL;
     fflush(stdout);
 
@@ -2120,11 +1945,9 @@ void p4_connectivity_treevertex(p4est_topidx_t num_vertices,
                              (long long) conn->num_trees, (long long) conn->num_vertices);
 
     *conn_out = conn;
-    // printf("Connectivity adress = %p\n", conn);
 }
 
 
-// int iElem=0;
 static void
 partition_init_fn(p4est_t *p4est, p4est_topidx_t which_tree,
                   p4est_quadrant_t *q) {
@@ -2151,10 +1974,8 @@ partition_init_fn(p4est_t *p4est, p4est_topidx_t which_tree,
     int Part = 0;
     i = j = k = 2;
     iVar = 1;
-    // double a = U[(iElem - 1) * nVar * PP_Np13 + k * nVar * PP_Np12 + j * nVar * PP_Np1 + i*nVar + (iVar-1)];
     int dir = 1; //direction 1:3
     Part = 1;// This is U
-    // double b = Elem_xGP[(iElem - 1) * D * P3 + k * D * P2 + j * D * P1 + i * D + (dir - 1)];
     double a = 0;
     for (iVar = 1; iVar <= nVar; iVar++)
         for (i = 0; i <= PP_N; i++)
@@ -2165,9 +1986,8 @@ partition_init_fn(p4est_t *p4est, p4est_topidx_t which_tree,
                 }
 
 
-    // data1 = &data[(Part - 1) * nVar * P3 + P3*nVar + P2*nVar + P1 * nVar + nVar - 1 ];// + PP_N * nVar * P2 + PP_N * nVar * P1 + PP_N * nVar + (nVar - 1)];
     data1 = &data[P3 *
-                  nVar];// + P2 * nVar + P1 * nVar + nVar]; // + PP_N * nVar * P2 + PP_N * nVar * P1 + PP_N * nVar + (nVar - 1)];
+                  nVar];
     Part = 2; // This is Elem_xGP
     for (dir = 1; dir <= D; dir++)
         for (i = 0; i <= PP_N; i++)
@@ -2186,7 +2006,6 @@ partition_init_fn(p4est_t *p4est, p4est_topidx_t which_tree,
 static void
 ReturnData(p4est_iter_volume_info_t *info, void *user_data) {
     p4est_quadrant_t *q = info->quad;
-    // p4est_inner_data_t *dataquad = (p4est_inner_data_t *)q->p.user_data;
     p4est_t *p4est = info->p4est;
     p4est_balance_data_t *ctx = (p4est_balance_data_t *) p4est->user_pointer;
     double *data = (double *) q->p.user_data;
@@ -2219,17 +2038,14 @@ ReturnData(p4est_iter_volume_info_t *info, void *user_data) {
                 }
 
     data1 = &data[P3 *
-                  nVar]; // + P2 * nVar + P1 * nVar + nVar]; // + PP_N * nVar * P2 + PP_N * nVar * P1 + PP_N * nVar + (nVar - 1)];
+                  nVar]; 
     Part = 2;                 // This is Elem_xGP
     for (dir = 1; dir <= D; dir++)
         for (i = 0; i <= PP_N; i++)
             for (j = 0; j <= PP_N; j++)
                 for (k = 0; k <= PP_N; k++) {
-                    // data[(Part - 1) * nVar * P3 + k * nVar * P2 + j * nVar * P1 + i * nVar + (dir - 1)]
-                    //     = Elem_xGP[(iElem - 1) * D * P3 + k * D * P2 + j * D * P1 + i * D + (dir - 1)];
                     Elem_xGP[(iElem - 1) * D * P3 + k * D * P2 + j * D * P1 + i * D + (dir - 1)]
                             = data1[k * D * P2 + j * D * P1 + i * D + (dir - 1)];
-                    // printf("a = %f \n",a);
                 }
     ctx->nElems++;
 }
@@ -2242,17 +2058,11 @@ void ResetElementNumber(p4est_t *p4est) {
                   NULL,
                   (void *) &nEl,
                   ElementCounterNew_iter,
-            // ElementCounterSetOldToZero_iter,
                   NULL,
                   NULL,
                   NULL);
-    // ElementCounterNew_iter
     return;
 }
-
-// typedef void(* p4est_init_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
-
-// typedef int(* p4est_weight_t)(p4est_t *p4est, p4est_topidx_t which_tree, p4est_quadrant_t *quadrant)
 
 typedef struct p4est_Weights {
     int index;
@@ -2284,19 +2094,7 @@ weight_fn(p4est_t *p4est,
     return Weight;
 }
 
-// static int
-// weight_fn(p4est_t *p4est,
-//           p4est_topidx_t which_tree,
-//           p4est_quadrant_t *quad)
-// {
-//         p4est_inner_data_t *dataquad = (p4est_inner_data_t *)quad->p.user_data;
-//         return (int)dataquad->weight;
-// }
-
-
 void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer) {
-    // p4set_gloidx_t  *dest; // before
-    // p4set_gloidx_t  *src = (p4set_gloidx_t  *)desptr; // after
     p4est_balance_datav2_t *data = (p4est_balance_datav2_t *) user_pointer;
     p4est_gloidx_t *src = nullptr; //(p4set_gloidx_t  *)desptr; // after
     p4est_Weights_t WeightStruct;
@@ -2307,7 +2105,6 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer) {
                   NULL,
                   (void *) &WeightStruct,
                   WeightsFunctionIter,
-            // ElementCounterSetOldToZero_iter,
                   NULL,
                   NULL,
                   NULL);
@@ -2323,13 +2120,10 @@ void p4est_loadbalancing_init(p4est_t *p4est, void *user_pointer) {
     p4est->user_pointer = (void *) &WeightStruct;
     WeightStruct.index = 0;
     const int allow_coarsening = 1;
-    //p4est_partition(p4est, allow_coarsening, NULL);
     p4est_partition(p4est, allow_coarsening, weight_fn);
     p4est->user_pointer = nullptr;
-    // printf(" data->src_gfq [1] = %d \n",  data->src_gfq[1]);
     data->nElems = p4est->local_num_quadrants;
     free(WeightStruct.Weights);
-    // printf("mpirank = %d, nElems = %d \n", p4est->mpirank, data->nElems);
     return;
 }
 
@@ -2351,12 +2145,7 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
                          sizeof(double));
 #endif /*SHOCK_NFVSE*/
 
-    //  printf("data->GPSize= %d \n", data->GPSize);
-    // int a = MPI_Barrier(p4est->mpicomm);
-    
-    // int b = MPI_Barrier(p4est->mpicomm);
     free(data->src_gfq);
-    // free(dest);
 
     return;
 
@@ -2381,8 +2170,6 @@ void p4est_loadbalancing(p4est_t *p4est, void *user_pointer) {
     p4est1->user_pointer = user_pointer;
 
     nElems = p4est1->local_num_quadrants;
-    // double *Elem_xGP = (double *)ctx->DataSetElem_xGP;
-    // double *U = (double *)ctx->DataSetU;
     //Create to Array to return to the FLUXO
     int P1 = PP_N + 1;
     int P2 = P1 * P1;
@@ -2413,12 +2200,9 @@ void p4est_loadbalancing(p4est_t *p4est, void *user_pointer) {
                                              edges between quadrants */
                   NULL);
 
-    // p4est_destroy(p4est);
     p4est = p4est1;
-    // printf("Balance is DONE !!! \n");
     data->nElems = p4est1->local_num_quadrants;
     return;
-    // exit(1);
 }
 
 //From Hopest, but was changed to connectivity,  not p4est
@@ -2429,7 +2213,6 @@ void p4_build_bcs(p8est_connectivity_t *connectivity,
 
     p8est_connectivity_t *conn = connectivity;
     P4EST_ASSERT(p4est_connectivity_is_valid(conn));
-    // printf("Connectivity adress = %p\n", conn);
     P4EST_ASSERT(connectivity->num_trees == num_trees);
     p4est_connectivity_set_attr(conn, 6 * sizeof(int32_t));
     P4EST_ASSERT(p4est_connectivity_is_valid(conn));
@@ -2440,5 +2223,3 @@ void p4_build_bcs(p8est_connectivity_t *connectivity,
         }
     }
 }
-
-//#include "save.fc"
