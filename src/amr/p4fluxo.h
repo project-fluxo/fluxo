@@ -26,7 +26,6 @@
 #include <p4est_to_p8est.h>
 
 #define nullptr ((void*)0)
-#define NON_OPTIMIZED
 #define MORTAR_SIDE_WEIGHT 1
 static sc_MPI_Comm mpicomm;
 
@@ -60,11 +59,6 @@ typedef struct p4est_inner_data {
     int SidesID[6];
     uint8_t flips[6];
     uint8_t weight;
-#ifndef NON_OPTIMIZED
-    int OldSidesID[6];
-    int8_t SidesRatio[6];// 0 = Sides the same. -1 = Side is smaller as the NB. +1 = Side is Bigger as NB
-    int8_t IsChanged;
-#endif
 } p4est_inner_data_t;
 
 typedef struct p4est_balance_data {

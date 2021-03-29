@@ -39,13 +39,6 @@ ElementCounterSetOldToZero_iter(p4est_iter_volume_info_t *info, void *user_data)
     }
     dataquad->OldElementID[0] = dataquad->ElementID;
 
-#ifndef NON_OPTIMIZED
-    dataquad->IsChanged = 0;
-    for (i = 0; i < 6; i++) {
-        dataquad->OldSidesID[i] = dataquad->SidesID[i];
-
-    }
-#endif
     return;
 }
 
@@ -58,15 +51,9 @@ ElementCounter_iter(p4est_iter_volume_info_t *info, void *user_data) {
     //ElementID must be set in previous function (for example getData444)
     dataquad->ElementID = ++data->nElems;
     dataquad->weight = 0;
-#ifndef NON_OPTIMIZED
-    dataquad->IsChanged = 0;
-#endif
-    for (i = 0; i < 6; i++) {
-#ifndef NON_OPTIMIZED
-        dataquad->OldSidesID[i] = dataquad->SidesID[i];
-#endif
-        dataquad->SidesID[i] = 0;
 
+    for (i = 0; i < 6; i++) {
+        dataquad->SidesID[i] = 0;
     }
 
     return;
@@ -87,9 +74,6 @@ ElementCounterNew_iter(p4est_iter_volume_info_t *info, void *user_data) {
     dataquad->OldElementID[0] = dataquad->ElementID;
     for (i = 0; i < 6; i++) {
         dataquad->SidesID[i] = -1;
-#ifndef NON_OPTIMIZED
-        dataquad->OldSidesID[i] = -1;
-#endif
         dataquad->flips[i] = -1;
     }
     return;
@@ -1049,253 +1033,6 @@ SetMPISidesAUXNumber(p4est_iter_face_info_t *info, void *user_data) {
 
     }
 }
-
-
-#ifndef NON_OPTIMIZED
-///////////////////////////////////////////////////////////////////////////////
-//
-// Set the SidesRatio. = 0 is non hanging Side. -1 = Small Side, +1 = big Side
-//  it is not used  the ghost layer.
-//
-///////////////////////////////////////////////////////////////////////////////
-static void
-SetSidesRatio(p4est_iter_face_info_t *info, void *user_data)
-{
-    int i, j, iBigSide = 0, iSmallSide = 0;
-    p4est_t *p4est = info->p4est;
-
-    int Changes = 0;
-   p4est_quadrant_t *quad;
-    p4est_inner_data_t *dataquad;
-
-    p4est_iter_face_side_t *side[2];
-    sc_array_t *sides = &(info->sides);
-
-    if (sides->elem_count == 1)
-    {
-        side[0] = p4est_iter_fside_array_index_int(sides, 0);
-        quad = side[0]->is.full.quad;
-        int face = side[0]->face;
-        dataquad = (p4est_inner_data_t *)quad->p.user_data;
-        dataquad->SidesRatio[face] = 0;// For Boundary always 0.
-        return;
-    }
-    side[0] = p4est_iter_fside_array_index_int(sides, 0);
-    side[1] = p4est_iter_fside_array_index_int(sides, 1);
-    if (side[0]->is_hanging || side[1]->is_hanging)
-    {
-        //One Side is Mortar
-        iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
-        iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
-        int Bigface = side[iBigSide]->face;
-        int SmallFace = side[iSmallSide]->face;
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
-        {
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
-            {
-                if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
-                {
-                    // not ghost side, but local
-                    quad = side[iSmallSide]->is.hanging.quad[j];
-                    dataquad = (p4est_inner_data_t *)quad->p.user_data;
-                    dataquad->SidesRatio[SmallFace] = -1;
-
-                }
-                else
-                {
-                }
-            }
-            quad = side[iBigSide]->is.full.quad;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            dataquad->SidesRatio[Bigface] = 1;
-        }
-        else
-        { //We have only 4 small sides
-            // Nothing to do
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
-            {
-                //quad=side[i]->is.hanging.quad[j];
-                if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
-                {
-                    // not ghost side, but local
-                    quad = side[iSmallSide]->is.hanging.quad[j];
-                    dataquad = (p4est_inner_data_t *)quad->p.user_data;
-                   dataquad->SidesRatio[SmallFace] = -1;
-                    // continue;
-                }
-            }
-        return;
-        }
-    }
-    else //Then it is a one side
-    {
-        if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost)
-        {
-            int SideIn = 0;
-            int SideGhost = 1;
-            if (side[0]->is.full.is_ghost)
-            {
-                SideIn = 1;
-                SideGhost = 0;
-            }
-            quad = side[SideIn]->is.full.quad;
-            int face = side[SideIn]->face;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-
-            dataquad->SidesRatio[face] = 0;
-        }
-        else //No Ghosts
-        {
-            int face = side[0]->face;
-            quad = side[0]->is.full.quad;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            dataquad->SidesRatio[face] = 0;
-
-            quad = side[1]->is.full.quad;
-            face = side[1]->face;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            dataquad->SidesRatio[face] = 0;
-        }
-
-            return;
-    }
-}
-#endif //  NON_OPTIMIZED
-#ifndef NON_OPTIMIZED
-///////////////////////////////////////////////////////////////////////////////
-//
-// Check if two or five NB quads was changed - then set OldSidesID to Zero.
-// We use also the ghost layer.
-//
-///////////////////////////////////////////////////////////////////////////////
-static void
-CheckChanges(p4est_iter_face_info_t *info, void *user_data)
-{
-    int i, j, iBigSide = 0, iSmallSide = 0;
-    p4est_t *p4est = info->p4est;
-    int myrank = p4est->mpirank;
-    int Changes = 0;
-    p4est_quadrant_t *quad;
-    p4est_inner_data_t *dataquad;
-
-    p4est_iter_face_side_t *side[2];
-    sc_array_t *sides = &(info->sides);
-
-    if (sides->elem_count == 1)
-    {
-        // There is nothing to do here with bounadry;
-        return;
-    }
-    side[0] = p4est_iter_fside_array_index_int(sides, 0);
-    side[1] = p4est_iter_fside_array_index_int(sides, 1);
-    if (side[0]->is_hanging || side[1]->is_hanging)
-    {
-        //One Side is Mortar
-        iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
-        iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
-        int Bigface = side[iBigSide]->face;
-        int SmallFace = side[iSmallSide]->face;
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
-        {
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
-            {
-                if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
-                {
-                     // not ghost side, but local
-                     quad = side[iSmallSide]->is.hanging.quad[j];
-                     dataquad = (p4est_inner_data_t *)quad->p.user_data;
-                    if ((dataquad->SidesRatio[SmallFace] != -1) 
-                        || (dataquad->OldElementID[0] < 0) 
-                        || (dataquad->OldElementID[1] > 0)
-                        || (dataquad->OldSidesID[SmallFace]<=0))
-                        dataquad->IsChanged++;
-
-                }
-                else
-                {
-
-                    // MPI MINE Side;
-                }
-            }
-            quad = side[iBigSide]->is.full.quad;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            if ((dataquad->SidesRatio[Bigface] != 1) 
-                || (dataquad->OldElementID[0] < 0) 
-                || (dataquad->OldElementID[1] > 0) 
-                || (dataquad->OldSidesID[Bigface] <= 0))
-                dataquad->IsChanged++;
-
-           
-
-        }
-        else
-        { //We have only 4 small sides
-            // Nothing to do
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
-            {
-                if (side[iSmallSide]->is.hanging.is_ghost[j] == 0)
-                {
-                    // not ghost side, but local
-                    quad = side[iSmallSide]->is.hanging.quad[j];
-                    dataquad = (p4est_inner_data_t *)quad->p.user_data;
-
-                    if ((dataquad->SidesRatio[SmallFace] != -1) 
-                        || (dataquad->OldElementID[0] < 0) 
-                        || (dataquad->OldElementID[1] > 0) 
-                        || (dataquad->OldSidesID[SmallFace] <= 0))
-                        dataquad->IsChanged++;
-                }
-            }
-            return;
-        }
-    }
-    else //Then it is a one side
-    {    //Nothing to do here. We optimize Mortar side
-
-      if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost)
-        {
-            int SideIn = 0;
-            int SideGhost = 1;
-            if (side[0]->is.full.is_ghost)
-            {
-                SideIn = 1;
-                SideGhost = 0;
-            }
-            quad = side[SideIn]->is.full.quad;
-            int face = side[SideIn]->face;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            if ((dataquad->SidesRatio[face] != 0) 
-            || (dataquad->OldElementID[0] < 0) 
-            || (dataquad->OldElementID[1] > 0) 
-            || (dataquad->OldSidesID[face] <= 0))
-                dataquad->IsChanged++;
-        }
-        else //No Ghosts
-        {
-            int face = side[0]->face;
-            quad = side[0]->is.full.quad;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-            if ((dataquad->SidesRatio[face] != 0) 
-            || (dataquad->OldElementID[0] < 0) 
-            || (dataquad->OldElementID[1] > 0) 
-            || (dataquad->OldSidesID[face] <= 0))
-                dataquad->IsChanged++;
-
-            quad = side[1]->is.full.quad;
-            face = side[1]->face;
-            dataquad = (p4est_inner_data_t *)quad->p.user_data;
-             if ((dataquad->SidesRatio[face] != 0) 
-            || (dataquad->OldElementID[0] < 0) 
-            || (dataquad->OldElementID[1] > 0) 
-            || (dataquad->OldSidesID[face] <= 0))
-                dataquad->IsChanged++;
-        }
-
-        return;
-    }
-}
-
-#endif
 
 static void
 ShiftMPISideNumeration(p4est_iter_face_info_t *info, void *user_data) {
