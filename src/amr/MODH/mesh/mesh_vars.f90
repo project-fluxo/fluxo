@@ -28,8 +28,6 @@ MODULE MODH_Mesh_Vars
     INTEGER :: NGeo_out                    ! polynomial degree of geometric transformation for output
     REAL, ALLOCATABLE :: XGeo(:, :, :, :, :)             ! High order geometry nodes, per element (1:3,0:Ngeo,0:Ngeo,0:Ngeo,nTrees)
 
-    LOGICAL :: setUserBCs = .FALSE.          ! replace HDF5 BCs by those defined in parameter file (only in solver mode)
-
     !-----------------------------------------------------------------------------------------------------------------------------------
     ! GLOBAL VARIABLES
     !-----------------------------------------------------------------------------------------------------------------------------------

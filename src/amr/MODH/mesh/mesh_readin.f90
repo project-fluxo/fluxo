@@ -78,63 +78,6 @@ CONTAINS
         SWRITE(UNIT_StdOut, '(132("."))')
     END SUBROUTINE ReadBCs
 
-    ! BC must be set by FLUXO
-    ! TODO: This routine does nothing but is being kept because it might be important for user-defined BCs. Check this!
-    SUBROUTINE SetUserBCs()
-        !===================================================================================================================================
-        ! The user can redefine boundaries in the ini file. We create the mappings for the boundaries.
-        !===================================================================================================================================
-        ! MODULES
-        USE MOD_Globals
-        USE MOD_Mesh_Vars, ONLY : BoundaryName, BoundaryType, nBCs, nUserBCs
-
-        USE MOD_ReadinTools, ONLY : GETSTR, GETINTARRAY
-        ! IMPLICIT VARIABLE HANDLING
-        IMPLICIT NONE
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! INPUT VARIABLES
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! OUTPUT VARIABLES
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! LOCAL VARIABLES
-        INTEGER :: BCMapping(nBCs)
-        CHARACTER(LEN = 255), ALLOCATABLE :: BoundaryNameUser(:)
-        INTEGER, ALLOCATABLE :: BoundaryTypeUser(:, :)
-        INTEGER :: iBC, iUserBC
-        !===================================================================================================================================
-        ! read in boundary conditions, will overwrite BCs from meshfile!
-        ! nUserBCs = CNTSTR('BoundaryName',0)
-        ! print *, "=============> HERE! <===================", nUserBCs
-        ! IF(nUserBCs.EQ.0)
-        RETURN
-
-        ! Read user BC
-        ALLOCATE(BoundaryNameUser(nUserBCs))
-        ALLOCATE(BoundaryTypeUser(nUserBCs, 2))
-        DO iBC = 1, nUserBCs
-            BoundaryNameUser(iBC) = GETSTR('BoundaryName')
-            BoundaryTypeUser(iBC, :) = GETINTARRAY('BoundaryType', 2) !(/Type,State/)
-        END DO
-
-        ! Override BCs
-        BCMapping = 0
-        DO iBC = 1, nBCs
-            DO iUserBC = 1, nUserBCs
-                IF(INDEX(TRIM(BoundaryNameUser(iUserBC)), TRIM(BoundaryName(iBC))) .NE.0)THEN
-                    SWRITE(Unit_StdOut, '(A,A)')    ' |     Boundary in HDF file found | ', TRIM(BoundaryName(iBC))
-                    SWRITE(Unit_StdOut, '(A,I2,I2)')' |                            was | ', BoundaryType(1, iBC), BoundaryType(3, iBC)
-                    SWRITE(Unit_StdOut, '(A,I2,I2)')' |                      is set to | ', BoundaryTypeUser(iUserBC, 1:2)
-                    BoundaryType(BC_TYPE, iBC) = BoundaryTypeUser(iUserBC, 1)
-                    BoundaryType(BC_STATE, iBC) = BoundaryTypeUser(iUserBC, 2)
-                END IF
-            END DO
-        END DO
-
-        SWRITE(UNIT_StdOut, '(132("."))')
-        DEALLOCATE(BoundaryNameUser, BoundaryTypeUser)
-    END SUBROUTINE SetUserBCs
-
-
     SUBROUTINE ReadMeshHeader(FileString)
         !===================================================================================================================================
         ! Subroutine to read the mesh from a mesh data file
@@ -195,8 +138,6 @@ CONTAINS
         DEALLOCATE(HSize)
 
         CALL readBCs()
-
-        CALL setUserBCs()
 
         CALL CloseDataFile()
 

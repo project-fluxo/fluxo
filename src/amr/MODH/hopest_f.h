@@ -35,8 +35,6 @@
 #define BC_SIZE   4
 #define BC_TYPE   1
 #define BC_CURVED 2
-#define BC_STATE  3
-#define BC_ALPHA  4
 
 !entry positions in ElemInfo 
 #define ElemInfoSize      6        /*number of entry in each line of ElemInfo*/

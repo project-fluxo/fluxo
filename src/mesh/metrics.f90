@@ -175,7 +175,6 @@ CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 DO iElem=1,nElems
   IF (ForAMR) THEN
     CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N )
-    !~ CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N1 )
     CALL ChangeBasis3D(3,PP_N,NGeo,Vdm_GLN_GLNGeo ,XGL_N   ,XGL_Ngeo)
   ELSE
     !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
