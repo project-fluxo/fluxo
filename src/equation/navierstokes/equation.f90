@@ -494,6 +494,8 @@ REAL                            :: sines(256)
 INTEGER                         :: f
 ! needed for cylinder potential flow
 REAL                            :: phi
+integer :: dim_
+real :: newx(3)
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
@@ -733,6 +735,24 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
   IF ((r2.LE.0.1).AND.(r2.NE.0.)) THEN
     du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
     prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+  END IF
+  CALL PrimToCons(prim,resu)
+CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
+  dim_ = 3
+  prim(1)   = 1.     ! ambient density
+  prim(2:4) = 0.     ! gas at rest initially
+  prim(5)   = 1.     ! ambient pressure
+  newx = (x - IniCenter)
+  
+  r2 = SQRT(SUM(newx(1:dim_)*newx(1:dim_)))! the radius
+  IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN ! 
+    prim(1) = 1.3416149068323
+    prim(2) = 0.361538208967199 * newx(1) / r2
+    prim(3) = 0.361538208967199 * newx(2) / r2
+    if (dim_ == 3) then
+      prim(4) = 0.361538208967199 * newx(3) / r2
+    end if
+    prim(5) = 1.51333333333333
   END IF
   CALL PrimToCons(prim,resu)
 END SELECT ! ExactFunction
