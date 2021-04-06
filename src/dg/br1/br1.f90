@@ -165,7 +165,7 @@ USE MOD_Mesh_Vars,         ONLY: LastMPISide_MINE,FirstMortarMPISide,nMortarMPIS
 USE MOD_Mesh_Vars,         ONLY: nInnerSides,FirstInnerSide,LastInnerSide 
 USE MOD_Mesh_Vars,         ONLY: nMPISides_MINE,FirstMPISide_MINE,LastMPISide_MINE 
 #endif 
-USE MOD_FillMortar,        ONLY: U_Mortar,Flux_Mortar
+USE MOD_FillMortar,        ONLY: U_Mortar,Flux_Cons_Mortar
 USE MOD_Lifting_SurfInt,   ONLY: Lifting_SurfInt
 USE MOD_Lifting_VolInt,    ONLY: Lifting_VolInt
 USE MOD_ProlongToFace,     ONLY: ProlongToFace
@@ -214,7 +214,7 @@ CALL Lifting_FillFlux_BC(tIn,FluxX, FluxY, FluxZ)
 CALL Lifting_FillFlux(FluxX,FluxY,FluxZ,doMPISides=.FALSE.)
 
 !Start now with gradPx
-CALL Flux_Mortar(FluxX,FluxX,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
+CALL Flux_Cons_Mortar(FluxX,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
 
 CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.FALSE.)
 
@@ -222,7 +222,7 @@ CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.FALSE.)
 ! Complete send / receive FluxX
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,1,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-CALL Flux_Mortar(FluxX,FluxX,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
+CALL Flux_Cons_Mortar(FluxX,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxX
 CALL Lifting_SurfInt(FluxX,gradPx,doMPISides=.TRUE.)
 #endif /*MPI*/
 
@@ -252,7 +252,7 @@ CALL U_Mortar(gradPx_master,gradPx_slave,doMPISides=.FALSE.)
 
 !gradPx sides finished (will be received in DG)
 ! now gradPy sides
-CALL Flux_Mortar(FluxY,FluxY,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
+CALL Flux_Cons_Mortar(FluxY,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
 
 CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.FALSE.)
 
@@ -260,7 +260,7 @@ CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.FALSE.)
 ! Complete send / receive FluxY
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,2,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-CALL Flux_Mortar(FluxY,FluxY,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
+CALL Flux_Cons_Mortar(FluxY,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxY
 
 CALL Lifting_SurfInt(FluxY,gradPy,doMPISides=.TRUE.)
 #endif /*MPI*/
@@ -289,14 +289,14 @@ CALL U_Mortar(gradPy_master,gradPy_slave,doMPISides=.FALSE.)
 !gradPy sides finished (will be received in DG)
 ! now gradPz sides
 
-CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
+CALL Flux_Cons_Mortar(FluxZ,doMPISides=.FALSE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
 
 CALL Lifting_SurfInt(FluxZ,gradPz,doMPISides=.FALSE.)
 #if MPI
 ! Complete send / receive FluxZ
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Lifting(:,3,:))!Send MINE -receive YOUR
 !FINALIZE Fluxes for MPI Sides
-CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
+CALL Flux_cons_Mortar(FluxZ,doMPISides=.TRUE.,weak=.FALSE.) !here, strong flux_slave=flux_master=fluxZ
 CALL Lifting_SurfInt(FluxZ,gradPz,doMPISides=.TRUE.)
 #endif /*MPI*/
 
