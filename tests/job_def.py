@@ -609,8 +609,8 @@ def job_definition():
          {'tags': ['mhd','freestream','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [0.20843974245430472, 0.16163638839069047, 0.11036650636467360, 0.13146725568430423, 0.29599931757632236, 0.12065374311914598, 0.17516347069271623, 0.12596313999327302, 4.9235758173196982E-002],
-                                                  'err_tol': 1e-8} } , # err_tol is limited by the precision of the output..
+                                                    'to_be': [2.495915018038E+00,   6.325174433685E-01,   7.889488615235E-01,   5.323075180477E-01,   1.325157194232E+00,   3.723270002320E-01,   3.284881946353E-01,   4.062933775229E-01,   6.423215469974E-01],
+                                                  'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
       }
