@@ -35,7 +35,11 @@ INTERFACE Flux_Mortar
   MODULE PROCEDURE Flux_Mortar
 END INTERFACE
 
-PUBLIC::U_Mortar,Flux_Mortar
+INTERFACE Flux_Cons_Mortar
+  MODULE PROCEDURE Flux_Cons_Mortar
+END INTERFACE
+
+PUBLIC::U_Mortar,Flux_Mortar,Flux_Cons_mortar
 
 CONTAINS
 
@@ -327,5 +331,29 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
 END DO !MortarSideID
 END SUBROUTINE Flux_Mortar
 
+
+
+!==================================================================================================================================
+!> Calls flux_mortar if flux is conservative, slave=master, with array 
+!>   Flux_master(:,:,:,1:nSides)=Flux(:,:,:,1:nSides)
+!>   Flux_slave(:,:,:,FirstSlaveSide:LastSlaveSide)=Flux(:,:,:,FirstSlaveSide:LastSlaveSide)
+!==================================================================================================================================
+SUBROUTINE Flux_Cons_Mortar(Flux,doMPISides,weak)
+! MODULES
+USE MOD_Preproc
+USE MOD_Mesh_Vars,   ONLY: nSides
+USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,LastSlaveSide
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT)   :: Flux(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< on input: has flux from small mortar sides 
+LOGICAL,INTENT(IN) :: doMPISides                                    !< flag whether MPI sides are processed
+LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+CALL Flux_Mortar(Flux(:,:,:,1:nSides),Flux(:,:,:,FirstSlaveSide:LastSlaveSide),doMPIsides,weak)
+
+END SUBROUTINE Flux_Cons_mortar
 
 END MODULE MOD_FillMortar

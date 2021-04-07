@@ -340,7 +340,7 @@ END IF !MPIroot & AnalyzeToFile
 IF(doCalcErrorNorms)THEN
   CALL CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)' L_2        : ',L_2_Error
     WRITE(UNIT_StdOut,formatStr)' L_2_colloc : ',L_2_colloc
     WRITE(UNIT_StdOut,formatStr)' L_inf      : ',L_Inf_Error
@@ -357,7 +357,7 @@ END IF  ! ErrorNorms
 IF(doCalcBulk)THEN
   CALL CalcBulk(bulk,bulk_t,maxabs_Ut)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
     WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk_t(:)
     WRITE(UNIT_StdOut,formatStr)' max|Ut|    : ',maxabs_Ut

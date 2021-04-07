@@ -800,7 +800,6 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
     prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/VPP_Pi
   END IF
   CALL PrimToCons(prim,resu)
-  
 CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
   dim_ = 3
   prim(1)   = 1.     ! ambient density
@@ -819,7 +818,6 @@ CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
     prim(5) = 1.51333333333333
   END IF
   CALL PrimToCons(prim,resu)
-  
 case(15)
   ! Some parameters
   dim_ = 2 ! (2D)
