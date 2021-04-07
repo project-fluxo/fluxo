@@ -49,10 +49,6 @@ INTERFACE FinalizeAMR
   MODULE PROCEDURE FinalizeAMR
 END INTERFACE
 
-INTERFACE LoadBalancingAMR
-  MODULE PROCEDURE LoadBalancingAMR
-END INTERFACE
-
 INTERFACE SaveMesh
   MODULE PROCEDURE SaveMesh
 END INTERFACE
@@ -64,7 +60,6 @@ PUBLIC :: WriteStateAMR
 PUBLIC::RunAMR
 PUBLIC::InitAMR_Connectivity
 PUBLIC::DefineParametersAMR
-PUBLIC::LoadBalancingAMR
 CONTAINS
 
 !==================================================================================================================================
@@ -314,12 +309,8 @@ inquire( file=trim(FileString), exist=CheckP4estFileExist )
 END FUNCTION CheckP4estFileExist
 
 !==================================================================================================================================
-!>  The main SUBROUTINE used for Coarse/Refine Mesh.
-!> IF Array ElemToRefineAndCoarse is not Present, then the SUBROUTINE just rebuild the FLUXO Nesh 
-!>  according to the p4est Data
-!>
+!>  The main SUBROUTINE used to adapt the mesh (Coarsening and refining).
 !==================================================================================================================================
-
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
   USE MOD_PreProc,            ONLY: PP_N
@@ -339,7 +330,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
 #endif  /*MPI*/
-
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   use MOD_Mortar_Vars,        only: M_0_1,M_0_2
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
@@ -357,9 +347,12 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
 #endif /*SHOCKCAPTURE*/
   USE, INTRINSIC :: ISO_C_BINDING
+! ----------------------------------------------------------------------------------------------------------------------------------
+! ARGUMENTS
+  INTEGER, ALLOCATABLE, TARGET :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
+! ----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
   REAL,ALLOCATABLE :: Elem_xGP_New(:,:,:,:,:), U_New(:,:,:,:,:)
-  INTEGER, ALLOCATABLE, TARGET, Optional  :: ElemToRefineAndCoarse(:) ! positive Number - refine, negative - coarse, 0 - do nothing
   INTEGER :: Ie
   TYPE(C_PTR) :: DataPtr;
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
@@ -373,63 +366,83 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (.NOT. UseAMR) THEN
     RETURN;
   ENDIF
-  
+
+! ==============
+! Store old data  
+! ==============
   nElemsOld = nElems;
   nSidesOld = nSides
   LastSlaveSideOld = LastSlaveSide;
   firstSlaveSideOld = firstSlaveSide;
   firstMortarInnerSideOld = firstMortarInnerSide
-  IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
-  ENDIF 
-
-  DATAPtr = C_LOC(FortranData)
   
+! ================================================
+! Compute which elements will be refined/coarsened
+! ================================================
+  CALL RefineCoarse(p4est_ptr,C_LOC(ElemToRefineAndCoarse))
+  DATAPtr = C_LOC(FortranData)
   FortranData%nElems = GetNElems(p4est_ptr)
 
+! =========================================================================================================================
+! Get the element changes into the ChangeElem variable
+!       ChangeElem(1:8,1:nElems)
+!                    |        |_ New element index (in the adapted mesh)
+!                    |__________ Stores old element index(es)
+!                                * Refinement: First position = minus the old element index, second to eighth positions = 0
+!                                * Coarsening: All poisitive old element indices
+!                                * Nothing:    First position = the old element index (positive), second to eighth = 0
+! =========================================================================================================================
   ALLOCATE(ChangeElem(8,FortranData%nElems))
   FortranData%ChngElmPtr = C_LOC(ChangeElem)
   
   CALL FillElemsChanges(p4est_ptr, DATAPtr)
   
-  IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ALLOCATE(Elem_xGP_New(3      ,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
-    ALLOCATE(U_New       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
-    allocate(ElemWasCoarsened(FortranData%nElems) )
-    ElemWasCoarsened = 0
-    iElem=0;
-    DO 
-      iElem=iElem+1;
-      IF (iElem .GT. FortranData%nElems) EXIT
-        i=1;
-        Ie= ChangeElem(i,iElem);
-        IF (Ie .LT. 0) THEN
-          !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
-          ! contains the number of child element 
-          call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
-          call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
-          iElem=iElem+7;
-        ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
-          !  This is COARSE. Array ChangeElem(:,iElem) Contains 
-          !  8 Element which must be COARSED to the new number iElem
-          ElemWasCoarsened(iElem) = 1
-          call InterpolateCoords_Coarsening( Elem_xGP_New(:,:,:,:,iElem),&
-                                             Elem_xGP    (:,:,:,:,ChangeElem(:,iElem)) )
-          call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,ChangeElem(:,iElem)))
-        ELSE
-          IF (iE .LE. 0) THEN
-            print *, "Error, iE = 0!, iElem = ", ielem
-            CALL EXIT()
-          ENDIF
-          ! This is simple case of renumeration of Elements
-          Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
-          U_New       (:,:,:,:,iElem)= U       (:,:,:,:,Ie)
+! =====================================================================================================
+! Transfer the solution (U) and the node coordinates (Elem_xGP) to the new mesh
+! ATTENTION!!: 1) For the elements that are coarsened, we transfer J*U. This is needed to obtain an 
+!                 accurate L2 projection in physical space!!
+!              2) U is recovered in a later stage after the metric terms are computed for the new mesh.
+! =====================================================================================================
+  ALLOCATE(Elem_xGP_New(3      ,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+  ALLOCATE(U_New       (PP_nVar,0:PP_N,0:PP_N,0:PP_N,FortranData%nElems))
+  allocate(ElemWasCoarsened(FortranData%nElems) )
+  ElemWasCoarsened = 0
+  iElem=0;
+  DO 
+    iElem=iElem+1;
+    IF (iElem .GT. FortranData%nElems) EXIT
+    
+    Ie= ChangeElem(1,iElem);    
+    IF (Ie .LT. 0) THEN
+      !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
+      ! contains the number of child element 
+      call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
+      call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
+      iElem=iElem+7;
+    ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
+      !  This is COARSE. Array ChangeElem(:,iElem) Contains 
+      !  8 Element which must be COARSED to the new number iElem
+      ElemWasCoarsened(iElem) = 1
+      call InterpolateCoords_Coarsening( Elem_xGP_New(:,:,:,:,iElem),&
+                                         Elem_xGP    (:,:,:,:,ChangeElem(:,iElem)) )
+      call ProjectSolution_Coarsening(U_New(:,:,:,:,iElem), U(:,:,:,:,ChangeElem(:,iElem)),sJ(:,:,:,ChangeElem(:,iElem)))
+    ELSE
+      IF (iE .LE. 0) THEN
+        print *, "Error, iE = 0!, iElem = ", ielem
+        CALL EXIT()
       ENDIF
-    END DO
-      CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
-      CALL MOVE_ALLOC(U_New, U)
-  ENDIF
-   
+      ! This is simple case of renumeration of Elements
+      Elem_xGP_New(:,:,:,:,iElem)= Elem_xGP(:,:,:,:,Ie)
+      U_New       (:,:,:,:,iElem)= U       (:,:,:,:,Ie)
+    ENDIF
+  END DO
+  CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
+  CALL MOVE_ALLOC(U_New, U)
+  
+! =============================================
+! Perform load balancing and display statistics
+! =============================================
+  
   CALL LoadBalancingAMR(ElemWasCoarsened,new_nElems)
 
 #if MPI 
@@ -444,6 +457,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     WRITE(*,'(A,I0,A,I0,A,F0.2,A,I0)') "LoadBalance: Done! nGlobalElems=", sum_nElems, ", min_nElems=", min_nElems, ", avg_nElems=", sum_nElems/real(nProcessors), ", max_nElems=", max_nElems
   ENDIF
 
+! ==============================
+! Reallocate MPI data structures
+! ==============================
+ 
  CALL GetnNBProcs(p4est_ptr, DATAPtr)
 
 #if MPI 
@@ -483,78 +500,78 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   
   CALL GetData(p4est_ptr,DATAPtr)
 
-#if MPI 
-        
-
-IF (nProcessors .GT. 1) THEN
-  nNbProcs=FortranData%nNBProcs
-  ! Here reallocate all arrays and redefine  all parameters
-  
-  SDEALLOCATE(nMPISides_send)
-  ALLOCATE(nMPISides_send(       nNbProcs,2))
-  
-  nMPISides_send(:,1)     =nMPISides_MINE_Proc
-  nMPISides_send(:,2)     =nMPISides_YOUR_Proc
-  
-  SDEALLOCATE(nMPISides_rec)
-  ALLOCATE(nMPISides_rec(        nNbProcs,2))
-  nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
-  nMPISides_rec(:,2)      =nMPISides_MINE_Proc
-  
-  SDEALLOCATE(OffsetMPISides_send)
-  ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
-  OffsetMPISides_send(:,1)=OffsetMPISides_MINE
-  OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
-  
-  SDEALLOCATE(OffsetMPISides_rec)
-  ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
-  OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
-  OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
-  
-  SDEALLOCATE(MPIRequest_U)
-  SDEALLOCATE(MPIRequest_Flux)
-  ALLOCATE(MPIRequest_U(nNbProcs,2)    )
-  ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
-  MPIRequest_U      = MPI_REQUEST_NULL
-  MPIRequest_Flux   = MPI_REQUEST_NULL
+#if MPI
+  IF (nProcessors .GT. 1) THEN
+    nNbProcs=FortranData%nNBProcs
+    ! Here reallocate all arrays and redefine  all parameters
+    
+    SDEALLOCATE(nMPISides_send)
+    ALLOCATE(nMPISides_send(       nNbProcs,2))
+    
+    nMPISides_send(:,1)     =nMPISides_MINE_Proc
+    nMPISides_send(:,2)     =nMPISides_YOUR_Proc
+    
+    SDEALLOCATE(nMPISides_rec)
+    ALLOCATE(nMPISides_rec(        nNbProcs,2))
+    nMPISides_rec(:,1)      =nMPISides_YOUR_Proc
+    nMPISides_rec(:,2)      =nMPISides_MINE_Proc
+    
+    SDEALLOCATE(OffsetMPISides_send)
+    ALLOCATE(OffsetMPISides_send(0:nNbProcs,2))
+    OffsetMPISides_send(:,1)=OffsetMPISides_MINE
+    OffsetMPISides_send(:,2)=OffsetMPISides_YOUR
+    
+    SDEALLOCATE(OffsetMPISides_rec)
+    ALLOCATE(OffsetMPISides_rec( 0:nNbProcs,2))
+    OffsetMPISides_rec(:,1) =OffsetMPISides_YOUR
+    OffsetMPISides_rec(:,2) =OffsetMPISides_MINE
+    
+    SDEALLOCATE(MPIRequest_U)
+    SDEALLOCATE(MPIRequest_Flux)
+    ALLOCATE(MPIRequest_U(nNbProcs,2)    )
+    ALLOCATE(MPIRequest_Flux(nNbProcs,2) )
+    MPIRequest_U      = MPI_REQUEST_NULL
+    MPIRequest_Flux   = MPI_REQUEST_NULL
 #if PARABOLIC && MPI
-  SDEALLOCATE(MPIRequest_Lifting)
-  ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
-  MPIRequest_Lifting = MPI_REQUEST_NULL
+    SDEALLOCATE(MPIRequest_Lifting)
+    ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
+    MPIRequest_Lifting = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
-  IF (nNbProcs .EQ. 0) nNbProcs =1;
-ENDIF
-
-      
+    IF (nNbProcs .EQ. 0) nNbProcs =1;
+  ENDIF
 #endif  /*MPI*/
 
-CALL p4estSetMPIData()
-nElems=FortranData%nElems
-nSides=FortranData%nSides
+! ==========================================================================
+! Reallocate the connectivity arrays (ElemToSide, SideToElem and MortarType)
+! ... And fill them with updated information
+! ==========================================================================
 
-IF (nElemsOld .NE. nElems) THEN
-  deallocate(ElemToSide)
-  ALLOCATE(ElemToSide(2,6,FortranData%nElems))
+  CALL p4estSetMPIData()
+  nElems=FortranData%nElems
+  nSides=FortranData%nSides
 
+  IF (nElemsOld .NE. nElems) THEN
+    deallocate(ElemToSide)
+    ALLOCATE(ElemToSide(2,6,FortranData%nElems))
+  ENDIF
 
-ENDIF
+  IF (nSidesOld .NE. nSides) THEN
+    deallocate(SideToElem)
+    ALLOCATE(SideToElem(5,nSides))
 
-IF (nSidesOld .NE. nSides) THEN
-  
-  deallocate(SideToElem)
-  ALLOCATE(SideToElem(5,nSides))
+    deallocate(MortarType)
+    ALLOCATE(MortarType(2,nSides))
+  ENDIF
+  FortranData%EtSPtr = C_LOC(ElemToSide)
+  FortranData%StEPtr = C_LOC(SideToElem)
+  FortranData%MTPtr = C_LOC(MortarType)
 
-  deallocate(MortarType)
-  ALLOCATE(MortarType(2,nSides))
-ENDIF
-FortranData%EtSPtr = C_LOC(ElemToSide)
-FortranData%StEPtr = C_LOC(SideToElem)
-FortranData%MTPtr = C_LOC(MortarType)
+  CALL SetEtSandStE(p4est_ptr,DATAPtr)
 
-CALL SetEtSandStE(p4est_ptr,DATAPtr)
-
-  
- 
+! ==========================================
+! Reallocate the BC and MortarInfo arrays
+! ... And fill them with updated information
+! ==========================================
  
   CALL C_F_POINTER(FortranData%BCs, nBCsF,[FortranData%nBCSides])
   SDEALLOCATE(BC)
@@ -566,7 +583,9 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
 
-
+! ==========================================
+! Reallocate remaining arrays of size nElems
+! ==========================================
 
   ! Reallocate Arrays if the nElems was changed
   IF (nElemsOld .NE. nElems) THEN
@@ -609,7 +628,10 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
 #endif /* PARABOLIC */
   ENDIF  !IF (nElemsOld .NE. nElems)
 
-    
+! ==========================================
+! Reallocate remaining arrays of size nSides
+! ==========================================
+  
   IF (nSidesOld .NE. nSides) THEN
 ! surface data
     SDEALLOCATE(Face_xGP); ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
@@ -657,56 +679,70 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   
     DEALLOCATE(Flux_master)
     ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-
-
   ENDIF !  IF (nSidesOld .NE. nSides) THEN
 
+! ======================
+! Recalculate parameters
+! ======================
+  ! Mesh parameters
   CALL RecalculateParameters(FortranData)
-    !From DG Vars 
-   nDOFElem=(PP_N+1)**3
-   nTotalU=PP_nVar*nDOFElem*nElems
-   nTotal_face=(PP_N+1)*(PP_N+1)
-   nTotal_vol=nTotal_face*(PP_N+1)
-   nTotal_IP=nTotal_vol*nElems
-   nTotalU=PP_nVar*nTotal_vol*nElems
+  
+  ! Parameters of MOD_DG_Vars
+  nDOFElem=(PP_N+1)**3
+  nTotalU=PP_nVar*nDOFElem*nElems
+  nTotal_face=(PP_N+1)*(PP_N+1)
+  nTotal_vol=nTotal_face*(PP_N+1)
+  nTotal_IP=nTotal_vol*nElems
+  nTotalU=PP_nVar*nTotal_vol*nElems
+  
+! ======================================================
+! Reallocate arrays of size firstSlaveSide:LastSlaveSide
+! ======================================================
   
   IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. (firstSlaveSideOld .NE. firstSlaveSide)) THEN
 #if PARABOLIC
-      IF (ALLOCATED(gradPx_slave))  THEN 
-        DEALLOCATE(gradPx_slave); 
-        ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-      ENDIF
-     
-      IF (ALLOCATED(gradPy_slave))  THEN 
-        DEALLOCATE(gradPy_slave); 
-        ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-      ENDIF
-     
-      IF (ALLOCATED(gradPz_slave))  THEN 
-        DEALLOCATE(gradPz_slave); 
-        ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-      ENDIF
+    IF (ALLOCATED(gradPx_slave))  THEN 
+      DEALLOCATE(gradPx_slave); 
+      ALLOCATE(gradPx_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    ENDIF
+   
+    IF (ALLOCATED(gradPy_slave))  THEN 
+      DEALLOCATE(gradPy_slave); 
+      ALLOCATE(gradPy_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    ENDIF
+   
+    IF (ALLOCATED(gradPz_slave))  THEN 
+      DEALLOCATE(gradPz_slave); 
+      ALLOCATE(gradPz_slave (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    ENDIF
 #endif /* PARABOLIC */
-      DEALLOCATE(U_SLAVE)
-      ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-      DEALLOCATE(Flux_SLAVE)
-      
-      ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-    ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
+    DEALLOCATE(U_SLAVE)
+    ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    DEALLOCATE(Flux_SLAVE)
+    
+    ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+  ENDIF ! IF ((LastSlaveSideOld .NE. LastSlaveSide) .OR. firstSlaveSideOld .NE. firstSlaveSide)) 
   
+! ======================
+! Recompute metric terms
+! ======================
   CALL CalcMetrics((/0/))
   
-  IF (PRESENT(ElemToRefineAndCoarse)) THEN
-    ! Scale coarsened elements
-    do iElem=1, nElems
-      if ( ElemWasCoarsened(iElem)>0 ) then
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          U(:,i,j,k,iElem) = U(:,i,j,k,iElem) * sJ(i,j,k,iElem)
-        end do       ; end do       ; end do
-      end if
-    end do
-  END IF ! PRESENT(ElemToRefineAndCoarse)
+! ================================================================================================
+! Recover U in the elements that were coarsened (their U is currently scaled by the Jacobian: J*U)
+! ================================================================================================
+  ! Scale coarsened elements
+  do iElem=1, nElems
+    if ( ElemWasCoarsened(iElem)>0 ) then
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        U(:,i,j,k,iElem) = U(:,i,j,k,iElem) * sJ(i,j,k,iElem)
+      end do       ; end do       ; end do
+    end if
+  end do
   
+! ===================================================
+! Re-initialize other modules that depend on the mesh
+! ===================================================
 #if SHOCKCAPTURE
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
@@ -714,7 +750,10 @@ CALL SetEtSandStE(p4est_ptr,DATAPtr)
   call FinalizePositivityPreservation()
   call InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
-  
+
+! =========
+! Finish up
+! =========  
   CALL FinalizeBC()
   CALL InitBC()
   call free_data_memory(DataPtr)
@@ -905,7 +944,7 @@ END SUBROUTINE RunAMR
   end subroutine InterpolateCoords_Coarsening
 
 !============================================================================================================================
-!> Deallocate mesh data.
+!> Balances the loads using p4est
 !============================================================================================================================
 SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
   ! MODULES

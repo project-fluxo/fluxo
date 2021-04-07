@@ -98,7 +98,7 @@ end subroutine
     SUBROUTINE PerformAMR()
         USE MOD_PreProc
         USE MOD_DG_Vars,                ONLY : U
-        USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
+        USE MOD_AMR,                    ONLY : RunAMR, SaveMesh;
         USE MOD_Mesh_Vars,              ONLY : nElems
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal, AMR_Indicator
