@@ -1538,7 +1538,7 @@ contains
     use MOD_ShockCapturing_Vars, only: Shock_Indicator
     ! For reconstruction on boundaries
 #if MPI
-    use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
+    use MOD_Mesh_Vars          , only: nSides
     use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster, RECONS_NEIGHBOR
     use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
     USE MOD_MPI_Vars
@@ -1559,11 +1559,11 @@ contains
 #if MPI
     if (ReconsBoundaries >= RECONS_NEIGHBOR) then
       ! receive the master
-      call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartReceiveMPIData(U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
       
       ! Send the master
-      call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartSendMPIData   (U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,2),SendID=1) 
     end if
 #endif /*MPI*/
