@@ -1020,9 +1020,9 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   # New test: Soft blast with BR2 and non-conforming
+   # New test: Soft blast with SC, BR2, and non-conforming
    run_opt_nonConf_parabolic={'runs/navst/softBlast/nonconfParabolic':
-         {'tags': ['navierstokes','blast','nonconforming','br2'] ,
+         {'tags': ['navierstokes','blast','nonconforming','br2','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
                                                     'to_be': [5.945798911280E-01,   2.065011304993E-01,   2.003460892178E-01,   2.207665371548E-01,   2.168581765236E+00],
@@ -1032,9 +1032,9 @@ def job_definition():
       }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
-   jobs['build_navierstokes_type2_br1_entr_vars']={
+   jobs['build_navierstokes_type2_SC_br2_entr_vars']={
           'case': caseID,
-          'tags': [ 'navierstokes','split-form','GL','br2','entropy_var','nonconforming'],
+          'tags': [ 'navierstokes','split-form','GL','br2','entropy_var','nonconforming','SC'],
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
