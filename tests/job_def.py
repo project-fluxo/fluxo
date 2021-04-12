@@ -606,7 +606,7 @@ def job_definition():
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    # New test: Soft blast with shock capturing and AMR
    run_opt_p4est_SC={'runs/mhd/softBlast/p4est_SC':
-         {'tags': ['mhd','freestream','nonconforming','p4est','amr','SC'] ,
+         {'tags': ['mhd','blast','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
                                                     'to_be': [2.495915018038E+00,   6.325174433685E-01,   7.889488615235E-01,   5.323075180477E-01,   1.325157194232E+00,   3.723270002320E-01,   3.284881946353E-01,   4.062933775229E-01,   6.423215469974E-01],
@@ -637,6 +637,45 @@ def job_definition():
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
                        **run_opt_p4est_SC,
+                      },
+
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Soft blast with shock capturing, AMR and BR1
+   run_opt_p4est_SC_br1={'runs/mhd/softBlast/p4est_SC':
+         {'tags': ['mhd','blast','nonconforming','p4est','amr','SC','br1'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [2.495897740097E+00,   6.325155875638E-01,   7.889453566845E-01,   5.323026725737E-01,   1.325156184899E+00,   3.723256877799E-01,   3.284879997260E-01,   4.062928761863E-01,   6.423200485785E-01],
+                                                  'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_nopara_p4est_SC']={
+          'case': caseID ,
+          'tags': ['mhd','split-form','SC','GL','GLM','NONCONS','p4est','amr','br1'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'  :'ON',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
+                        'FLUXO_SHOCKCAPTURE'     :'ON',
+                        'FLUXO_SHOCKCAP_NFVSE'   :'ON',
+                        'FLUXO_SHOCKINDICATOR'   :'custom',
+                        "FLUXO_AMR"              :"ON",
+                        "FLUXO_BUILD_P4EST"      :"OFF",
+                       },
+          'run_opts': {
+                       **run_opt_fsp_conf,
+                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_SC_first,
+                       **run_opt_p4est_SC_br1,
                       },
 
          }
@@ -981,4 +1020,32 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Soft blast with BR2 and non-conforming
+   run_opt_nonConf_parabolic={'runs/navst/softBlast/nonconfParabolic':
+         {'tags': ['navierstokes','blast','nonconforming','br2'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [5.945798911280E-01,   2.065011304993E-01,   2.003460892178E-01,   2.207665371548E-01,   2.168581765236E+00],
+                                                  'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_br1_entr_vars']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','br2','entropy_var','nonconforming'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br2",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                       },
+          'run_opts': {
+                       **run_opt_nonConf_parabolic,
+                      }
+         }
    return jobs
