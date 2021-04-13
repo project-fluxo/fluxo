@@ -106,7 +106,7 @@ contains
     USE MOD_Globals
     use MOD_NFVSE_Vars
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
-    USE MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh, firstMortarInnerSide
+    USE MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide, MeshIsNonConforming, firstMortarInnerSide
     use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_Equation_Vars      , only: RiemannVolFluxAndDissipMatrices
 #if USE_AMR
@@ -154,7 +154,7 @@ contains
     ! ---------------------
     
     ! Check if the mesh can be non-conforming
-    MeshNonConforming = isMortarMesh
+    MeshNonConforming = MeshIsNonConforming
 #if USE_AMR
     MeshNonConforming = UseAMR .or. MeshNonConforming
 #endif /*USE_AMR*/

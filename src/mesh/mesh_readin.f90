@@ -179,6 +179,7 @@ USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
 USE MOD_Mesh_Vars,          ONLY:Elems
 USE MOD_Mesh_Vars,          ONLY:GETNEWELEM,GETNEWSIDE
 USE MOD_Mesh_Vars,          ONLY:NodeTypeMesh
+use MOD_Mesh_Vars,          ONLY:MeshIsNonConforming
 #if USE_AMR
 USE MOD_AMR_Vars,           ONLY:UseAMR
 USE MOD_P4EST,              ONLY: p4estSetMPIData
@@ -609,6 +610,14 @@ ReduceData(10)=nMPIPeriodics
 #if MPI
 CALL MPI_REDUCE(ReduceData,ReduceData_glob,10,MPI_INTEGER,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ReduceData=ReduceData_glob
+#endif /*MPI*/
+
+! Check if the mesh is non-conforming and broadcast the information
+IF(MPIRoot)THEN
+  MeshIsNonConforming = (ReduceData(9)>0)
+END IF
+#if MPI
+call MPI_Bcast(MeshIsNonConforming, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, iError)
 #endif /*MPI*/
 
 IF(MPIRoot)THEN

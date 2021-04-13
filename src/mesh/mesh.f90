@@ -139,23 +139,7 @@ IF(.NOT.validMesh) &
 useCurveds=GETLOGICAL('useCurveds','.TRUE.')
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
-#if USE_AMR
 
-IF (UseAMR) THEN
-  iMortar = 0
-  dsExists = .FALSE.
-  CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
-  IF(dsExists)&
-    CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-  isMortarMesh=(iMortar.EQ.1)
-
-  IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
-    ! Error, we can't Run AMR on Mortar Mesh without p4est file
-    CALL CollectiveStop(__STAMP__,&
-    "Error, we cannot use AMR on Mortar Mesh without p4est file.")
-  ENDIF
-ENDIF
-#endif /*USE_AMR*/
 CALL CloseDataFile()
 
 CALL readMesh(MeshFile) !set nElems

@@ -184,7 +184,7 @@ SUBROUTINE InitAMR()
     IF  (p4estFileExist) THEN
       
       IF(MPIRoot)THEN
-        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'HAS BEEN FOUND THE P4EST FILE: '
+        WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')'THE P4EST FILE HAS BEEN FOUND: '
         WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(p4estFile)
       END IF
       CALL LoadP4est(trim(p4estFile))

@@ -111,7 +111,8 @@ CONTAINS
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
-
+        
+        ! Check if the mesh was generated from an AMR tree (by fluxo or hopest) and stop if the p4est file is not present
 #if USE_AMR
           iMortar = 0
           dsExists = .FALSE.
@@ -309,7 +310,7 @@ CONTAINS
                 ! The number (-1,-2,-3) is the Type of mortar
                 IF(ElemID.LT.0)THEN ! mortar Sides attached!
                     CALL abort(__STAMP__, &
-                            'Only conforming meshes in readin.')
+                            'ERROR: We cannot use AMR on non-conforming mesh without p4est file.')
                 END IF
             END DO !i=1,locnSides
         END DO !iElem
