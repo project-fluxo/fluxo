@@ -98,6 +98,9 @@ USE MOD_ReadInTools,        ONLY:GETLOGICAL,GETSTR,GETREAL,GETINT
 USE MOD_Metrics,            ONLY:CalcMetrics
 USE MOD_DebugMesh,          ONLY:writeDebugMesh
 USE MOD_Mappings,           ONLY:buildMappings
+#if USE_AMR
+USE MOD_AMR_Vars,           ONLY: p4estFileExist, UseAMR
+#endif /*USE_AMR*/
 #if MPI
 USE MOD_Prepare_Mesh,       ONLY:exchangeFlip
 #endif
@@ -109,7 +112,10 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 REAL              :: x(3),meshScale
 INTEGER           :: iElem,i,j,k
-LOGICAL           :: validMesh
+#if USE_AMR
+INTEGER           :: iMortar
+#endif /*USE_AMR*/
+LOGICAL           :: validMesh, dsExists
 INTEGER           :: firstMasterSide     !< lower side ID of array U_master/gradUx_master...
 INTEGER           :: lastMasterSide      !< upper side ID of array U_master/gradUx_master...
 !==================================================================================================================================
@@ -122,7 +128,10 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT MESH...'
 
 ! prepare pointer structure (get nElems, etc.)
-MeshFile = GETSTR('MeshFile')
+! MeshFile = GETSTR('MeshFile')
+IF (ICHAR(Meshfile(1:1))==0) THEN !MeshFile not defined in AMR
+  MeshFile = GETSTR('MeshFile')
+ENDIF
 validMesh = ISVALIDMESHFILE(MeshFile)
 IF(.NOT.validMesh) &
     CALL CollectiveStop(__STAMP__,'ERROR - Mesh file not a valid HDF5 mesh.')
@@ -130,6 +139,7 @@ IF(.NOT.validMesh) &
 useCurveds=GETLOGICAL('useCurveds','.TRUE.')
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
+
 CALL CloseDataFile()
 
 CALL readMesh(MeshFile) !set nElems
@@ -244,6 +254,8 @@ ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
 NGeoRef=3*NGeo ! build jacobian at higher degree
 ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
+ALLOCATE(    Elem_inCyl(nElems))
+
 ! surface data
 ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
@@ -267,6 +279,8 @@ DEALLOCATE(NodeCoords)
 CALL WriteDebugMesh(GETINT('debugmesh','0'))
 
 CALL AddToElemData('myRank',IntScalar=myRank)
+
+Elem_inCyl=.FALSE.
 
 MeshInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MESH DONE!'

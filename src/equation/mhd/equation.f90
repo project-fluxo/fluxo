@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -101,7 +102,8 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "10: LLF entropy stable flux, "//&
                                            "11: entropy conservative flux,"//&
                                            "12: FloGor entropy conservative flux,"//&
-                                           "13: FloGor EC+LLF entropy stable flux")
+                                           "13: FloGor EC+LLF entropy stable flux,"//&
+                                           "14: 9wave entropy stable flux")
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
@@ -269,7 +271,7 @@ SUBROUTINE SetRiemannSolver(which)
 ! MODULES
 USE MOD_Globals
 USE MOD_Equation_Vars,ONLY: VolumeFluxAverage
-USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0
+USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0,RiemannVolFluxAndDissipMatrices
 USE MOD_Riemann
 USE MOD_Flux_Average
 IMPLICIT NONE
@@ -321,6 +323,16 @@ CASE(13)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
   VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor  
   SolveRiemannProblem => EntropyStableByLLF 
+CASE(14)
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: 9 wave entropy stable flux!'
+#ifdef PP_GLM
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
+  SolveRiemannProblem => EntropyStable9WaveFlux 
+  RiemannVolFluxAndDissipMatrices => EntropyStable9WaveFlux_VolFluxAndDissipMatrices
+#else
+  CALL abort(__STAMP__,&
+   'Entropy Stable 9 wave flux can currently only be run with GLM!!!')
+#endif
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -372,7 +384,7 @@ END SUBROUTINE SetVolumeFlux
 SUBROUTINE FillIni(IniExactFunc_in,U_in)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems
+USE MOD_Mesh_Vars,ONLY:Elem_xGP,nElems,Elem_inCyl
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -382,19 +394,51 @@ INTEGER,INTENT(IN) :: IniExactFunc_in  !< handle to specify exactfunction
 REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< initialized DG solution 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                         :: i,j,k,iElem
+INTEGER                 :: i,j,k,iElem,counter
+REAL 			:: x,z,y,tol,d1,d2,tau,s,tau_max,r,h
 !==================================================================================================================================
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
 DO iElem=1,nElems
+
+  counter=0
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
         CALL ExactFunc(IniExactFunc_in,0.,Elem_xGP(1:3,i,j,k,iElem),U_in(1:PP_nVar,i,j,k,iElem))
+        IF (IniExactFunc_in.EQ.102) THEN ! Cylinder in Box
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          tol = 100.*EPSILON(y)      
+          IF (((z-1.).LE.tol).AND.((z+1.).GE.-tol).AND.((x**2+y**2).LE.1.01)) THEN
+            counter=counter+1
+          END IF
+        END IF
+
+        IF (IniExactFunc_in.EQ.109) THEN ! Sphere in Box
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          IF ((x**2+y**2+z**2).LE.1.001) THEN
+            counter=counter+1
+          END IF
+        END IF
+
       END DO ! i
     END DO ! j
   END DO !k
-END DO ! iElem=1,nElems
+  
+  IF ((IniExactFunc_in.EQ.102).AND.((PP_N+1)**3.EQ.counter)) THEN
+    Elem_inCyl(iElem) = .TRUE.
+  END IF
+  
+  IF ((IniExactFunc_in.EQ.109).AND.((PP_N+1)**3.EQ.counter)) THEN
+    Elem_inCyl(iElem) = .TRUE.
+  END IF
+
+END DO ! iElem=1,PP_nElems
+
 END SUBROUTINE FillIni
 
 
@@ -428,7 +472,7 @@ REAL,INTENT(OUT)                :: Resu(PP_nVar)    !< state in conservative var
 REAL                            :: tEval
 REAL                            :: Resu_t(PP_nVar),Resu_tt(PP_nVar)      ! state in conservative variables
 INTEGER                         :: i,j
-REAL                            :: Omega,a
+REAL                            :: Omega,a,f
 REAL                            :: Prim(1:PP_nVar) 
 REAL                            :: r, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
@@ -1077,6 +1121,16 @@ CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but r
   prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
   prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
+CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
+  prim    = 0.
+  prim(1) =  25./(36.*PP_Pi)
+  prim(2) = -SIN(2.*PP_Pi*x(2))
+  prim(3) =  SIN(2.*PP_Pi*x(1))
+  prim(5) =  5./(12*PP_Pi)
+  prim(6) = -SIN(2.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
+
 CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov 
           ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
   prim    = 0.
@@ -1088,6 +1142,80 @@ CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
   prim(6) = -SIN(2.*PP_Pi*x(3))/SQRT(4.*PP_Pi)
   prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
   prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
+
+CASE(411) ! Magnetic Rotor
+  r = SQRT((x(1)-0.5)*(x(1)-0.5)+(x(2)-0.5)*(x(2)-0.5))
+  f = (0.115-r)/0.015
+  Prim = 0.  
+  Prim(1) = 1.0  
+  Prim(5) = 1.0
+  Prim(6) = 5.0/SQRT(4.0*PP_Pi)
+  IF (r .LT. 0.1) THEN
+    Prim(1) = 10.0
+    Prim(2) = 20.0*(0.5-x(2))
+    Prim(3) = 20.0*(x(1)-0.5)
+  ELSE
+    IF (r .LE. 0.115) THEN
+      Prim(1) = 1.0+9.0*f
+      Prim(2) = f*20.0*(0.5-x(2))
+      Prim(3) = f*20.0*(x(1)-0.5)
+    END IF
+  END IF
+  CALL PrimToCons(Prim,Resu)
+
+CASE(102) ! Geophysics application: Flow through cylinder
+  
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148 
+  Prim(8)=-3.41 
+  CALL PrimToCons(Prim,Resu)
+
+CASE(109) ! Geophysics application: Flow through sphere
+
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148 
+  Prim(8)=-3.41 
+    
+  CALL PrimToCons(Prim,Resu)
+
+CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
+
+  Prim = 0. 
+  
+  ! Density variation with z
+  r = sqrt(x(3)**2+x(2)**2)
+  if (r <= 12.) then ! Io's plasma torus
+    Prim(1) = 1.
+  elseif (r <= 16.) then ! Transition zone between the torus and the low-density plasma
+    Prim(1) = -0.225*r+3.7
+  elseif (r <= 33.) then ! Low-density zone
+    Prim(1) = 0.1
+  else  ! Jovial ionosphere
+    Prim(1) = 1.6583*r - 54.625
+!#    Prim(1) = 0.1
+  end if
+  
+  Prim(2)=1.
+  Prim(5)=0.148984037940128
+  Prim(6)=0.373469788265899
+  Prim(7)=-1.19510332245088
+  Prim(8)=-3.60398345676592
+    
+  CALL PrimToCons(Prim,Resu)
+
+CASE(111) ! Geophysics application: Io interaction with its plasma torus (for shock-capturing MHD paper)
+
+  Prim = 0. 
+  Prim(1)=1.
+  Prim(2)=1.
+  Prim(5)=0.148984037940128
+  Prim(8)=-3.60398345676592
+    
   CALL PrimToCons(Prim,Resu)
 
 !CASE(666) ! random initialization for velocity and B field, only works with GNU
@@ -1158,6 +1286,15 @@ CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant ch
   prim(7) =  r*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
   prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
 CALL PrimToCons(Prim,Resu)
+
+case(12345) ! Geospace Environmental Modeling (GEM) reconnection challenge
+  prim = 0.
+  prim(1) = 1./cosh(2.*x(2))**2 + 0.2
+  prim(5) = 0.5 *prim(1)
+  prim(6) = tanh(2.*x(2)) - 0.1*(PP_Pi/12.8)   *sin(   PP_Pi*x(2)/12.8)*cos(2.*PP_Pi*x(1)/25.6)
+  prim(7) = 0.1*(2.*PP_Pi/25.6)*sin(2.*PP_Pi*x(1)/25.6)*cos(   PP_Pi*x(2)/12.8)
+  
+  CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
@@ -1192,10 +1329,12 @@ USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
 USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
 USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
 USE MOD_Equation_Vars, ONLY:doCalcSource
-USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems
+use MOD_Equation_Vars, only:s2mu_0
+USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
+USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1211,6 +1350,8 @@ INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
 REAL                            :: rho,rho_x,rho_xx
+REAL                            :: x,y,z,d1,d2,tau,tau_max,s,r,h,tol
+LOGICAL                         :: diffCyl
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
@@ -1295,6 +1436,111 @@ CASE(6) ! case 5 rotated
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
+
+
+CASE(102) ! Geophysics plasma flow through cylinder
+  
+  ! Make cylinder boundaries diffusive?
+  diffCyl=.FALSE.
+  tol=100.*EPSILON(1.)
+  tau_max=127.6
+  s=0.5  
+
+  DO iElem=1,nElems
+    IF (Elem_inCyl(iElem)) THEN
+      tau=tau_max
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    ELSE
+      IF (diffCyl) THEN
+        DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+          tau=0.
+          x=Elem_xGP(1,i,j,k,iElem)
+          y=Elem_xGP(2,i,j,k,iElem)
+          z=Elem_xGP(3,i,j,k,iElem)
+          d1=x*x+y*y-1.
+          d2=ABS(z)-1.               
+          IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .GE. -tol).AND.(d2 .LE. 0.5)) THEN
+            tau=MAX(0.,s*ATANH(2.*((0.5-d1)*(0.5-d1)+(0.5-d2)*(0.5-d2))*TANH(tau_max/s))) 
+!            tau=16./PP_Pi*ATAN(2.*(0.5-SQRT(d1*d1+d2*d2)))
+          ELSE
+            IF ((d1 .GE. -tol).AND.(d1 .LE. 0.5).AND.(d2 .LE. 0.)) THEN
+              tau=s*ATANH(2.*(0.5-d1)*TANH(tau_max/s)) 
+!              tau=16./PP_Pi*ATAN(2.*(0.5-d1))
+            ELSE
+              IF ((d2 .GE. -tol).AND.(d2 .LE. 0.5).AND.(d1 .LE. 0.)) THEN
+                tau=s*ATANH(2.*(0.5-d2)*TANH(tau_max/s))
+!                tau=16./PP_Pi*ATAN(2.*(0.5-d2))
+              END IF
+            END IF
+          END IF
+          Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+          Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+        END DO; END DO; END DO ! i,j,k
+      END IF
+    END IF 
+  END DO ! iElem=1,nElems
+
+CASE(109) ! Geophysics plasma flow through sphere
+  tau_max=127.6
+  DO iElem=1,nElems
+    IF (Elem_inCyl(iElem)) THEN
+      tau=tau_max
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    ELSE
+      DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+        r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+	h = 150.0/1820.0
+	tau = tau_max*EXP((1.0-r)/h)
+        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+      END DO; END DO; END DO ! i,j,k
+    END IF
+    
+  END DO
+
+CASE(110) ! Geophysics plasma flow through sphere (tilted B_field)
+  tau_max=127.719298245614
+  DO iElem=1,nElems
+    ! New continuous application of the source term!
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (r > 1.) then
+        h = 150.0/1820.0
+        tau = tau_max*EXP((1.0-r)/h)
+      else
+        tau = tau_max
+      end if
+      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem) !! OLD WRONG
+!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- 2*tau* ( U(5,i,j,k,iElem) - 0.5*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW (wrong)
+      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+    END DO; END DO; END DO ! i,j,k
+  END DO
+
+CASE(111) ! Geophysics: Io interaction with its plasma torus (for shock-capturing MHD paper)
+  tau_max=IniFrequency
+
+  DO iElem=1,nElems
+    ! New continuous application of the source term!
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (r > 1.) then
+        h = 150.0/1820.0
+        tau = tau_max*EXP((1.0-r)/h)
+      else
+        tau = tau_max
+      end if
+      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
+      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+    END DO; END DO; END DO ! i,j,k
+  END DO
+
 CASE DEFAULT
   ! No source -> do nothing
   doCalcSource=.FALSE. 
@@ -1358,7 +1604,7 @@ USE MOD_Equation_Vars,ONLY:GLM_ch
 REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
 REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
 REAL  :: check,absdiff
-INTEGER :: icase,i
+INTEGER :: icase,i,nCases
 PROCEDURE(),POINTER :: fluxProc 
 CHARACTER(LEN=255)  :: fluxName
 #if PP_DiscType==2
@@ -1380,6 +1626,9 @@ PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 PL(9)= 0.31999469
 PR(9)= 0.
 GLM_ch = 0.5 !was not set yet
+nCases=8
+#else
+nCases=7
 #endif
 CALL PrimToCons(PL,UL)
 CALL PrimToCons(PR,UR)
@@ -1387,7 +1636,7 @@ CALL PrimToCons(PR,UR)
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
-DO icase=0,7
+DO icase=0,nCases
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1415,6 +1664,11 @@ DO icase=0,7
   CASE(7)
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
+#ifdef PP_GLM
+  CASE(8)
+    fluxProc => EntropyStable9WaveFlux
+    fluxName = "EntropyStable9WaveFlux"
+#endif
   END SELECT
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)

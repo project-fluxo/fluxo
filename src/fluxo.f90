@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -40,14 +41,24 @@ USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTi
 USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
+#if USE_AMR
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR
+#endif /*USE_AMR*/
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
-!IMPLICIT NONE
+#if SHOCKCAPTURE
+USE MOD_ShockCapturing,    ONLY:DefineParametersShockCapturing,InitShockCapturing,FinalizeShockCapturing
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY:DefineParametersPositivityPreservation,InitPositivityPreservation,FinalizePositivityPreservation
+#endif /*POSITIVITYPRES*/
+IMPLICIT NONE
 !!----------------------------------------------------------------------------------------------------------------------------------
 !! LOCAL VARIABLES
 REAL                    :: Time                              !< Used to measure simulation time
-!!==================================================================================================================================
+!==================================================================================================================================
+
 CALL InitMPI()
 CALL ParseCommandlineArguments()
 ! Check if the number of arguments is correct
@@ -61,12 +72,21 @@ CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
+#if USE_AMR
+CALL DefineParametersAMR()
+#endif
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
 #if PARABOLIC
 CALL DefineParametersLifting ()
 #endif /*PARABOLIC*/
+#if SHOCKCAPTURE
+CALL DefineParametersShockCapturing()
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL DefineParametersPositivityPreservation()
+#endif /*POSITIVITYPRES*/
 CALL DefineParametersTimedisc()
 CALL DefineParametersAnalyze()
 !
@@ -117,14 +137,23 @@ StartTime=FLUXOTIME()
 CALL InitInterpolation()
 CALL InitMortar()
 CALL InitRestart()
-CALL InitOutput()
+CALL InitOutput() 
+
+#if USE_AMR
+CALL InitAMR()
+#endif
 CALL InitMesh()
+
 #if MPI
 CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
+#if SHOCKCAPTURE
+CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
+
 #if PARABOLIC
 CALL InitLifting()
 #endif /*PARABOLIC*/
@@ -132,9 +161,14 @@ CALL InitTimeDisc()
 CALL Restart()
 CALL InitAnalyze()
 CALL InitTestcase()
+
+#if POSITIVITYPRES
+CALL InitPositivityPreservation()
+#endif /*POSITIVITYPRES*/
+
 ! initialization finished
 CALL IgnoredParameters()
-!
+
 ! Measure init duration
 Time=FLUXOTIME()
 SWRITE(UNIT_stdOut,'(132("="))')
@@ -150,6 +184,7 @@ CALL FinalizeAnalyze()
 #if PARABOLIC
 CALL FinalizeLifting()
 #endif /*PARABOLIC*/
+
 CALL FinalizeDG()
 CALL FinalizeEquation()
 CALL FinalizeBC()
@@ -158,7 +193,16 @@ CALL FinalizeTimeDisc()
 CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
+#if USE_AMR
+CALL FinalizeAMR() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
+#endif
 CALL FinalizeMortar()
+#if SHOCKCAPTURE
+CALL FinalizeShockCapturing()
+#endif /*SHOCKCAPTURE*/
+#if POSITIVITYPRES
+CALL FinalizePositivityPreservation()
+#endif /*POSITIVITYPRES*/
 ! Measure simulation duration
 Time=FLUXOTIME()
 CALL FinalizeParameters()
@@ -169,6 +213,6 @@ IF(iError .NE. 0) STOP 'MPI finalize error'
 CALL FinalizeMPI()
 #endif
 SWRITE(UNIT_stdOut,'(132("="))')
-SWRITE(UNIT_stdOut,'(A,F8.2,A)') ' FLUXO FINISHED! [',Time-StartTime,' sec ]'
+SWRITE(UNIT_stdOut,'(A,F15.2,A)') ' FLUXO FINISHED! [',Time-StartTime,' sec ]'
 SWRITE(UNIT_stdOut,'(132("="))')
 END PROGRAM Fluxo

@@ -3,8 +3,10 @@
 This is a (possibly incomplete) list of the people who contributed to FLUXO (or former versions of FLEXI).
 
 * Christoph Altmann
+* Alexander Astanin
 * Muhammed Atak
 * Andrea Beck
+* Marvin Bohm
 * Thomas Bolemann
 * Stephen Copplestone
 * Stefan Fechter
@@ -21,6 +23,7 @@ This is a (possibly incomplete) list of the people who contributed to FLUXO (or 
 * Jonathan Neudorfer
 * Jonatan Núñez-de la Rosa
 * Philip Ortwein
+* Andrés Rueda-Ramírez
 * Matthias Sonntag
 * Marc Staudenmaier
 * Andrew Winters

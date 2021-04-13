@@ -96,6 +96,7 @@ PUBLIC::PolynomialDerivativeMatrix
 PUBLIC::BarycentricWeights
 PUBLIC::LagrangeInterpolationPolys
 PUBLIC::EQUALTOTOLERANCE
+public::ALMOSTEQUAL
 
 !==================================================================================================================================
 
@@ -147,7 +148,7 @@ CONTAINS
 !==================================================================================================================================
 !> Computes the inverse of a 3x3 matrix
 !==================================================================================================================================
-SUBROUTINE INV33(M,MInv,detM_out)
+pure SUBROUTINE INV33(M,MInv,detM_out)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -192,7 +193,7 @@ END SUBROUTINE INV33
 !==================================================================================================================================
 !> Build a 1D Vandermonde matrix from an orthonormal Legendre basis to a nodal basis and reverse
 !==================================================================================================================================
-SUBROUTINE buildLegendreVdm(N_In,xi_In,Vdm_Leg,sVdm_Leg)
+SUBROUTINE BuildLegendreVdm(N_In,xi_In,Vdm_Leg,sVdm_Leg)
 ! MODULES
 USE MOD_Globals,ONLY:abort
 USE MOD_PreProc,ONLY:PP_RealTolerance
@@ -248,8 +249,7 @@ END DO; END DO !j
 dummy=ABS(SUM(ABS(MATMUL(sVdm_Leg,Vdm_Leg)))/REAL(N_In+1)-1.)
 IF(dummy.GT.100.*PP_RealTolerance) CALL abort(__STAMP__,&
                                          'problems in MODAL<->NODAL Vandermonde ',999,dummy)
-END SUBROUTINE buildLegendreVdm
-
+END SUBROUTINE BuildLegendreVdm
 
 
 !==================================================================================================================================
@@ -669,7 +669,7 @@ END SUBROUTINE PolynomialDerivativeMatrix
 !> Takes into account that x,y are located in-between [-1;1]
 !> Based on Algorithm 139, Kopriva
 !==================================================================================================================================
-FUNCTION ALMOSTEQUAL(x,y)
+elemental FUNCTION ALMOSTEQUAL(x,y)
 USE MOD_PreProc
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------

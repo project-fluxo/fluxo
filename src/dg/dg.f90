@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -153,6 +154,7 @@ END IF
 DGInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT DG DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
+
 END SUBROUTINE InitDG
 
 
@@ -258,14 +260,17 @@ USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+#if SHOCK_NFVSE
+use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
+#endif /*SHOCK_NFVSE*/
 #if PP_DiscType==1
-USE MOD_VolInt              ,ONLY: VolInt
+USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
 USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#endif /*PP_DiscType==2*/
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
 #endif /*PARABOLIC*/
-#endif /*PP_DiscType==2*/
 USE MOD_GetBoundaryFlux     ,ONLY: GetBoundaryFlux
 USE MOD_FillFlux            ,ONLY: FillFlux
 USE MOD_SurfInt             ,ONLY: SurfInt
@@ -299,29 +304,42 @@ CALL VNullify(nTotalU,Ut)
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
-CALL ProlongToFace(U,U_master,U_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
+CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+
+! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
+#if SHOCK_NFVSE
+call CalcBlendingCoefficient(U)
+#endif /*SHOCK_NFVSE*/
+
 ! for all remaining sides (buffer routine for latency hiding!)
 !!write(*,*)'u in dgtimederivative', U
 !!write(*,*)'u_slave before prolong', u_slave
 !!write(*,*)'u_master before prolong', u_master
+
 #if PP_DiscType==2
 CALL VolInt_adv_SplitForm(Ut)
-#endif
-
-CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+#elif SHOCK_NFVSE
+CALL VolInt_adv(Ut)
+#endif /*PP_DiscType==2*/
 
 
 #if MPI
 !complete send / receive of side data (WAIT...)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
 #endif
+
+! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
+#if SHOCK_NFVSE
+call VolInt_NFVSE(Ut)
+#endif /*SHOCK_NFVSE*/
 
 #if PARABOLIC
 ! Lifting 
@@ -331,12 +349,12 @@ CALL Lifting(tIn)
 #endif /*PARABOLIC*/
 
 ! Compute volume integral contribution and add to Ut (should buffer latency of gradient communications)
-#if PP_DiscType==1
-CALL VolInt(Ut)
-#elif PP_DiscType==2
+#if PP_DiscType==2 || SHOCK_NFVSE
 #  if PARABOLIC
 CALL VolInt_visc(Ut)
 #  endif /*PARABOLIC*/
+#elif PP_DiscType==1
+CALL VolInt(Ut)
 #endif
 
 
@@ -422,6 +440,7 @@ SDEALLOCATE(U_slave)
 SDEALLOCATE(Flux_master)
 SDEALLOCATE(Flux_slave)
 DGInitIsDone = .FALSE.
+
 END SUBROUTINE FinalizeDG
 
 END MODULE MOD_DG

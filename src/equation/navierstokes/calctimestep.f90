@@ -40,21 +40,21 @@ FUNCTION CALCTIMESTEP(errType)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_DG_Vars       ,ONLY:U
-USE MOD_Mesh_Vars     ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
-USE MOD_Equation_Vars ,ONLY:kappa,kappaM1
-USE MOD_TimeDisc_Vars ,ONLY:CFLScale,ViscousTimeStep,dtElem
+USE MOD_DG_Vars            ,ONLY:U
+USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
+USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
+USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem
 #if PARABOLIC
-USE MOD_Equation_Vars ,ONLY:KappasPr
-USE MOD_TimeDisc_Vars ,ONLY:DFLScale
+USE MOD_Equation_Vars      ,ONLY:KappasPr
+USE MOD_TimeDisc_Vars      ,ONLY:DFLScale
 #if PP_VISC == 0
-USE MOD_Equation_Vars ,ONLY:mu0
+USE MOD_Equation_Vars      ,ONLY:mu0
 #endif
 #if PP_VISC == 1
-USE MOD_Equation_Vars ,ONLY:muSuth,R
+USE MOD_Equation_Vars      ,ONLY:muSuth,R
 #endif
 #if PP_VISC == 2
-USE MOD_Equation_Vars ,ONLY:mu0,ExpoPow,R
+USE MOD_Equation_Vars      ,ONLY:mu0,ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
 #ifndef GNU

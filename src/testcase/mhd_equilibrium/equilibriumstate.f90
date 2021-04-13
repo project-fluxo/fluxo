@@ -175,12 +175,12 @@ IF(doRestart) U_tmp=U
 U=Ueq
 
 !CHECK continuity of tangential B-field on FACES
-CALL ProlongToFace(U,U_master,U_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
 #if MPI
 ! Prolong to face for MPI sides - send direction
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,SEND),SendID=2) ! Receive MINE
-CALL ProlongToFace(U,U_master,U_slave,doMPiSides=.TRUE.)
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPiSides=.TRUE.)
 CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
 CALL StartSendMPIData(   U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_U(:,RECV),SendID=2) ! Send YOUR
 ! Complete send / receive

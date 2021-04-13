@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -96,6 +97,7 @@ CALL prms%CreateIntOption(          'NVisu',       "Polynomial degree at which s
 CALL prms%CreateStringOption(       'ProjectName', "Name of the current simulation (mandatory).")
 CALL prms%CreateLogicalOption(      'Logging',     "Write log files containing debug output.", '.FALSE.')
 CALL prms%CreateLogicalOption(      'ErrorFiles',  "Write error files containing error output.", '.TRUE.')
+CALL prms%CreateLogicalOption( 'PrimVisuDefault',  "Visualize the primitive variables by default.", '.FALSE.')
 CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None, 1: ParaView Single vtu File,"//&
                                           "2: ParaView vtu files per proc+pvtu link file,"//&
                                           "3: 2D (zeta=-1 of each element) ParaView, single vtu file,"//&
@@ -116,6 +118,7 @@ SUBROUTINE InitOutput()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Output_Vars
+USE MOD_Equation_Vars     ,ONLY:StrVarNames
 USE MOD_ReadInTools       ,ONLY:GETSTR,GETLOGICAL,GETINT
 USE MOD_StringTools       ,ONLY:INTTOSTR
 USE MOD_Interpolation     ,ONLY:GetVandermonde
@@ -126,7 +129,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                        :: iBox,OpenStat
+INTEGER                        :: iBox,OpenStat, nVars
 CHARACTER(LEN=8)               :: StrDate
 CHARACTER(LEN=10)              :: StrTime
 CHARACTER(LEN=255)             :: LogFile
@@ -148,6 +151,7 @@ CALL GetVandermonde(PP_N,NodeType,NVisu,NodeTypeVISU,Vdm_GaussN_NVisu)
 ProjectName=GETSTR('ProjectName')
 Logging    =GETLOGICAL('Logging')
 ErrorFiles =GETLOGICAL('ErrorFiles')
+PrimVisuDefault=GETLOGICAL('PrimVisuDefault')
 
 doPrintStatusLine=GETLOGICAL("doPrintStatusLine",".FALSE.")
 
@@ -183,6 +187,43 @@ IF(Logging)THEN
   WRITE(UNIT_logOut,*)'STARTED LOGGING FOR PROC',myRank,' ON ',StrDate(7:8),'.',StrDate(5:6),'.',StrDate(1:4),' | ',&
                       StrTime(1:2),':',StrTime(3:4),':',StrTime(5:10)
 END IF  ! Logging
+
+! Set the default number of output variables and allocate
+! -------------------------------------------------------
+#if defined (linearscalaradvection)
+nOutVars=2
+#elif (defined (mhd) | defined (navierstokes))
+nOutVars=PP_nVar
+#else
+!default
+nOutVars=PP_nVar
+#endif
+! If shock-capturing is activated output extra quantities
+#if SHOCK_NFVSE
+nOutvars = nOutvars + 1
+#if NFVSE_CORR
+nOutvars = nOutvars + 1
+#endif /*NFVSE_CORR*/
+#endif /*SHOCK_NFVSE*/
+allocate(strvarnames_tmp(nOutVars))
+
+! Set the default names
+! ---------------------
+#if defined (linearscalaradvection)
+strvarnames_tmp(1)=StrVarnames(1)
+strvarnames_tmp(2)='ExactSolution'
+#endif /*linearscalaradvection*/
+nVars = PP_nVar
+
+#if SHOCK_NFVSE
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'BlendingFunction'
+#if NFVSE_CORR
+nVars = nVars+1
+strvarnames_tmp(nVars) = 'BlendingFunction_old'
+#endif /*NFVSE_CORR*/
+#endif /*SHOCK_NFVSE*/
+
 
 OutputInitIsDone =.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT OUTPUT DONE!'
@@ -246,9 +287,15 @@ USE MOD_Analyze_Vars  ,ONLY: AnalyzeExactFunc
 #elif (defined(mhd) || defined(navierstokes))
 USE MOD_Equation_Vars ,ONLY:StrVarnamesPrim,ConsToPrim
 #endif /*defined(mhd)*/
+#if SHOCK_NFVSE
+use MOD_NFVSE_Vars ,only: alpha
+#if NFVSE_CORR
+use MOD_NFVSE_Vars ,only: alpha_old
+#endif /*NFVSE_CORR*/
+#endif /*SHOCK_NFVSE*/
 USE MOD_Output_Vars,ONLY:OutputFormat
 USE MOD_Mesh_Vars  ,ONLY:Elem_xGP,nElems
-USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
+USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu, strvarnames_tmp, nOutVars, PrimVisuDefault
 USE MOD_ChangeBasis,ONLY:ChangeBasis3D
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -270,8 +317,8 @@ REAL                          :: Uex(1,0:PP_N,0:PP_N,0:PP_N)
 #elif (defined (mhd) || defined (navierstokes))
 REAL                          :: cons(PP_nVar)
 #endif
-INTEGER                       :: i,j,k,nOutVars
-CHARACTER(LEN=255),ALLOCATABLE:: strvarnames_tmp(:)
+INTEGER                       :: i,j,k
+integer                       :: nVars
 !==================================================================================================================================
 IF(outputFormat.LE.0) RETURN
 
@@ -283,34 +330,25 @@ END IF !PRESENT(FileTypeStrIn)
 IF(PRESENT(PrimVisuOpt))THEN
   PrimVisu=PrimVisuOpt
 ELSE
-  PrimVisu=.FALSE.
+  PrimVisu=PrimVisuDefault
 END IF
 ! Specify output names
-#if defined (linearscalaradvection)
-nOutVars=2
-ALLOCATE(strvarnames_tmp(nOutVars))
-strvarnames_tmp(1)=StrVarnames(1)
-strvarnames_tmp(2)='ExactSolution'
-#elif (defined (mhd) | defined (navierstokes))
-nOutVars=PP_nVar
-ALLOCATE(strvarnames_tmp(nOutVars))
+#if (defined (mhd) | defined (navierstokes))
 IF(PrimVisu)THEN
-  strvarnames_tmp=StrVarnamesPrim
+  strvarnames_tmp(1:PP_nVar)=StrVarnamesPrim
 ELSE
   IF(PRESENT(StrVarNames_opt))THEN
-    strvarnames_tmp=StrVarnames_opt
+    strvarnames_tmp(1:PP_nVar)=StrVarnames_opt
   ELSE
-    strvarnames_tmp=StrVarnames
+    strvarnames_tmp(1:PP_nVar)=StrVarnames
   END IF
 END IF
 #else
 !default
-nOutVars=PP_nVar
-ALLOCATE(strvarnames_tmp(nOutVars))
 IF(PRESENT(StrVarNames_opt))THEN
-  strvarnames_tmp=StrVarnames_opt
+  strvarnames_tmp(1:PP_nVar)=StrVarnames_opt
 ELSE
-  strvarnames_tmp=StrVarnames
+  strvarnames_tmp(1:PP_nVar)=StrVarnames
 END IF
 #endif
 
@@ -319,7 +357,7 @@ U_NVisu = 0.
 ALLOCATE(Coords_NVisu(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems))
 
 DO iElem=1,nElems
-    ! Create coordinates of visualization points
+    ! Create coordinates of visualization points (TODO: can't this be done only once at the beginning?)
     CALL ChangeBasis3D(3,PP_N,NVisu,Vdm_GaussN_NVisu,Elem_xGP(1:3,:,:,:,iElem),Coords_NVisu(1:3,:,:,:,iElem))
     ! Interpolate solution onto visu grid
     CALL ChangeBasis3D(PP_nVar,PP_N,NVisu,Vdm_GaussN_NVisu,Uin(1:PP_nVar,:,:,:,iElem),U_NVisu(1:PP_nVar,:,:,:,iElem))
@@ -335,10 +373,19 @@ DO iElem=1,nElems
     END DO ; END DO ; END DO
   END IF !PrimVisu
 #endif /*linadv,navierstokes,mhd*/
+  nVars = PP_nVar
+#if SHOCK_NFVSE
+  nVars = nVars+1
+  U_NVisu(nVars,:,:,:,iElem) = alpha(iElem)
+#if NFVSE_CORR
+  nVars = nVars+1
+  U_NVisu(nVars ,:,:,:,iElem) = alpha_old(iElem)
+#endif /*NFVSE_CORR*/
+#endif /*SHOCK_NFVSE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
 DEALLOCATE(U_NVisu)
-DEALLOCATE(Coords_NVisu)
+DEALLOCATE(Coords_NVisu) 
 END SUBROUTINE Visualize
 
 !==================================================================================================================================

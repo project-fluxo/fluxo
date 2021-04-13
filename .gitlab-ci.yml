@@ -6,7 +6,7 @@
 stages:
   - startup
   - build
-  - short_runs
+  - runs
   - cleanup
 
 # =================================================================================================================================
@@ -45,6 +45,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_intel_build: &IPP_setup_intel_build
   variables:
@@ -56,6 +57,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_gnu: &IPP_setup_gnu
   variables:
@@ -66,6 +68,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_gnu_build: &IPP_setup_gnu_build
   variables:
@@ -77,6 +80,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_PCM_setup_gnu: &PCM_setup_gnu
   variables:
@@ -86,6 +90,7 @@ variables:
     - pcm_linux_fluxo
   before_script:
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Debug"
     - pwd
 
 .job_PCM_setup_gnu_build: &PCM_setup_gnu_build
@@ -97,6 +102,7 @@ variables:
     - pcm_linux_fluxo
   before_script:
     - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Debug"
     - pwd
 
 # =================================================================================================================================
@@ -126,8 +132,8 @@ variables:
   script:
     - cd tests; pwd
     - rm -rf dirx_1* log_1*.txt
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 100-199
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 101,102 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 100-199
+    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 101,102 ;  fi
     - mv dirx_1* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -140,8 +146,8 @@ variables:
   script:
     - cd tests; pwd
     - rm -rf dirx_2* log_2*
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 200-299
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 201,202 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 200-299
+    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 201,202 ;  fi
     - mv dirx_2* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -154,8 +160,8 @@ variables:
   script:
     - cd tests; pwd
     - rm -rf dirx_3* log_3*
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 300-399
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 301,302 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 300-399
+    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 301,302,316 ;  fi
     - mv dirx_3* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -168,8 +174,8 @@ variables:
   script:
     - cd tests; pwd
     - rm -rf dirx_4* log_4*
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 400-499
-    - else python build_tests.py -p 2 -stage 0 -buildhdf5 0 -case 401,402 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 400-499
+    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 401,402,413,414,416 ;  fi
     - mv dirx_4* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -177,64 +183,64 @@ variables:
     - tests/log_4*.txt
 
 # =================================================================================================================================
-# TEMPLATES FOR STAGE "short_runs"
+# TEMPLATES FOR STAGE "runs"
 # =================================================================================================================================
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_linadv: &script_short_runs_linadv
-  stage: short_runs
+.job_script_runs_linadv: &script_runs_linadv
+  stage: runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_1*.txt
+    - rm -f tests/runs/linadv/*/log_1*.txt
     - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_1* .
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 100-199
-    - else python build_tests.py -p 2 -stage 2 -case 101,102 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 100-199
+    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 101,102 ;  fi
   artifacts:
     <<: *common_arts
     paths:
-    - tests/freestream/log_1*.txt
+    - tests/runs/linadv/*/log_1*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_mhd: &script_short_runs_maxwell
-  stage: short_runs
+.job_script_runs_mhd: &script_runs_maxwell
+  stage: runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_2*.txt
+    - rm -f tests/runs/maxwell/*/log_2*.txt
     - rm -rf dirx_2*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_2* .
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 200-299
-    - else python build_tests.py -p 2 -stage 2 -case 201,202 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 200-299
+    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 201,202 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_2*.txt
+    - tests/runs/maxwell/*/log_2*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_mhd: &script_short_runs_mhd
-  stage: short_runs
+.job_script_runs_mhd: &script_runs_mhd
+  stage: runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_3*.txt
+    - rm -f tests/runs/mhd/*/*/log_3*.txt
     - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_3* .
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 300-399
-    - else python build_tests.py -p 2 -stage 2 -case 301,302 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 300-399
+    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 301,302,316 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_3*.txt
+    - tests/runs/mhd/*/*/log_3*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_short_runs_nav-st: &script_short_runs_nav-st
-  stage: short_runs
+.job_script_runs_nav-st: &script_runs_nav-st
+  stage: runs
   script:
     - cd tests; pwd
-    - rm -f freestream/log_4*.txt
+    - rm -f tests/runs/navst/*/*/log_4*.txt
     - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* .
-    - if [ -n "${NIGHTLY_RUNNER}" ]; then python build_tests.py -p 2 -stage 2 -case 400-499
-    - else python build_tests.py -p 2 -stage 2 -case 401,402 ;  fi
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 400-499
+    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 401,402,413,414,416 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/freestream/log_4*.txt
+    - tests/runs/navst/*/*/log_4*.txt
 
 # =================================================================================================================================
 # TEMPLATES FOR STAGE "cleanup"
@@ -278,157 +284,157 @@ PCM_gnu_startup:
 # Stage "build"
 # =================================================================================================================================
 
-IPP_gnu_build_mhd:
+IPP_gnu_mhd_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_mhd
 
-IPP_intel_build_mhd:
+IPP_intel_mhd_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_mhd
 
-PCM_gnu_build_mhd:
+PCM_gnu_mhd_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_linadv:
+IPP_gnu_linadv_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_linadv
 
-IPP_intel_build_linadv:
+IPP_intel_linadv_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_linadv
 
-PCM_gnu_build_linadv:
+PCM_gnu_linadv_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_linadv
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_maxwell:
+IPP_gnu_maxwell_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_maxwell
 
-IPP_intel_build_maxwell:
+IPP_intel_maxwell_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_maxwell
 
-PCM_gnu_build_maxwell:
+PCM_gnu_maxwell_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_build_nav-st:
+IPP_gnu_nav-st_build:
   needs: ["IPP_gnu_startup"]
   <<: *IPP_setup_gnu_build
   <<: *script_build_nav-st
 
-IPP_intel_build_nav-st:
+IPP_intel_nav-st_build:
   needs: ["IPP_intel_startup"]
   <<: *IPP_setup_intel_build
   <<: *script_build_nav-st
 
-PCM_gnu_build_nav-st:
+PCM_gnu_nav-st_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_nav-st
 
 # =================================================================================================================================
-# Stage "short_runs"
+# Stage "runs"
 # =================================================================================================================================
 
-IPP_gnu_short_runs_mhd:
-  needs: ["IPP_gnu_build_mhd"]
+IPP_gnu_mhd_runs:
+  needs: ["IPP_gnu_mhd_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
-IPP_intel_short_runs_mhd:
-  needs: ["IPP_intel_build_mhd"]
+IPP_intel_mhd_runs:
+  needs: ["IPP_intel_mhd_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
-PCM_gnu_short_runs_mhd:
-  needs: ["PCM_gnu_build_mhd"]
+PCM_gnu_mhd_runs:
+  needs: ["PCM_gnu_mhd_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_mhd
+  <<: *script_runs_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_linadv:
-  needs: ["IPP_gnu_build_linadv"]
+IPP_gnu_linadv_runs:
+  needs: ["IPP_gnu_linadv_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
-IPP_intel_short_runs_linadv:
-  needs: ["IPP_intel_build_linadv"]
+IPP_intel_linadv_runs:
+  needs: ["IPP_intel_linadv_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
-PCM_gnu_short_runs_linadv:
-  needs: ["PCM_gnu_build_linadv"]
+PCM_gnu_linadv_runs:
+  needs: ["PCM_gnu_linadv_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_linadv
+  <<: *script_runs_linadv
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_maxwell:
-  needs: ["IPP_gnu_build_maxwell"]
+IPP_gnu_maxwell_runs:
+  needs: ["IPP_gnu_maxwell_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
-IPP_intel_short_runs_maxwell:
-  needs: ["IPP_intel_build_maxwell"]
+IPP_intel_maxwell_runs:
+  needs: ["IPP_intel_maxwell_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
-PCM_gnu_short_runs_maxwell:
-  needs: ["PCM_gnu_build_maxwell"]
+PCM_gnu_maxwell_runs:
+  needs: ["PCM_gnu_maxwell_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_maxwell
+  <<: *script_runs_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_gnu_short_runs_nav-st:
-  needs: ["IPP_gnu_build_nav-st"]
+IPP_gnu_nav-st_runs:
+  needs: ["IPP_gnu_nav-st_build"]
   <<: *IPP_setup_gnu
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
-IPP_intel_short_runs_nav-st:
-  needs: ["IPP_intel_build_nav-st"]
+IPP_intel_nav-st_runs:
+  needs: ["IPP_intel_nav-st_build"]
   <<: *IPP_setup_intel
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
-PCM_gnu_short_runs_nav-st:
-  needs: ["PCM_gnu_build_nav-st"]
+PCM_gnu_nav-st_runs:
+  needs: ["PCM_gnu_nav-st_build"]
   <<: *PCM_setup_gnu
-  <<: *script_short_runs_nav-st
+  <<: *script_runs_nav-st
 
 # =================================================================================================================================
 # Stage "cleanup"
 # =================================================================================================================================
 
 IPP_gnu_cleanup_cache:
-  needs: ["IPP_gnu_short_runs_linadv", "IPP_gnu_short_runs_maxwell", "IPP_gnu_short_runs_mhd", "IPP_gnu_short_runs_nav-st"]
+  needs: ["IPP_gnu_linadv_runs", "IPP_gnu_maxwell_runs", "IPP_gnu_mhd_runs", "IPP_gnu_nav-st_runs"]
   <<: *IPP_setup_gnu
   <<: *script_cleanup
 
 IPP_intel_cleanup_cache:
-  needs: ["IPP_intel_short_runs_linadv", "IPP_intel_short_runs_maxwell", "IPP_intel_short_runs_mhd", "IPP_intel_short_runs_nav-st"]
+  needs: ["IPP_intel_linadv_runs", "IPP_intel_maxwell_runs", "IPP_intel_mhd_runs", "IPP_intel_nav-st_runs"]
   <<: *IPP_setup_intel
   <<: *script_cleanup
 
 PCM_gnu_cleanup_cache:
-  needs: ["PCM_gnu_short_runs_linadv", "PCM_gnu_short_runs_maxwell", "PCM_gnu_short_runs_mhd", "PCM_gnu_short_runs_nav-st"]
+  needs: ["PCM_gnu_linadv_runs", "PCM_gnu_maxwell_runs", "PCM_gnu_mhd_runs", "PCM_gnu_nav-st_runs"]
   <<: *PCM_setup_gnu
   <<: *script_cleanup

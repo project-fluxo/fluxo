@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -16,6 +17,7 @@
 !==================================================================================================================================
 !> Contains global variables needed for the MHD equation
 !==================================================================================================================================
+#include "defines.h"
 MODULE MOD_Equation_Vars
 ! MODULES
 IMPLICIT NONE
@@ -102,6 +104,9 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ C
 #endif 
                    /)
 
+integer, parameter :: nIndVar = 4
+character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 'Density','Pressure','DensityTimesPressure','KinPlusMagEnergy'/)
+
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
 INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
@@ -109,16 +114,25 @@ INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
 #endif /*PP_DiscType==2*/
+PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDissipMatrices =>Null()
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
 !==================================================================================================================================
 ABSTRACT INTERFACE
-  SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
+  pure SUBROUTINE i_sub_SolveRiemannProblem(ConsL,ConsR,Flux)
     REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsL !<  left conservative state  
     REAL,DIMENSION(1:PP_nVar),INTENT(IN)  :: ConsR !< right conservative state
     REAL,DIMENSION(1:PP_nVar),INTENT(OUT) :: Flux  !< numerical flux
   END SUBROUTINE i_sub_SolveRiemannProblem
+  
+  PURE SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices(ConsL,ConsR,F,Dmatrix,Rmatrix)
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsL    !<  left conservative state  
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(IN)  :: ConsR    !< right conservative state
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: F        !< Central volume flux
+    REAL,DIMENSION(1:PP_nVar)      ,INTENT(OUT) :: Dmatrix  !< Dissipation matrix
+    REAL,DIMENSION(PP_nVar,PP_nVar),INTENT(OUT) :: Rmatrix  !< Right-eigenvector matrix
+  END SUBROUTINE i_sub_RiemannVolFluxAndDissipMatrices
 
   PURE SUBROUTINE i_sub_VolumeFluxAverage(UL,UR,Fstar)
     REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
@@ -135,6 +149,11 @@ ABSTRACT INTERFACE
     REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
     REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
   END SUBROUTINE i_sub_VolumeFluxAverageVec
+  
+  pure subroutine i_indicatorFunction(U,ind)
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: ind
+  end subroutine i_indicatorFunction
 END INTERFACE
 
 INTERFACE ConsToPrim
@@ -294,7 +313,7 @@ END SUBROUTINE PrimToConsVec
 !==================================================================================================================================
 !> Transformation from conservative variables U to entropy vector, dS/dU, S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
 !==================================================================================================================================
-FUNCTION ConsToEntropy(cons) RESULT(Entropy)
+PURE FUNCTION ConsToEntropy(cons) RESULT(Entropy)
 ! MODULES
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -565,7 +584,7 @@ END SUBROUTINE WaveSpeeds1D
 !==================================================================================================================================
 !> calculate fastest wave speed 
 !==================================================================================================================================
-SUBROUTINE FastestWave1D(Prim,cf)
+pure SUBROUTINE FastestWave1D(Prim,cf)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -619,7 +638,7 @@ END SUBROUTINE FastestWave3D
 !> use Roe mean wavespeeds from  Roe meanvalues 
 !>   (paper by Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997)
 !==================================================================================================================================
-SUBROUTINE FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
+pure SUBROUTINE FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -667,5 +686,103 @@ cf_Roe    = SQRT(0.5*(c2_Roe+va2_Roe+astar_Roe))
 RoeVelx   = RoeVel(1)
 END SUBROUTINE FastestWave1D_Roe
 
+!===================================================================================================================================
+!> Subroutine to initialize a procedure pointer to a specific indicator function
+!===================================================================================================================================
+subroutine SetIndicatorFunction(ind_id,IndicatorFunc)
+  use MOD_Globals
+  implicit none
+  !-arguments---------------------------------------
+  character(len=255)        , intent(in) :: ind_id
+  procedure(i_indicatorFunction),pointer :: IndicatorFunc
+  !-------------------------------------------------
+  
+  select case (trim(ind_id))
+    case('Density')              ; IndicatorFunc => Get_Density
+    case('Pressure')             ; IndicatorFunc => Get_Pressure
+    case('DensityTimesPressure') ; IndicatorFunc => Get_DensityTimesPressure
+    case('KinPlusMagEnergy')     ; IndicatorFunc => Get_KinPlusMagEnergy
+    case default
+      CALL abort(__STAMP__,'Indicator quantity "'//trim(ind_id)//'" is not defined for this equation!',999,999.)
+      RETURN
+  end select
+  
+end subroutine SetIndicatorFunction
 
+!===================================================================================================================================
+!> Returns the density
+!===================================================================================================================================
+pure subroutine Get_Density(U,rho)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: rho
+  !-------------------------------------------------
+  
+  rho = U(1)
+end subroutine Get_Density
+!===================================================================================================================================
+!> Returns the pressure
+!===================================================================================================================================
+pure subroutine Get_Pressure(U,p)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: p
+  !-------------------------------------------------
+  
+  p = KappaM1*(U(5)-0.5*(SUM(U(2:4)*U(2:4))/U(1))-s2mu_0*SUM(U(6:PP_nVar)*U(6:PP_nVar)))
+  
+end subroutine Get_Pressure
+!============================================================================================================================
+!> Get Density Times Pressure
+!============================================================================================================================
+pure subroutine Get_DensityTimesPressure(U,rhop)
+  implicit none
+  !-arguments---------------------------------------
+  real, intent(in)  :: U(PP_nVar)
+  real, intent(out) :: rhop
+  !-------------------------------------------------
+  real :: p
+  !-------------------------------------------------
+  
+  call Get_Pressure(U,p)
+  rhop = U(1) * p
+end subroutine Get_DensityTimesPressure
+!============================================================================================================================
+!> Get kinetic energy
+!============================================================================================================================
+  pure subroutine Get_KinPlusMagEnergy(U,kinen)
+    implicit none
+    !-arguments---------------------------------------
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: kinen
+    !-------------------------------------------------
+    
+    kinen = 0.5*SUM(U(2:4)*U(2:4))/U(1) + s2mu_0*SUM(U(6:8)*U(6:8))
+  end subroutine Get_KinPlusMagEnergy
+
+!============================================================================================================================
+!> Get dp/du
+!============================================================================================================================
+  pure subroutine Get_dpdU(U,dpdu)
+    implicit none
+    !-arguments---------------------------------------
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: dpdU(PP_nVar)
+    !-local-variables---------------------------------
+    real :: vel(3)
+    !-------------------------------------------------
+    
+    vel = U(2:4)/U(1)
+    
+    dpdu(1)         = 0.5*sum(vel**2)
+    dpdu(2:4)       = -vel
+    dpdu(5)         = 1.0
+    dpdu(6:PP_nVar) = -smu_0*U(6:PP_nVar)
+    
+    dpdu = dpdu*KappaM1
+    
+  end subroutine Get_dpdU
+  
 END MODULE MOD_Equation_Vars

@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -53,6 +54,9 @@ CHARACTER(LEN=255),DIMENSION(4),PARAMETER ::  StrVarNames(8)=&
                             'Phi           ', &
                             'Psi           ' /)
 
+integer, parameter :: nIndVar = 1
+character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 'MagneticFieldMag'/)
+
 !REAL,PARAMETER      :: c=299792458.
 !REAL,PARAMETER      :: eps0=8.8541878176E-12
 REAL                :: c  
@@ -80,5 +84,46 @@ ABSTRACT INTERFACE
   END SUBROUTINE i_sub_VolumeFluxAverageVec
 END INTERFACE
 #endif /*PP_DiscType==2*/
+ABSTRACT INTERFACE
+  pure subroutine i_indicatorFunction(U,ind)
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: ind
+  end subroutine i_indicatorFunction
+END INTERFACE
+
+contains
+
+!===================================================================================================================================
+!> Subroutine to initialize a procedure pointer to a specific indicator function
+!===================================================================================================================================
+subroutine SetIndicatorFunction(ind_id,IndicatorFunc)
+  use MOD_Globals
+  implicit none
+  !-arguments---------------------------------------
+  character(len=255)        , intent(in) :: ind_id
+  procedure(i_indicatorFunction),pointer :: IndicatorFunc
+  !-------------------------------------------------
+  
+  select case (trim(ind_id))
+    case('MagneticFieldMag') ; IndicatorFunc => Get_MagFieldMag
+    case default
+      CALL abort(__STAMP__,'Indicator quantity "'//trim(ind_id)//'" is not defined for this equation!',999,999.)
+      RETURN
+  end select
+  
+end subroutine SetIndicatorFunction
+
+!===================================================================================================================================
+!> Returns the solution
+!===================================================================================================================================
+pure subroutine Get_MagFieldMag(U,sol)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: sol
+  !-------------------------------------------------
+  
+  sol = sqrt(sum(U(4:6)*U(4:6)))
+end subroutine Get_MagFieldMag
 
 END MODULE MOD_Equation_Vars

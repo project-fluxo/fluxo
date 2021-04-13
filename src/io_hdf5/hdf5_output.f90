@@ -63,6 +63,7 @@ PUBLIC :: WriteHeader
 PUBLIC :: WriteTimeAverage
 PUBLIC :: WriteArray
 PUBLIC :: WriteAttribute
+PUBLIC :: GatheredWriteArray
 !==================================================================================================================================
 
 CONTAINS
@@ -258,6 +259,13 @@ END IF
 
 END SUBROUTINE GatheredWriteArray
 
+SUBROUTINE Check(eout ,Arr)
+  REAL,INTENT(IN),TARGET,OPTIONAL    :: Arr(:)
+  TYPE(tElementOut),POINTER      :: eout
+      ! It is not a good way, but there are no others
+      ! Print *, "ASSOCIATED(eout%RealArray,Arr)", ASSOCIATED(eout%RealArray,Arr)
+      eout%RealArray  => Arr
+END SUBROUTINE Check
 
 !==================================================================================================================================
 !> Write additional data for analyze purpose to HDF5.
@@ -281,6 +289,7 @@ SUBROUTINE WriteAdditionalElemData(FileName,ElemList)
 ! MODULES
 USE MOD_Globals
 USE MOD_Mesh_Vars,ONLY: offsetElem,nGlobalElems,nElems
+USE MOD_TimeDisc_Vars,      ONLY:   dtElem
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -313,7 +322,11 @@ e=>ElemList
 DO WHILE(ASSOCIATED(e))
   nVar=nVar+1
   VarNames(nVar)=e%VarName
-  IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:)=e%RealArray
+  IF(ASSOCIATED(e%RealArray)) THEN
+        CALL Check(e,dtElem)
+             ElemData(nVar,:)=e%RealArray
+        ENDIF
+  ! IF(ASSOCIATED(e%RealArray))  ElemData(nVar,:)=e%RealArray
   IF(ASSOCIATED(e%RealScalar)) ElemData(nVar,:)=e%RealScalar
   IF(ASSOCIATED(e%IntArray))   ElemData(nVar,:)=REAL(e%IntArray)
   IF(ASSOCIATED(e%IntScalar))  ElemData(nVar,:)=REAL(e%IntScalar)

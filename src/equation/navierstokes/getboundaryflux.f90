@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -225,6 +226,7 @@ INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N),N_loc(1:3,1:3)
 REAL                                 :: Prim(1:8),ar,br
 REAL                                 :: U_loc(PP_nVar)
+real                                 :: pres, a, normalMachNo
 #if PARABOLIC
 REAL                                 :: BCGradMat(1:3,1:3)
 REAL                                 :: Fd_Face_loc(1:PP_nVar,0:PP_N,0:PP_N)
@@ -353,7 +355,7 @@ DO iBC=1,nBCs
       END DO ! q
 #if PARABOLIC
       ! Evaluate 3D Diffusion Flux with interior state and symmetry gradients
-      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:),&
+      CALL EvalDiffFlux3D(Fd_Face_loc,Gd_Face_loc,Hd_Face_loc,U_Face_loc(:,:,:), &
                           gradPx_Master(:,:,:,SideID),                           &
                           gradPy_Master(:,:,:,SideID),                           &
                           gradPz_Master(:,:,:,SideID))                           
@@ -441,12 +443,8 @@ DO iBC=1,nBCs
       SideID=BCSideID(iBC,iSide)
       DO q=0,PP_N
         DO p=0,PP_N
-          ! get pressure from refstate
+          ! Get inner state
           U_loc = U_Master(:,p,q,SideID)
-          CALL ConsToPrim(Prim(1:5),U_loc)
-          Prim(5) = RefStatePrim(BCState,5)
-          ! U_loc contains now the state with pressure from outside (refstate)
-          CALL PrimToCons(Prim(1:5),U_loc(:))
           ! local normal system
           N_loc(:,1) = NormVec( :,p,q,SideID)
           N_loc(:,2) = TangVec1(:,p,q,SideID)
@@ -457,6 +455,17 @@ DO iBC=1,nBCs
           U_Face_loc(2,p,q)= SUM(U_loc(2:4)*N_loc(:,1))
           U_Face_loc(3,p,q)= SUM(U_loc(2:4)*N_loc(:,2))
           U_Face_loc(4,p,q)= SUM(U_loc(2:4)*N_loc(:,3))
+          
+          ! get pressure from refstate if subsonic
+          pres = KappaM1*( U_loc(5) - 0.5 *(U_loc(2)**2 + U_loc(3)**2 + U_loc(4)**2)/U_loc(1) )
+          a    = sqrt(Kappa*pres/U_loc(1))
+          normalMachNo = ABS(U_Face_loc(2,p,q)/(a*U_loc(1)))
+          if (normalMachNo<=1.0) then
+            CALL ConsToPrim(Prim(1:5),U_Face_loc(:,p,q))
+            Prim(5) = RefStatePrim(BCState,5)
+            ! U_loc contains now the state with pressure from outside (refstate)
+            CALL PrimToCons(Prim(1:5),U_Face_loc(:,p,q))
+          end if
 #if PARABOLIC
           ! for diffusion, we use the rotational invariance of the diffusion fluxes
           !   for this, we need to transform the gradients into the normal system (see GG Diss for details)
@@ -479,7 +488,7 @@ DO iBC=1,nBCs
       ! Compute 1D diffusion Flux Fd_Face_loc
       !   Use: tau_12 = 0, tau_13 = 0, q1 = 0 (Paper POINSOT and LELE, JCP 1992, page 113, Table IV)
       !   We use special evalflux routine
-      CALL EvalDiffFlux1D_Outflow(Fd_Face_loc,U_Face_loc,gradVel)
+      CALL EvalDiffFlux1D_Outflow (Fd_Face_loc,U_Face_loc,gradVel)
       ! Sum up Euler and Diffusion Flux and tranform back into Cartesian system
       Flux(:,:,:,SideID) = Flux(:,:,:,SideID) + Fd_Face_loc
 #endif /*PARABOLIC*/

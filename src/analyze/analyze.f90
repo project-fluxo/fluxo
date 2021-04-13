@@ -174,6 +174,13 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
       END DO !iVar
     END DO
   END IF  !doCalcMeanFlux
+#if NFVSE_CORR
+  ! If we are doing NFVSE_CORR, record the maximum alpha since the last analyze
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar) = 'alpha_max'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar) = 'alpha_amount'
+#endif /*NFVSE_CORR*/
 END IF !MPIroot & doAnalyzeToFile
   
 
@@ -294,6 +301,10 @@ USE MOD_Testcase_Analyze,   ONLY: AnalyzeTestcase
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_Mesh_Vars,          ONLY: nGlobalElems
 USE MOD_Mesh_Vars,          ONLY: nBCs,BoundaryType,BoundaryName
+#if NFVSE_CORR
+use MOD_NFVSE_Vars,         ONLY: maximum_alpha, amount_alpha, amount_alpha_steps
+USE MOD_Mesh_Vars,          ONLY: nElems
+#endif /*NFVSE_CORR*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -309,6 +320,9 @@ INTEGER                         :: iBC
 REAL                            :: CalcTime
 REAL,DIMENSION(PP_nVar)         :: L_Inf_Error,L_2_Error,L_2_colloc,maxabs_Ut,bulk,bulk_t
 REAL                            :: MeanFlux(PP_nVar,nBCs)
+#if NFVSE_CORR
+real                            :: amount_alpha_weighted
+#endif /*NFVSE_CORR*/
 !==================================================================================================================================
 ! Graphical output
 CalcTime=FLUXOTIME()
@@ -326,7 +340,7 @@ END IF !MPIroot & AnalyzeToFile
 IF(doCalcErrorNorms)THEN
   CALL CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)' L_2        : ',L_2_Error
     WRITE(UNIT_StdOut,formatStr)' L_2_colloc : ',L_2_colloc
     WRITE(UNIT_StdOut,formatStr)' L_inf      : ',L_Inf_Error
@@ -343,7 +357,7 @@ END IF  ! ErrorNorms
 IF(doCalcBulk)THEN
   CALL CalcBulk(bulk,bulk_t,maxabs_Ut)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A14,',PP_nVar,'ES16.7)'
+    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
     WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk_t(:)
     WRITE(UNIT_StdOut,formatStr)' max|Ut|    : ',maxabs_Ut
@@ -380,6 +394,35 @@ END IF  !(doCalcMeanFlux)
 CALL AnalyzeEquation(Time)
 
 CALL AnalyzeTestcase(Time)
+
+#if NFVSE_CORR
+! If we are doing NFVSE_CORR, record the maximum alpha since the last analyze
+IF(MPIroot) THEN
+#if MPI
+  amount_alpha_weighted = amount_alpha*nElems
+  CALL MPI_REDUCE(MPI_IN_PLACE,maximum_alpha        ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,amount_alpha_weighted,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  amount_alpha = amount_alpha_weighted / nGlobalElems
+#endif /*MPI*/
+  A2F_iVar=A2F_iVar+1
+  A2F_Data(A2F_iVar) = maximum_alpha
+  A2F_iVar=A2F_iVar+1
+  A2F_Data(A2F_iVar) = amount_alpha
+  WRITE(formatStr,'(A)')'(A27,ES21.12)'
+  WRITE(UNIT_StdOut,'(A)')  ' POSITIVITY LIMITER:'
+  WRITE(UNIT_StdOut,formatStr)' max(d_alpha): ', maximum_alpha
+  WRITE(UNIT_StdOut,formatStr)' avg(sum(d_alpha)/nElems): ' , amount_alpha
+#if MPI
+ELSE
+  amount_alpha_weighted = amount_alpha*nElems
+  CALL MPI_REDUCE(maximum_alpha        ,0        ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(amount_alpha_weighted,0        ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+#endif /*MPI*/
+END IF
+maximum_alpha=0.0
+amount_alpha =0.0
+amount_alpha_steps=0
+#endif /*NFVSE_CORR*/
 
 IF(MPIroot.AND.doAnalyzeToFile) CALL AnalyzeToFile(Time,CalcTime,iter)
 

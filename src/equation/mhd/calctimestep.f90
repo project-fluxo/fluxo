@@ -117,7 +117,7 @@ DO iElem=1,nElems
         Lambda_v(1)=(SUM((Metrics_fTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
         Lambda_v(2)=(SUM((Metrics_gTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
         Lambda_v(3)=(SUM((Metrics_hTilde(:,i,j,k,iElem)*sJ(i,j,k,iElem))**2))
-        Max_Lambda_v=MAX(Max_Lambda_v,MAX(diffC_max,sRho*muKappasPR_max)*SUM(lambda_v(:)))
+        Max_Lambda_v=MAX(Max_Lambda_v,MAX(diffC_max,sRho*muKappasPr_max)*SUM(lambda_v(:)))
 #ifdef PP_ANISO_HEAT
         !isotropic part of anisotropic heat flux I*kperp
         Max_Lambda_v=MAX(Max_Lambda_v,sRho*KappaM1*kperp*SUM(lambda_v(:)))

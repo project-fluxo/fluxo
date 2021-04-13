@@ -36,12 +36,13 @@ INTEGER           :: NGeoRef                   !< polynomial degree of reference
 ! GLOBAL VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL,ALLOCATABLE,TARGET :: NodeCoords(:,:,:,:,:) !< XYZ positions (equidistant,NGeo) of element interpolation points from meshfile
-REAL,ALLOCATABLE :: Elem_xGP(:,:,:,:,:)          !< XYZ positions (first index 1:3) of the volume Gauss Point
+REAL,ALLOCATABLE,TARGET :: Elem_xGP(:,:,:,:,:)          !< XYZ positions (first index 1:3) of the volume Gauss Point
 REAL,ALLOCATABLE :: Face_xGP(:,:,:,:)            !< XYZ positions (first index 1:3) of the Face Gauss Point
+LOGICAL,ALLOCATABLE :: Elem_inCyl(:)         ! flag if elem is in Cylinder
 !----------------------------------------------------------------------------------------------------------------------------------
-! MORTAR DATA FOR NON-CONFORMING MESHES ORIGINATING FROM AN OCTREE BASIS (ONLY ALLOCATED IF isMortarMesh=.TRUE.!!!)
+! A flag to check if the mesh is non-conforming
 !----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: isMortarMesh               !< Marker whether non-conforming data is present (false for conforming meshes)
+LOGICAL          :: MeshIsNonConforming
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Metrics on GaussPoints
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -62,11 +63,11 @@ REAL,ALLOCATABLE :: TangVec1(:,:,:,:)          !< tangential vector 1 for each s
 REAL,ALLOCATABLE :: TangVec2(:,:,:,:)          !< tangential vector 3 for each side (1:3,0:N,0:N,nSides)
 REAL,ALLOCATABLE :: SurfElem(:,:,:)            !< surface area for each side        (    0:N,0:N,nSides)
 !----------------------------------------------------------------------------------------------------------------------------------
-INTEGER,ALLOCATABLE :: ElemToSide(:,:,:)       !< Array containing element-wise connectivity information to sides
+INTEGER,ALLOCATABLE, TARGET :: ElemToSide(:,:,:)       !< Array containing element-wise connectivity information to sides
                                                !< SideID    = ElemToSide(E2S_SIDE_ID,ZETA_PLUS,iElem)
                                                !< flip      = ElemToSide(E2S_FLIP,ZETA_PLUS,iElem)
 
-INTEGER,ALLOCATABLE :: SideToElem(:,:)         !< Array containing per-side connectivity information to elements and local side ids
+INTEGER,ALLOCATABLE, TARGET :: SideToElem(:,:)         !< Array containing per-side connectivity information to elements and local side ids
                                                !< ElemID      = SideToElem(S2E_ELEM_ID,SideID)
                                                !< NB_ElemID   = SideToElem(S2E_NB_ELEM_ID,SideID)
                                                !< locSideID   = SideToElem(S2E_LOC_SIDE_ID,SideID)
@@ -130,8 +131,8 @@ INTEGER             :: lastMortarMPISide       !< Last  SideID of Mortar MPI sid
 INTEGER             :: nMortarSides=0          !< total number of mortar sides
 INTEGER             :: nMortarInnerSides=0     !< number of inner mortar sides
 INTEGER             :: nMortarMPISides=0       !< number of mortar MPI sides
-INTEGER,ALLOCATABLE :: MortarType(:,:)         !< Type of mortar [1] and position in mortar list [1:nSides]
-INTEGER,ALLOCATABLE :: MortarInfo(:,:,:)       !< 1:2,1:4,1:nMortarSides: [1] nbSideID / flip, [2] max 4 mortar sides, [3] sides
+INTEGER,ALLOCATABLE, TARGET :: MortarType(:,:)         !< Type of mortar [1] and position in mortar list [1:nSides]
+INTEGER,ALLOCATABLE, TARGET :: MortarInfo(:,:,:)       !< 1:2,1:4,1:nMortarSides: [1] nbSideID / flip, [2] max 4 mortar sides, [3] sides
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255),ALLOCATABLE :: BoundaryName(:) !< names of the boundary conditions read from the mesh file
 CHARACTER(LEN=255)             :: MeshFile     !< name of hdf5 meshfile (write with ending .h5!)

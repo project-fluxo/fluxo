@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -56,7 +57,7 @@ CALL prms%CreateStringOption('TimeDiscMethod', "Specifies the type of time-discr
                                                " a specific Runge-Kutta scheme. Possible values:\n"//&
                                                "  * standardrk3-3\n  * carpenterrk4-5\n  * niegemannrk4-14\n"//&
                                                "  * toulorgerk4-8c\n  * toulorgerk3-7c\n  * toulorgerk4-8f\n"//&
-                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18", value='CarpenterRK4-5')
+                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18\n  * ssprk4-5", value='CarpenterRK4-5')
 CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mandatory).")
 CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0 (mandatory)")
 CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0 (mandatory)")
@@ -95,6 +96,8 @@ CASE('LSERKW2')
   TimeStep=>TimeStepByLSERKW2
 CASE('LSERKK3')
   TimeStep=>TimeStepByLSERKK3
+case('SSPRK2')
+  TimeStep=>TimeStepBySSPRK2
 END SELECT
 
 IF(TimeDiscInitIsDone)THEN
@@ -152,6 +155,14 @@ USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
 USE MOD_DG                  ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars             ,ONLY: U
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
+#if USE_AMR
+USE MOD_AMR_tracking        ,ONLY: PerformAMR,InitData,InitialAMRRefinement
+USE MOD_AMR_Vars            ,ONLY: UseAMR, nWriteDataAMR, nDoAMR
+USE MOD_AMR                 ,ONLY: WriteStateAMR
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -162,6 +173,9 @@ INTEGER(KIND=8)              :: iter,iter_loc
 REAL                         :: iterTimeStart,CalcTimeStart,CalcTimeEnd
 INTEGER                      :: TimeArray(8)              !< Array for system time
 INTEGER                      :: errType,nCalcTimestep,writeCounter
+#if USE_AMR
+INTEGER                      :: doAMR, writeCounterAMR
+#endif /*USE_AMR*/
 LOGICAL                      :: doAnalyze,doFinalize
 LOGICAL                      :: firstWCTcheck=.TRUE.
 !==================================================================================================================================
@@ -187,20 +201,42 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 
 ! --- Perform some preparational steps ---
 
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+
 ! Do first RK stage of first timestep to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
 
+! Impose initial AMR refinement
+#if USE_AMR
+call InitialAMRRefinement()
+CALL DGTimeDerivative(t)
+#endif /*USE_AMR*/
 
 ! Write the state at time=0, i.e. the initial condition
 IF(nWriteData.GT.0) THEN
   CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.FALSE.)
 
   CALL Visualize(t,U)
-END IF
+#if USE_AMR
+  IF (UseAMR) THEN
+    IF(nWriteDataAMR .GT. 0) THEN
+      CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+        !Write Mesh and AMR to file
+    ENDIF
+  ENDIF
+#endif /*USE_AMR*/
+END IF 
 
 ! No computation needed if tEnd=tStart!
 IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
+
+#if USE_AMR
+writeCounterAMR = 0
+doAMR = 0
+#endif /*USE_AMR*/
 
 iter=0
 iter_loc=0
@@ -226,13 +262,29 @@ IF(MPIroot)THEN
   WRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 END IF ! MPIroot
 
-
 ! Run computation
 tStart = t
 CalcTimeStart=FLUXOTIME()
-IterTimeStart=CalcTimeStart !not changed
+iterTimeStart=CalcTimeStart ! is not reset
+
+
+iter = 0
 DO
-  IF(nCalcTimestepMax.EQ.1)THEN
+
+#if USE_AMR
+IF (UseAMR) THEN
+  doAMR = doAMR + 1;
+  IF (doAMR .EQ. nDoAMR) THEN
+    doAMR = 0;
+    call PerformAMR()
+  ENDIF
+ENDIF
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+#endif /*USE_AMR*/
+
+IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
     ! be careful, this is using an estimator, when to recompute the timestep
@@ -265,12 +317,13 @@ DO
   IF(doTCpreTimeStep) CALL CalcPreTimeStep(t,dt)
 
 
-  !CALL PrintStatusLine(t,dt,tStart,tEnd)
+  CALL PrintStatusLine(t,dt,tStart,tEnd)
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !Perform Timestep using a global time stepping routine, attention: only RK3 has time dependent BC
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   CALL TimeStep(t)
 
+  
   iter=iter+1
   iter_loc=iter_loc+1
   t=t+dt
@@ -305,6 +358,29 @@ DO
 
   ! Analyze and output now
   IF(doAnalyze) THEN
+  
+    ! Visualize data and write solution
+    writeCounter=writeCounter+1
+    IF(nWriteData.GT.0) THEN
+      IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
+        ! Visualize data
+        CALL Visualize(t,U)
+        ! Write state to file
+        CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
+        writeCounter=0
+        tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
+#if USE_AMR
+        IF (UseAMR) THEN
+          writeCounterAMR = writeCounterAMR + 1
+          IF((writeCounterAMR .EQ. nWriteDataAMR).OR.doFinalize)THEN
+            CALL WriteStateAMR(OutputTime=t, isErrorFile=.FALSE.)
+            writeCounterAMR = 0
+          ENDIF
+        ENDIF
+#endif /* USE_AMR */
+      END IF
+    END IF
+    
     ! Call DG operator to fill face data, fluxes, gradients for analyze
     CALL DGTimeDerivative(t)
 
@@ -322,20 +398,7 @@ DO
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
       WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps   : ',REAL(iter)
     END IF !MPIroot
-
-    ! Visualize data and write solution
-    writeCounter=writeCounter+1
-    IF(nWriteData.GT.0) THEN
-      IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
-        ! Visualize data
-        CALL Visualize(t,U)
-        ! Write state to file
-        CALL WriteState(OutputTime=t,FutureTime=tWriteData,isErrorFile=.FALSE.)
-        writeCounter=0
-        tWriteData=MIN(tAnalyze+WriteData_dt,tEnd)
-      END IF
-    END IF
-
+    
     ! do analysis
     CALL Analyze(t,iter)
     iter_loc=0
@@ -364,6 +427,12 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKA,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#if NFVSE_CORR
+use MOD_NFVSE                 , only: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -383,7 +452,12 @@ tStage=t
 CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
-
+#if NFVSE_CORR
+call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 
 ! Following steps
 DO iStage=2,nRKStages
@@ -392,7 +466,12 @@ DO iStage=2,nRKStages
   CALL DGTimeDerivative(tStage)
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
-
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 END DO
 CurrentStage=1
 
@@ -413,6 +492,9 @@ USE MOD_DG           ,ONLY: DGTimeDerivative
 USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
 USE MOD_TimeDisc_Vars,ONLY: dt,RKdelta,RKg1,RKg2,RKg3,RKb,RKc,nRKStages,CurrentStage
 USE MOD_Mesh_Vars    ,ONLY: nElems
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -437,6 +519,9 @@ CALL VCopy(nTotalU,Uprev,U)                    !Uprev=U
 CALL VCopy(nTotalU,S2,U)                       !S2=U
 CALL DGTimeDerivative(t)
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))      !U      = U + Ut*b_dt(1)
+#if POSITIVITYPRES
+CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 
 DO iStage=2,nRKStages
   CurrentStage=iStage
@@ -446,12 +531,97 @@ DO iStage=2,nRKStages
   CALL VAXPBY(nTotalU,U,S2,ConstOut=RKg1(iStage),ConstIn=RKg2(iStage)) !U = RKg1(iStage)*U + RKg2(iStage)*S2
   CALL VAXPBY(nTotalU,U,Uprev,ConstIn=RKg3(iStage))                !U = U + RKg3(ek)*Uprev
   CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(iStage))                   !U = U + Ut*b_dt(iStage)
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
 END DO
 CurrentStage=1
 
 END SUBROUTINE TimeStepByLSERKK3
+!===================================================================================================================================
+!> Strong-Stability-Preserving Runge-Kutta integration: 2 register version
+!> See: Spiteri, R. J., & Ruuth, S. J. (2002). "A new class of optimal high-order strong-stability-preserving time discretization 
+!>                                              methods". SIAM Journal on Numerical Analysis, 40(2), 469-491.
+!> This procedure takes the current time t, the time step dt and the solution at
+!> the current time U(t) and returns the solution at the next time level.
+!> -> ATTENION: Only works for the SSPRK4-5
+!===================================================================================================================================
+subroutine TimeStepBySSPRK2(t)
+  use MOD_PreProc
+  use MOD_Vector
+  use MOD_TimeDisc_Vars, only: dt,nRKStages,CurrentStage, RKa, RKb, RKc, RKd, RKe
+  use MOD_DG_Vars      , only: U, Ut, nTotalU
+  use MOD_MESH_Vars    , only: nElems
+  use MOD_DG           , only: DGTimeDerivative
+#if NFVSE_CORR
+  use MOD_NFVSE        , only: Apply_NFVSE_Correction
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
+#endif /*POSITIVITYPRES*/
+  implicit none
+  !-arguments----------------------------------
+  real, intent(in) :: t
+  !-local-variables----------------------------
+  real    :: r0(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! Register 0
+  real    :: r1(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! Register 1
+  real    :: b_dt(1:nRKStages)
+  real    :: tStage
+  integer :: iStage
+  !--------------------------------------------
+  
+  call VCopy(nTotalU,r0,U)    !r0=U
+  b_dt=RKb*dt
+  
+  ! First stage
+  CurrentStage = 1
+  tStage=t
+  CALL DGTimeDerivative(tStage) ! Computes Ut
+  U = U + Ut*b_dt(1)
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(1))
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+  
+  do iStage=2, nRKStages-1
+    CurrentStage = iStage
+    tStage=t+dt*RKc(iStage)
+    CALL DGTimeDerivative(tStage) ! Computes Ut
+    
+    U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
+    
+#if NFVSE_CORR
+    call Apply_NFVSE_Correction(U,Ut,t,b_dt(iStage))
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+    
+    select case(iStage)
+    case(2) ; r1 = U*RKe(iStage)
+    case(3) ; r1 = r1 + U*RKe(iStage)
+    case(4) ; r1 = r1 + dt*Ut*RKe(iStage)
+    end select
 
-
+  end do
+  
+  ! Last stage
+  CurrentStage = nRKStages
+  tStage=t+dt*RKc(nRKStages)
+  CALL DGTimeDerivative(tStage) ! Computes Ut
+  
+  U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
+  
+#if NFVSE_CORR
+  call Apply_NFVSE_Correction(U,Ut,t,b_dt(nRKStages))
+#endif /*NFVSE_CORR*/
+#if POSITIVITYPRES
+  CALL MakeSolutionPositive(U)
+#endif /*POSITIVITYPRES*/
+  
+end subroutine TimeStepBySSPRK2
 !===================================================================================================================================
 !> Scaling of the CFL number, from paper GASSNER, KOPRIVA, "A comparision of the Gauss and Gauss-Lobatto
 !> Discontinuous Galerkin Spectral Element Method for Wave Propagation Problems" .

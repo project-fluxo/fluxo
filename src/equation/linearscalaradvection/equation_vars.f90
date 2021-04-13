@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -17,6 +18,7 @@
 !==================================================================================================================================
 !> Contains parameters for the linear scalar advection equation
 !==================================================================================================================================
+#include "defines.h"
 MODULE MOD_Equation_Vars
 ! MODULES
 IMPLICIT NONE
@@ -35,6 +37,9 @@ INTEGER,ALLOCATABLE :: BCSideID(:,:)           !< SideIDs for BC types
 
 CHARACTER(LEN=255),PARAMETER :: StrVarNames(1)=(/'Solution'/) !< Variable names for output
 
+integer, parameter :: nIndVar = 1
+character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 'Solution'/)
+
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
@@ -51,6 +56,11 @@ ABSTRACT INTERFACE
     REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
     REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
   END SUBROUTINE i_sub_VolumeFluxAverageVec
+  
+  pure subroutine i_indicatorFunction(U,ind)
+    real, intent(in)  :: U(PP_nVar)
+    real, intent(out) :: ind
+  end subroutine i_indicatorFunction
 END INTERFACE
 
 
@@ -88,5 +98,37 @@ END DO!i
 END SUBROUTINE ConvertToGradPrimVec
 #endif /*PARABOLIC*/
 
+!===================================================================================================================================
+!> Subroutine to initialize a procedure pointer to a specific indicator function
+!===================================================================================================================================
+subroutine SetIndicatorFunction(ind_id,IndicatorFunc)
+  use MOD_Globals
+  implicit none
+  !-arguments---------------------------------------
+  character(len=255)        , intent(in) :: ind_id
+  procedure(i_indicatorFunction),pointer :: IndicatorFunc
+  !-------------------------------------------------
+  
+  select case (trim(ind_id))
+    case('Solution') ; IndicatorFunc => Get_Solution
+    case default
+      CALL abort(__STAMP__,'Indicator quantity "'//trim(ind_id)//'" is not defined for this equation!',999,999.)
+      RETURN
+  end select
+  
+end subroutine SetIndicatorFunction
+
+!===================================================================================================================================
+!> Returns the solution
+!===================================================================================================================================
+pure subroutine Get_Solution(U,sol)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: sol
+  !-------------------------------------------------
+  
+  sol = U(1)
+end subroutine Get_Solution
 
 END MODULE MOD_Equation_Vars

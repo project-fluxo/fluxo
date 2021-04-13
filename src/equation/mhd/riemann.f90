@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -54,8 +55,7 @@ INTERFACE EntropyStableByLLF
   MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
 
-
-PUBLIC :: Riemann
+PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
 #endif /*NONCONS*/
@@ -65,6 +65,12 @@ PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
+#ifdef PP_GLM
+PUBLIC :: EntropyStable9WaveFlux
+PUBLIC :: EntropyStable9WaveFlux_VolFluxAndDissipMatrices
+#endif
+PUBLIC :: RotateState
+PUBLIC :: RotateFluxBack
 !==================================================================================================================================
 
 
@@ -75,13 +81,13 @@ CONTAINS
 SUBROUTINE Riemann(F,UL,UR,                                                                       &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R,                         &
-#endif
+#endif /*PARABOLIC*/
                    nv,t1,t2)
 USE MOD_PreProc
 USE MOD_Equation_vars,ONLY: SolveRiemannProblem
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
-#endif
+#endif /*PARABOLIC*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -103,62 +109,110 @@ REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of f
 REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL             :: ConsL(1:PP_nVar)
-REAL             :: ConsR(1:PP_nVar)
-#if PARABOLIC
+#if PARABOLIC  
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N) :: k_L,g_L,j_L,k_R,g_R,j_R
-INTEGER          :: iVar
+INTEGER                                 :: iVar
 #endif /*PARABOLIC*/
-INTEGER          :: i,j
 !==================================================================================================================================
-DO j = 0,PP_N
-  DO i = 0,PP_N
-    !rotate fields
-    ConsL(:) =     UL(:  ,i,j)
-    ConsL(2) = SUM(UL(2:4,i,j)*nv(:,i,j))
-    ConsL(3) = SUM(UL(2:4,i,j)*t1(:,i,j))
-    ConsL(4) = SUM(UL(2:4,i,j)*t2(:,i,j))
-    ConsL(6) = SUM(UL(6:8,i,j)*nv(:,i,j))
-    ConsL(7) = SUM(UL(6:8,i,j)*t1(:,i,j))
-    ConsL(8) = SUM(UL(6:8,i,j)*t2(:,i,j))
 
-    ConsR(:) =     UR(:,i,j)
-    ConsR(2) = SUM(UR(2:4,i,j)*nv(:,i,j))
-    ConsR(3) = SUM(UR(2:4,i,j)*t1(:,i,j))
-    ConsR(4) = SUM(UR(2:4,i,j)*t2(:,i,j))
-    ConsR(6) = SUM(UR(6:8,i,j)*nv(:,i,j))
-    ConsR(7) = SUM(UR(6:8,i,j)*t1(:,i,j))
-    ConsR(8) = SUM(UR(6:8,i,j)*t2(:,i,j))
+call AdvRiemann(F,UL,UR,nv,t1,t2)
 
-
-    CALL SolveRiemannProblem(ConsL(:),ConsR(:),F(:,i,j))
-
-    ! Back Rotate the normal flux into Cartesian direction
-    F(2:4,i,j) =   nv(:,i,j)*F(2,i,j) &
-                 + t1(:,i,j)*F(3,i,j) &
-                 + t2(:,i,j)*F(4,i,j)
-    F(6:8,i,j) =   nv(:,i,j)*F(6,i,j) &
-                 + t1(:,i,j)*F(7,i,j) &
-                 + t2(:,i,j)*F(8,i,j)
-
-  END DO !i
-END DO !j
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute MHD Diffusion flux
+
 CALL EvalDiffFlux3D(k_L,g_L,j_L,UL,gradUx_L,gradUy_L,gradUz_L)
+
 CALL EvalDiffFlux3D(k_R,g_R,j_R,UR,gradUx_R,gradUy_R,gradUz_R)
+
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
+! ATTENTION: This is done from iVar=2 because the first component of the viscous fluxes is  F(1,:,:)=0
+!            ... Change to iVar=1 if that is no longer the case
 DO iVar=2,PP_nVar
   F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:))  & 
                                +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:))  &
                                +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:))  )
 END DO
+
 #endif /* PARABOLIC */
 
 END SUBROUTINE Riemann
 
+!==================================================================================================================================
+!> Advective Riemann solver
+!==================================================================================================================================
+pure SUBROUTINE AdvRiemann(F,UL,UR,nv,t1,t2)
+USE MOD_PreProc
+USE MOD_Equation_vars,ONLY: SolveRiemannProblem
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: UL(      PP_nVar,0:PP_N,0:PP_N) !<  left state on face
+REAL,INTENT(IN) :: UR(      PP_nVar,0:PP_N,0:PP_N) !< right state on face
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL             :: ConsL(1:PP_nVar)
+REAL             :: ConsR(1:PP_nVar)
+INTEGER          :: i,j
+!==================================================================================================================================
+
+DO j = 0,PP_N
+  DO i = 0,PP_N
+    !rotate fields
+    ConsL = RotateState(UL(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    ConsR = RotateState(UR(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+
+    CALL SolveRiemannProblem(ConsL(:),ConsR(:),F(:,i,j))
+
+    ! Back Rotate the normal flux into Cartesian direction
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+
+  END DO !i
+END DO !j
+END SUBROUTINE AdvRiemann
+!==================================================================================================================================
+!> Rotate the state to the normal frame of reference
+!==================================================================================================================================
+pure function RotateState(U,nv,t1,t2) result(rotU)
+  implicit none
+  real, intent(in) :: U(PP_nVar)
+  real, intent(in) :: nv(3)
+  real, intent(in) :: t1(3)
+  real, intent(in) :: t2(3)
+  real             :: rotU(PP_nVar)
+  
+  rotU(:) =     U(:  )
+  rotU(2) = SUM(U(2:4)*nv(:))
+  rotU(3) = SUM(U(2:4)*t1(:))
+  rotU(4) = SUM(U(2:4)*t2(:))
+  rotU(6) = SUM(U(6:8)*nv(:))
+  rotU(7) = SUM(U(6:8)*t1(:))
+  rotU(8) = SUM(U(6:8)*t2(:))
+end function RotateState
+!==================================================================================================================================
+!> Rotate the flux from the normal frame of reference back to the physical framework
+!==================================================================================================================================
+pure subroutine RotateFluxBack(F,nv,t1,t2)
+  implicit none
+  real, intent(inout) :: F(PP_nVar)
+  real, intent(in)    :: nv(3)
+  real, intent(in)    :: t1(3)
+  real, intent(in)    :: t2(3)
+  
+  F(2:4) =   nv(:)*F(2) &
+           + t1(:)*F(3) &
+           + t2(:)*F(4)
+  F(6:8) =   nv(:)*F(6) &
+           + t1(:)*F(7) &
+           + t2(:)*F(8)
+end subroutine RotateFluxBack
 #if NONCONS
 !==================================================================================================================================
 !> strong nonconservative flux on a side: 
@@ -171,7 +225,7 @@ END SUBROUTINE Riemann
 !> we only need to add
 !> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
 !==================================================================================================================================
-SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
+pure SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
 USE MOD_DG_Vars,ONLY:nTotal_Face
 IMPLICIT NONE
@@ -214,7 +268,7 @@ END SUBROUTINE AddNonConsFlux
 !==================================================================================================================================
 !> Lax-friedrichs / rusanov flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -255,7 +309,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -312,7 +366,7 @@ END SUBROUTINE RiemannSolverByHLL
 !==================================================================================================================================
 !> HLLC solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -452,7 +506,7 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and 
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
+pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: FastestWave1D
@@ -499,6 +553,7 @@ CALL ConsToPrim(PrimR(:),ConsR_in(:))
 ! make B_n continuous 
 Bn=0.5*(PrimL(6)+PrimR(6))
 PrimR(6)=Bn
+PrimL(6)=Bn
 
 CALL PrimToCons(PrimL(:),ConsL(:))
 CALL PrimToCons(PrimR(:),ConsR(:))
@@ -673,7 +728,7 @@ END SUBROUTINE RiemannSolverByHLLD
 
 
 
-SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
+pure SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
 !==================================================================================================================================
 ! Calculates the HLL state for use with the MHD HLLC Riemann solver
 !==================================================================================================================================
@@ -704,7 +759,7 @@ END SUBROUTINE EvalHLLState
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
+pure SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
 USE MOD_Equation_vars, ONLY: WaveSpeeds1D
@@ -967,7 +1022,7 @@ Flux(:)=0.5*Flux(:)
 END SUBROUTINE RiemannSolverByRoe
 
 
-SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
+pure SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 !==================================================================================================================================
 ! entropy conservation for MHD, kinetric Energy conservation only in the Euler case
 ! following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
@@ -979,9 +1034,9 @@ USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage !pointer to EC routine
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
+!##ifdef PP_GLM
+!#USE MOD_Equation_Vars,ONLY:GLM_ch
+!##endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1010,7 +1065,7 @@ REAL            :: psiAvg
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
 #ifdef PP_GLM
-              E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
             psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
@@ -1152,5 +1207,417 @@ Fstar(  9) = Fstar(  9) - (LambdaMax_s2*tau)*(   psiAvg*V_jump(5)   + V_jump(  9
 
 END ASSOCIATE 
 END SUBROUTINE EntropyStableByLLF
+
+
+
+#ifdef PP_GLM
+!==================================================================================================================================
+!> The following three routines are for the entropy stable 9wave solver. 
+!>    See: Derigs et al. (2018). "Ideal GLM-MHD: About the entropy consistent nine-wave magnetic field divergence diminishing ideal
+!>         magnetohydrodynamics equations. Journal of Computational Physics, 364, 420-467."
+!> ATTENTION: 1) Central flux is entropy conservaing for MHD, kinetic Energy conservation only in the Euler case
+!>            2) mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
+!>            3) Dissipation for each characteristic wave seperately
+!==================================================================================================================================
+pure SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Flux_Average, ONLY:LN_MEAN
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: beta_R,beta_L
+REAL            :: srho_L,srho_R
+REAL            :: u2_L,u2_R
+REAL            :: p_L,p_R
+REAL            :: u_L(3),u_R(3)
+REAL            :: V_jump(PP_nVar)
+REAL            :: Dmatrix(PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+!
+           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+#ifdef PP_GLM
+              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
+#else
+              E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+              B_L => UL(6:8),    B_R => UR(6:8)  )
+
+! Get auxiliar variables
+srho_L=1./rho_L
+srho_R=1./rho_R
+u_L = rhoU_L(:)*srho_L
+u_R = rhoU_R(:)*srho_R
+u2_L = SUM(u_L(:)*u_L(:))
+u2_R = SUM(u_R(:)*u_R(:))
+p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*SUM(B_L(:)*B_L(:))))
+p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*SUM(B_R(:)*B_R(:))))
+beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
+beta_R = 0.5*rho_R/P_R
+
+! Jump in entropy vars
+V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
+                       - (beta_R*u2_R         -beta_L*u2_L  )  
+V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
+V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
+V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
+    
+call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+RT = TRANSPOSE(Rmatrix)
+
+! Compute entropy-stable fluxes
+Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*MATMUL(RT,V_jump))
+
+END ASSOCIATE 
+END SUBROUTINE EntropyStable9WaveFlux
+!==================================================================================================================================
+!> Computation of the entropy conserving flux and the dissipation matrices for the entropy stable 9wave solver
+!==================================================================================================================================
+pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1, Kappa
+  USE MOD_Flux_Average, ONLY:LN_MEAN
+#ifdef PP_GLM
+  USE MOD_Equation_Vars,ONLY:GLM_ch
+#endif
+  implicit none
+  !-arguments-----------------------------------------------
+  real, intent(in)  :: UL(PP_nVar)      !< left state
+  real, intent(in)  :: UR(PP_nVar)      !< right state
+  real, intent(out) :: Fstar  (PP_nVar)
+  real, intent(out) :: Dmatrix(PP_nVar)
+  real, intent(out) :: Rmatrix(PP_nVar,PP_nVar)
+  !-local-variables-----------------------------------------
+  ! Mean states
+  real    :: sbetaLN,betaAvg,rhoLN,pAvg,psiAvg,BAvg(3),uAvg(3)
+  real    :: p_L,p_R,u_L(3), u_R(3), pTilde
+  ! Additional
+  REAL :: B2_L,B2_R,B2Avg
+  REAL :: u2_L,u2_R,u2Avg
+  REAL :: beta_R,beta_L
+  REAL :: srho_L,srho_R
+  REAL :: u1_B2Avg, uB_Avg
+  real :: Tmatrix(PP_nVar)
+  REAL :: aA,aLN,abeta,bb1A,bb2A,bb3A,bbA,aabbA,ca,xx,xxx,cf,cs,bperpA,beta2A,beta3A,alphaf,alphas,sgnb1
+  REAL :: psiSplus,psiSminus,psiFplus,psiFminus, srhoLN, rhoAvg, pLN
+  real :: LambdaMax, phi
+  !---------------------------------------------------------
+  
+  ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+             rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+#ifdef PP_GLM
+                E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
+              psi_L =>UL(9)   ,  psi_R =>UR(9), &
+#else
+                E_L =>UL(5)   ,    E_R =>UR(5), &
+#endif
+                B_L => UL(6:8),    B_R => UR(6:8)  )
+  ! Get auxiliar variables
+  srho_L=1./rho_L
+  srho_R=1./rho_R
+  u_L = rhoU_L(:)*srho_L
+  u_R = rhoU_R(:)*srho_R
+  u2_L = SUM(u_L(:)*u_L(:))
+  u2_R = SUM(u_R(:)*u_R(:))
+  B2_L = SUM(B_L(:)*B_L(:))
+  B2_R = SUM(B_R(:)*B_R(:))
+  p_L    = kappaM1*(E_L - 0.5*(rho_L*u2_L+smu_0*B2_L))
+  p_R    = kappaM1*(E_R - 0.5*(rho_R*u2_R+smu_0*B2_R))
+  beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
+  beta_R = 0.5*rho_R/P_R
+
+  ! Get the averages for the numerical flux
+  rhoLN      = LN_MEAN( rho_L, rho_R)
+  sbetaLN    = 1./LN_MEAN(beta_L,beta_R)
+  uAvg       = 0.5 * ( u_L +  u_R)
+  u2Avg      = 0.5 * (u2_L + u2_R)
+  BAvg       = 0.5 * ( B_L +  B_R)
+  B2Avg      = 0.5 * (B2_L + B2_R)
+  u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+  uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
+  betaAvg    = 0.5 * (beta_L + beta_R)                                                               
+  pAvg       = 0.5*(rho_L+rho_R)/(beta_L+beta_R) !rhoMEAN/(2*betaMEAN)
+#ifdef PP_GLM
+  psiAvg     = 0.5*(psi_L+psi_R)
+#endif
+  pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
+  
+  ! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*uAvg(1)
+Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
+Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
+Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
+#ifdef PP_GLM
+Fstar(6) = GLM_ch*psiAvg
+Fstar(9) = GLM_ch*BAvg(1)
+#endif
+
+Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
+           + SUM(uAvg(:)*Fstar(2:4)) &
+           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
+#ifdef PP_GLM
+                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
+#endif
+                   )
+  ! MHD waves selective dissipation
+
+    ! Compute additional averages
+    rhoAvg = 0.5*(rho_L + rho_R)
+    pLN = 0.5*rhoLN*sbetaLN
+    u2Avg = u_L(1)*u_R(1) + u_L(2)*u_R(2) + u_L(3)*u_R(3)  ! Redefinition of u2Avg -> \bar{\norm{u}^2}
+    srhoLN = 1./rhoLN
+    aA = SQRT(kappa*pAvg/rhoLN)
+    aLN = SQRT(kappa*pLN/rhoLN)
+    abeta = SQRT(0.5*kappa/betaAvg)
+    bb1A = BAvg(1)/SQRT(rhoLN)
+    bb2A = BAvg(2)/SQRT(rhoLN)
+    bb3A = BAvg(3)/SQRT(rhoLN)
+    bbA = SQRT(bb1A*bb1A + bb2A*bb2A + bb3A*bb3A)
+    aabbA = aA*aA + bbA*bbA
+
+    ! Alfven speed
+    ! Derigs et al. (2018), (4.63)
+    ca = ABS(bb1A)
+
+    ! Control round-off errors
+    xx = aabbA*aabbA - 4.0*aA*aA*bb1A*bb1A
+    if(xx .lt. 0.0) xx = 0.0
+    xxx = aabbA + SQRT(xx)
+
+    ! Fast magnetoacoustic speed
+    ! Derigs et al. (2018), (4.63)
+    cf = SQRT(0.5 * xxx)
+
+    ! Control round-off errors
+    xxx = aabbA - SQRT(xx)
+    if(xxx .lt. 0.0) xxx = 0.0
+
+    ! Slow magnetoacoustic speed
+    ! Derigs et al. (2018), (4.63)
+    cs = SQRT(0.5 * xxx)
+
+    bperpA = SQRT(bb2A*bb2A + bb3A*bb3A)
+    ! In case of very small bperpA, the values of betaA_{2,3}
+    ! are indeterminable so we make them pairwise orthogonal
+    ! Derigs et al. (2018), (4.63)
+    if(bperpA .gt. 1.0E-14) then
+      beta2A = bb2A/bperpA
+      beta3A = bb3A/bperpA
+    else
+      bperpA = 0.0
+      beta2A = 1.0/sqrt(2.0)
+      beta3A = 1.0/sqrt(2.0)
+    endif
+
+    ! Avoid negative round-off errors when computing alphaf (auxiliary variable)
+    xx = 0.0
+    if((cf*cf-cs*cs) .gt. 0.0) xx = (aA*aA-cs*cs)/(cf*cf-cs*cs)
+    if(xx .gt. 0.0) then
+      alphaf = SQRT(xx)
+    else
+      alphaf = 0.0
+    end if
+
+    ! Avoid negative round-off errors when computing alphas (auxiliary variable)
+    xx = 0.0
+    if((cf*cf-cs*cs) .gt. 0.0) xx = (cf*cf-aA*aA)/(cf*cf-cs*cs)
+    if(xx .gt. 0.0) then
+      alphas = SQRT(xx)
+    else
+      alphas = 0.0
+    end if
+
+    sgnb1 = sign(1.,bb1A)
+
+    ! Derigs et al. (2018), (4.63)
+    psiSplus =  0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
+                alphas*rhoLN*aLN*aLN*skappaM1 + alphas*cs*rhoLN*uAvg(1) + &
+                alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
+    psiSminus = 0.5*alphas*rhoLN*u2Avg - abeta*alphaf*rhoLN*bperpA + &
+                alphas*rhoLN*aLN*aLN*skappaM1 - alphas*cs*rhoLN*uAvg(1) - &
+                alphaf*cf*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
+
+    psiFplus =  0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
+                alphaf*rhoLN*aLN*aLN*skappaM1 + alphaf*cf*rhoLN*uAvg(1) - &
+                alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
+    psiFminus = 0.5*alphaf*rhoLN*u2avg + abeta*alphas*rhoLN*bperpA + &
+                alphaf*rhoLN*aLN*aLN*skappaM1 - alphaf*cf*rhoLN*uAvg(1) + &
+                alphas*cs*rhoLN*sgnb1*(uAvg(2)*beta2A + uAvg(3)*beta3A)
+
+    ! + fast magnetoacoustic wave
+    ! Derigs et al. (2018), (4.68)
+    Rmatrix(:,1) = (/ alphaf*rhoLN, &
+                      alphaf*rhoLN*(uAvg(1) + cf), &
+                      rhoLN*(alphaf*uAvg(2) - alphas*cs*beta2A*sgnb1), &
+                      rhoLN*(alphaf*uAvg(3) - alphas*cs*beta3A*sgnb1), &
+                      psiFplus, &
+                      0.0, &
+                      alphas*abeta*beta2A*SQRT(rhoLN), &
+                      alphas*abeta*beta3A*SQRT(rhoLN), &
+                      0.0 /)
+
+    ! + Alfven wave
+    ! Derigs et al. (2018), (4.67)
+    Rmatrix(:,2) = (/ 0.0, &
+                      0.0,  &
+                      rhoLN*SQRT(rhoAvg)*beta3A, &
+                      -rhoLN*SQRT(rhoAvg)*beta2A, &
+                      -rhoLN*SQRT(rhoAvg)*(beta2A*uAvg(3) - beta3A*uAvg(2)), &
+                      0.0, &
+                      -rhoLN*beta3A, &
+                      rhoLN*beta2A, &
+                      0.0 /)
+
+    ! + slow magnetoacoustic wave
+    ! Derigs et al. (2018), (4.69)
+    Rmatrix(:,3) = (/ alphas*rhoLN, &
+                      alphas*rhoLN*(uAvg(1) + cs), &
+                      rhoLN*(alphas*uAvg(2) + alphaf*cf*beta2A*sgnb1), &
+                      rhoLN*(alphas*uAvg(3) + alphaf*cf*beta3A*sgnb1), &
+                      psiSplus, &
+                      0.0, &
+                      -alphaf*abeta*beta2A*SQRT(rhoLN), &
+                      -alphaf*abeta*beta3A*SQRT(rhoLN), &
+                      0.0 /)
+
+    ! + GLM wave
+    ! Dergs et al. (2018), eq. (4.65)
+    Rmatrix(:,4) = (/ 0.0, &
+                      0.0, &
+                      0.0, &
+                      0.0, &
+                      BAvg(1) + psiAvg, &
+                      1.0, &
+                      0.0, &
+                      0.0, &
+                      1.0 /)
+
+    ! Entropy wave
+    ! Derigs et al. (2018), (4.66)
+    Rmatrix(:,5) = (/ 1.0, &
+                      uAvg(1), &
+                      uAvg(2), &
+                      uAvg(3), &
+                      0.5*u2Avg, &
+                      0.0, &
+                      0.0, &
+                      0.0, &
+                      0.0 /)
+
+    ! - GLM wave
+    ! Dergs et al. (2018), eq. (4.65)
+    Rmatrix(:,6) = (/ 0.0, &
+                      0.0, &
+                      0.0, &
+                      0.0, &
+                      BAvg(1) - psiAvg, &
+                      1.0, &
+                      0.0, &
+                      0.0, &
+                      -1.0 /)
+
+    ! - slow magnetoacoustic wave
+    ! Derigs et al. (2018), (4.69)
+    Rmatrix(:,7) = (/ alphas*rhoLN, &
+                      alphas*rhoLN*(uAvg(1) - cs), &
+                      rhoLN*(alphas*uAvg(2) - alphaf*cf*beta2A*sgnb1), &
+                      rhoLN*(alphas*uAvg(3) - alphaf*cf*beta3A*sgnb1), &
+                      psiSminus, &
+                      0.0, &
+                      -alphaf*abeta*beta2A*SQRT(rhoLN), &
+                      -alphaf*abeta*beta3A*SQRT(rhoLN), &
+                      0.0 /)
+
+    ! - Alfven wave
+    ! Derigs et al. (2018), (4.67)
+    Rmatrix(:,8) = (/ 0.0, &
+                      0.0, &
+                      -rhoLN*SQRT(rhoAvg)*beta3A, &
+                      rhoLN*SQRT(rhoAvg)*beta2A, &
+                      rhoLN*SQRT(rhoAvg)*(beta2A*uAvg(3) - beta3A*uAvg(2)), &
+                      0.0, &
+                      -rhoLN*beta3A, &
+                      rhoLN*beta2A, &
+                      0.0 /)
+
+    ! - fast magnetoacoustic wave
+    ! Derigs et al. (2018), (4.68)
+    Rmatrix(:,9) = (/ alphaf*rhoLN, &
+                      alphaf*rhoLN*(uAvg(1) - cf), &
+                      rhoLN*(alphaf*uAvg(2) + alphas*cs*beta2A*sgnb1), &
+                      rhoLN*(alphaf*uAvg(3) + alphas*cs*beta3A*sgnb1), &
+                      psiFminus, &
+                      0.0, &
+                      alphas*abeta*beta2A*SQRT(rhoLN), &
+                      alphas*abeta*beta3A*SQRT(rhoLN), &
+                      0.0 /)
+    
+    ! A blend of the 9waves solver and LLF
+      phi = sqrt(ABS(1.0-(p_R*rho_R/(p_L*rho_L)))/(1.0+(p_R*rho_R/(p_L*rho_L))))
+      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
+      
+      Dmatrix(1) = (1.-phi)*ABS( uAvg(1) + cf ) + phi*LambdaMax
+      Dmatrix(2) = (1.-phi)*ABS( uAvg(1) + ca ) + phi*LambdaMax
+      Dmatrix(3) = (1.-phi)*ABS( uAvg(1) + cs ) + phi*LambdaMax
+      Dmatrix(4) = (1.-phi)*ABS( uAvg(1) + GLM_ch ) + phi*LambdaMax
+      Dmatrix(5) = (1.-phi)*ABS( uAvg(1)      ) + phi*LambdaMax
+      Dmatrix(6) = (1.-phi)*ABS( uAvg(1) - GLM_ch ) + phi*LambdaMax
+      Dmatrix(7) = (1.-phi)*ABS( uAvg(1) - cs ) + phi*LambdaMax
+      Dmatrix(8) = (1.-phi)*ABS( uAvg(1) - ca ) + phi*LambdaMax
+      Dmatrix(9) = (1.-phi)*ABS( uAvg(1) - cf ) + phi*LambdaMax
+      
+    ! Pure 9waves solver (no LLF)
+!#      
+!#      Dmatrix(1) = ABS( uAvg(1) + cf ) ! + fast magnetoacoustic wave
+!#      Dmatrix(2) = ABS( uAvg(1) + ca ) ! + Alfven wave
+!#      Dmatrix(3) = ABS( uAvg(1) + cs ) ! + slow magnetoacoustic wave
+!#      Dmatrix(4) = ABS( uAvg(1) + GLM_ch ) ! + GLM wave
+!#      Dmatrix(5) = ABS( uAvg(1)      ) ! / Entropy wave
+!#      Dmatrix(6) = ABS( uAvg(1) - GLM_ch ) ! - GLM wave
+!#      Dmatrix(7) = ABS( uAvg(1) - cs ) ! - slow magnetoacoustic wave
+!#      Dmatrix(8) = ABS( uAvg(1) - ca ) ! - Alfven wave
+!#      Dmatrix(9) = ABS( uAvg(1) - cf ) ! - fast magnetoacoustic wave
+    
+    ! LLF solver
+!#      LambdaMax = MAX(ABS( uAvg(1) + cf ),ABS( uAvg(1) - cf ))
+!#      
+!#      Dmatrix(1) = LambdaMax
+!#      Dmatrix(2) = LambdaMax
+!#      Dmatrix(3) = LambdaMax
+!#      Dmatrix(4) = LambdaMax
+!#      Dmatrix(5) = LambdaMax
+!#      Dmatrix(6) = LambdaMax
+!#      Dmatrix(7) = LambdaMax
+!#      Dmatrix(8) = LambdaMax
+!#      Dmatrix(9) = LambdaMax
+    
+    ! Diagonal scaling matrix as described in Winters et al., eq. (4.15)
+    Tmatrix = 0.0
+    Tmatrix(1) = 0.5/kappa/rhoLN ! + f
+    Tmatrix(2) = 0.25/betaAvg/rhoLN/rhoLN ! + a
+    Tmatrix(3) = Tmatrix(1) ! + s
+    Tmatrix(4) = 0.25 / betaAvg ! + GLM
+    Tmatrix(5) = rhoLN*kappaM1/kappa ! E
+    Tmatrix(6) = Tmatrix(4) ! - GLM
+    Tmatrix(7) = Tmatrix(1) ! - s
+    Tmatrix(8) = Tmatrix(2) ! - a
+    Tmatrix(9) = Tmatrix(1) ! - f
+
+    ! Scale D matrix
+    Dmatrix = Dmatrix*Tmatrix
+end ASSOCIATE
+end subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices  
+#endif
 
 END MODULE MOD_Riemann

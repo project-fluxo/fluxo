@@ -200,7 +200,7 @@ USE MOD_Equation     ,ONLY: ExactFunc
 USE MOD_Equation_Vars,ONLY: RefStateCons
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: s2mu_0
-USE MOD_Equation_Vars,ONLY: ConsToPrim
+USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
 USE MOD_Equation_Vars,ONLY: FastestWave1D
 USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
 USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
@@ -212,7 +212,6 @@ USE MOD_Riemann,         ONLY: AddNonConsFlux
 #endif /*NONCONS*/
 #if PARABOLIC
 USE MOD_Lifting_Vars ,ONLY: gradPx_master,gradPy_master,gradPz_master
-USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseGetBoundaryFlux
 IMPLICIT NONE
@@ -297,6 +296,26 @@ DO iBC=1,nBCs
 #endif 
       END DO !iSide=1,nBCloc
     END IF !BCState=0
+
+  CASE(3) ! Supersonic/superalfvénic outflow with internal solution
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
+
+      CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
+#if PARABOLIC
+                     gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                     gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                     gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                     NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+      CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_master(:,:,:,SideID), &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif
+ 
+    END DO !iSide=1,nBCLoc
+
+
   
   CASE(22) ! exact BC = Dirichlet BC !!
     ! SPECIAL BC: BCState specifies exactfunc to be used!!
@@ -475,6 +494,17 @@ DO iBC=1,nBCs
         END DO ! q
       END DO !iSide=1,nBCloc
     END IF !BCstate=0
+
+  CASE(3) ! outflow
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
+!      DO q=0,PP_N
+!        DO p=0,PP_N
+          Flux(:,:,:,SideID)=U_master(:,:,:,SideID)
+!        END DO
+!      END DO
+    END DO
+
   
   CASE(22) ! exact BC = Dirichlet BC !!
     ! SPECIAL BC: BCState specifies exactfunc to be used!!
@@ -530,6 +560,7 @@ DO SideID=1,nBCSides
     Flux(:,p,q,SideID)=(Floc(:,p,q)-P_m(:,p,q))*SurfElem(p,q,SideID)
   END DO; END DO
 END DO ! iSide
+
 END SUBROUTINE Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
 

@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -67,8 +68,8 @@ CALL prms%CreateIntOption(      'IniRefState' , "Refstate required for initializ
 CALL prms%CreateRealArrayOption('RefState'    , "State(s) in primitive variables (density, velx, vely, velz, pressure).",&
                                                 multiple=.TRUE.)
 CALL prms%CreateRealArrayOption('AdvVel'      , "for exact function, const velocity.")
-CALL prms%CreateRealArrayOption('MachShock'   , "for exact function, Mach shock.")
-CALL prms%CreateRealArrayOption('PreShockDens', "for exact function, pre shock density.")
+CALL prms%CreateRealOption('MachShock'        , "for exact function, Mach shock.")
+CALL prms%CreateRealOption('PreShockDens'     , "for exact function, pre shock density.")
 CALL prms%CreateRealArrayOption('IniCenter'   , "for exactfunc, center point.","0.,0.,0.")
 CALL prms%CreateRealArrayOption('IniAxis'     , "for exactfunc, center axis.","0.,0.,1.")
 CALL prms%CreateRealArrayOption("IniWaveNumber", " For exactfunction: wavenumber of solution.")
@@ -92,11 +93,14 @@ CALL prms%CreateRealOption(     'mu0'         , "power-law viscosity, prefactor.
 CALL prms%CreateRealOption(     'Tref'        , "power-law viscosity, reference temperature.","280.")
 CALL prms%CreateRealOption(     'ExpoPow'     , "power-law viscosity, exponent.","1.5")
 #endif /*PP_VISC==2*/
+CALL prms%CreateLogicalOption(  'doCalcSource', "Apply source terms.", '.TRUE.')
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
                                            "  0: Central"//&
                                            "  1: Local Lax-Friedrichs"//&
                                            " 22: HLL"//&
+                                           " 23: HLLE"//&
+                                           " 24: HLLEM"//&
                                            "  2: HLLC"//&
                                            "  3: Roe"//&
                                            "  4: Entropy Stable: EC Ismail and Roe + full wave diss."//&
@@ -170,7 +174,7 @@ IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsD
 END IF
 SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT NAVIER-STOKES...'
-doCalcSource=.TRUE.
+doCalcSource=GETLOGICAL('doCalcSource', '.TRUE.')
 
 s23=2./3.
 
@@ -182,7 +186,7 @@ CASE(1,11,12)
   IniRefState  =GETINT('IniRefState')
 CASE(2,21,8) ! synthetic test cases
   AdvVel = GETREALARRAY('AdvVel',3)
-CASE(6) ! shock
+CASE(6,61) ! shock
   MachShock    = GETREAL('MachShock','1.5')
   PreShockDens = GETREAL('PreShockDens','1.0')
 END SELECT ! IniExactFunc
@@ -284,6 +288,12 @@ SELECT CASE(WhichRiemannSolver)
   CASE(22)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
     SolveRiemannProblem     => RiemannSolverByHLL
+  CASE(23)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLE'
+    SolveRiemannProblem     => RiemannSolverByHLLE
+  CASE(24)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLEM'
+    SolveRiemannProblem     => RiemannSolverByHLLEM
   CASE(3)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
     SolveRiemannProblem     => RiemannSolverByRoe
@@ -291,10 +301,12 @@ SELECT CASE(WhichRiemannSolver)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, EC Ismail and Roe + full wave dissipation'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
+    RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
   CASE(44)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, ECKEP + full wave dissipation'
     VolumeFluxAverage    => EntropyAndEnergyConservingFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
+    RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
   CASE(5)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: EC Ismail and Roe'
     VolumeFluxAverage    => TwoPointEntropyConservingFlux
@@ -494,6 +506,12 @@ REAL                            :: sines(256)
 INTEGER                         :: f
 ! needed for cylinder potential flow
 REAL                            :: phi
+! For KHI
+real                            :: dens0, dens1, pres0, velx0, vely0, slope
+integer :: dim_
+real :: newx(3)
+! For new blast
+real    :: bell_sigma, blast_sigma, bell_mass, blast_energy, bell_mass_normalized, blast_ener_normalized
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 resu_t=0.
@@ -586,6 +604,24 @@ CASE(4) ! exact function
   ! g''(t)
   Resu_tt(1:4)=-omega*omega*IniAmplitude*sin(Omega*(SUM(x) - tEval))
   Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
+  
+case(17) ! KHI
+  ! parameters
+  dens0 = 0.5
+  dens1 = 1.5
+  pres0 = 1.0
+  velx0 = 0.5
+  vely0 = 0.1
+  slope = 15
+  
+  Prim(1) = dens0 + dens1 * 0.5*(1+(tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1)))
+  Prim(2) = velx0 * (tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1))
+  Prim(3) = vely0 * sin(2*PP_Pi*x(1)) !*(exp(-100*(coords(:,:,2)+0.5)**2) - exp(-100*(coords(:,:,2)-0.5)**2))
+  Prim(4) = 0.
+  Prim(5) = pres0
+  
+  CALL PrimToCons(prim,resu)
+  
 CASE(41) ! exact function, in 2D, rho=2+g(x,y) , rho v_1/2 =2+g(x,y) , rhoE =(2+g(x,y) )^2 = 4+4*g(x,y) + g(x,y)^2
          ! g(x,y) = A*sin(omega(x+y-1))
   Omega=PP_Pi*IniFrequency
@@ -631,6 +667,35 @@ CASE(6) ! shock
   xs=5.+Ms*tEval ! 5. bei 10x10x10 Rechengebiet
   ! Tanh boundary
   Resu=-0.5*(Resul-Resur)*TANH(5.0*(x(1)-xs))+Resur+0.5*(Resul-Resur)
+CASE(61) ! sharp shock
+  prim=0.
+
+  ! pre-shock
+  prim(1) = PreShockDens
+  Ms      = MachShock
+
+  prim(5)=prim(1)/Kappa
+  CALL PrimToCons(prim,Resur)
+
+  ! post-shock
+  prim(3)=prim(1) ! temporal storage of pre-shock density
+  prim(1)=prim(1)*((KappaP1)*Ms*Ms)/(KappaM1*Ms*Ms+2.)
+  prim(5)=prim(5)*(2.*Kappa*Ms*Ms-KappaM1)/(KappaP1)
+  IF (prim(2) .EQ. 0.0) THEN
+    prim(2)=Ms*(1.-prim(3)/prim(1))
+  ELSE
+    prim(2)=prim(2)*prim(3)/prim(1)
+  END IF
+  prim(3)=0. ! reset temporal storage
+  CALL PrimToCons(prim,Resul)
+  xs=IniHalfwidth
+  
+  
+  if (x(1) < xs) then
+    Resu=Resul
+  else
+    Resu=Resur
+  end if
 CASE(7) !TAYLOR GREEN VORTEX
   A=1. ! magnitude of speed
   Ms=0.1  ! maximum Mach number
@@ -732,9 +797,54 @@ CASE(13) ! Sedov-Taylor Circular Blast Wave
   r2 = SQRT(SUM(x*x))! the radius
   IF ((r2.LE.0.1).AND.(r2.NE.0.)) THEN
     du      = 4.*PP_Pi*r2*r2*r2/3. ! the volume of the small sphere
-    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/V
+    prim(5) = kappaM1/du ! inject energy into small radius sphere, p = (gamma-1)*E/VPP_Pi
   END IF
   CALL PrimToCons(prim,resu)
+CASE(14) ! Soft Sedov-Taylor Circular Blast Wave
+  dim_ = 3
+  prim(1)   = 1.     ! ambient density
+  prim(2:4) = 0.     ! gas at rest initially
+  prim(5)   = 1.     ! ambient pressure
+  newx = (x - IniCenter)
+  
+  r2 = SQRT(SUM(newx(1:dim_)*newx(1:dim_)))! the radius
+  IF ((r2.LE.0.5).AND.(r2.NE.0.)) THEN ! 
+    prim(1) = 1.3416149068323
+    prim(2) = 0.361538208967199 * newx(1) / r2
+    prim(3) = 0.361538208967199 * newx(2) / r2
+    if (dim_ == 3) then
+      prim(4) = 0.361538208967199 * newx(3) / r2
+    end if
+    prim(5) = 1.51333333333333
+  END IF
+  CALL PrimToCons(prim,resu)
+case(15)
+  ! Some parameters
+  dim_ = 2 ! (2D)
+  bell_sigma  = 0.5 * 5e-1
+  blast_sigma = 0.5 * 3e-1
+  bell_mass  = 0.5 !! note also norm. in setup_init
+  blast_energy = 1.0
+
+  dens0       = 1.
+  pres0       = 1e-5
+
+  bell_mass_normalized  = bell_mass/SQRT((2*PP_Pi)**dim_)/bell_sigma**dim_
+  blast_ener_normalized = blast_energy/SQRT((2*PP_Pi)**dim_)/blast_sigma**dim_
+  r2 = SQRT(SUM(x(1:dim_)*x(1:dim_)))! the radius
+
+  ! Initialization
+  Prim(1) = dens0
+  Prim(2) = 0.
+  Prim(3) = 0.
+  Prim(4) = 0.
+  Prim(5) = pres0
+
+  Prim(1) = dens0 + bell_mass_normalized * exp(-0.5*(r2/bell_sigma)**2)
+
+  CALL PrimToCons(prim,resu)
+
+  resu(5) = resu(5) + blast_ener_normalized * exp(-0.5*(r2/blast_sigma)**2)
 END SELECT ! ExactFunction
 
 IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant

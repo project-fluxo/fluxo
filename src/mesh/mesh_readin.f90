@@ -172,13 +172,18 @@ USE MOD_Mesh_Vars,          ONLY:NGeo
 USE MOD_Mesh_Vars,          ONLY:NodeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,nElems,nGlobalElems
 USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
-USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
+USE MOD_Mesh_Vars,          ONLY:nMortarSides
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
 USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
 USE MOD_Mesh_Vars,          ONLY:Elems
 USE MOD_Mesh_Vars,          ONLY:GETNEWELEM,GETNEWSIDE
 USE MOD_Mesh_Vars,          ONLY:NodeTypeMesh
+use MOD_Mesh_Vars,          ONLY:MeshIsNonConforming
+#if USE_AMR
+USE MOD_AMR_Vars,           ONLY:UseAMR
+USE MOD_P4EST,              ONLY: p4estSetMPIData
+#endif
 USE MOD_Interpolation_Vars, ONLY:NodeTypeEq,NodeTypeGL
 #if MPI
 USE MOD_MPI_Vars,           ONLY:offsetElemMPI,nMPISides_Proc,nNbProcs,NbProc
@@ -243,16 +248,28 @@ END IF
 IF(ALLOCATED(offsetElemMPI)) DEALLOCATE(offsetElemMPI)
 ALLOCATE(offsetElemMPI(0:nProcessors))
 offsetElemMPI=0
-nElems=nGlobalElems/nProcessors
-iElem=nGlobalElems-nElems*nProcessors
-DO iProc=0,nProcessors-1
-  offsetElemMPI(iProc)=nElems*iProc+MIN(iProc,iElem)
-END DO
-offsetElemMPI(nProcessors)=nGlobalElems
-!local nElems and offset
-nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
-offsetElem=offsetElemMPI(myRank)
-LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
+
+#if USE_AMR
+IF (UseAMR) THEN
+  CALL p4estSetMPIData()
+ELSE
+#endif/*USE_AMR*/
+  nElems=nGlobalElems/nProcessors
+  iElem=nGlobalElems-nElems*nProcessors
+  DO iProc=0,nProcessors-1
+    offsetElemMPI(iProc)=nElems*iProc+MIN(iProc,iElem)
+  END DO
+  offsetElemMPI(nProcessors)=nGlobalElems
+  !local nElems and offset
+  nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
+  offsetElem=offsetElemMPI(myRank)
+  LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
+
+#if USE_AMR
+ ENDIF
+#endif/*USE_AMR*/
+
+
 #else /* MPI */
 nElems=nGlobalElems   !local number of Elements
 offsetElem=0          ! offset is the index of first entry, hdf5 array starts at 0-.GT. -1
@@ -439,7 +456,7 @@ IF(useCurveds)THEN
 ELSE
   ALLOCATE(NodeCoords(   3,0:1,   0:1,   0:1,   nElems))
   ALLOCATE(NodeCoordsTmp(3,0:NGeo,0:NGeo,0:NGeo,nElems))
-  CALL ReadArray('NodeCoords',2,(/3,nElems*(NGeo+1)**3/),offsetElem*(NGeo+1)**3,2,RealArray=NodeCoordsTmp)
+  CALL ReadArray('NodeCoords',2,(/3,nElems*(NGeo+1)**3/),offsetElem*(NGeo+1)**3,2,RealArray=NodeCoordsTmp) 
   NodeCoords(:,0,0,0,:)=NodeCoordsTmp(:,0,   0,   0,   :)
   NodeCoords(:,1,0,0,:)=NodeCoordsTmp(:,NGeo,0,   0,   :)
   NodeCoords(:,0,1,0,:)=NodeCoordsTmp(:,0,   NGeo,0,   :)
@@ -462,15 +479,6 @@ nNodes=nElems*(NGeo+1)**3
 !  ALLOCATE(Elem_IJK(3,nLocalElems))
 !  CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntegerArray=Elem_IJK)
 !END IF
-
-! Get Mortar specific arrays
-dsExists=.FALSE.
-iMortar=0
-CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
-IF(dsExists)&
-  CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-isMortarMesh=(iMortar.EQ.1)
-
 
 CALL CloseDataFile()
 
@@ -550,6 +558,7 @@ LOGWRITE(*,'(A22,I8)')'nInnerSides:',nInnerSides
 LOGWRITE(*,'(A22,I8)')'nMPISides:',nMPISides
 LOGWRITE(*,*)'-------------------------------------------------------'
  !now MPI sides
+! TODO: Check nMortarSides
 #if MPI
 nNBProcs=0
 DO iProc=0,nProcessors-1
@@ -592,6 +601,14 @@ ReduceData(10)=nMPIPeriodics
 #if MPI
 CALL MPI_REDUCE(ReduceData,ReduceData_glob,10,MPI_INTEGER,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ReduceData=ReduceData_glob
+#endif /*MPI*/
+
+! Check if the mesh is non-conforming and broadcast the information
+IF(MPIRoot)THEN
+  MeshIsNonConforming = (ReduceData(9)>0)
+END IF
+#if MPI
+call MPI_Bcast(MeshIsNonConforming, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, iError)
 #endif /*MPI*/
 
 IF(MPIRoot)THEN

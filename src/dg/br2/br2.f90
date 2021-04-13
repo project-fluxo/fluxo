@@ -171,7 +171,7 @@ USE MOD_Preproc
 USE MOD_Lifting_Vars
 USE MOD_Vector,            ONLY: VNullify
 USE MOD_DG_Vars,           ONLY: nTotalU,U,U_master,U_slave,nTotal_IP,nTotal_face
-USE MOD_FillMortar,        ONLY: U_Mortar,Flux_Mortar
+USE MOD_FillMortar,        ONLY: U_Mortar,Flux_Cons_Mortar
 USE MOD_Lifting_SurfInt,   ONLY: Lifting_SurfInt
 USE MOD_Lifting_VolInt,    ONLY: Lifting_VolInt
 USE MOD_ProlongToFace,     ONLY: ProlongToFace
@@ -217,9 +217,9 @@ CALL StartSendMPIData(   FluxZ,DataSizeSide,1,nSides,MPIRequest_Lifting(:,3,SEND
 CALL Lifting_FillFlux_BC(tIn,FluxX, FluxY, FluxZ)
 CALL Lifting_FillFlux(FluxX,FluxY,FluxZ,doMPISides=.FALSE.)
 
-CALL Flux_Mortar(FluxX,FluxX,doMPISides=.FALSE.,weak=.FALSE.)
-CALL Flux_Mortar(FluxY,FluxY,doMPISides=.FALSE.,weak=.FALSE.)
-CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxX,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxY,doMPISides=.FALSE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxZ,doMPISides=.FALSE.,weak=.FALSE.)
 
 ! compute volume integral contribution and add to gradP, Jacobian already included in BR2 volint
 ! this is onyl the local gradient!
@@ -229,21 +229,21 @@ CALL Lifting_VolInt(gradPx,gradPy,gradPz)
 ! The local gradient is now interpolated to the face of the grid cells
 #if MPI
 ! Prolong to face for MPI sides - send direction
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.TRUE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.TRUE.)
 #endif /*MPI*/
 ! Prolong to face for BCSides, InnerSides and MPI sides - receive direction
-CALL ProlongToFace(gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
-CALL ProlongToFace(gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
-CALL ProlongToFace(gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPx,gradPx_master,gradPx_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPy,gradPy_master,gradPy_slave,doMPISides=.FALSE.)
+CALL ProlongToFace(PP_nVar,gradPz,gradPz_master,gradPz_slave,doMPISides=.FALSE.)
 
 #if MPI
 ! Complete send / receive
 CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting)
-CALL Flux_Mortar(FluxX,FluxX,doMPISides=.TRUE.,weak=.FALSE.)
-CALL Flux_Mortar(FluxY,FluxY,doMPISides=.TRUE.,weak=.FALSE.)
-CALL Flux_Mortar(FluxZ,FluxZ,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxX,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxY,doMPISides=.TRUE.,weak=.FALSE.)
+CALL Flux_Cons_Mortar(FluxZ,doMPISides=.TRUE.,weak=.FALSE.)
 
 CALL StartReceiveMPIData(gradPx_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,1,RECV),SendID=2)
 CALL StartReceiveMPIData(gradPy_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide,MPIRequest_Lifting(:,2,RECV),SendID=2)

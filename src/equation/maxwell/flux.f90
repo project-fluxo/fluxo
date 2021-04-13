@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -23,11 +24,23 @@ MODULE MOD_Flux
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
-!INTERFACE EvalFluxTilde3D
-!  MODULE PROCEDURE EvalFluxTilde3D
-!END INTERFACE
+ABSTRACT INTERFACE
+  subroutine i_sub_EvalFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+    USE MOD_DG_Vars       ,ONLY:nTotal_vol
+    REAL,INTENT(IN )   :: U_in(8,1:nTotal_vol) !< solution state (conservative vars)
+    REAL,INTENT(IN )   :: M_f( 3,1:nTotal_vol) !< metrics for ftilde                 
+    REAL,INTENT(IN )   :: M_g( 3,1:nTotal_vol) !< metrics for gtilde                 
+    REAL,INTENT(IN )   :: M_h( 3,1:nTotal_vol) !< metrics for htilde                 
+    REAL,INTENT(OUT)   :: ftilde(8,1:nTotal_vol) !< transformed flux f(iVar,i,j,k)
+    REAL,INTENT(OUT)   :: gtilde(8,1:nTotal_vol) !< transformed flux g(iVar,i,j,k)
+    REAL,INTENT(OUT)   :: htilde(8,1:nTotal_vol) !< transformed flux h(iVar,i,j,k)
+  end subroutine i_sub_EvalFluxTilde3D
+END INTERFACE
+
+procedure(i_sub_EvalFluxTilde3D), pointer :: EvalAdvFluxTilde3D => EvalFluxTilde3D
 
 PUBLIC::EvalFluxTilde3D
+PUBLIC::EvalAdvFluxTilde3D
 !==================================================================================================================================
 
 CONTAINS

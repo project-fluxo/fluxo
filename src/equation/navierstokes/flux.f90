@@ -134,7 +134,7 @@ END DO ! i
 END SUBROUTINE EvalAdvFluxTilde3D
 
 !==================================================================================================================================
-!> Compute transformed 3D Navier-Stokes fluxes(Euler+diffusion) for every volume Gauss point of element iElem.
+!> Compute transformed 3D Navier-Stokes fluxes(Euler+diffusion) for every volume Gauss point of an element.
 !> In comparison to EvalFlux3D, metrics are directly applied 
 !==================================================================================================================================
 SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
@@ -144,17 +144,17 @@ SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
                            ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:kappaM1
+USE MOD_Equation_Vars      ,ONLY:kappaM1
 #if PARABOLIC
-USE MOD_Equation_Vars ,ONLY:mu0,sKappaM1,KappasPr,s23
+USE MOD_Equation_Vars      ,ONLY:mu0,sKappaM1,KappasPr,s23
 #if PP_VISC==1
-USE MOD_Equation_Vars ,ONLY:muSuth,R
+USE MOD_Equation_Vars      ,ONLY:muSuth,R
 #endif
 #if PP_VISC==2
-USE MOD_Equation_Vars ,ONLY:ExpoPow,R
+USE MOD_Equation_Vars      ,ONLY:ExpoPow,R
 #endif
 #endif /*PARABOLIC*/
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
+USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -178,8 +178,8 @@ REAL                :: f(5),g(5),h(5)                 ! Cartesian fluxes (iVar)
 REAL                :: srho                           ! reciprocal values for density and the value of specific energy
 REAL                :: v1,v2,v3,p                     ! auxiliary variables
 #if PARABOLIC
-REAL                :: f_visc(5),g_visc(5),h_visc(5)  ! viscous cartesian fluxes (iVar)
-REAL                :: muS,lambda                     ! viscosity,heat coeff.
+REAL                :: f_visc(5),g_visc(5),h_visc(5)           ! viscous cartesian fluxes (iVar)
+REAL                :: muS,lambda                              ! viscosity,heat coeff.
 REAL                :: divv 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 #if (PP_VISC == 1) || (PP_VISC == 2) 
@@ -235,7 +235,7 @@ DO i=1,nTotal_vol
 #if PP_VISC == 2
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
-  ! Viscous part
+  
   ! Viscous part
   ASSOCIATE( gradv1x => gradPx_in(2,i), & 
              gradv2x => gradPx_in(3,i), & 
@@ -246,31 +246,32 @@ DO i=1,nTotal_vol
              gradv1z => gradPz_in(2,i), & 
              gradv2z => gradPz_in(3,i), & 
              gradv3z => gradPz_in(4,i)  )
-           
+  
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
+  
   !isotropic heat flux
   lambda=muS*KappasPr
   ! viscous fluxes in x-direction      
   f_visc(2)=-muS*(2*gradv1x-s23*divv)
-  f_visc(3)=-muS*(  gradv2x+gradv1y)   
-  f_visc(4)=-muS*(  gradv3x+gradv1z)   
+  f_visc(3)=-muS*(  gradv2x+gradv1y)
+  f_visc(4)=-muS*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-muS*(2*gradv2y-s23*divv)     
-  g_visc(4)=-muS*(  gradv3y+gradv2z)      
+  g_visc(3)=-muS*(2*gradv2y-s23*divv)
+  g_visc(4)=-muS*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
   ! viscous fluxes in z-direction      
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-muS*(2*gradv3z-s23*divv )             
+  h_visc(4)=-muS*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 
@@ -294,7 +295,7 @@ END SUBROUTINE EvalFluxTilde3D
 !==================================================================================================================================
 !> Computes the first cartesian Euler flux (F_x) using the conservative variables for every surface point
 !==================================================================================================================================
-SUBROUTINE EvalEulerFlux1D(U_Face,F_Face)
+pure SUBROUTINE EvalEulerFlux1D(U_Face,F_Face)
 ! MODULES
 USE MOD_Equation_Vars,ONLY:KappaM1
 USE MOD_DG_Vars,ONLY:nTotal_face
@@ -352,7 +353,6 @@ IMPLICIT NONE
 ! INPUT VARIABLES
 REAL,INTENT(IN)     :: U_Face( 5,nTotal_Face)   !< state (conservative vars) on surface points (iVar,i,j)
 REAL,INTENT(IN)     :: gradVel(3,nTotal_Face)   !< u_x, v_y, w_z 
-
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)    :: f(5,nTotal_Face)         !< Cartesian flux in x direction
@@ -366,6 +366,7 @@ REAL                :: T
 REAL                :: srho                    ! reciprocal values for density and the value of specific energy
 REAL                :: v(3)
 REAL                :: gradv_diag(3)           ! diagonal of velocity and energy gradient matrix
+real                :: divv
 INTEGER             :: i
 !==================================================================================================================================
 f=0.
@@ -388,10 +389,13 @@ DO i=1,nTotal_Face
   T  = kappaM1*(Uin(5)*srho-0.5*(SUM(v(:)*v(:))))/R             ! T=p/(rho*R)
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
+  
   ! compute derivatives via product rule (a*b)'=a'*b+a*b' and multiply with viscosity
-  gradv_diag = muS*gradVel(:,i)
+  gradv_diag = gradVel(:,i)
+  divv = gradv_diag(1)+gradv_diag(2) + gradv_diag(3)
   ! viscous fluxes in x-direction      
-  f(2,i)= 2.*gradv_diag(1) - s23*(gradv_diag(1)+gradv_diag(2) + gradv_diag(3)) ! tau_11
+  f(2,i)= muS* (2.*gradv_diag(1) - s23*divv) ! tau_11
+  
   f(5,i)=f(2,i)*v(1) !tau_11 * v1
 END DO ! i 
 END SUBROUTINE EvalDiffFlux1D_Outflow
@@ -421,7 +425,6 @@ REAL,INTENT(IN)     :: U_Face(     5,nTotal_face)    !< state in conservative va
 REAL,INTENT(IN)     :: gradPx_Face(5,nTotal_face)    !< x gradient of state 
 REAL,INTENT(IN)     :: gradPy_Face(5,nTotal_face)    !< y gradient of state 
 REAL,INTENT(IN)     :: gradPz_Face(5,nTotal_face)    !< z gradient of state 
-
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(PP_nVar,nTotal_face),INTENT(OUT) :: f       !< Cartesian diffusion flux in x
@@ -475,12 +478,16 @@ DO i=1,nTotal_face
   T=p*srho/R                      ! T=p/(rho*R)
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n
 #endif
+  
+  ! Conductivity
+  lambda=muS*KappasPr
+  
   ! compute derivatives via product rule (a*b)'=a'*b+a*b'
   divv    = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_Face(5,i)-srho*p*gradPx_Face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_Face(5,i)-srho*p*gradPy_Face(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_Face(5,i)-srho*p*gradPz_Face(1,i)) 
-  lambda=muS*KappasPr
+  
   ! viscous fluxes in x-direction      
   f(1,i)=0.
   f(2,i)=-muS*(2*gradv1x-s23*divv)
@@ -488,7 +495,7 @@ DO i=1,nTotal_face
   f(4,i)=-muS*(  gradv3x+gradv1z)   
   !energy
   f(5,i)= v1*f(2,i)+v2*f(3,i)+v3*f(4,i) -lambda*cv_gradTx
-                                                     
+  
   ! viscous fluxes in y-direction      
   g(1,i)= 0. 
   g(2,i)= f(3,i)                  !muS*(  gradv1y+gradv2x)  
@@ -496,7 +503,7 @@ DO i=1,nTotal_face
   g(4,i)=-muS*(  gradv3y+gradv2z)      
   !energy
   g(5,i)= v1*g(2,i)+v2*g(3,i)+v3*g(4,i) - lambda*cv_gradTy
-
+  
   ! viscous fluxes in z-direction      
   h(1,i)= 0. 
   h(2,i)= f(4,i)                  !muS*(  gradv1z+gradv3x)                 
@@ -504,13 +511,14 @@ DO i=1,nTotal_face
   h(4,i)=-muS*(2*gradv3z-s23*divv )             
   !energy
   h(5,i)= v1*h(2,i)+v2*h(3,i)+v3*h(4,i)-lambda*cv_gradTz
+  
   END ASSOCIATE !rho,rhov1,rhov2,rhov3,rhoE & v_x/y/z...
 END DO !i=1,nTotal
 END SUBROUTINE EvalDiffFlux3D
 
 
 !==================================================================================================================================
-!> Compute transformed 3D Navier-Stokes diffusion fluxes for every volume Gauss point of element iElem.
+!> Compute transformed 3D Navier-Stokes diffusion fluxes for every volume Gauss point of an element.
 !==================================================================================================================================
 SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
@@ -584,26 +592,29 @@ DO i=1,nTotal_vol
   T=p*srho/R ! Calculate temperature
   muS=mu0*T**ExpoPow  ! mu0=mu0/T0^n: compute vsicosity using the power-law
 #endif
+  
+  ! Conductivity
+  lambda=muS*KappasPr
+  
   ! Viscous part
-  divv    = gradv1x+gradv2y+gradv3z
+  divv       = gradv1x+gradv2y+gradv3z
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
 
-  lambda=muS*KappasPr
   ! viscous fluxes in x-direction      
   f_visc(1)= 0.
   f_visc(2)=-muS*(2*gradv1x-s23*divv)
-  f_visc(3)=-muS*(  gradv2x+gradv1y)   
-  f_visc(4)=-muS*(  gradv3x+gradv1z)   
+  f_visc(3)=-muS*(  gradv2x+gradv1y)
+  f_visc(4)=-muS*(  gradv3x+gradv1z)
   !energy
   f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) -lambda*cv_gradTx
                                                      
   ! viscous fluxes in y-direction      
   g_visc(1)= 0.
   g_visc(2)= f_visc(3)                  !muS*(  gradv1y+gradv2x)  
-  g_visc(3)=-muS*(2*gradv2y-s23*divv)     
-  g_visc(4)=-muS*(  gradv3y+gradv2z)      
+  g_visc(3)=-muS*(2*gradv2y-s23*divv)
+  g_visc(4)=-muS*(  gradv3y+gradv2z)
   !energy
   g_visc(5)= v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) - lambda*cv_gradTy
 
@@ -611,7 +622,7 @@ DO i=1,nTotal_vol
   h_visc(1)= 0.
   h_visc(2)= f_visc(4)                  !muS*(  gradv1z+gradv3x)                 
   h_visc(3)= g_visc(4)                  !muS*(  gradv2z+gradv3y)                
-  h_visc(4)=-muS*(2*gradv3z-s23*divv )             
+  h_visc(4)=-muS*(2*gradv3z-s23*divv )
   !energy
   h_visc(5)= v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)-lambda*cv_gradTz
 

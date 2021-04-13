@@ -1,4 +1,5 @@
 !==================================================================================================================================
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -67,6 +68,8 @@ PROCEDURE(TimeIntegrator),POINTER :: TimeStep !< pointer to timestepping routine
 
 !> Runge-Kutta low storage coefficients for Williamson 2 register and Ketcheson 3 register schemes
 REAL,ALLOCATABLE    :: RKA(:),RKb(:),RKc(:),RKg1(:),RKg2(:),RKg3(:),RKdelta(:)
+!> Additional coefficients for the SSPRK schemes
+REAL,ALLOCATABLE    :: RKd(:),RKe(:)
 
 REAL                :: CFLScaleAlpha(1:15)  !< timestep scaling factor for CFL number, depends on scheme
 #if PARABOLIC
@@ -104,6 +107,12 @@ CASE('standardrk3-3','carpenterrk4-5','niegemannrk4-14',&
   TimeDiscType='LSERKW2'
 CASE('ketchesonrk4-20','ketchesonrk4-18')
   TimeDiscType='LSERKK3'
+#if NFVSE_CORR
+  CALL CollectiveStop(__STAMP__,&
+                      'NFVSE correction is only implemented for LSERKW2 methods and ssprk4-5')
+#endif
+case('ssprk4-5')
+  TimeDiscType='SSPRK2'
 CASE DEFAULT
   CALL CollectiveStop(__STAMP__,&
                       'Unknown method of time discretization: '//TRIM(TimeDiscMethod))
@@ -111,6 +120,37 @@ END SELECT
 
 
 SELECT CASE (TimeDiscMethod)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+! Strong-Stability-Preserving Runge-Kutta 4, 5 stages, Spiteri & Ruuth
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CASE('ssprk4-5')
+
+  TimeDiscName = 'SSP RK4-5'
+  nRKStages=5
+#if PARABOLIC
+  RelativeDFL=1.
+#endif
+
+! TODO: Adjust CFLScaleAlpha!! ... These are the ones for carpenterrk4-5
+#if (PP_NodeType==1)
+  CFLScaleAlpha(1:15) = &
+  (/ 2.0351, 1.7595, 1.5401, 1.3702, 1.2375, 1.1318, 1.0440, 0.9709, 0.9079, 0.8539, 0.8066, 0.7650, 0.7290, 0.6952, 0.6660 /)
+#elif (PP_NodeType==2)
+  CFLScaleAlpha(1:15) = &
+  (/ 4.7497, 3.4144, 2.8451, 2.4739, 2.2027, 1.9912, 1.8225, 1.6830, 1.5682, 1.4692, 1.3849, 1.3106, 1.2454, 1.1880, 1.1362 /)
+#endif /*PP_NodeType*/
+
+  ALLOCATE(RKA(2:nRKStages),RKb(1:nRKStages),RKc(2:nRKStages),RKd(2:nRKStages),RKe(2:4))
+  ! The coefficients that multiply Uprev
+  RKa(2:nRKStages) = (/ 0.44437049406734, 0.62010185138540, 0.17807995410773, 0.00683325884039 /) 
+  ! The coefficients that multiply dt*Ut
+  RKb(1:nRKStages) = (/ 0.39175222700392, 0.36841059262959, 0.25189177424738, 0.54497475021237, 0.22600748319395 /)
+  ! The c coefficients (that multiply dt)
+  RKc(2:nRKStages) = (/ 0.39175222700392, 0.58607968896779, 0.47454236302687, 0.93501063100924 /)
+  ! The coefficients that multiply U of the last stage
+  RKd(2:nRKStages) = (/ 0.55562950593266, 0.37989814861460, 0.82192004589227, 0.34833675773694 /)
+  ! The extra coeffs
+  RKe(2:4)         = (/ 0.51723167208978, 0.12759831133288, 0.08460416338212 /)
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Low-storage Runge-Kutta 3, 3 stages, Kopriva,Algorithm 42
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

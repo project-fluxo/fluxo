@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2020 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -39,6 +40,14 @@ INTERFACE RiemannSolverByHLL
   MODULE PROCEDURE RiemannSolverByHLL
 END INTERFACE
 
+INTERFACE RiemannSolverByHLLE
+  MODULE PROCEDURE RiemannSolverByHLLE
+END INTERFACE
+
+INTERFACE RiemannSolverByHLLEM
+  MODULE PROCEDURE RiemannSolverByHLLEM
+END INTERFACE
+
 INTERFACE RiemannSolverByHLLC
   MODULE PROCEDURE RiemannSolverByHLLC
 END INTERFACE
@@ -67,17 +76,22 @@ INTERFACE RiemannSolver_ECKEP_LLF
   MODULE PROCEDURE RiemannSolver_ECKEP_LLF
 END INTERFACE
 
-PUBLIC:: Riemann
+PUBLIC:: Riemann, AdvRiemann
 PUBLIC:: RiemannSolverCentral
 PUBLIC:: RiemannSolverByRusanov
 PUBLIC:: RiemannSolverByHLL
+PUBLIC:: RiemannSolverByHLLE
+PUBLIC:: RiemannSolverByHLLEM
 PUBLIC:: RiemannSolverByHLLC
 PUBLIC:: RiemannSolverByRoe
 PUBLIC:: RiemannSolver_EntropyStable
+PUBLIC:: RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
 PUBLIC:: RiemannSolver_VolumeFluxAverage
 PUBLIC:: RiemannSolver_EC_LLF
 PUBLIC:: RiemannSolver_VolumeFluxAverage_LLF
 PUBLIC:: RiemannSolver_ECKEP_LLF
+PUBLIC:: RotateState
+PUBLIC:: RotateFluxBack
 !==================================================================================================================================
 
 CONTAINS
@@ -90,15 +104,18 @@ CONTAINS
 SUBROUTINE Riemann(F,U_L,U_R, &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
-#endif
+#endif /*PARABOLIC*/
                    nv,t1,t2)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
 USE MOD_Flux_Average
+!USE MOD_Analyze_Vars  ,ONLY: wGPSurf ! ECMORTAR
+!USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa ! ECMORTAR
+!USE MOD_Equation_Vars ,ONLY:kappaM1 ! ECMORTAR
 #if PARABOLIC
 USE MOD_Flux            ,ONLY:EvalDiffFlux3D    ! and the NSE diffusion fluxes in all directions to approximate the numerical flux
-#endif
+#endif /*PARABOLIC*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -126,44 +143,20 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
 #if PARABOLIC
 REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: g_L,g_R,k_L,k_R,j_L,j_R
 #endif
+!REAL                                          :: Sum1, sum2, sum3, sum3_1, sum3_2, suma, sumb ! ECMORTAR
+!REAL                                          :: math_entropy_R, math_entropy_L, prim(PP_nVar), sRho, pres,v1,v2,v3 ! ECMORTAR
+!REAL                                          :: Flux_F_R(PP_nVar), Flux_F_L(PP_nVar) ! ECMORTAR
+!REAL                                          :: entropy_vars_R(PP_nVar), entropy_vars_L(PP_nVar) ! ECMORTAR
+!REAL                                          :: entropy_flux_R, entropy_flux_L ! ECMORTAR
 !==================================================================================================================================
-! Momentum has to be rotatet using the normal system individual for each
-! Gauss point i,j
-DO j=0,PP_N
-  DO i=0,PP_N
-    !LEFT
-    U_LL(1,i,j)=U_L(1,i,j)
-    ! rotate momentum
-    U_LL(2,i,j)=SUM(U_L(2:4,i,j)*nv(:,i,j))
-    U_LL(3,i,j)=SUM(U_L(2:4,i,j)*t1(:,i,j))
-    U_LL(4,i,j)=SUM(U_L(2:4,i,j)*t2(:,i,j))
-    U_LL(5,i,j)=U_L(5,i,j)
-    !right
-    U_RR(1,i,j)=U_R(1,i,j)
-    ! rotate momentum
-    U_RR(2,i,j)=SUM(U_R(2:4,i,j)*nv(:,i,j))
-    U_RR(3,i,j)=SUM(U_R(2:4,i,j)*t1(:,i,j))
-    U_RR(4,i,j)=SUM(U_R(2:4,i,j)*t2(:,i,j))
-    U_RR(5,i,j)=U_R(5,i,j)
-  END DO ! i 
-END DO ! j
 
+call AdvRiemann(F,U_L,U_R,nv,t1,t2)
 
-CALL SolveRiemannProblem(F,U_LL,U_RR)
-
-
-! Back Rotate the normal flux into Cartesian direction
-DO j=0,PP_N
-  DO i=0,PP_N
-    F(2:4,i,j)= nv(:,i,j)*F(2,i,j) &
-               +t1(:,i,j)*F(3,i,j) &
-               +t2(:,i,j)*F(4,i,j)
-  END DO ! i
-END DO ! j
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
 !! Compute NSE Diffusion flux in cartesian coordinates
 CALL EvalDiffFlux3D(k_L,g_L,j_L,U_L,gradUx_L,gradUy_L,gradUz_L)
+
 CALL EvalDiffFlux3D(k_R,g_R,j_R,U_R,gradUx_R,gradUy_R,gradUz_R)
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
@@ -175,11 +168,86 @@ END DO
 #endif /* PARABOLIC */
 END SUBROUTINE Riemann
 
+!==================================================================================================================================
+!> Advective Riemann solver
+!==================================================================================================================================
+pure SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
+USE MOD_Flux_Average
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: U_L(     PP_nVar,0:PP_N,0:PP_N) !<  left state on face, not rotated
+REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face, not rotated
+REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
+REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
+REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                                       :: i,j,iVar
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: U_LL,U_RR
+!==================================================================================================================================
+! Momentum has to be rotated using the normal system individual for each
+! Gauss point i,j
+DO j=0,PP_N
+  DO i=0,PP_N
+    U_LL(:,i,j) = RotateState(U_L(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+    U_RR(:,i,j) = RotateState(U_R(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+  END DO ! i 
+END DO ! j
 
+CALL SolveRiemannProblem(F,U_LL,U_RR)
+
+! Back Rotate the normal flux into Cartesian direction
+DO j=0,PP_N
+  DO i=0,PP_N
+    call RotateFluxBack(F(:,i,j),nv(:,i,j),t1(:,i,j),t2(:,i,j))
+  END DO ! i
+END DO ! j
+
+END SUBROUTINE AdvRiemann
+!==================================================================================================================================
+!> Rotate the state to the normal frame of reference
+!==================================================================================================================================
+pure function RotateState(U,nv,t1,t2) result(rotU)
+  implicit none
+  real, intent(in) :: U(PP_nVar)
+  real, intent(in) :: nv(3)
+  real, intent(in) :: t1(3)
+  real, intent(in) :: t2(3)
+  real             :: rotU(PP_nVar)
+  
+  rotU(1) =     U(1  )
+  rotU(2) = SUM(U(2:4)*nv(:))
+  rotU(3) = SUM(U(2:4)*t1(:))
+  rotU(4) = SUM(U(2:4)*t2(:))
+  rotU(5) =     U(5  )
+end function RotateState
+!==================================================================================================================================
+!> Rotate the flux from the normal frame of reference back to the physical framework
+!==================================================================================================================================
+pure subroutine RotateFluxBack(F,nv,t1,t2)
+  implicit none
+  real, intent(inout) :: F(PP_nVar)
+  real, intent(in)    :: nv(3)
+  real, intent(in)    :: t1(3)
+  real, intent(in)    :: t2(3)
+  
+  F(2:4) =   nv(:)*F(2) &
+           + t1(:)*F(3) &
+           + t2(:)*F(4)
+  
+end subroutine RotateFluxBack
 !==================================================================================================================================
 !> Central / Average Euler flux
 !==================================================================================================================================
-SUBROUTINE RiemannSolverCentral(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverCentral(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
@@ -208,7 +276,7 @@ END SUBROUTINE RiemannSolverCentral
 !==================================================================================================================================
 !> Rusanov / lax-Friedrichs Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRusanov(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByRusanov(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:SoundSpeed2
@@ -249,7 +317,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByHLL(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -268,7 +336,7 @@ REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
 ! LOCAL VARIABLES                                                                                                               !
 INTEGER :: i,j
 REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
-REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, HTilde, vTilde, aTilde
 REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
 !==================================================================================================================================
 CALL EvalEulerFlux1D(U_LL,F_L)
@@ -281,13 +349,35 @@ DO j=0,PP_N
     Vel_R =U_RR(2:4,i,j)*sRho_R
     p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
     p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
-    Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
-    Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+!   
+!   Davis (not recommended according to Toro)
+!   -----------------------------------------
+!~     Ssl = Vel_L(1) - SQRT(kappa*p_L*sRho_L)
+!~     Ssr = Vel_R(1) + SQRT(kappa*p_R*sRho_R)
+!
+!   Davis and Einfeldt
+!   ------------------
+    !! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)/U_LL(1,i,j)
+    H_R = (U_RR(5,i,j) + p_R)/U_RR(1,i,j)
+
+    !! Roe averages
+    HTilde = (SQRT(U_LL(1,i,j))*H_L      + SQRT(U_RR(1,i,j))*H_R     )/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+    vTilde = (SQRT(U_LL(1,i,j))*Vel_L(1) + SQRT(U_RR(1,i,j))*Vel_R(1))/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+
+    aTilde = SQRT((kappa-1.)*(HTilde - 0.5*vTilde**2))
+
+    Ssl = vTilde - aTilde
+    Ssr = vTilde + aTilde
+    
+!   New Einfeldt
+!   ------------
+    
     ! positive supersonic speed
-    IF(Ssl .GE. 0.)THEN
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
       F(:,i,j)=F_L(:,i,j)
     ! negative supersonic speed
-    ELSEIF(Ssr .LE. 0.)THEN
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
       F(:,i,j)=F_R(:,i,j)
     ! subsonic case
     ELSE
@@ -297,11 +387,169 @@ DO j=0,PP_N
 END DO ! j
 END SUBROUTINE RiemannSolverByHLL
 
+!==================================================================================================================================
+!> HLLE Riemann solver:
+!> Positivity preserving!
+!>    * Einfeldt, B. (1988). On Godunov-type methods for gas dynamics. SIAM Journal on Numerical Analysis, 25(2), 294-318.
+!>    * Einfeldt, B., Munz, C. D., Roe, P. L., & Sjögreen, B. (1991). On Godunov-type methods near low densities. Journal of computational physics, 92(2), 273-295.
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLE(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,aL,aR
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, RoeVel(3), RoeH, absVel, Roec, SqrtRho_L, SqrtRho_R, sSqrtRho, beta
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+beta=SQRT(0.5*kappaM1/kappa)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    aL    =sqrt(kappa*p_L*sRho_L)
+    aR    =sqrt(kappa*p_R*sRho_R)
+!   
+!   Signal speeds
+!   ------------------
+    ! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)*sRho_L
+    H_R = (U_RR(5,i,j) + p_R)*sRho_R
+    ! Root of densities
+    SqrtRho_L = SQRT(U_LL(1,i,j))
+    SqrtRho_R = SQRT(U_RR(1,i,j))
+    sSqrtRho  = 1./(SqrtRho_L+SqrtRho_R)
+    ! Roe mean values
+    RoeVel    = (SqrtRho_R*Vel_R + SqrtRho_L*Vel_L) * sSqrtRho
+    RoeH      = (SqrtRho_R*H_R   + SqrtRho_L*H_L  ) * sSqrtRho
+    absVel    = DOT_PRODUCT(RoeVel,RoeVel)
+    Roec      = SQRT(kappaM1*(RoeH-0.5*absVel))
+    ! HLLE flux (positively conservative)
+    SsL=MIN(RoeVel(1)-Roec,Vel_L(1) - beta*aL, 0.)
+    SsR=MAX(RoeVel(1)+Roec,Vel_R(1) + beta*aR, 0.)
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR*(U_RR(:,i,j)-U_LL(:,i,j)))/(ssR-ssL)
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLE
+
+!==================================================================================================================================
+!> HLLEM Riemann solver:
+!> Positivity preserving!
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLEM(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,aL,aR, Alpha(2:4),delta, RoeDens
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R, H_L, H_R, RoeVel(3), RoeH, absVel, Roec, SqrtRho_L, SqrtRho_R, sSqrtRho, beta
+REAL,DIMENSION(PP_nVar)           :: r2,r3,r4  ! Roe eigenvectors + jump in prims
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+beta=SQRT(0.5*kappaM1/kappa)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    aL    =sqrt(kappa*p_L*sRho_L)
+    aR    =sqrt(kappa*p_R*sRho_R)
+!   
+!   Signal speeds
+!   ------------------
+    ! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)*sRho_L
+    H_R = (U_RR(5,i,j) + p_R)*sRho_R
+    ! Root of densities
+    SqrtRho_L = SQRT(U_LL(1,i,j))
+    SqrtRho_R = SQRT(U_RR(1,i,j))
+    sSqrtRho  = 1./(SqrtRho_L+SqrtRho_R)
+    ! Roe mean values
+    RoeVel    = (SqrtRho_R*Vel_R + SqrtRho_L*Vel_L) * sSqrtRho
+    RoeH      = (SqrtRho_R*H_R   + SqrtRho_L*H_L  ) * sSqrtRho
+    absVel    = DOT_PRODUCT(RoeVel,RoeVel)
+    Roec      = SQRT(kappaM1*(RoeH-0.5*absVel))
+    RoeDens   = SQRT(U_LL(1,i,j)*U_RR(1,i,j))
+    ! HLLE flux (positively conservative)
+    SsL=MIN(RoeVel(1)-Roec,Vel_L(1) - beta*aL, 0.)
+    SsR=MAX(RoeVel(1)+Roec,Vel_R(1) + beta*aR, 0.)
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      ! delta
+      delta = Roec/(Roec+ABS(0.5*(Ssl+Ssr)))
+      
+      ! mean eigenvectors
+      Alpha(2)   = (U_RR(1,i,j)-U_LL(1,i,j))  - (p_R-p_L)/(Roec*Roec)
+      Alpha(3:4) = RoeDens*(Vel_R(2:3) - Vel_L(2:3))
+      r2 = (/ 1., RoeVel(1), RoeVel(2), RoeVel(3), 0.5*absVel /)
+      r3 = (/ 0., 0.,        1.,        0.,        RoeVel(2)  /)
+      r4 = (/ 0., 0.,        0.,        1.,        RoeVel(3)  /)
+      
+      F(:,i,j) = (ssR*F_L(:,i,j) - ssL*F_R(:,i,j) + ssL*ssR* &
+                 (U_RR(:,i,j)-U_LL(:,i,j) - delta*(r2*Alpha(2)+r3*Alpha(3)+r4*Alpha(4))))/(ssR-ssL)
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLEM
 
 !==================================================================================================================================
 !> HLLC Riemann solver
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByHLLC(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByHLLC(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1
@@ -368,9 +616,134 @@ END SUBROUTINE RiemannSolverByHLLC
 
 
 !==================================================================================================================================
+!> HLLC Riemann solver with Carbuncle fix
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLCnoCarbuncle(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star(1:5)
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+real,DIMENSION(1:5) :: F_HLLE, F_HLLC
+real :: smooth, a_L, a_R, H_L, H_R, HTilde, vTilde, aTilde
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    
+!   ***************************    
+!   Direct wave speed estimates
+!   ***************************
+    
+!   Davis estimates:
+!   ----------------   ...not recommended for practical computations [Toro,2009]
+!~     a_L   =SQRT(kappa*p_L*sRho_L)
+!~     a_R   =SQRT(kappa*p_R*sRho_R)
+!~     !(1)
+!~     Ssl = Vel_L(1) - a_L
+!~     Ssr = Vel_R(1) + a_R
+!~     !(2)
+!~     Ssl = min( Vel_L(1) - a_L, Vel_R(1) - a_R )
+!~     Ssr = max( Vel_L(1) + a_L, Vel_R(1) + a_R )
+    
+!   Davis (1988) and Einfeldt (1988):
+!   ---------------------------------
+    !! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)/U_LL(1,i,j)
+    H_R = (U_RR(5,i,j) + p_R)/U_RR(1,i,j)
+
+    !! Roe averages
+    HTilde = (SQRT(U_LL(1,i,j))*H_L      + SQRT(U_RR(1,i,j))*H_R     )/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+    vTilde = (SQRT(U_LL(1,i,j))*Vel_L(1) + SQRT(U_RR(1,i,j))*Vel_R(1))/(SQRT(U_LL(1,i,j)) + SQRT(U_RR(1,i,j)))
+
+    aTilde = SQRT((kappa-1.)*(HTilde - 0.5*vTilde**2))
+
+    Ssl = vTilde - aTilde
+    Ssr = vTilde + aTilde
+    
+!   ***************
+!   Riemann solver!
+!   ***************
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0. .and. Ssr .GT. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0. .and. Ssl .LT. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      sMu_L = Ssl - Vel_L(1)
+      sMu_R = Ssr - Vel_R(1)
+      SStar = (p_R - p_L +                    &
+               U_LL(2,i,j)*sMu_L - U_RR(2,i,j)*sMu_R) / &
+              (U_LL(1,i,j)*sMu_L - U_RR(1,i,j)*sMu_R)
+      IF ((Ssl .LE. 0.).AND.(SStar .GE. 0.)) THEN
+        U_Star(:) = U_LL(1,i,j) * sMu_L/(Ssl-SStar)*                  &
+          (/ 1., SStar, U_LL(3:4,i,j)*sRho_L,                         &
+             U_LL(PP_nVar,i,j)*sRho_L + (SStar-Vel_L(1))*             &
+            (SStar + p_L*sRho_L/sMu_L)                              /)
+        
+        ! Original HLLC:
+        !F(:,i,j)=F_L(:,i,j)+Ssl*(U_Star(:)-U_LL(:,i,j))
+        
+        ! For Carbuncle:
+        F_HLLE = (Ssr*F_L(:,i,j) - Ssl*F_R(:,i,j) + Ssl*Ssr*(U_RR(:,i,j) - U_LL(:,i,j))) / (Ssr - Ssl)
+        F_HLLC = F_L(:,i,j) + Ssl*(U_Star(:) - U_LL(:,i,j))
+
+        smooth = SQRT(abs(p_L - p_R)/(p_L + p_R))
+
+        F(:,i,j) = smooth*F_HLLE + (1.-smooth)*F_HLLC
+
+        
+      ELSE
+        U_Star(:) = U_RR(1,i,j) * sMu_R/(Ssr-SStar)*                  &
+          (/ 1., SStar, U_RR(3:4,i,j)*sRho_R,                         &
+             U_RR(PP_nVar,i,j)*sRho_R + (SStar-Vel_R(1))*             &
+            (SStar + p_R*sRho_R/sMu_R)                              /)
+        
+        ! Original HLLC:
+        !F(:,i,j)=F_R(:,i,j)+Ssr*(U_Star(:)-U_RR(:,i,j))
+        
+        ! For Carbuncle:
+        F_HLLE = (Ssr*F_L(:,i,j) - Ssl*F_R(:,i,j) + Ssl*Ssr*(U_RR(:,i,j) - U_LL(:,i,j))) / (Ssr - Ssl)
+        F_HLLC = F_R(:,i,j) + Ssr*(U_Star(:) - U_RR(:,i,j))
+
+        smooth = SQRT(abs(p_L - p_R)/(p_L + p_R))
+
+        F(:,i,j) = smooth*F_HLLE + (1.-smooth)*F_HLLC
+      END IF
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLCnoCarbuncle
+
+!==================================================================================================================================
 !> Roe riemann solver, depending on "whichvolumeflux" global parameter, consistent dissipation is added
 !==================================================================================================================================
-SUBROUTINE RiemannSolverByRoe(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolverByRoe(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars, ONLY: kappaM1,WhichVolumeFlux
@@ -488,11 +861,10 @@ DO j=0,PP_N
 END DO ! j
 END SUBROUTINE RiemannSolverByRoe
 
-
 !==================================================================================================================================
-!> Entropy stable Riemann solver, uses TwoPoint Entropy Conserving flux
+!> Entropy stable Riemann solver with full matrix dissipation (uses TwoPoint Entropy Conserving flux)
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_EntropyStable(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_EntropyStable(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY: kappa,KappaM1
@@ -518,11 +890,9 @@ REAL,DIMENSION(1:5)  :: Dhat,vR,vL,vjump,diss
 !==================================================================================================================================
 DO j=0,PP_N
   DO i=0,PP_N
-! Compute entropy conserving flux
-!    CALL TwoPointEntropyConservingFlux(F_c,U_LL(:,i,j),U_RR(:,i,j),&
-!                                       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
-    CALL VolumeFluxAverage(F_c,U_LL(:,i,j),U_RR(:,i,j),&
-                                       uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+! Compute entropy conserving flux and the dissipation matrices
+    call RiemannSolver_EntropyStable_VolFluxAndDissipMatrices(U_LL(:,i,j),U_RR(:,i,j),F_c,Dhat,Rhat)
+    
 ! Get the entropy variables locally
     sRho_L = 1./U_LL(1,i,j)
     sRho_R = 1./U_RR(1,i,j)
@@ -540,18 +910,6 @@ DO j=0,PP_N
     vR(2:4)=  rho_pR*Vel_R(1:3)
     vR(5)  = -rho_pR
     vL(5)  = -rho_pL
-! Matrix of right eigenvectors
-    RHat(1,:) = (/ 1.               , 1.                                      , 0.   ,  0.  , 1.               /)
-    RHat(2,:) = (/ uHat - aHat      , uHat                                    , 0.   ,  0.  , uHat + aHat      /)
-    RHat(3,:) = (/ vHat             , vHat                                    , 1.   ,  0.  , vHat             /)
-    RHat(4,:) = (/ wHat             , wHat                                    , 0.   ,  1.  , wHat             /)
-    RHat(5,:) = (/ HHat - uHat*aHat , 0.5*(uHat*uHat + vHat*vHat + wHat*wHat) , vHat , wHat , HHat + uHat*aHat /)
-! Diagonal scaling matrix where DHat = ABS(\Lambda)S
-    DHat(1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
-    DHat(2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
-    DHat(3) = ABS(uHat)*p1Hat!*rhoHat
-    DHat(4) = DHat(3)
-    DHat(5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
 ! Compute the dissipation term RHat*DHat*RHat^T*[v]
     vJump = vR - vL
     diss  = RHat(1,:)*vJump(1) + RHat(2,:)*vJump(2) + RHat(3,:)*vJump(3) + RHat(4,:)*vJump(4) + RHat(5,:)*vJump(5)
@@ -564,12 +922,55 @@ DO j=0,PP_N
   END DO ! i
 END DO ! j
 END SUBROUTINE RiemannSolver_EntropyStable
+!==================================================================================================================================
+!> Volume flux and dissipation matrices evaluation for entropy stable Riemann solver with full matrix dissipation 
+!> (uses TwoPoint Entropy Conserving flux)
+!==================================================================================================================================
+PURE SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices(U_LL,U_RR,F,Dhat,Rhat)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY: kappa,KappaM1
+!USE MOD_Flux_Average ,ONLY: TwoPointEntropyConservingFlux
+USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(1:5),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5)    ,INTENT(OUT)  :: F         !< numerical flux
+REAL,DIMENSION(1:5)    ,INTENT(OUT)  :: Dhat      !< Dissipation matrix
+REAL,DIMENSION(1:5,1:5),INTENT(OUT)  :: Rhat      !< Right-eigenvector matrix
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                 :: uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat
+!==================================================================================================================================
 
+CALL VolumeFluxAverage(F,U_LL,U_RR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+
+! Matrix of right eigenvectors
+RHat(1,:) = (/ 1.               , 1.                                      , 0.   ,  0.  , 1.               /)
+RHat(2,:) = (/ uHat - aHat      , uHat                                    , 0.   ,  0.  , uHat + aHat      /)
+RHat(3,:) = (/ vHat             , vHat                                    , 1.   ,  0.  , vHat             /)
+RHat(4,:) = (/ wHat             , wHat                                    , 0.   ,  1.  , wHat             /)
+RHat(5,:) = (/ HHat - uHat*aHat , 0.5*(uHat*uHat + vHat*vHat + wHat*wHat) , vHat , wHat , HHat + uHat*aHat /)
+! Diagonal scaling matrix where DHat = ABS(\Lambda)S
+DHat = 0.0
+DHat(1) = 0.5*ABS(uHat - aHat)*rhoHat/kappa
+DHat(2) = ABS(uHat)*(kappaM1/kappa)*rhoHat!*rhoHat*rhoHat
+DHat(3) = ABS(uHat)*p1Hat!*rhoHat
+DHat(4) = DHat(3)
+DHat(5) = 0.5*ABS(uHat + aHat)*rhoHat/kappa
+    
+!----------------------------------------------------------------------------------------------------------------------------------
+END SUBROUTINE RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
 
 !==================================================================================================================================
 !> Riemann solver, using simply the two point average chosen by the global parameter whichVolumeFlux
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_VolumeFluxAverage(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_VolumeFluxAverage(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
@@ -600,7 +1001,7 @@ END SUBROUTINE RiemannSolver_VolumeFluxAverage
 !==================================================================================================================================
 !> Entropy conservative Ismali and Roe with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_EC_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_EC_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappa,kappaM1,SoundSpeed2
@@ -707,7 +1108,7 @@ END SUBROUTINE RiemannSolver_EC_LLF
 !==================================================================================================================================
 !> Kennedy Gruber /Decros with LLF diss, EC+KEP - pressure with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:VolumeFluxAverage,SoundSpeed2
@@ -746,7 +1147,7 @@ END SUBROUTINE RiemannSolver_VolumeFluxAverage_LLF
 !==================================================================================================================================
 !> Kennedy Gruber /Decros with LLF diss
 !==================================================================================================================================
-SUBROUTINE RiemannSolver_ECKEP_LLF(F,U_LL,U_RR)
+pure SUBROUTINE RiemannSolver_ECKEP_LLF(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,SoundSpeed2
