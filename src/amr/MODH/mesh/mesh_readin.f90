@@ -90,7 +90,7 @@ CONTAINS
 #endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
-        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo, isMortarMesh
+        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
         !-----------------------------------------------------------------------------------------------------------------------------------
@@ -100,7 +100,7 @@ CONTAINS
         ! OUTPUT VARIABLES
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        LOGICAL :: isMesh, dsExists
+        LOGICAL :: isMesh, dsExists, hasAMRmortars
         INTEGER :: NGEO1, nGlobalTrees1, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
@@ -112,19 +112,19 @@ CONTAINS
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
         
-        ! Check if the mesh was generated from an AMR tree (by fluxo or hopest) and stop if the p4est file is not present
+        ! Check if the mesh was generated from an AMR tree by fluxo and stop if the p4est file is not present
 #if USE_AMR
           iMortar = 0
           dsExists = .FALSE.
-          CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
+          CALL DatasetExists(File_ID,'hasAMRmortars',dsExists,.TRUE.)
           IF(dsExists)&
-                CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-          isMortarMesh=(iMortar.EQ.1)
+                CALL ReadAttribute(File_ID,'hasAMRmortars',1,IntegerScalar=iMortar)
+          hasAMRmortars=(iMortar.EQ.1)
           
           IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
             ! Error, we can't Run AMR on Mortar Mesh without p4est file
             CALL CollectiveStop(__STAMP__,&
-             "Error, we cannot use AMR on Mortar Mesh without p4est file.")
+             "ERROR: We cannot use AMR on an Octree-generated mesh without a p4est file.")
           ENDIF
 #endif /*USE_AMR*/
 
@@ -310,7 +310,7 @@ CONTAINS
                 ! The number (-1,-2,-3) is the Type of mortar
                 IF(ElemID.LT.0)THEN ! mortar Sides attached!
                     CALL abort(__STAMP__, &
-                            'ERROR: We cannot use AMR on non-conforming mesh without p4est file.')
+                            'ERROR: We cannot use AMR on a non-conforming mesh without a p4est file.')
                 END IF
             END DO !i=1,locnSides
         END DO !iElem

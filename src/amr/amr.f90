@@ -1110,7 +1110,7 @@ SUBROUTINE SaveMesh(FileString)
     CALL WriteAttribute(File_ID,'nUniqueNodes',1,IntScalar=343)
     CALL WriteAttribute(File_ID,'nBCs',1,IntScalar=nBCs)
     
-    CALL WriteAttribute(File_ID,'isMortarMesh',1,IntScalar=1)
+    CALL WriteAttribute(File_ID,'hasAMRmortars',1,IntScalar=1)
 
      DimsM=(/6, nGlobalElems/)
     CALL H5SCREATE_SIMPLE_F(2, DimsM, FileSpace, iError)

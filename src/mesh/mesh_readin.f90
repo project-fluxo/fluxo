@@ -172,7 +172,7 @@ USE MOD_Mesh_Vars,          ONLY:NGeo
 USE MOD_Mesh_Vars,          ONLY:NodeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,nElems,nGlobalElems
 USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
-USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
+USE MOD_Mesh_Vars,          ONLY:nMortarSides
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
 USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
@@ -479,15 +479,6 @@ nNodes=nElems*(NGeo+1)**3
 !  ALLOCATE(Elem_IJK(3,nLocalElems))
 !  CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntegerArray=Elem_IJK)
 !END IF
-
-! Get Mortar specific arrays
-dsExists=.FALSE.
-iMortar=0
-CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
-IF(dsExists)&
-  CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-isMortarMesh=(iMortar.EQ.1)
-
 
 CALL CloseDataFile()
 

@@ -40,10 +40,6 @@ REAL,ALLOCATABLE,TARGET :: Elem_xGP(:,:,:,:,:)          !< XYZ positions (first 
 REAL,ALLOCATABLE :: Face_xGP(:,:,:,:)            !< XYZ positions (first index 1:3) of the Face Gauss Point
 LOGICAL,ALLOCATABLE :: Elem_inCyl(:)         ! flag if elem is in Cylinder
 !----------------------------------------------------------------------------------------------------------------------------------
-! MORTAR DATA FOR NON-CONFORMING MESHES ORIGINATING FROM AN OCTREE BASIS (ONLY ALLOCATED IF isMortarMesh=.TRUE.!!!)
-!----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: isMortarMesh               !< Marker whether non-conforming data is present (false for conforming meshes)
-!----------------------------------------------------------------------------------------------------------------------------------
 ! A flag to check if the mesh is non-conforming
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL          :: MeshIsNonConforming
