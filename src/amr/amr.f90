@@ -537,7 +537,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
     MPIRequest_Lifting = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
-    IF (nNbProcs .EQ. 0) nNbProcs =1;
   ENDIF
 #endif  /*MPI*/
 
@@ -1061,7 +1060,7 @@ SUBROUTINE SaveMesh(FileString)
   ! Set NGeo of the mesh to save
   NGeo_new = min(PP_N,NGeo)
   
-  IF (.NOT. UseAMR) RETURN;
+  IF (.NOT. UseAMR) RETURN
 
   IF(MPIRoot)THEN
     WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE MESH TO _MESH.H5 FILE: '
@@ -1079,11 +1078,16 @@ SUBROUTINE SaveMesh(FileString)
   ALLOCATE(ElemInfoW(6,nElems), SOURCE  = ElInfoF)
   ElemInfoW = ElInfoF
   ! ALLOCATE(ElemInfo1(6,nElems))
-  nIndexSide = ElInfoF(4,nElems)
   
-  CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
+  if (nElems > 0) then
+    nIndexSide = ElInfoF(4,nElems)
+    CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
+  else
+    allocate ( SiInfoF(5,0) )
+  end if
   
   CALL C_F_POINTER(FortranDataSave%OffsetSideMPI, OffSideMPIF,[mpisize+1])
+  
   ALLOCATE(OffsetSideMPI(0:mpisize), SOURCE  = OffSideMPIF)
 
   CALL C_F_POINTER(FortranDataSave%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
