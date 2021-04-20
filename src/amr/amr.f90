@@ -1191,7 +1191,11 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
     CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
 
-nLocalIndSides = FortranDataSave%nSidesArrIndex
+if (nElems==0) then
+  nLocalIndSides = 0
+else
+  nLocalIndSides = FortranDataSave%nSidesArrIndex
+end if
 nGlobalIndSides = OffsetSideArrIndexMPI(mpisize)
 OffsetIndSides = OffsetSideArrIndexMPI(myrank)
 
@@ -1223,6 +1227,9 @@ DO iElem=1,nElems
     ENDDO
   ENDDO
 ENDDO
+#if MPI
+    CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
+#endif
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         DataSetName='NodeCoords', rank=2,  &
                         nValGlobal=(/3,nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&
