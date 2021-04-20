@@ -1045,7 +1045,6 @@ SUBROUTINE SaveMesh(FileString)
   INTEGER, POINTER :: OffSideMPIF(:), OffSideArrIndMPIF(:)  ! OffsetSideMPI and OffsetSideArrIndexMPI to pass the data
   INTEGER, ALLOCATABLE :: OffsetSideMPI(:), OffsetSideArrIndexMPI(:), ElemInfoW(:,:)
   INTEGER          :: iElem, nIndexSide, mpisize, FirstElemInd, LastElemInd, nLocalIndSides, nGlobalIndSides, OffsetIndSides
-  CHARACTER(LEN=255)             :: FileName,TypeString
   INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
   INTEGER(HSIZE_T)               :: DimsM(2)
   CHARACTER(LEN=255), ALLOCATABLE:: BCNames(:)
@@ -1102,8 +1101,6 @@ SUBROUTINE SaveMesh(FileString)
 
   IF(MPIRoot)THEN
    ! Create file
-   FileName=TRIM(FileString)//'.h5'
-   TypeString = FileName
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
     CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=NGeo_new)
@@ -1191,11 +1188,7 @@ CALL GatheredWriteArray(FileString,create=.FALSE.,&
     CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
 #endif
 
-if (nElems==0) then
-  nLocalIndSides = 0
-else
-  nLocalIndSides = FortranDataSave%nSidesArrIndex
-end if
+nLocalIndSides = FortranDataSave%nSidesArrIndex
 nGlobalIndSides = OffsetSideArrIndexMPI(mpisize)
 OffsetIndSides = OffsetSideArrIndexMPI(myrank)
 
