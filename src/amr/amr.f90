@@ -96,9 +96,12 @@ SUBROUTINE DefineParametersAMR()
                                                               '1')
  CALL prms%CreateIntOption(  'nDoAMR'           ,       " Time-step interval to call the AMR routines.",&
                                                   '1')
- CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used "//&
-                                                        "  0: Use the custom indicator"//&
-                                                        "  1: Refine the elements in the sphere with r=IniHalfwidthAMR",&
+ CALL prms%CreateIntOption(  'nDoAMRShift'      ,       " Initial shift for time-step interval to call the AMR routines.",&
+                                                  '0')
+ CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used\n"//&
+                                                        "  0: Use the custom indicator\n"//&
+                                                        "  1: Refine the elements in the sphere with r=IniHalfwidthAMR\n"//&
+                                                        "  2: Do nothing",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR
@@ -154,6 +157,7 @@ SUBROUTINE InitAMR()
     CoarseVal = GetREal('CoarseVal',"0.")
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
     nDoAMR = GetINT('nDoAMR',"1")
+    nDoAMRShift = GetINT('nDoAMRShift',"0")
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')

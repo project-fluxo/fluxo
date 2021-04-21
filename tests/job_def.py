@@ -609,7 +609,18 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [2.495915018038E+00,   6.325174433685E-01,   7.889488615235E-01,   5.323075180477E-01,   1.325157194232E+00,   3.723270002320E-01,   3.284881946353E-01,   4.062933775229E-01,   6.423215469974E-01],
+                                                    'to_be': [1.804813249457E+00,   5.517578664708E-01,   5.597476535066E-01,   4.138627951187E-01,   1.284407297899E+00,   3.777790394332E-01,   3.096901992672E-01,   3.895851478715E-01,   5.355148669546E-01],
+                                                  'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
+                      },
+         },
+      }
+   # New test: Soft blast with shock capturing and AMR. This test must be run after run_opt_p4est_SC becasue it restarts from an intermediate state of the other test
+   run_opt_p4est_SC_restart={'runs/mhd/softBlast/p4est_SC_restart':
+         {'tags': ['mhd','blast','nonconforming','p4est','amr','SC'] ,
+          'restartfile': '../p4est_SC/MHD_ENTROPYCONS_State_0000000.400000000.h5',
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [1.804813249457E+00,   5.517578664708E-01,   5.597476535066E-01,   4.138627951187E-01,   1.284407297899E+00,   3.777790394332E-01,   3.096901992672E-01,   3.895851478715E-01,   5.355148669546E-01],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -637,6 +648,7 @@ def job_definition():
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
                        **run_opt_p4est_SC,
+                       **run_opt_p4est_SC_restart,
                       },
 
          }
@@ -646,7 +658,7 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC','br1'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [2.495897740097E+00,   6.325155875638E-01,   7.889453566845E-01,   5.323026725737E-01,   1.325156184899E+00,   3.723256877799E-01,   3.284879997260E-01,   4.062928761863E-01,   6.423200485785E-01],
+                                                    'to_be': [1.804801447128E+00,   5.517563598585E-01,   5.597450372181E-01,   4.138619747972E-01,   1.284406351905E+00,   3.777785377465E-01,   3.096900072869E-01,   3.895846561534E-01,   5.355136203722E-01],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
