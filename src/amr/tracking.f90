@@ -50,7 +50,7 @@ subroutine InitialAMRRefinement()
   if (.not. UseAMR) return
   
   select case (InitialRefinement)  
-    case default ! Use the default indicator up to max-level
+    case default ! (0) Use the default indicator up to max-level
       do iter = 1,MaxLevel
         call PerformAMR()
         call InitData()
@@ -89,9 +89,8 @@ subroutine InitialAMRRefinement()
         deallocate (ElemToRefineAndCoarse)
       end do
       call InitData()
+    case(2) ! Do nothing
   end select
-  
-
 end subroutine
 
 

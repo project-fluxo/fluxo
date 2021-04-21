@@ -779,11 +779,12 @@ END IF
 Dimsf=nVal  ! Now we need the local array size
 OffsetHDF = Offset
 ! Create the data space in the memory
-IF(ANY(Dimsf.EQ.0))THEN
-  CALL H5SCREATE_F(H5S_NULL_F,MemSpace,iError)
-ELSE
+! ATTENTION: The case 'ANY(Dimsf.EQ.0)' was commented because it caused the writing routine to crash when nElems=0
+!IF(ANY(Dimsf.EQ.0))THEN
+!  CALL H5SCREATE_F(H5S_NULL_F,MemSpace,iError)
+!ELSE
   CALL H5SCREATE_SIMPLE_F(Rank, Dimsf, MemSpace, iError)
-END IF
+!END IF
 ! Select hyperslab in the file.
 CALL H5DGET_SPACE_F(DSet_id, FileSpace, iError)
 IF(ANY(Dimsf.EQ.0))THEN

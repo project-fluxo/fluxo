@@ -35,11 +35,7 @@ def job_init(list_all=False):
                rprm_file=os.path.join(rdir,'parameter.ini')
                if(not os.path.isfile(rprm_file)):
                   errmsg.append('parameter.ini does not exist in directory "%s" ' % (rdir))
-            if('restartfile' in r_opts):
-               restart_file=os.path.join(rdir,r_opts['restartfile'])
-               if(not os.path.isfile(restart_file)):
-                  errmsg.append('restart file does not exist in directory "%s" ' % (rdir))
-   
+            
             if('test_opts' in r_opts):
                for t_name,t_opts in r_opts['test_opts'].items():
                   #check mandatory keys in test_opts

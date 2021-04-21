@@ -34,6 +34,7 @@ INTEGER                     :: MaxLevel             ! Loaded from .ini file
 INTEGER                     :: MinLevel             ! Loaded from .ini file
 INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
 INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
+INTEGER                     :: nDoAMRShift          ! Initial shift fot time-step interval to do AMR
 integer                     :: InitialRefinement    ! Initial refinement switch
 integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
 real                        :: IniHalfwidthAMR
