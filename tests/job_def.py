@@ -653,7 +653,7 @@ def job_definition():
       }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
-   jobs['mhd_split_glm_noncons_nopara_p4est_SC']={
+   jobs['mhd_split_glm_noncons_br1_p4est_SC']={
           'case': caseID ,
           'tags': ['mhd','split-form','SC','GL','GLM','NONCONS','p4est','amr','br1'] ,
           'build_opts':{**baseopts,
