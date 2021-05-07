@@ -426,14 +426,8 @@ contains
     alpha_Master = 0.0
     alpha_Slave  = 0.0
     
-    if (TimeRelFactor <= alpha_min/alpha_max) then
-      ! The time relaxation has no effect, alpha can be set to 0
-      if (nElems /= nElemsOld) then
-        SDEALLOCATE(alpha)
-        allocate(alpha(nElems))
-      end if
-      alpha = 0.0
-    else
+    ! Check if we need the alpha from the previous mesh and assign it if we do!
+    if ( (ComputeAlpha==20 .and. ShockBlendCoef<-1.0) .or. (TimeRelFactor > alpha_min/alpha_max) ) then
       allocate ( alphaNew(nElems) )
       ! Set with old values
       do eID=1, nElems
@@ -449,6 +443,12 @@ contains
         endif
       end do
       call move_alloc(alphaNew,alpha)
+    else ! The time relaxation has no effect, alpha can be set to 0
+      if (nElems /= nElemsOld) then
+        SDEALLOCATE(alpha)
+        allocate(alpha(nElems))
+      end if
+      alpha = 0.0
     end if
     
 !   Compute Subcell Metrics
