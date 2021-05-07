@@ -241,6 +241,9 @@ contains
     allocate ( alpha_old(nElems) )
     FFV_m_FDG = 0.
     alpha_old = 0.
+    maximum_alpha=0.0
+    amount_alpha =0.0
+    amount_alpha_steps=0
 #endif /*NFVSE_CORR*/
     
 #if MPI
