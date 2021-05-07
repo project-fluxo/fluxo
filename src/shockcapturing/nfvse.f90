@@ -73,7 +73,8 @@ contains
                                              
     call prms%CreateIntOption     (  "ComputeAlpha",  " Specifies how to compute the blending coefficient:\n"//&
                                               "   1: Use the shock indicator\n"//&
-                                              "   2: Randomly assign the blending coef.\n"//&
+                                              "   2: Randomly assign the blending coef.,changes over time\n"//&
+                                              "   20: Randomly assign the blending coef.0<alpha<alpha_max, fixed over time\n"//&
                                               "   3: Fixed blending coef. (alpha=ShockBlendCoef)"&
                                              ,"1")
     call prms%CreateRealOption(   "ShockBlendCoef",  " Fixed blending coefficient to be used with ComputeAlpha=3", "0.0")
@@ -1587,6 +1588,12 @@ contains
         do eID=1, nElems
           call RANDOM_NUMBER(alpha(eID))
         end do
+      case(20)   ! Random indicator, fixed over time (using shockBlendCoef as a switch)
+        if(shockBlendCoef.GT.-1.)THEN
+          call RANDOM_NUMBER(alpha(:))
+          alpha=alpha*alpha_max
+          shockBlendCoef=-2.
+        end if
         
       case(3)   ! Fixed blending coefficients
         alpha = ShockBlendCoef
