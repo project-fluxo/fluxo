@@ -32,6 +32,7 @@ INTEGER,PARAMETER ::UNIT_stdOut=6                                             !<
 INTEGER,PARAMETER ::UNIT_logOut=133                                           !< unit for writing log files
 INTEGER           ::UNIT_errOut=999                                           !< unit for writing error files
 LOGICAL           ::Logging                                                   !< switch to turn log file writing on or of
+CHARACTER(LEN=255) :: LogFile !< name of logfile for each rank 
 LOGICAL           ::ErrorFiles                                                !< switch to turn error file writing on or of
 CHARACTER(LEN=255)::ErrorFileName='NOT_SET'                                   !< file to write error data into
 INTEGER           ::iError                                                    !< default error handle
@@ -82,6 +83,10 @@ END INTERFACE GETFREEUNIT
 INTERFACE CreateErrFile
   MODULE PROCEDURE CreateErrFile
 END INTERFACE CreateErrFile
+
+INTERFACE ReOpenLogFile
+  MODULE PROCEDURE ReOpenLogFile
+END INTERFACE ReOpenLogFile
 
 INTERFACE NORMALIZE
   MODULE PROCEDURE NORMALIZE
@@ -235,6 +240,24 @@ IF (ErrorFiles) THEN
   END IF
 END IF
 END SUBROUTINE CreateErrFile
+
+
+!===================================================================================================================================
+!> re-open log file (used by preprocessor LOGWRITE_BARRIER) to be sure that all logwrites are written to file 
+!===================================================================================================================================
+SUBROUTINE ReOpenLogFile()
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+INTEGER                        :: OpenStat
+LOGICAL                        :: LogIsOpen
+!===================================================================================================================================
+  INQUIRE(UNIT=UNIT_LogOut,OPENED=LogIsOpen)
+  IF(logIsOpen)CLOSE(UNIT_logOut)
+  OPEN(UNIT=UNIT_logOut, FILE=LogFile, STATUS='UNKNOWN', ACTION='WRITE', POSITION='APPEND', IOSTAT=OpenStat)
+END SUBROUTINE ReOpenLogFile
 
 
 !==================================================================================================================================
