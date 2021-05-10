@@ -73,7 +73,8 @@ contains
                                              
     call prms%CreateIntOption     (  "ComputeAlpha",  " Specifies how to compute the blending coefficient:\n"//&
                                               "   1: Use the shock indicator\n"//&
-                                              "   2: Randomly assign the blending coef.\n"//&
+                                              "   2: Randomly assign the blending coef.,changes over time\n"//&
+                                              "   20: Randomly assign the blending coef.0<alpha<alpha_max, fixed over time\n"//&
                                               "   3: Fixed blending coef. (alpha=ShockBlendCoef)"&
                                              ,"1")
     call prms%CreateRealOption(   "ShockBlendCoef",  " Fixed blending coefficient to be used with ComputeAlpha=3", "0.0")
@@ -241,6 +242,9 @@ contains
     allocate ( alpha_old(nElems) )
     FFV_m_FDG = 0.
     alpha_old = 0.
+    maximum_alpha=0.0
+    amount_alpha =0.0
+    amount_alpha_steps=0
 #endif /*NFVSE_CORR*/
     
 #if MPI
@@ -374,7 +378,7 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha_old
@@ -422,14 +426,8 @@ contains
     alpha_Master = 0.0
     alpha_Slave  = 0.0
     
-    if (TimeRelFactor <= alpha_min/alpha_max) then
-      ! The time relaxation has no effect, alpha can be set to 0
-      if (nElems /= nElemsOld) then
-        SDEALLOCATE(alpha)
-        allocate(alpha(nElems))
-      end if
-      alpha = 0.0
-    else
+    ! Check if we need the alpha from the previous mesh and assign it if we do!
+    if ( (ComputeAlpha==20 .and. ShockBlendCoef<-1.0) .or. (TimeRelFactor > alpha_min/alpha_max) ) then
       allocate ( alphaNew(nElems) )
       ! Set with old values
       do eID=1, nElems
@@ -445,6 +443,12 @@ contains
         endif
       end do
       call move_alloc(alphaNew,alpha)
+    else ! The time relaxation has no effect, alpha can be set to 0
+      if (nElems /= nElemsOld) then
+        SDEALLOCATE(alpha)
+        allocate(alpha(nElems))
+      end if
+      alpha = 0.0
     end if
     
 !   Compute Subcell Metrics
@@ -1584,6 +1588,12 @@ contains
         do eID=1, nElems
           call RANDOM_NUMBER(alpha(eID))
         end do
+      case(20)   ! Random indicator, fixed over time (using shockBlendCoef as a switch)
+        if(shockBlendCoef.GT.-1.)THEN
+          call RANDOM_NUMBER(alpha(:))
+          alpha=alpha*alpha_max
+          shockBlendCoef=-2.
+        end if
         
       case(3)   ! Fixed blending coefficients
         alpha = ShockBlendCoef

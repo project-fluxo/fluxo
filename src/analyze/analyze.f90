@@ -181,6 +181,15 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar) = 'alpha_amount'
 #endif /*NFVSE_CORR*/
+#if SHOCK_NFVSE
+  ! If we are doing NFVSE_CORR, record the maximum alpha since the last analyze
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar) = 'alpha_globmin'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar) = 'alpha_globmax'
+  A2F_iVar=A2F_iVar+1
+  A2F_VarNames(A2F_iVar) = 'alpha_globavg'
+#endif /*SHOCK_NFVSE*/
 END IF !MPIroot & doAnalyzeToFile
   
 
@@ -301,6 +310,9 @@ USE MOD_Testcase_Analyze,   ONLY: AnalyzeTestcase
 USE MOD_Output_Vars,        ONLY: ProjectName
 USE MOD_Mesh_Vars,          ONLY: nGlobalElems
 USE MOD_Mesh_Vars,          ONLY: nBCs,BoundaryType,BoundaryName
+#if SHOCK_NFVSE
+use MOD_NFVSE_Vars,         ONLY: alpha
+#endif /*SHOCK_NFVSE*/
 #if NFVSE_CORR
 use MOD_NFVSE_Vars,         ONLY: maximum_alpha, amount_alpha, amount_alpha_steps
 USE MOD_Mesh_Vars,          ONLY: nElems
@@ -323,6 +335,9 @@ REAL                            :: MeanFlux(PP_nVar,nBCs)
 #if NFVSE_CORR
 real                            :: amount_alpha_weighted
 #endif /*NFVSE_CORR*/
+#if SHOCK_NFVSE
+REAL                            :: alpha_globmin,alpha_globmax,alpha_globavg
+#endif /*SHOCK_NFVSE*/
 !==================================================================================================================================
 ! Graphical output
 CalcTime=FLUXOTIME()
@@ -404,12 +419,14 @@ IF(MPIroot) THEN
   CALL MPI_REDUCE(MPI_IN_PLACE,amount_alpha_weighted,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   amount_alpha = amount_alpha_weighted / nGlobalElems
 #endif /*MPI*/
-  A2F_iVar=A2F_iVar+1
-  A2F_Data(A2F_iVar) = maximum_alpha
-  A2F_iVar=A2F_iVar+1
-  A2F_Data(A2F_iVar) = amount_alpha
+  IF(doAnalyzeToFile)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_Data(A2F_iVar) = maximum_alpha
+    A2F_iVar=A2F_iVar+1
+    A2F_Data(A2F_iVar) = amount_alpha
+  END IF
   WRITE(formatStr,'(A)')'(A27,ES21.12)'
-  WRITE(UNIT_StdOut,'(A)')  ' POSITIVITY LIMITER:'
+  WRITE(UNIT_StdOut,'(A)')  ' FV POSITIVITY LIMITER:'
   WRITE(UNIT_StdOut,formatStr)' max(d_alpha): ', maximum_alpha
   WRITE(UNIT_StdOut,formatStr)' avg(sum(d_alpha)/nElems): ' , amount_alpha
 #if MPI
@@ -423,6 +440,36 @@ maximum_alpha=0.0
 amount_alpha =0.0
 amount_alpha_steps=0
 #endif /*NFVSE_CORR*/
+#if SHOCK_NFVSE
+alpha_globmin=MINVAL(alpha)
+alpha_globmax=MAXVAL(alpha)
+alpha_globavg=SUM(alpha)
+#if MPI
+IF(MPIroot) THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,alpha_globmin        ,1,MPI_DOUBLE_PRECISION,MPI_MIN,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,alpha_globmax        ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,alpha_globavg        ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(alpha_globmin        ,0,1,MPI_DOUBLE_PRECISION,MPI_MIN,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(alpha_globmax        ,0,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(alpha_globavg        ,0,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+#endif /*MPI*/
+IF(MPIroot) THEN
+  alpha_globavg = alpha_globavg / nGlobalElems
+  WRITE(UNIT_StdOut,'(A,3ES21.12)')  ' SHOCK CAPTURING, min/max/avg(alpha): ', &
+                                      alpha_globmin,alpha_globmax,alpha_globavg
+  IF(doAnalyzeToFile)THEN
+    A2F_iVar=A2F_iVar+1
+    A2F_Data(A2F_iVar) = alpha_globmin
+    A2F_iVar=A2F_iVar+1
+    A2F_Data(A2F_iVar) = alpha_globmax
+    A2F_iVar=A2F_iVar+1
+    A2F_Data(A2F_iVar) = alpha_globavg
+  END IF
+END IF
+#endif /*SHOCK_NFVSE*/
+
 
 IF(MPIroot.AND.doAnalyzeToFile) CALL AnalyzeToFile(Time,CalcTime,iter)
 
