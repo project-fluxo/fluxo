@@ -242,10 +242,16 @@ nGlobalElems=INT(HSize(2),4)
 DEALLOCATE(HSize)
 CALL ReadAttribute(File_ID,'nUniqueSides',1,IntegerScalar=nGlobalUniqueSides)
 #if MPI
+#if USE_AMR
+IF (.not. UseAMR) THEN
+#endif /*USE_AMR*/
 IF(nGlobalElems.LT.nProcessors) THEN
   CALL Abort(__STAMP__,&
   'ERROR: Number of elements (1) is smaller then number of processors (2)!',nGlobalElems,REAL(nProcessors))
 END IF
+#if USE_AMR
+END IF
+#endif /*USE_AMR*/
 
 !simple partition: nGlobalelems/nprocs, do this on proc 0
 IF(ALLOCATED(offsetElemMPI)) DEALLOCATE(offsetElemMPI)
@@ -267,7 +273,6 @@ ELSE
   nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
   offsetElem=offsetElemMPI(myRank)
   LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
-
 #if USE_AMR
  ENDIF
 #endif/*USE_AMR*/
@@ -279,6 +284,10 @@ offsetElem=0          ! offset is the index of first entry, hdf5 array starts at
 #endif /* MPI */
 
 CALL readBCs()
+
+#if USE_AMR
+if (nElems > 0) then
+#endif /*USE_AMR*/
 !----------------------------------------------------------------------------------------------------------------------------
 !                              ELEMENTS
 !----------------------------------------------------------------------------------------------------------------------------
@@ -482,6 +491,31 @@ nNodes=nElems*(NGeo+1)**3
 !  ALLOCATE(Elem_IJK(3,nLocalElems))
 !  CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntegerArray=Elem_IJK)
 !END IF
+
+#if USE_AMR
+else ! nElems>0
+  ! Define indices to avoind entering in loops
+  FirstElemInd=0
+  LastElemInd=-1
+  
+  ! We have to read from hdf5, such that parallel read-in does not freeze
+  ALLOCATE(ElemInfo(ElemInfoSize,1))
+  CALL ReadArray('ElemInfo',2,(/ElemInfoSize,1/),1,2,IntegerArray=ElemInfo)
+  deallocate(ElemInfo)
+  
+  ALLOCATE(SideInfo(SideInfoSize,1))
+  CALL ReadArray('SideInfo',2,(/SideInfoSize,1/),1,2,IntegerArray=SideInfo)
+  DEALLOCATE(SideInfo)
+  
+  IF(useCurveds)THEN
+    ALLOCATE(NodeCoords(3,0:NGeo,0:NGeo,0:NGeo,1))
+    CALL ReadArray('NodeCoords',2,(/3,(NGeo+1)**3/),(NGeo+1)**3,2,RealArray=NodeCoords)
+  ELSE
+    ALLOCATE(NodeCoords(   3,0:1,   0:1,   0:1,   1))
+    CALL ReadArray('NodeCoords',2,(/3,(NGeo+1)**3/),(NGeo+1)**3,2,RealArray=NodeCoords) 
+  end if
+end if !nElems>0
+#endif /*USE_AMR*/
 
 CALL CloseDataFile()
 

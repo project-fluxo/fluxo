@@ -96,9 +96,12 @@ SUBROUTINE DefineParametersAMR()
                                                               '1')
  CALL prms%CreateIntOption(  'nDoAMR'           ,       " Time-step interval to call the AMR routines.",&
                                                   '1')
- CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used "//&
-                                                        "  0: Use the custom indicator"//&
-                                                        "  1: Refine the elements in the sphere with r=IniHalfwidthAMR",&
+ CALL prms%CreateIntOption(  'nDoAMRShift'      ,       " Initial shift for time-step interval to call the AMR routines.",&
+                                                  '0')
+ CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used\n"//&
+                                                        "  0: Use the custom indicator\n"//&
+                                                        "  1: Refine the elements in the sphere with r=IniHalfwidthAMR\n"//&
+                                                        "  2: Do nothing",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR
@@ -154,6 +157,7 @@ SUBROUTINE InitAMR()
     CoarseVal = GetREal('CoarseVal',"0.")
     nWriteDataAMR = GetINT('nWriteDataAMR',"1")
     nDoAMR = GetINT('nDoAMR',"1")
+    nDoAMRShift = GetINT('nDoAMRShift',"0")
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
@@ -537,7 +541,6 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ALLOCATE(MPIRequest_Lifting(nNbProcs,3,2))
     MPIRequest_Lifting = MPI_REQUEST_NULL
 #endif /*PARABOLIC*/
-    IF (nNbProcs .EQ. 0) nNbProcs =1;
   ENDIF
 #endif  /*MPI*/
 
@@ -1046,7 +1049,6 @@ SUBROUTINE SaveMesh(FileString)
   INTEGER, POINTER :: OffSideMPIF(:), OffSideArrIndMPIF(:)  ! OffsetSideMPI and OffsetSideArrIndexMPI to pass the data
   INTEGER, ALLOCATABLE :: OffsetSideMPI(:), OffsetSideArrIndexMPI(:), ElemInfoW(:,:)
   INTEGER          :: iElem, nIndexSide, mpisize, FirstElemInd, LastElemInd, nLocalIndSides, nGlobalIndSides, OffsetIndSides
-  CHARACTER(LEN=255)             :: FileName,TypeString
   INTEGER(HID_T)                 :: DSet_ID,FileSpace,HDF5DataType
   INTEGER(HSIZE_T)               :: DimsM(2)
   CHARACTER(LEN=255), ALLOCATABLE:: BCNames(:)
@@ -1061,7 +1063,7 @@ SUBROUTINE SaveMesh(FileString)
   ! Set NGeo of the mesh to save
   NGeo_new = min(PP_N,NGeo)
   
-  IF (.NOT. UseAMR) RETURN;
+  IF (.NOT. UseAMR) RETURN
 
   IF(MPIRoot)THEN
     WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE MESH TO _MESH.H5 FILE: '
@@ -1079,11 +1081,16 @@ SUBROUTINE SaveMesh(FileString)
   ALLOCATE(ElemInfoW(6,nElems), SOURCE  = ElInfoF)
   ElemInfoW = ElInfoF
   ! ALLOCATE(ElemInfo1(6,nElems))
-  nIndexSide = ElInfoF(4,nElems)
   
-  CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
+  if (nElems > 0) then
+    nIndexSide = ElInfoF(4,nElems)
+    CALL C_F_POINTER(FortranDataSave%SideInfo, SiInfoF,[5,nIndexSide])
+  else
+    allocate ( SiInfoF(5,0) )
+  end if
   
   CALL C_F_POINTER(FortranDataSave%OffsetSideMPI, OffSideMPIF,[mpisize+1])
+  
   ALLOCATE(OffsetSideMPI(0:mpisize), SOURCE  = OffSideMPIF)
 
   CALL C_F_POINTER(FortranDataSave%OffsetSideArrIndexMPI, OffSideArrIndMPIF,[mpisize+1])
@@ -1098,8 +1105,6 @@ SUBROUTINE SaveMesh(FileString)
 
   IF(MPIRoot)THEN
    ! Create file
-   FileName=TRIM(FileString)//'.h5'
-   TypeString = FileName
     CALL OpenDataFile(TRIM(FileString),create=.TRUE.,single=.TRUE.,readOnly=.FALSE.)
     CALL WriteAttribute(File_ID,'Version',1,RealScalar=1.0)
     CALL WriteAttribute(File_ID,'Ngeo',1,IntScalar=NGeo_new)
@@ -1219,6 +1224,9 @@ DO iElem=1,nElems
     ENDDO
   ENDDO
 ENDDO
+#if MPI
+    CALL MPI_BARRIER(MPI_COMM_WORLD,iError)
+#endif
 CALL GatheredWriteArray(FileString,create=.FALSE.,&
                         DataSetName='NodeCoords', rank=2,  &
                         nValGlobal=(/3,nGlobalElems*(NGeo_new+1)*(NGeo_new+1)*(NGeo_new+1)/),&

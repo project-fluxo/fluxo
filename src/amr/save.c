@@ -744,7 +744,10 @@ p4est_savef_data_t *save_mesh(p4est_t *p4est1) {
 
 
     p4est_savef_data->OffsetSideArrIndexMPI = (int *) malloc((p4est->mpisize + 1) * sizeof(int));
-    p4est_savef_data->nSidesArrIndex = p4est_savef_data->ElemInfo[(p4est->local_num_quadrants - 1) * 6 + (4 - 1)];
+    if (p4est->local_num_quadrants == 0)
+      p4est_savef_data->nSidesArrIndex = 0;
+    else
+      p4est_savef_data->nSidesArrIndex = p4est_savef_data->ElemInfo[(p4est->local_num_quadrants - 1) * 6 + (4 - 1)];
 
     p4est->user_pointer = (void *) p4est_savef_data;
     count_parallel_index_sides(p4est);

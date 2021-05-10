@@ -160,7 +160,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 #if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: PerformAMR,InitData,InitialAMRRefinement
-USE MOD_AMR_Vars            ,ONLY: UseAMR, nWriteDataAMR, nDoAMR
+USE MOD_AMR_Vars            ,ONLY: UseAMR, nWriteDataAMR, nDoAMR, nDoAMRShift
 USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
 IMPLICIT NONE
@@ -235,7 +235,7 @@ IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
 
 #if USE_AMR
 writeCounterAMR = 0
-doAMR = 0
+doAMR = nDoAMRShift
 #endif /*USE_AMR*/
 
 iter=0

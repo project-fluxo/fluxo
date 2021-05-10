@@ -281,7 +281,7 @@ DO iElem=FirstElemInd,LastElemInd
   DEALLOCATE(aElem%Side)
   DEALLOCATE(aElem)
 END DO
-DEALLOCATE(Elems)
+if (nElems>0) DEALLOCATE(Elems)
 END SUBROUTINE deleteMeshPointer
 
 
