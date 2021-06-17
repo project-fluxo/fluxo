@@ -121,7 +121,9 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            " 18: Kennedy Gruber (Pirozilli version)  with LLF diss"//&
                                            " 19: Morinishi + LLF diss"//&
                                            " 20: Gassner, Winters, Walch flux"//&
-                                           " 21: Gassner, Winters, Walch flux + LLF diss" &
+                                           " 21: Gassner, Winters, Walch flux + LLF diss"//&
+                                           " 32: Ranocha ECKEP flux,"//&
+                                           " 33: Entropy Stable: Ranocha ECKEP + full wave diss.," &
                                           ,"1")
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
@@ -136,7 +138,8 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "  7: approx. EC-KEP + press. aver."//&
                                               "  8: Kenndy & Gruber (pirozolli version)"//&
                                               "  9: Gassner Winter Walch"//&
-                                              " 10: EC Ismail and Roe" &
+                                              " 10: EC Ismail and Roe"//&
+                                              " 32: Ranocha entropy conservative flux with metric dealiasing" &
                                              ,"0")
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
@@ -375,6 +378,15 @@ SELECT CASE(WhichRiemannSolver)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Gassner, Winters, Walch flux + LLF diss'
     VolumeFluxAverage    => GassnerWintersWalchFlux
     SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage_LLF
+  CASE(32)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Ranocha entropy conservative flux'
+    VolumeFluxAverage    => RanochaFlux
+    SolveRiemannProblem     => RiemannSolver_VolumeFluxAverage
+  CASE(33)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: ES, Ranocha ECKEP + full wave dissipation'
+    VolumeFluxAverage    => RanochaFlux
+    SolveRiemannProblem     => RiemannSolver_EntropyStable
+    RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
   CASE DEFAULT
     CALL ABORT(__STAMP__,&
          "Riemann solver not implemented")
@@ -421,6 +433,9 @@ CASE(9)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC Ismail and Roe'
   VolumeFluxAverageVec => TwoPointEntropyConservingFluxVec
+CASE(32)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Ranocha KEPEC with Metrics Dealiasing'
+  VolumeFluxAverageVec    => RanochaFluxVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
