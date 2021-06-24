@@ -740,7 +740,16 @@ def job_definition():
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
          },
-      } 
+      }
+   # Entropy conservation test with Ranocha EC-KEP flux (with and without shock-capturing)
+   run_opt_entropyCons_Ranocha={'runs/navst/softBlast/entropyCons_Ranocha':
+         {'tags': ['navierstokes','entropyCons','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      }
+
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['navierstokes_type1_br1_GL']={
@@ -867,6 +876,7 @@ def job_definition():
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
                      **run_opt_entropyStab,
+                     **run_opt_entropyCons_Ranocha,
                     }
       
       jobs['build_navierstokes_type2_nopara_volFlux_'+volflux]={
