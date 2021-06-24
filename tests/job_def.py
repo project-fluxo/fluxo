@@ -314,7 +314,15 @@ def job_definition():
       } 
    # Entropy stability test with EC flux and LLF (with and without shock-capturing)
    run_opt_entropyStab={'runs/mhd/softBlast/entropyStab':
-         {'tags': ['mhd','entropyCons','conforming'] ,
+         {'tags': ['mhd','entropyStab','conforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }  
+   # Entropy stability test with EC flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab_FloGor9waves={'runs/mhd/softBlast/entropyStab_FloGor9waves':
+         {'tags': ['mhd','entropyStab','conforming','FloGor'] ,
           'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
@@ -505,6 +513,7 @@ def job_definition():
       if vvv==1 or vvv==2:
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
+                     **run_opt_entropyStab_FloGor9waves,
                     }
       
       jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
