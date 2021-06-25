@@ -117,6 +117,30 @@ END IF
 END SUBROUTINE VAXPBY
 
 
+!==================================================================================================================================
+!> Z=Z+AX+BY
+!==================================================================================================================================
+SUBROUTINE VZPAXPBY(nTotal,VecZ,const_a,VecX,const_b,VecY)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN)    :: nTotal                                               !< vector length
+REAL,INTENT(INOUT)    :: VecZ(nTotal)                                         !< output vector
+REAL,INTENT(IN)       :: Const_a
+REAL,INTENT(IN)       :: VecX(nTotal)                                        !< input vector
+REAL,INTENT(IN)       :: Const_b
+REAL,INTENT(IN)       :: VecY(nTotal)                                        !< input vector
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER               :: i
+!==================================================================================================================================
+  DO i=1,nTotal
+    VecZ(i)=VecZ(i)+VecX(i)*const_a+VecY(i)*const_b
+  END DO
+END SUBROUTINE VZPAXPBY
+
+
 SUBROUTINE V2D_M_V1D(dim1,nTotal,Y,X)
 !===================================================================================================================================
 ! Y(1:dim1,i)=Y(1:dim1,i)*X(i)

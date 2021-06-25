@@ -335,7 +335,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
 #endif  /*MPI*/
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
-  use MOD_Mortar_Vars,        only: M_0_1,M_0_2
+  use MOD_Mortar_Vars,        only: Mint
   use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
   use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
 #if POSITIVITYPRES
@@ -421,7 +421,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
       !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
       ! contains the number of child element 
       call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
-      call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), M_0_1, M_0_2 )
+      call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), Mint(:,:,1), Mint(:,:,2) )
       iElem=iElem+7;
     ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
       !  This is COARSE. Array ChangeElem(:,iElem) Contains 
@@ -584,7 +584,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,4,nMortarSides])
   deallocate(MortarInfo)
-  ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides),SOURCE = MInfo)
+  ALLOCATE(MortarInfo(MI_FLIP,0:4,nMortarSides),SOURCE = MInfo)
 
 ! ==========================================
 ! Reallocate remaining arrays of size nElems
@@ -746,6 +746,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 ! ===================================================
 ! Re-initialize other modules that depend on the mesh
 ! ===================================================
+  call FinalizeMortarArrays()
+  call InitMortarArrays()
 #if SHOCKCAPTURE
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
@@ -827,7 +829,7 @@ END SUBROUTINE RunAMR
 !===================================================================================================================================
   subroutine ProjectSolution_Coarsening(Unew, Uold, sJold)
     use MOD_PreProc     , only: PP_N
-    use MOD_Mortar_Vars , only: M_1_0,M_2_0
+    use MOD_Mortar_Vars , only: M_proj !M_1_0=M_proj(:,:,1),M_2_0=M_proj(:,:,2)
     implicit none
     !-arguments-----------------------------------------------
     real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
@@ -847,14 +849,14 @@ END SUBROUTINE RunAMR
     Unew = 0.0
     do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
       do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
-        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,1) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,2) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,3) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,4) &
-                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,5) &
-                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,6) &
-                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,7) &
-                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,8) 
+        Unew(:,p,q,r) = Unew(:,p,q,r) + M_proj(l,p,1)*M_proj(m,q,1)*M_proj(s,r,1) * JUold(:,l,m,s,1) &
+                                      + M_proj(l,p,2)*M_proj(m,q,1)*M_proj(s,r,1) * JUold(:,l,m,s,2) &
+                                      + M_proj(l,p,1)*M_proj(m,q,2)*M_proj(s,r,1) * JUold(:,l,m,s,3) &
+                                      + M_proj(l,p,2)*M_proj(m,q,2)*M_proj(s,r,1) * JUold(:,l,m,s,4) &
+                                      + M_proj(l,p,1)*M_proj(m,q,1)*M_proj(s,r,2) * JUold(:,l,m,s,5) &
+                                      + M_proj(l,p,2)*M_proj(m,q,1)*M_proj(s,r,2) * JUold(:,l,m,s,6) &
+                                      + M_proj(l,p,1)*M_proj(m,q,2)*M_proj(s,r,2) * JUold(:,l,m,s,7) &
+                                      + M_proj(l,p,2)*M_proj(m,q,2)*M_proj(s,r,2) * JUold(:,l,m,s,8) 
       end do       ; end do       ; end do
     end do       ; end do       ; end do
     

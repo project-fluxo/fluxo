@@ -26,7 +26,7 @@ USE MOD_Commandline_Arguments
 USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
-USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
+USE MOD_Mortar,            ONLY:DefineParametersMortar,InitMortarBase,InitMortar,FinalizeMortar
 USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
@@ -70,6 +70,7 @@ END IF
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
+CALL DefineParametersMortar()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
 #if USE_AMR
@@ -135,7 +136,7 @@ StartTime=FLUXOTIME()
 !
 ! Initialization
 CALL InitInterpolation()
-CALL InitMortar()
+CALL InitMortarBase()
 CALL InitRestart()
 CALL InitOutput() 
 
@@ -143,7 +144,7 @@ CALL InitOutput()
 CALL InitAMR()
 #endif
 CALL InitMesh()
-
+CALL InitMortar()
 #if MPI
 CALL InitMPIvars()
 #endif

@@ -21,56 +21,98 @@ MODULE MOD_Mortar
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
+INTERFACE DefineParametersMortar 
+  MODULE PROCEDURE DefineParametersMortar
+END INTERFACE
+
 INTERFACE InitMortar
   MODULE PROCEDURE InitMortar
+END INTERFACE
+
+INTERFACE InitMortarArrays
+  MODULE PROCEDURE InitMortarArrays
 END INTERFACE
 
 INTERFACE MortarBasis_BigToSmall
   MODULE PROCEDURE MortarBasis_BigToSmall
 END INTERFACE
 
-INTERFACE MortarBasis_SmallToBig
-  ! MODULE PROCEDURE MortarBasis_SmallToBig_Collocation
-  MODULE PROCEDURE MortarBasis_SmallToBig_Projection
-END INTERFACE
-
 INTERFACE FinalizeMortar
   MODULE PROCEDURE FinalizeMortar
 END INTERFACE
 
-PUBLIC::InitMortar,FinalizeMortar,MortarBasis_BigToSmall,MortarBasis_SmallToBig
+PUBLIC::DefineParametersMortar,InitMortarBase,InitMortar,InitMortarArrays,FinalizeMortar,FinalizeMortarArrays,&
+        MortarBasis_BigToSmall
 
 !==================================================================================================================================
 
 CONTAINS
 
 !==================================================================================================================================
+!> Define parameters 
+!==================================================================================================================================
+SUBROUTINE DefineParametersMortar()
+! MODULES
+USE MOD_Globals
+USE MOD_ReadInTools ,ONLY: prms
+IMPLICIT NONE
+!==================================================================================================================================
+CALL prms%SetSection("Mortar")
+CALL prms%CreateIntOption(     'whichMortar',           "0: projection mortar, 1: collocation mortar. ")
+END SUBROUTINE DefineParametersMortar
+
+!==================================================================================================================================
 !> Basic Mortar initialization.
 !==================================================================================================================================
-SUBROUTINE InitMortar()
+SUBROUTINE InitMortarBase()
 ! MODULES
 USE MOD_Preproc
 USE MOD_Globals
 USE MOD_Interpolation     ,ONLY: getNodesAndWeights
 USE MOD_Interpolation_Vars,ONLY: InterpolationInitIsDone,NodeType
+USE MOD_Basis,             ONLY: buildLegendreVdm 
 USE MOD_Mortar_Vars
+USE MOD_ReadInTools, ONLY: GETINT
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL                          :: error
+REAL,DIMENSION(0:PP_N,0:PP_N) :: Vdm_Leg,sVdm_Leg
 REAL,DIMENSION(0:PP_N)        :: test1,test2,xi_GP,w_GP
+INTEGER                       :: whichMortar
 !==================================================================================================================================
 IF(MortarInitIsDone.OR.(.NOT.InterpolationInitIsDone))THEN
    CALL CollectiveStop(__STAMP__,&
      'InitMortar not ready to be called or already called.')
 END IF
-
+!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
 ! DG interfaces
-ALLOCATE(M_0_1(0:PP_N,0:PP_N))
-ALLOCATE(M_0_2(0:PP_N,0:PP_N))
-ALLOCATE(M_1_0(0:PP_N,0:PP_N))
-ALLOCATE(M_2_0(0:PP_N,0:PP_N))
-CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,   M_0_2)
-CALL MortarBasis_SmallToBig(PP_N,NodeType,   M_1_0,   M_2_0)
+ALLOCATE(MInt(0:PP_N,0:PP_N,2))
+ALLOCATE(MInt_h(0:PP_N,0:PP_N,2))
+ALLOCATE(MProj(0:PP_N,0:PP_N,2))
+ALLOCATE(MProj_h(0:PP_N,0:PP_N,2))
+CALL MortarBasis_BigToSmall(PP_N,NodeType,   Mint(:,:,1),   Mint(:,:,2))
+MInt_h=0.5*MInt
+#ifdef JESSE_MORTAR
+whichMortar = 1  
+SWRITE(UNIT_StdOut,'(A)')"Compiled with Jesse's mortar,  Mortar set to collocation!"
+#else
+whichMortar = GETINT('whichMortar','0')
+#endif
+SELECT CASE (whichMortar)
+CASE(0)
+  CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   Mproj(:,:,1),   Mproj(:,:,2))
+  SWRITE(UNIT_StdOut,'(A)')'Projection Mortar chosen.'
+CASE(1)
+  CALL MortarBasis_SmallToBig_Collocation(PP_N,NodeType,  Mproj(:,:,1),   Mproj(:,:,2))
+  SWRITE(UNIT_StdOut,'(A)')'Collocation Mortar chosen.'
+CASE DEFAULT
+  CALL abort(__STAMP__,&
+    'which mortar either 0 (projection) or 1 (collocation)')
+END SELECT
+Mproj_h=0.5*Mproj
+  
+
+ASSOCIATE(M_0_1=>MInt(:,:,1),M_0_2=>Mint(:,:,2),M_1_0=>MProj(:,:,1),M_2_0=>Mproj(:,:,2))
 
 !> TODO: Make a unit test out of this one
 !Test mean value property 0.5*(0.5+1.5)=1.  !ONLY GAUSS
@@ -81,14 +123,127 @@ error=ABS(0.25*SUM((MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2
 
 IF(error.GT. 100.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
-    'problems in building Mortar',999,error)
+    'problems in building Mortar 1',999,error)
+END IF
+
+! freestream test
+test2 = 1.33d0
+test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
+error = SUM(ABS(test1-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'Error of interpolate constant to mortar 1:',error
+test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
+error = SUM(ABS(test2-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'Error of interpolate constant to mortar 2:',error
+test2 = MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)
+error = SUM(ABS(0.5d0*test2-1.33d0))/REAL(PP_N+1)
+SWRITE(UNIT_StdOut,*)'Error of project constant back to big side:',error
+
+IF(error.GT. 10.*PP_RealTolerance) THEN
+  CALL abort(__STAMP__,&
+    'problems in building Mortar 2',999,error)
+END IF
+
+CALL buildLegendreVdm(PP_N,xi_GP,Vdm_Leg,sVdm_Leg)
+test2 = 1.0d0
+test2(0) = -10.33d0
+error  = SUM(test2*w_GP)  !save mean value of big side
+!SWRITE(*,*)'big side',test2
+!SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+!SWRITE(*,*)'MV',SUM(test2*w_GP)
+
+test1 = MATMUL(TRANSPOSE(M_0_1),test2) !interpolate to mortar1
+test2 = MATMUL(TRANSPOSE(M_0_2),test2) !interpolate to mortar2
+test2 = 0.5*(MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)) !project  back
+!SWRITE(*,*)'big side',test2
+!SWRITE(*,*)'big side modes',MATMUL(sVdm_Leg,test2)
+!SWRITE(*,*)'MV',SUM(test2*w_GP)
+
+error  = error - SUM(test2*w_GP)  !difference to initial mean value
+SWRITE(UNIT_StdOut,*)'Error of mean value of polynomial, projected back to big side:',error
+
+END ASSOCIATE !M_0_1,M_0_2,M_1_0,M_2_0
+
+IF(error.GT. 10.*PP_RealTolerance) THEN
+  CALL abort(__STAMP__,&
+    'problems in building Mortar 3',999,error)
 ELSE
   SWRITE(UNIT_StdOut,'(A)')'Mortar operators build successfully.'
 END IF
 
+END SUBROUTINE InitMortarBase
+
+!==================================================================================================================================
+!> Basic Mortar initialization.
+!==================================================================================================================================
+SUBROUTINE InitMortar()
+! MODULES
+USE MOD_Preproc
+USE MOD_Globals
+USE MOD_Mesh_Vars,  ONLY: MeshInitIsDone,nMortarSides
+USE MOD_Mesh_Vars,  ONLY: MortarType,MortarInfo
+USE MOD_Mortar_Vars
+#ifdef JESSE_MORTAR
+USE MOD_Mesh_Vars,  ONLY: NormVec,SurfElem
+USE MOD_FillMortar, ONLY: InterpolateBigToSmall
+#endif /*JESSE_MORTAR*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+#ifdef JESSE_MORTAR
+INTEGER      :: doMPIsides,firstMortarSideID,lastMortarSideID
+INTEGER      :: MortarSideID,iSide
+REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
+#endif /*JESSE_MORTAR*/
+!==================================================================================================================================
+IF(MortarInitIsDone.OR.(.NOT.MeshInitIsDone))THEN
+   CALL CollectiveStop(__STAMP__,&
+     'InitMortar not ready to be called or already called.')
+END IF
+CALL InitMortarArrays()
+
 MortarInitIsDone=.TRUE.
 END SUBROUTINE InitMortar
 
+!==================================================================================================================================
+!> Initialize arrays needed for mortars that depend on the mesh.
+!==================================================================================================================================
+SUBROUTINE InitMortarArrays()
+! MODULES
+USE MOD_Preproc
+USE MOD_Globals
+#ifdef JESSE_MORTAR
+USE MOD_Mesh_Vars,  ONLY: nMortarSides
+USE MOD_Mesh_Vars,  ONLY: MortarType,MortarInfo
+USE MOD_Mesh_Vars,  ONLY: NormVec,SurfElem
+USE MOD_FillMortar, ONLY: InterpolateBigToSmall
+USE MOD_Mortar_Vars
+#endif /*JESSE_MORTAR*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+#ifdef JESSE_MORTAR
+INTEGER      :: doMPIsides,firstMortarSideID,lastMortarSideID
+INTEGER      :: MortarSideID,iSide
+REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
+#endif /*JESSE_MORTAR*/
+!==================================================================================================================================
+!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
+
+#ifdef JESSE_MORTAR
+ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
+U_small=-HUGE(1.)
+ALLOCATE(delta_flux_jesse(PP_nVar,0:PP_N,0:PP_N,nMortarSides)) 
+delta_flux_jesse=-HUGE(1.)
+
+ALLOCATE(Ns_small(1:3   ,0:PP_N,0:PP_N,-2:4,nMortarSides))
+Ns_small=-HUGE(1.)
+DO iSide=1,nMortarSides
+    MortarSideID=MortarInfo(MI_SIDEID,0,iSide)
+    Ns_loc(1,:,:)=NormVec(1,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    Ns_loc(2,:,:)=NormVec(2,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    Ns_loc(3,:,:)=NormVec(3,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
+    CALL InterpolateBigToSmall(3,MortarType(1,MortarSideID),Ns_loc,Ns_small(:,:,:,:,iSide))
+END DO !nMortarSides
+#endif /*JESSE_MORTAR*/
+END SUBROUTINE InitMortarArrays
 
 !==================================================================================================================================
 !> Build 1D operators for non-conforming interfaces:
@@ -171,6 +326,7 @@ END DO
 !            in hand-written matrix multiplications. For the use with the intrinsic MATMUL, they must be transposed.
 M_1_0=TRANSPOSE(M_1_0)
 M_2_0=TRANSPOSE(M_2_0)
+
 END SUBROUTINE MortarBasis_SmallToBig_Collocation
 
 !==================================================================================================================================
@@ -237,10 +393,27 @@ SUBROUTINE FinalizeMortar()
 USE MOD_Mortar_Vars
 IMPLICIT NONE
 !==================================================================================================================================
-SDEALLOCATE(M_0_1)
-SDEALLOCATE(M_0_2)
-SDEALLOCATE(M_1_0)
-SDEALLOCATE(M_2_0)
+SDEALLOCATE(Mint)
+SDEALLOCATE(Mint_h)
+SDEALLOCATE(Mproj)
+SDEALLOCATE(Mproj_h)
+CALL FinalizeMortarArrays()
+
 END SUBROUTINE FinalizeMortar
+
+!==================================================================================================================================
+!> Deallocate mortar arrays that depend on the mesh.
+!==================================================================================================================================
+SUBROUTINE FinalizeMortarArrays()
+! MODULES
+USE MOD_Mortar_Vars
+IMPLICIT NONE
+!==================================================================================================================================
+#ifdef JESSE_MORTAR
+SDEALLOCATE(U_small)
+SDEALLOCATE(Ns_small)
+#endif /*JESSE_MORTAR*/
+
+END SUBROUTINE FinalizeMortarArrays
 
 END MODULE MOD_Mortar

@@ -614,6 +614,9 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1; //MortarType
             i = 2;
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID;
+            i = 1;
+            jIndex=0;
+            MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = BigSideID;
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
@@ -630,9 +633,9 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int PFlip = orientation;
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
                     i = 1;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
+                    MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = 0 * flip;
+                    MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = 0 * flip;
                 } else {
                     /// Use GHOST DATA
                     int ghostid = side[iSmallSides]->is.hanging.quadid[j];
@@ -646,9 +649,9 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
 
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
                     i = 1;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
+                    MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = flip;//Not Zero
+                    MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = flip;//Not Zero
 
                 }
             }

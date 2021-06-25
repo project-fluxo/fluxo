@@ -114,6 +114,7 @@ USE MOD_PreProc
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 #endif
 USE MOD_Equation_Vars  ,ONLY:nAuxVar
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -130,7 +131,7 @@ INTEGER   :: i,j,k,l
 !==================================================================================================================================
 
 !opt_v1
-CALL EvalUaux(U_in,Uaux)
+CALL EvalUaux(nTotal_vol,U_in,Uaux)
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
   !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
@@ -177,25 +178,25 @@ END SUBROUTINE EvalAdvFluxAverage3D
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
 !==================================================================================================================================
-PURE SUBROUTINE EvalUaux(Uin,Uaux)
+PURE SUBROUTINE EvalUaux(np,Uin,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar
 USE MOD_Equation_Vars ,ONLY:kappaM1,KappaM2,s2mu_0
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: Uin
+INTEGER                     ,INTENT(IN)  :: np !size of input/output arrays
+REAL,DIMENSION(PP_nVar,1:np),INTENT(IN)  :: Uin
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,DIMENSION(nAuxVar,1:nTotal_vol),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
+REAL,DIMENSION(nAuxVar,1:np),INTENT(OUT) :: Uaux   !< auxiliary variables:(srho,v1,v2,v3,p_t,|v|^2,|B|^2,v*b
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i 
 REAL                :: srho,vel(1:3),v2,B2
 !==================================================================================================================================
-DO i=1,nTotal_vol
+DO i=1,np
   ! auxiliary variables
   srho = 1./Uin(1,i) 
   vel  = Uin(2:4,i)*srho

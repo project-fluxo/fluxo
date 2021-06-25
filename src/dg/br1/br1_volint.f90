@@ -49,11 +49,6 @@ USE MOD_DG_Vars            ,ONLY:D_T,U
 USE MOD_Mesh_Vars          ,ONLY:nElems,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde   ! metrics
 USE MOD_PreProc
 USE MOD_Flux               ,ONLY: EvalLiftingVolumeFlux
-!#if PP_Lifting_Var==2
-!USE MOD_Equation_Vars, ONLY: ConsToPrimVec
-!#elif PP_Lifting_Var==3
-!USE MOD_Equation_Vars, ONLY: ConsToEntropyVec
-!#endif /*PP_Lifting_Var**/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
