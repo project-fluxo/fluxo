@@ -160,7 +160,7 @@ IniDisturbance= GETREAL('IniDisturbance','0.')
 
 
 ! Gas constants
-Kappa    =GETREAL('kappa','1.4')
+Kappa    =GETREAL('kappa','1.6666666666666667')
 KappaM1  =Kappa-1.
 KappaM2  =Kappa-2.
 sKappaM1 =1./KappaM1
