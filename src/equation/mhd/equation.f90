@@ -1677,7 +1677,7 @@ DO icase=0,nCases
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
 #ifdef PP_GLM
   CASE(8)
-    fluxProc => EntropyStableDerigsFlux_Derigs
+    fluxProc => EntropyStableDerigsFlux
     fluxName = "9Wave EntropyStableDerigsFlux"
 #endif
   END SELECT
