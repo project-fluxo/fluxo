@@ -590,7 +590,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
         int BigFace = side[iBigSide]->face;
         int SmallFace = side[iSmallSides]->face;
         p4est_inner_data_t *Bigdataquad;
-        if (side[iBigSide]->is.full.is_ghost == 0) {
+        if (side[iBigSide]->is.full.is_ghost == 0) { // Big side is not MPI
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *) quad->p.user_data;
             int BigSideID = dataquad->SidesID[BigFace];
@@ -611,15 +611,16 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
 
 
             i = 1;
-            MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1; //MortarType
+            MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1;      // MortarType(1,:)=1: Four small sides in mortar
             i = 2;
-            MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID;
+            MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID; // MortarType(2,:):= Position in MortarInfo array
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) {
-
+                if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) { 
+                    // Small side is not MPI
+                    
                     quad = side[iSmallSides]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *) quad->p.user_data;
                     int iSide = dataquad->SidesID[SmallFace];
@@ -634,7 +635,8 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     i = 2;
                     MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = 0 * flip;
                 } else {
-                    /// Use GHOST DATA
+                    // Small side is MPI (Use GHOST DATA)
+                    
                     int ghostid = side[iSmallSides]->is.hanging.quadid[j];
                     int iSide = ghost_data[ghostid].SidesID[SmallFace];
                     int flip = ghost_data[ghostid].flips[SmallFace];
@@ -643,8 +645,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
-
-                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
+                    
                     i = 1;
                     MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
                     i = 2;
@@ -653,7 +654,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                 }
             }
 
-        } else {
+        } else { // Big side is MPI
 
         }
 
@@ -1232,43 +1233,48 @@ int GetNElems(p4est_t *p4est){
 void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     // Allocate EtS and StE
     int i, j, iElem, iSide;
-    i = 1;
-    int nElems = p4est_fortran_data->nElems;
     int nSides = p4est_fortran_data->nSides;
+    
     p4est_inner_data_t *ghost_data = p4est_fortran_data->ghost_data_ptr;
     p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr;
 
     int *EtS = p4est_fortran_data->EtSPtr;//= (int *)malloc(2 * 6 * nElems * sizeof(int));
-
+    
+    // Initialize SideToElem array
     int *StE = p4est_fortran_data->StEPtr;//! = (int *)malloc(5 * nSides * sizeof(int));
-    StE[1] = -1;
-
-    for (iSide = 1; iSide <= nSides; ++iSide)
+    for (iSide = 1; iSide <= nSides; ++iSide){
         for (i = 1; i <= 5; i++) {
             StE[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
+    }
 
-    // Now Mortar Type
+    // Initialize MortarType array
     int *MoTy = p4est_fortran_data->MTPtr;//! = (int *)malloc(2 * nSides * sizeof(int));
-    for (iSide = 1; iSide <= nSides; ++iSide)
+    for (iSide = 1; iSide <= nSides; ++iSide){
         for (i = 1; i <= 2; i++) {
             MoTy[(iSide - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
+    }
 
-    // Now MortarInfo
+    // Initialize MortarInfo array
     int nMortarSides = p4est_fortran_data->nMortarInnerSides + p4est_fortran_data->nMortarMPISides;
 
     int *MoInf = p4est_fortran_data->MIPtr = (int *) malloc(2 * 4 * nMortarSides * sizeof(int));
-    for (iSide = 1; iSide <= nMortarSides; ++iSide)
-        for (i = 1; i <= 2; i++)
-            for (j = 1; i <= 4; i++) {
+    for (iSide = 1; iSide <= nMortarSides; ++iSide){
+        for (j = 1; j <= 4; j++) {
+            for (i = 1; i <= 2; i++){
                 MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
             }
-
+        }
+    }
+    
+    // Initialize BC array
     int *BCs = p4est_fortran_data->BCs = (int *) malloc(p4est_fortran_data->nBCSides * sizeof(int32_t));
     for (iSide = 1; iSide <= p4est_fortran_data->nBCSides; ++iSide) {
         BCs[iSide - 1] = -1;
     }
+    
+    // Now iterate to fill the arrays
     p4est->user_pointer = (void *) ghost_data;
     p4est_iterate(p4est,                      /* the forest */
                   ghost,                      /* the ghost layer May be LAter!!! */
