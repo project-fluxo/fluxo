@@ -66,8 +66,8 @@ PUBLIC :: RiemannSolverByRoe
 PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
 #ifdef PP_GLM
-PUBLIC :: EntropyStable9WaveFlux
-PUBLIC :: EntropyStable9WaveFlux_VolFluxAndDissipMatrices
+PUBLIC :: EntropyStableDerigsFlux
+PUBLIC :: EntropyStableDerigsFlux_VolFluxAndDissipMatrices
 PUBLIC :: EntropyStableFloGorFlux
 PUBLIC :: EntropyStableFloGorFlux_VolFluxAndDissipMatrices
 #endif
@@ -1221,7 +1221,7 @@ END SUBROUTINE EntropyStableByLLF
 !>            2) mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t)
 !>            3) Dissipation for each characteristic wave seperately
 !==================================================================================================================================
-pure SUBROUTINE EntropyStable9WaveFlux(UL,UR,Fstar)
+pure SUBROUTINE EntropyStableDerigsFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
@@ -1273,18 +1273,18 @@ V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
-call EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+call EntropyStableDerigsFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
 RT = TRANSPOSE(Rmatrix)
 
 ! Compute entropy-stable fluxes
 Fstar = Fstar - 0.5*MATMUL(Rmatrix,Dmatrix*MATMUL(RT,V_jump))
 
 END ASSOCIATE
-END SUBROUTINE EntropyStable9WaveFlux
+END SUBROUTINE EntropyStableDerigsFlux
 !==================================================================================================================================
 !> Computation of the entropy conserving flux and the dissipation matrices for the entropy stable 9wave solver
 !==================================================================================================================================
-pure subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
+pure subroutine EntropyStableDerigsFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
   USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1, Kappa
   USE MOD_Flux_Average, ONLY:LN_MEAN
 #ifdef PP_GLM
@@ -1619,7 +1619,7 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
     ! Scale D matrix
     Dmatrix = Dmatrix*Tmatrix
 end ASSOCIATE
-end subroutine EntropyStable9WaveFlux_VolFluxAndDissipMatrices
+end subroutine EntropyStableDerigsFlux_VolFluxAndDissipMatrices
 #endif
 
 

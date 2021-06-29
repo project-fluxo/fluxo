@@ -100,10 +100,10 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "4: HLL, "//&
                                            "5: HLLD (only with mu_0=1), "//&
                                            "10: LLF entropy stable flux, "//&
-                                           "11: entropy conservative flux,"//&
+                                           "11: Derigs et al. entropy conservative flux,"//&
                                            "12: FloGor entropy conservative flux,"//&
                                            "13: FloGor EC+LLF entropy stable flux,"//&
-                                           "14: 9wave entropy stable flux,"//&
+                                           "14: Derigs EC + 9wave entropy stable flux,"//&
                                            "15: FloGor EC + 9wave entropy dissipation flux")
 
 #if (PP_DiscType==2)
@@ -111,7 +111,7 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
                                               "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: entropy conservative flux with metric dealiasing" //&
+                                              "10: Derigs er al. entropy conservative flux with metric dealiasing" //&
                                               "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
@@ -307,16 +307,16 @@ CASE(5)
   'HLLD solver only for mu_0=1 implemented!')
   SolveRiemannProblem => RiemannSolverByHLLD
 CASE(10)
-  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Entropy Stable flux'
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Derigs et al. Entropy Stable LLF flux'
 #ifndef PP_GLM
   CALL abort(__STAMP__,&
    'Entropy Stable flux can currently only be run with GLM!!!')
 #endif
-  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_Derigs
   SolveRiemannProblem => EntropyStableByLLF
 CASE(11)
-  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: KEPEC flux, no diffusion!'
-  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Derigs et al. KEPEC flux, no diffusion!'
+  SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_Derigs
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor
@@ -325,11 +325,11 @@ CASE(13)
   VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor
   SolveRiemannProblem => EntropyStableByLLF
 CASE(14)
-  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: 9 wave entropy stable flux!'
+  SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Derigs KEPEC flux + 9wave entropy stable flux!'
 #ifdef PP_GLM
-  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux
-  SolveRiemannProblem => EntropyStable9WaveFlux
-  RiemannVolFluxAndDissipMatrices => EntropyStable9WaveFlux_VolFluxAndDissipMatrices
+  VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_Derigs
+  SolveRiemannProblem => EntropyStableDerigsFlux
+  RiemannVolFluxAndDissipMatrices => EntropyStableDerigsFlux_VolFluxAndDissipMatrices
 #else
   CALL abort(__STAMP__,&
    'Entropy Stable 9 wave flux can currently only be run with GLM!!!')
@@ -378,7 +378,7 @@ CASE(1)
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: KEPEC with Metrics Dealiasing'
-  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec
+  VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
@@ -1666,19 +1666,19 @@ DO icase=0,nCases
     fluxProc => RiemannSolverByHLLD
     fluxName = "RiemannSolverByHLLD"
   CASE(5)
-    fluxProc => EntropyAndKinEnergyConservingFlux
-    fluxName = "EntropyAndKinEnergyConservingFlux"
+    fluxProc => EntropyAndKinEnergyConservingFlux_Derigs
+    fluxName = "Derigs et al. EntropyAndKinEnergyConservingFlux"
   CASE(6)
-    VolumeFluxAverage => EntropyAndKinEnergyConservingFlux !needed by EntropyStableByLLF
+    VolumeFluxAverage => EntropyAndKinEnergyConservingFlux_Derigs !needed by EntropyStableByLLF
     fluxProc => EntropyStableByLLF
-    fluxName = "EntropyStableByLLF"
+    fluxName = "Derigs et al. EntropyStableByLLF"
   CASE(7)
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
 #ifdef PP_GLM
   CASE(8)
-    fluxProc => EntropyStable9WaveFlux
-    fluxName = "EntropyStable9WaveFlux"
+    fluxProc => EntropyStableDerigsFlux_Derigs
+    fluxName = "9Wave EntropyStableDerigsFlux"
 #endif
   END SELECT
   !CONSISTENCY
@@ -1762,8 +1762,8 @@ DO icase=0,3
     fluxProc => StandardDGFluxDealiasedMetricVec
     fluxName = "StandardDGFluxDealiasedMetricVec"
   CASE(2)
-    fluxProc => EntropyandKinEnergyConservingFluxVec
-    fluxName = "EntropyandKinEnergyConservingFluxVec"
+    fluxProc => EntropyandKinEnergyConservingFluxVec_Derigs
+    fluxName = "Derigs et al. EntropyandKinEnergyConservingFluxVec"
   CASE(3)
     fluxProc => EntropyandKinEnergyConservingFluxVec_FloGor
     fluxName = "FloGor EntropyandKinEnergyConservingFluxVec"
