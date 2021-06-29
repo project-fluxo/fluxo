@@ -314,7 +314,15 @@ def job_definition():
       } 
    # Entropy stability test with EC flux and LLF (with and without shock-capturing)
    run_opt_entropyStab={'runs/mhd/softBlast/entropyStab':
-         {'tags': ['mhd','entropyCons','conforming'] ,
+         {'tags': ['mhd','entropyStab','conforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }  
+   # Entropy stability test with EC flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab_FloGor9waves={'runs/mhd/softBlast/entropyStab_FloGor9waves':
+         {'tags': ['mhd','entropyStab','conforming','FloGor'] ,
           'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
@@ -363,7 +371,7 @@ def job_definition():
    caseID=caseID+1
    jobs['mhd_split_glm_noncons_br1entr_ecvolflux_testcase_mhdeq']={
           'case': caseID ,
-          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux'] ,
+          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux','FloGor'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -376,10 +384,12 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'12',
                         'FLUXO_TESTCASE'         :'mhd_equilibrium'
                        },
-          'run_opts': {**run_opt_fsp_conf, 
+          'run_opts': {
+                       **run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -561,11 +571,13 @@ def job_definition():
                         'FLUXO_SHOCKCAP_NFVSE'   :'ON',
                         'FLUXO_SHOCKINDICATOR'   :'custom',
                        },
-          'run_opts': {**run_opt_fsp_conf,
+          'run_opts': {
+                       **run_opt_fsp_conf,
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       },
 
          }
@@ -731,7 +743,16 @@ def job_definition():
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
          },
-      } 
+      }
+   # Entropy conservation test with Ranocha EC-KEP flux (with and without shock-capturing)
+   run_opt_entropyCons_Ranocha={'runs/navst/softBlast/entropyCons_Ranocha':
+         {'tags': ['navierstokes','entropyCons','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      }
+
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['navierstokes_type1_br1_GL']={
@@ -858,6 +879,7 @@ def job_definition():
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
                      **run_opt_entropyStab,
+                     **run_opt_entropyCons_Ranocha,
                     }
       
       jobs['build_navierstokes_type2_nopara_volFlux_'+volflux]={

@@ -47,12 +47,12 @@ INTERFACE StandardDGFluxDealiasedMetricVec
   MODULE PROCEDURE StandardDGFluxDealiasedMetricVec
 END INTERFACE
 
-INTERFACE EntropyandKinEnergyConservingFlux
-  MODULE PROCEDURE EntropyandKinEnergyConservingFlux
+INTERFACE EntropyandKinEnergyConservingFlux_Derigs
+  MODULE PROCEDURE EntropyandKinEnergyConservingFlux_Derigs
 END INTERFACE
 
-INTERFACE EntropyandKinEnergyConservingFluxVec
-  MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec
+INTERFACE EntropyandKinEnergyConservingFluxVec_Derigs
+  MODULE PROCEDURE EntropyandKinEnergyConservingFluxVec_Derigs
 END INTERFACE
 
 INTERFACE EntropyandKinEnergyConservingFlux_FloGor
@@ -78,8 +78,8 @@ PUBLIC::AddNonConsFluxVec
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
 PUBLIC::StandardDGFluxDealiasedMetricVec
-PUBLIC::EntropyandKinEnergyConservingFlux
-PUBLIC::EntropyandKinEnergyConservingFluxVec
+PUBLIC::EntropyandKinEnergyConservingFlux_Derigs
+PUBLIC::EntropyandKinEnergyConservingFluxVec_Derigs
 PUBLIC::EntropyandKinEnergyConservingFlux_FloGor
 PUBLIC::EntropyandKinEnergyConservingFluxVec_FloGor
 PUBLIC::LN_MEAN
@@ -93,7 +93,7 @@ PUBLIC::LN_MEAN
 #elif PP_VolFlux==1
 #  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
 #elif PP_VolFlux==10
-#  define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec
+#  define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec_Derigs
 #elif PP_VolFlux==12
 #  define PP_VolumeFluxAverageVec EntropyandKinEnergyConservingFluxVec_FloGor
 #endif
@@ -584,7 +584,7 @@ END SUBROUTINE StandardDGFluxDealiasedMetricVec
 !> following D.Dergs et al."a novel Entropy consistent nine-wave field divergence diminishing ideal MHD system" 
 !> mu_0 added, total energy contribution is 1/(2mu_0)(|B|^2+psi^2), in energy flux: 1/mu_0*(B.B_t + psi*psi_t) 
 !==================================================================================================================================
-PURE SUBROUTINE EntropyAndKinEnergyConservingFlux(UL,UR,Fstar)
+PURE SUBROUTINE EntropyAndKinEnergyConservingFlux_Derigs(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:kappaM1,skappaM1,smu_0
@@ -675,7 +675,7 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R))  &
                    )
 
 END ASSOCIATE 
-END SUBROUTINE EntropyAndKinEnergyConservingFlux
+END SUBROUTINE EntropyAndKinEnergyConservingFlux_Derigs
 
 
 !==================================================================================================================================
@@ -685,7 +685,7 @@ END SUBROUTINE EntropyAndKinEnergyConservingFlux
 !> firectly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
 !> for curved metrics, 1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
-PURE SUBROUTINE EntropyAndKinEnergyConservingFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+PURE SUBROUTINE EntropyAndKinEnergyConservingFluxVec_Derigs(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars,ONLY:nAuxVar
@@ -772,7 +772,7 @@ Fstar(5) = Fstar(1)*0.5*(skappaM1/betaLN - 0.5*(v2_L+v2_R)) &
 #endif
                   )
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
-END SUBROUTINE EntropyAndKinEnergyConservingFluxVec
+END SUBROUTINE EntropyAndKinEnergyConservingFluxVec_Derigs
 
 !==================================================================================================================================
 !> entropy conservation for MHD, kinetric Energy conservation only in the Euler case

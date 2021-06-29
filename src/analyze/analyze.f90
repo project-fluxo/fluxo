@@ -406,10 +406,6 @@ END IF  !(doCalcMeanFlux)
 ! Attention: during the initialization phase no face data / gradients available!
 !END IF
 
-CALL AnalyzeEquation(Time)
-
-CALL AnalyzeTestcase(Time)
-
 #if NFVSE_CORR
 ! If we are doing NFVSE_CORR, record the maximum alpha since the last analyze
 IF(MPIroot) THEN
@@ -470,6 +466,10 @@ IF(MPIroot) THEN
 END IF
 #endif /*SHOCK_NFVSE*/
 
+
+CALL AnalyzeEquation(Time)
+
+CALL AnalyzeTestcase(Time)
 
 IF(MPIroot.AND.doAnalyzeToFile) CALL AnalyzeToFile(Time,CalcTime,iter)
 
