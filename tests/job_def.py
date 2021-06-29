@@ -371,7 +371,7 @@ def job_definition():
    caseID=caseID+1
    jobs['mhd_split_glm_noncons_br1entr_ecvolflux_testcase_mhdeq']={
           'case': caseID ,
-          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux'] ,
+          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux','FloGor'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -384,10 +384,12 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'12',
                         'FLUXO_TESTCASE'         :'mhd_equilibrium'
                        },
-          'run_opts': {**run_opt_fsp_conf, 
+          'run_opts': {
+                       **run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -513,7 +515,6 @@ def job_definition():
       if vvv==1 or vvv==2:
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
-                     **run_opt_entropyStab_FloGor9waves,
                     }
       
       jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
@@ -570,11 +571,13 @@ def job_definition():
                         'FLUXO_SHOCKCAP_NFVSE'   :'ON',
                         'FLUXO_SHOCKINDICATOR'   :'custom',
                        },
-          'run_opts': {**run_opt_fsp_conf,
+          'run_opts': {
+                       **run_opt_fsp_conf,
                        **run_opt_fsp_nonconf,
                        **run_opt_fsp_SC_first,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       },
 
          }
