@@ -501,7 +501,11 @@ Elm_iter(p4est_iter_volume_info_t *info, void *user_data) {
 
 }
 
-
+//////////////////////////////////////////////////////////
+// SetElementToSide_iter: 
+//  * Fills the ElementToSide AND ALSO the SideToElement array
+//  * Is called for each p4est quad
+//////////////////////////////////////////////////////////
 static void
 SetElementToSide_iter(p4est_iter_volume_info_t *info, void *user_data) {
     int i, j;
@@ -545,6 +549,11 @@ SetElementToSide_iter(p4est_iter_volume_info_t *info, void *user_data) {
     return;
 }
 
+//////////////////////////////////////////////////////////
+// SetSideToElement_iter: 
+//  * Fills the MortarType, MortarInfo, and BC arrays
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j;
@@ -564,9 +573,8 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
     int which_face, iSide;
     p4est_iter_face_side_t *side[2];
     sc_array_t *sides = &(info->sides);
-
-    int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
-
+    
+    // Check if this is a boundary face. If it is, fill the BC array
     if (sides->elem_count == 1) //Or sides->elem_num == 1
     {
 
@@ -581,33 +589,38 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
 
         return;
     }
+    
+    // Check if this is a non-conforming face. If it is, fill the MortarInfo and MortarType arrays
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     if (side[0]->is_hanging || side[1]->is_hanging) { //TODO: Complete Mortar Faces
+        // This is a non-conforming face
 
         iBigSide = side[0]->is_hanging ? 1 : 0;
         iSmallSides = side[1]->is_hanging ? 1 : 0;
         int BigFace = side[iBigSide]->face;
         int SmallFace = side[iSmallSides]->face;
         p4est_inner_data_t *Bigdataquad;
-        if (side[iBigSide]->is.full.is_ghost == 0) { // Big side is not MPI
+        if (side[iBigSide]->is.full.is_ghost == 0) {
+            // The mortar (big) side belongs to the current processor
+            
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *) quad->p.user_data;
             int BigSideID = dataquad->SidesID[BigFace];
             int ADD = 0;
-            int firstMortarInnerSide = 1 + data->nBCSides; //1
-            int firstInnerSide = firstMortarInnerSide + data->nMortarInnerSides; //1 + 0 = 1
-            int firstMPISide = firstInnerSide + data->nInnerSides; // 1 + 8 = 9 
-            int firstMortarMPISide = firstMPISide + data->nMPISides; // 9 + 14 = 21
-            int lastMortarInnerSide = firstInnerSide - 1; // = 0
+            int firstMortarInnerSide = 1 + data->nBCSides;
+            int firstInnerSide = firstMortarInnerSide + data->nMortarInnerSides;
+            int firstMPISide = firstInnerSide + data->nInnerSides;
+            int firstMortarMPISide = firstMPISide + data->nMPISides;
+            int lastMortarInnerSide = firstInnerSide - 1;
             if (BigSideID <= lastMortarInnerSide) { //Inner Mortar
                 ADD = firstMortarInnerSide;
             } else {   //MPI Mortar
-                ADD = firstMortarMPISide - data->nMortarInnerSides; // 21 - 0 = 21
+                ADD = firstMortarMPISide - data->nMortarInnerSides;
             }
 
 
-            int SideID = BigSideID + 1 - ADD; //  1 + 1 - 21 = -19 Index for MPI Sides
+            int SideID = BigSideID + 1 - ADD; // Mortar index in MortarInfo array
 
 
             i = 1;
@@ -616,7 +629,9 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID; // MortarType(2,:):= Position in MortarInfo array
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
+            
+            // Loop over the small sides and assign MortarInfo
+            for (j = 0; j < P8EST_HALF; j++)
             {
                 if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) { 
                     // Small side is not MPI
@@ -630,6 +645,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
+                    
                     i = 1;
                     MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
                     i = 2;
@@ -654,16 +670,22 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                 }
             }
 
-        } else { // Big side is MPI
-
+        } else { 
+            // The mortar (big) side belongs to another processor: Do nothing...
         }
 
         return;
     } else {
+        // This is a conforming face: Do nothing...
         return;
     }
 }
 
+//////////////////////////////////////////////////////////
+// SidesCounter_iter: 
+//  * Counts nSides, nBCSides, nMPISides, nInnerSides, nMortarInnerSides, and nMortarMPISides
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j, iBigSide = 0, iSmallSide = 0;
@@ -677,7 +699,7 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     sc_array_t *sides = &(info->sides);
 
     if (sides->elem_count == 1) {
-
+        // This is a boundary face
         data->nSides++;
         data->nBCSides++;
         return;
@@ -686,20 +708,20 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
     if (side[0]->is_hanging || side[1]->is_hanging) {
-        //One Side is Mortar
+        // This is a non-conforming face
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
 
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
+        if (side[iBigSide]->is.full.is_ghost == 0)
         {
-
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
+            // The mortar (big) side belongs to the current processor
+            for (j = 0; j < P8EST_HALF; j++) //Check if the small sides are MPI
             {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
                     ghost++;
                 }
             }
-            if (ghost == 0) //There is no small mpi sides. Add Mortar inner side
+            if (ghost == 0) //There are no small mpi sides. Add Mortar inner side
             {
                 data->nMortarInnerSides++;
             } else //One or more small mpi sides. Add Big side as MPIMortar
@@ -710,7 +732,9 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
             data->nSides += 4;              //Total nmber of sides
             data->nSides++;                 //Add also a MortarSide to nSides
             data->nInnerSides += 4 - ghost; //Number of inner sides
-        } else { //We use only 4 small sides and don't take into account the big side
+        } else { 
+            // The mortar (big) side belongs to another processor
+            // ... We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
@@ -721,32 +745,28 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
             data->nSides += (4 - ghost);    //Small sides are MPI sides. Ghost is for another proc.
             data->nMPISides += (4 - ghost); //Small sides  are MPI Sides
         }
-    } else //Then it is a one side
+    } else //Then it is a conforming side
     {
 
         if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost) {
-            //Debug
-            int SideIn = 0;
-            int SideGhost = 1;
-            if (side[0]->is.full.is_ghost) {
-                SideIn = 1;
-                SideGhost = 0;
-            }
-            quad = side[SideIn]->is.full.quad;
-            dataquad = (p4est_inner_data_t *) quad->p.user_data;
-            //Debug
+            // This is an MPI side
             data->nSides++;
             data->nMPISides++;
 
-        } else //Not Ghost
+        } else 
         {
+            // This is an inner side
             data->nSides++;
             data->nInnerSides++;
         }
     }
 }
 
-
+//////////////////////////////////////////////////////////
+// SidesCounter2_iter: 
+//  * Counts the number of MPI sides that are shared with each neighbor processor (nMPISidesCount[proc])
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j, iBigSide = 0, iSmallSide = 0;
@@ -758,7 +778,6 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     int ghost = 0;
     p4est_iter_face_side_t *side[2];
     sc_array_t *sides = &(info->sides);
-    int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
 
     if (sides->elem_count == 1) {
 
@@ -768,13 +787,13 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
     if (side[0]->is_hanging || side[1]->is_hanging) {
-        //One Side is Mortar
+        // This is a non-conforming face
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
 
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
+        if (side[iBigSide]->is.full.is_ghost == 0) 
         {
-
+            // The mortar (big) side belongs to the current processor
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
@@ -784,7 +803,9 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
                 }
             }
 
-        } else { //We use only 4 small sides and don't take into account the big side
+        } else { 
+            // The mortar (big) side belongs to another processor
+            // ... We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
@@ -795,14 +816,12 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
             }
 
         }
-    } else //Then it is a one side
+    } else 
     {
-
+      // It is a conforming face/side
         if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost) {
-            int SideIn = 0;
             int SideGhost = 1;
             if (side[0]->is.full.is_ghost) {
-                SideIn = 1;
                 SideGhost = 0;
             }
             int ghostid = side[SideGhost]->is.full.quadid;
@@ -813,7 +832,7 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// This function is used to sed SideID from 1 to nMPISides_Proc(iNbProc) for every 
+// This function is used to set SideID from 1 to nMPISides_Proc(iNbProc) for every 
 // NB Processor. Then it is used with shifting to setup the correct number
 //
 //
@@ -1295,7 +1314,6 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
 }
 
 void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
-    int i1, j1 = 0, k1 = 0;
     int rank = 0;
     p4est_locidx_t local_num_quad, num_ghost = 0;
 

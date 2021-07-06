@@ -502,6 +502,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           
 #endif  /*MPI*/
   
+! ==========================================================================
+! Count and organize sides (nSides, nMPISides_MINE, nMPISides_YOUR, etc.)
+! ==========================================================================
   CALL GetData(p4est_ptr,DATAPtr)
 
 #if MPI
