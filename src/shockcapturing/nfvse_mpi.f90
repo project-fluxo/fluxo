@@ -50,15 +50,15 @@ contains
       end if
     end do
     
-    call Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.FALSE.)
 #if MPI
     call Start_BlendCoeff_MPICommunication()
 #endif /*MPI*/
+    call Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.FALSE.)
     
   end subroutine ProlongBlendingCoeffToFaces
 !===================================================================================================================================
 !> Propagate the blending coefficient to the neighbor elements
-!> -> First the routine makes sure that all the MPI communication is done
+!> -> First the routine makes sure that the MPI communication is done
 !> -> Then, the blending coefficient is set to alpha = max (alpha, alpha_neighbor)
 !===================================================================================================================================
   subroutine PropagateBlendingCoeff()
