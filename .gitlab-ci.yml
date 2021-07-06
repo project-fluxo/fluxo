@@ -45,7 +45,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Debug"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_intel_build: &IPP_setup_intel_build
   variables:
@@ -57,7 +57,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_intel ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Debug"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_gnu: &IPP_setup_gnu
   variables:
@@ -68,7 +68,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Debug"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_IPP_setup_gnu_build: &IPP_setup_gnu_build
   variables:
@@ -80,7 +80,7 @@ variables:
   before_script:
     - . ~/environments/modules_for_fluxo_gnu ; pwd
     - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Debug"
+    - export NIGHTLYBUILDMODE="Release"
 
 .job_PCM_setup_gnu: &PCM_setup_gnu
   variables:
