@@ -350,6 +350,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #if SHOCKCAPTURE
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
 #endif /*SHOCKCAPTURE*/
+  use MOD_Equation,           only: InitEquationAfterAdapt
   USE, INTRINSIC :: ISO_C_BINDING
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! ARGUMENTS
@@ -756,7 +757,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   call FinalizePositivityPreservation()
   call InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
-
+  call InitEquationAfterAdapt()
 ! =========
 ! Finish up
 ! =========  

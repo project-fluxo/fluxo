@@ -27,6 +27,10 @@ INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
 
+INTERFACE InitEquationAfterAdapt
+MODULE PROCEDURE InitEquationAfterAdapt
+END INTERFACE
+
 INTERFACE FillIni
   MODULE PROCEDURE FillIni
 END INTERFACE
@@ -44,6 +48,7 @@ INTERFACE FinalizeEquation
 END INTERFACE
 
 PUBLIC:: InitEquation
+PUBLIC:: InitEquationAfterAdapt
 PUBLIC:: SetRiemannSolver
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
@@ -263,8 +268,24 @@ EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MHD DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
-
-
+!==================================================================================================================================
+!> Reinitialize equation after mesh adaptation
+!==================================================================================================================================
+SUBROUTINE InitEquationAfterAdapt()
+! MODULES
+USE MOD_Equation_Vars,ONLY: GLM_init
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+#ifdef PP_GLM
+GLM_init=.FALSE.
+#endif /*PP_GLM*/
+END SUBROUTINE InitEquationAfterAdapt
 !==================================================================================================================================
 !> Set the pointer of the riemann solver
 !==================================================================================================================================
