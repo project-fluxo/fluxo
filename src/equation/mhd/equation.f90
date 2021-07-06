@@ -273,7 +273,9 @@ END SUBROUTINE InitEquation
 !==================================================================================================================================
 SUBROUTINE InitEquationAfterAdapt()
 ! MODULES
+#ifdef PP_GLM
 USE MOD_Equation_Vars,ONLY: GLM_init
+#endif /*PP_GLM*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
