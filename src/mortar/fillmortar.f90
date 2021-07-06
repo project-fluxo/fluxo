@@ -65,6 +65,7 @@ CONTAINS
 SUBROUTINE U_Mortar(Uface_master,Uface_slave,doMPISides)
 ! MODULES
 USE MOD_Preproc
+USE MOD_Globals,     ONLY : abort
 USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
@@ -166,6 +167,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         END DO
       END DO
     END DO
+  CASE DEFAULT
+    CALL abort(__STAMP__,&
+               'Wrong mortar type')
   END SELECT ! mortarType(SideID)
  
   !Now save the small sides into master/slave arrays
@@ -215,6 +219,7 @@ END SUBROUTINE U_Mortar
 SUBROUTINE Flux_Mortar(Flux_master,Flux_slave,doMPISides,weak)
 ! MODULES
 USE MOD_Preproc
+USE MOD_Globals,     ONLY : abort
 USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nSides
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide,FS2M
@@ -326,7 +331,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
         END DO !l=1,PP_N
       END DO !p=0,PP_N
     END DO !q=0,PP_N
-
+  CASE DEFAULT
+    CALL abort(__STAMP__,&
+               'Wrong mortar type')
   END SELECT ! mortarType(MortarSideID)
 END DO !MortarSideID
 END SUBROUTINE Flux_Mortar
