@@ -101,7 +101,7 @@ SUBROUTINE DefineParametersAMR()
  CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used\n"//&
                                                         "  0: Use the custom indicator\n"//&
                                                         "  1: Refine the elements in the sphere with r=IniHalfwidthAMR\n"//&
-                                                        "  2: Do nothing",&
+                                                        "  2: Do nothing (needed to restart AMR simulation properly)",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR

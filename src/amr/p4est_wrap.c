@@ -1912,60 +1912,6 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
 
 }
 
-
-void p4est_loadbalancing(p4est_t *p4est, void *user_pointer) {
-    p4est_balance_data_t *data = (p4est_balance_data_t *) user_pointer;
-    int nVar = data->nVar;
-    int PP_N = data->PP_N;
-    int nElems = p4est->local_num_quadrants;
-    data->nElems = 1;// We use this field as a counter
-    int Datasize = data->DataSize;
-    // Try to avoid copying the data
-
-    p4est_t *p4est1 = p4est;//p4est_copy(p4est, 0); // 0 - no data to copy
-
-    p4est_reset_data(p4est1, Datasize, partition_init_fn, user_pointer);
-    int allow_coarsening = 1;
-    p4est_partition(p4est1, allow_coarsening, NULL);
-    // Return values to the two big array
-    p4est1->user_pointer = user_pointer;
-
-    nElems = p4est1->local_num_quadrants;
-    //Create to Array to return to the FLUXO
-    int P1 = PP_N + 1;
-    int P2 = P1 * P1;
-    int P3 = P2 * P1;
-    int Usize = nElems * nVar * P3;
-    int GPsize = nElems * 3 * P3;
-    data->DataSetU = (double *) malloc(Usize * sizeof(double));
-    data->DataSetElem_xGP = (double *) malloc(GPsize * sizeof(double));
-    data->nElems = 1;
-    p4est_iterate(p4est1, /* the forest */
-                  NULL,
-                  NULL,
-                  ReturnData,
-                  NULL,
-                  NULL,
-                  NULL);
-    // The return data is set up
-    p4est_reset_data(p4est1, sizeof(p4est_inner_data_t), NULL, NULL);
-    int nEl = 0;
-    p4est_iterate(p4est1,                     /* the forest */
-                  NULL,                   /* the ghost layer May be LAter!!! */
-                  (void *) &nEl,        /* the synchronized ghost data */
-                  ElementCounterNew_iter, /* callback to compute each quad's
-                                             interior contribution to du/dt */
-                  NULL,                   /* SidesCount_iter,            /* callback to compute each quads'
-                                             faces' contributions to du/du */
-                  NULL,                   /* there is no callback for the
-                                             edges between quadrants */
-                  NULL);
-
-    p4est = p4est1;
-    data->nElems = p4est1->local_num_quadrants;
-    return;
-}
-
 //From Hopest, but was changed to connectivity,  not p4est
 void p4_build_bcs(p8est_connectivity_t *connectivity,
                   p4est_topidx_t num_trees,
