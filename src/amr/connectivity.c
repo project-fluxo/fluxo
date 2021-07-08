@@ -1,5 +1,6 @@
 //!==================================================================================================================================
 //! Copyright (c) 2018 - 2020 Alexander Astanin
+//! Copyright (c) 2018 - 2020 Andrés Rueda
 //!
 //! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 //! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -67,7 +68,7 @@ const int P2H_MortarMap[9][4] = //   !p4est mortar ID, MortarCase -> iMortar CGN
      {1, 2, 3, 4},
      {1, 3, 2, 4},
      {2, 1, 4, 3},
-     {2, 4, 1, 1},
+     {2, 4, 1, 3},
      {4, 2, 3, 1},
      {4, 3, 2, 1},
      {3, 1, 4, 2},

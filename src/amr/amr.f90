@@ -101,7 +101,7 @@ SUBROUTINE DefineParametersAMR()
  CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used\n"//&
                                                         "  0: Use the custom indicator\n"//&
                                                         "  1: Refine the elements in the sphere with r=IniHalfwidthAMR\n"//&
-                                                        "  2: Do nothing",&
+                                                        "  2: Do nothing (needed to restart AMR simulation properly)",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR
@@ -350,6 +350,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #if SHOCKCAPTURE
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
 #endif /*SHOCKCAPTURE*/
+  use MOD_Equation,           only: InitEquationAfterAdapt
   USE, INTRINSIC :: ISO_C_BINDING
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! ARGUMENTS
@@ -502,6 +503,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           
 #endif  /*MPI*/
   
+! ==========================================================================
+! Count and organize sides (nSides, nMPISides_MINE, nMPISides_YOUR, etc.)
+! ==========================================================================
   CALL GetData(p4est_ptr,DATAPtr)
 
 #if MPI
@@ -753,7 +757,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   call FinalizePositivityPreservation()
   call InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
-
+  call InitEquationAfterAdapt()
 ! =========
 ! Finish up
 ! =========  

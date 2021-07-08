@@ -36,6 +36,8 @@ contains
     integer :: sideID, ElemID, nbElemID
     !-------------------------------------------------------------------------------------------------------------------------------
     
+!   First prolong alpha to all non-BC sides!
+!   ----------------------------------------
     do sideID=firstMortarInnerSide, nSides
       ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
       !master sides(ElemID,locSide and flip =-1 if not existing)
@@ -50,7 +52,13 @@ contains
       end if
     end do
     
+!   Fill the small INNER non-conforming sides with the big sides' alpha
+!   ATTENTION: This has to be done before calling Start_BlendCoeff_MPICommunication!!
+!   ---------------------------------------------------------------------------------
     call Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.FALSE.)
+    
+!   Send and receive alpha from master and slave sides
+!   --------------------------------------------------
 #if MPI
     call Start_BlendCoeff_MPICommunication()
 #endif /*MPI*/
@@ -58,7 +66,7 @@ contains
   end subroutine ProlongBlendingCoeffToFaces
 !===================================================================================================================================
 !> Propagate the blending coefficient to the neighbor elements
-!> -> First the routine makes sure that all the MPI communication is done
+!> -> First the routine makes sure that the MPI communication is done
 !> -> Then, the blending coefficient is set to alpha = max (alpha, alpha_neighbor)
 !===================================================================================================================================
   subroutine PropagateBlendingCoeff()

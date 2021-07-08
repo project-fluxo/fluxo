@@ -209,15 +209,14 @@ DO iElem=1,nElems
         Max_Lambda(2)=MAX(Max_Lambda(2),sJ(i,j,k,iElem) &
                       *SQRT(SUM(Metrics_gTilde(:,i,j,k,iElem)*Metrics_gTilde(:,i,j,k,iElem))))
         Max_Lambda(3)=MAX(Max_Lambda(3),sJ(i,j,k,iElem) &
-                          *SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem))))
+                      *SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem))))
   END DO; END DO; END DO ! i,j,k
   GLM_dtch1=MIN(GLM_dtch1,CFLScale*2./SUM(Max_Lambda))
 END DO !iElem
 #if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,GLM_dtch1,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
-SWRITE(UNIT_StdOut,'(A)')       '  GLM correction speed from timestep, (GLM_ch=GLM_scale*GLM_dtch1/dt)'
-SWRITE(UNIT_StdOut,'(A,ES16.7)')'    GLM_dt for ch=1 : ', GLM_dtch1
+SWRITE(UNIT_StdOut,'(A,ES16.7)')'  GLM correction speed from timestep, (GLM_ch=GLM_scale*GLM_dtch1/dt). GLM_dt for ch=1 : ', GLM_dtch1
 
 GLM_init=.TRUE.
 

@@ -90,6 +90,11 @@ subroutine InitialAMRRefinement()
       end do
       call InitData()
     case(2) ! Do nothing
+      allocate (ElemToRefineAndCoarse(1:nElems))
+      ElemToRefineAndCoarse = MinLevel
+      
+      CALL RunAMR(ElemToRefineAndCoarse)
+      deallocate (ElemToRefineAndCoarse)
   end select
 end subroutine
 
