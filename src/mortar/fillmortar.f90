@@ -35,10 +35,6 @@ INTERFACE U_Mortar_Eqn
   MODULE PROCEDURE U_Mortar_Eqn
 END INTERFACE
 
-!INTERFACE InterpolateBigToSmall
-!  MODULE PROCEDURE InterpolateBigToSmall
-!END INTERFACE
-
 INTERFACE Flux_Mortar
   MODULE PROCEDURE Flux_Mortar
 END INTERFACE
@@ -47,7 +43,7 @@ INTERFACE Flux_Cons_Mortar
   MODULE PROCEDURE Flux_Cons_Mortar
 END INTERFACE
 
-PUBLIC::U_Mortar,U_Mortar_Eqn,InterpolateBigToSmall,Flux_Mortar,Flux_Cons_mortar
+PUBLIC::U_Mortar,U_Mortar_Eqn,Flux_Mortar,Flux_Cons_mortar
 
 #ifdef JESSE_MORTAR
 PUBLIC::Fill_delta_flux_jesse
@@ -81,6 +77,7 @@ USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
 USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
 USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+USE MOD_Mortar_Vars, ONLY: InterpolateBigToSmall
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -93,7 +90,7 @@ INTEGER      :: p,q
 INTEGER      :: iMortar,nMortars
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID,iSide,flip
-REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,1:4)
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
@@ -153,12 +150,16 @@ END SUBROUTINE U_Mortar
 SUBROUTINE U_Mortar_Eqn(Uface_master,Uface_slave,doMPISides)
 ! MODULES
 USE MOD_Preproc
-USE MOD_Mortar_Vars, ONLY: U_small
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
 USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
 USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+#if defined(JESSE_MORTAR)
+USE MOD_Mortar_Vars, ONLY: U_small
+#else
+USE MOD_Mortar_Vars, ONLY: InterpolateBigToSmall
+#endif
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -171,7 +172,7 @@ INTEGER      :: p,q
 INTEGER      :: iMortar,nMortars
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID,iSide,flip
-REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,1:4)
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
@@ -185,9 +186,9 @@ END IF !doMPISides
 DO MortarSideID=firstMortarSideID,lastMortarSideID
   iSide=MortarType(2,MortarSideID) !ID in list 1:nMortarSides
 
-#if defined(JESSE_MORTAR) && (defined(navierstokes) || defined(mhd)) 
-  CALL InterpolateBigToSmallEqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small_loc(:,:,:,:))
-  U_small(:,:,:,:,iSide)=U_small_loc
+#if defined(JESSE_MORTAR)
+  CALL InterpolateBigToSmall_ALL_Eqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+  U_small_loc=U_small(:,:,:,1:4,iSide)
 #else
   CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small_loc(:,:,:,:))
 #endif
@@ -213,94 +214,6 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   END DO !iMortar
 END DO !MortarSideID
 END SUBROUTINE U_Mortar_Eqn
-
-
-
-!==================================================================================================================================
-!> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
-!>
-!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
-!>
-!>       eta                eta                  eta                 eta
-!>        ^                  ^                    ^                   ^
-!>        |                  |                    |                   |
-!>    +---+---+          +---+---+            +---+---+           +---+---+
-!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
-!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
-!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
-!>    +---+---+          +---+---+            +---+---+           +---+---+
-!>
-!==================================================================================================================================
-SUBROUTINE InterpolateBigToSmall(ndim1,whichMortarType,Big,Small)
-! MODULES
-USE MOD_Preproc
-USE MOD_Mortar_Vars, ONLY: Mint
-IMPLICIT NONE
-!----------------------------------------------------------------------------------------------------------------------------------
-! INPUT/OUTPUT VARIABLES
-INTEGER, INTENT(IN)  :: ndim1  !< size of first dimension of array
-INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
-REAL,INTENT(IN)      :: Big(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
-REAL,INTENT(INOUT)   :: small(1:ndim1,0:PP_N,0:PP_N,-2:4)
-                                                    !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
-                                                    !< 2-1 mortar: sol. on big (0) and small (1:2)
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER      :: p,q,l,iNb,jNb
-!==================================================================================================================================
-small(:,:,:,0)=Big(:,:,:) !save big mortar solution, too
-
-SELECT CASE(WhichMortarType)
-CASE(1) !1->4
-  !first  split 1 side into two, in eta direction
-  DO jNb=1,2
-    small(:,:,:,jNb-3)=0.
-    DO q=0,PP_N
-      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        DO l=0,PP_N
-          small(:,p,q,jNb-3)=small(:,p,q,jNb-3) +MInt(l,q,jNb)*Big(:,p,l)
-        END DO
-      END DO
-    END DO
-    ! then split each side again into two, now in xi direction
-    DO iNb=1,2
-      small(:,:,:,iNb+2*(jNb-1))=0.
-      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-        DO p=0,PP_N
-          DO l=0,PP_N
-            small(:,p,q,iNb+2*(jNb-1))=small(:,p,q,iNb+2*(jNb-1)) +MInt(l,p,iNb)*small(:,l,q,jNb-3)
-          END DO !l=1,PP_N
-        END DO
-      END DO 
-    END DO !iNb=1,2
-  END DO !jNb=1,2
-
-CASE(2) !1->2 in eta
-  DO jNb=1,2
-    small(:,:,:,jNb)=0.
-    DO q=0,PP_N
-      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        DO l=0,PP_N
-          small(:,p,q,jNb)=small(:,p,q,jNb) +MInt(l,q,jNb)*Big(:,p,l)
-        END DO
-      END DO
-    END DO
-  END DO !jNb=1,2
-
-CASE(3) !1->2 in xi
-  DO iNb=1,2
-    small(:,:,:,iNb)=0.
-    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
-      DO p=0,PP_N
-        DO l=0,PP_N
-          small(:,p,q,iNb)=small(:,p,q,iNb) +MInt(l,p,iNb)*Big(:,l,q)
-        END DO
-      END DO
-    END DO
-  END DO !iNb=1,2
-END SELECT ! mortarType(SideID)
-
-END SUBROUTINE InterpolateBigToSmall
 
 !==================================================================================================================================
 !>  Fills master side from small non-conforming sides, using 1D projection operators Mproj(:,:,1:2)
@@ -477,17 +390,19 @@ END SUBROUTINE Flux_Cons_mortar
 
 
 #ifdef JESSE_MORTAR
-#if defined(navierstokes) || defined(mhd)
 !==================================================================================================================================
 !>  if useEntropyMortar=.TRUE. , Data is transformed to entropy variables before interpolation 
 !>  and transformed back to conservative after interpolation 
 !>  else conservative variables are used
 !>
 !==================================================================================================================================
-SUBROUTINE InterpolateBigToSmallEqn(whichMortarType,BigCons,SmallCons)
+SUBROUTINE InterpolateBigToSmall_ALL_Eqn(whichMortarType,BigCons,SmallCons)
 ! MODULES
 USE MOD_Preproc
+#if defined(navierstokes) || defined(mhd)
 USE MOD_Equation_Vars, ONLY: useEntropyMortar,ConsToEntropyVec,EntropyToConsVec
+#endif
+USE MOD_Mortar_vars, ONLY: InterpolateBigToSmall_ALL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -498,26 +413,29 @@ REAL,INTENT(INOUT)   :: smallCons(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
                                                     !< 2-1 mortar: sol. on big (0) and small (1:2)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL         :: Big(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
-REAL         :: small(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+#if defined(navierstokes) || defined(mhd)
+REAL         :: BigEnt(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
+REAL         :: smallEnt(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
 !==================================================================================================================================
 IF(useEntropyMortar)THEN
-  smallCons(:,:,:,0)=BigCons(:,:,:) !save big mortar solution, too
-  CALL ConsToEntropyVec((PP_N+1)*(PP_N+1),Big,BigCons)
-  CALL InterpolateBigToSmall(PP_nVar,whichMortarType,Big,Small)
+  smallCons(:,:,:,0)=BigCons(:,:,:) !save big mortar Cons solution, too
+  CALL ConsToEntropyVec((PP_N+1)*(PP_N+1),BigEnt,BigCons)
+  CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigEnt,SmallEnt)
   SELECT CASE(WhichMortarType)
   CASE(1) !1->4
-    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,small(:,:,:,-2:1), SmallCons(:,:,:,-2:1))
-    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*4,small(:,:,:, 1:4), SmallCons(:,:,:, 1:4))
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,smallEnt(:,:,:,-2:1), SmallCons(:,:,:,-2:1))
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*4,smallEnt(:,:,:, 1:4), SmallCons(:,:,:, 1:4))
   CASE(2,3) !1->2 in eta,1->2 in xi
-    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,small(:,:,:, 1:2), SmallCons(:,:,:, 1:2))
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,smallEnt(:,:,:, 1:2), SmallCons(:,:,:, 1:2))
   END SELECT ! mortarType(SideID)
 ELSE
-  CALL InterpolateBigToSmall(PP_nVar,whichMortarType,BigCons,SmallCons)
+  CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigCons,SmallCons)
 END IF
-
-END SUBROUTINE InterpolateBigToSmallEqn
+#else 
+CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigCons,SmallCons)
 #endif /* (defined(navierstokes) || defined(mhd)) */
+
+END SUBROUTINE InterpolateBigToSmall_ALL_Eqn
 
 !==================================================================================================================================
 !> Computes the two-point flux correction (Jesse's paper: https://arxiv.org/pdf/2005.03237.pdf) and stores it in "delta_flux_jesse" 

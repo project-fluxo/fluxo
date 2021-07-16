@@ -1,5 +1,6 @@
 !==================================================================================================================================
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -179,13 +180,8 @@ SUBROUTINE InitMortar()
 ! MODULES
 USE MOD_Preproc
 USE MOD_Globals
-USE MOD_Mesh_Vars,  ONLY: MeshInitIsDone,nMortarSides
-USE MOD_Mesh_Vars,  ONLY: MortarType,MortarInfo
+USE MOD_Mesh_Vars,  ONLY: MeshInitIsDone
 USE MOD_Mortar_Vars
-#ifdef JESSE_MORTAR
-USE MOD_Mesh_Vars,  ONLY: NormVec,SurfElem
-USE MOD_FillMortar, ONLY: InterpolateBigToSmall
-#endif /*JESSE_MORTAR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 #ifdef JESSE_MORTAR
@@ -214,7 +210,6 @@ USE MOD_Globals
 USE MOD_Mesh_Vars,  ONLY: nMortarSides
 USE MOD_Mesh_Vars,  ONLY: MortarType,MortarInfo
 USE MOD_Mesh_Vars,  ONLY: NormVec,SurfElem
-USE MOD_FillMortar, ONLY: InterpolateBigToSmall
 USE MOD_Mortar_Vars
 #endif /*JESSE_MORTAR*/
 IMPLICIT NONE
@@ -225,11 +220,12 @@ INTEGER      :: MortarSideID,iSide
 REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
 #endif /*JESSE_MORTAR*/
 !==================================================================================================================================
-!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
 
 #ifdef JESSE_MORTAR
+!index 1:2/1:4 interpolation to small sides, index -2:-1 intermediate interpolation, index 0: big side
 ALLOCATE(U_small(PP_nVar,0:PP_N,0:PP_N,-2:4,nMortarSides)) 
 U_small=-HUGE(1.)
+
 ALLOCATE(delta_flux_jesse(PP_nVar,0:PP_N,0:PP_N,nMortarSides)) 
 delta_flux_jesse=-HUGE(1.)
 
@@ -240,7 +236,7 @@ DO iSide=1,nMortarSides
     Ns_loc(1,:,:)=NormVec(1,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
     Ns_loc(2,:,:)=NormVec(2,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
     Ns_loc(3,:,:)=NormVec(3,:,:,MortarSideID)*SurfElem(:,:,MortarSideID)
-    CALL InterpolateBigToSmall(3,MortarType(1,MortarSideID),Ns_loc,Ns_small(:,:,:,:,iSide))
+    CALL InterpolateBigToSmall_ALL(3,MortarType(1,MortarSideID),Ns_loc,Ns_small(:,:,:,:,iSide))
 END DO !nMortarSides
 #endif /*JESSE_MORTAR*/
 END SUBROUTINE InitMortarArrays

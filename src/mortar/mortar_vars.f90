@@ -1,5 +1,6 @@
 !==================================================================================================================================
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -38,4 +39,185 @@ REAL,ALLOCATABLE :: Ns_small(:,:,:,:,:)  !< Ja normal of big face interpolated t
 #endif /*JESSE_MORTAR*/
 LOGICAL          :: MortarInitIsDone=.FALSE. !< marks whether mortar init routines are complete
 !==================================================================================================================================
+
+
+!INTERFACE InterpolateBigToSmall
+!  MODULE PROCEDURE InterpolateBigToSmall
+!END INTERFACE
+
+CONTAINS
+
+!==================================================================================================================================
+!> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
+!>
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
+!>
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    |       |          | 3 | 4 |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    |       |          | 1 | 2 |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>
+!==================================================================================================================================
+SUBROUTINE InterpolateBigToSmall(ndim1,whichMortarType,Big,Small)
+! MODULES
+USE MOD_Preproc
+!USE MOD_Mortar_Vars, ONLY: Mint
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER, INTENT(IN)  :: ndim1  !< size of first dimension of array
+INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
+REAL,INTENT(IN)      :: Big(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
+REAL,INTENT(INOUT)   :: small(1:ndim1,0:PP_N,0:PP_N,1:4)
+                                                    !< 4-1 mortar: sol. on small (1:4)
+                                                    !< 2-1 mortar: sol. on small (1:2)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER      :: p,q,l,iNb,jNb
+REAL         :: tmp_jNb(1:ndim1,0:PP_N,0:PP_N)
+!==================================================================================================================================
+
+SELECT CASE(WhichMortarType)
+CASE(1) !1->4
+  !first  split 1 side into two, in eta direction
+  DO jNb=1,2
+    tmp_jNb=0.
+    DO q=0,PP_N
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        DO l=0,PP_N
+          tmp_jNb(:,p,q)=tmp_jNb(:,p,q) +MInt(l,q,jNb)*Big(:,p,l)
+        END DO
+      END DO
+    END DO
+    ! then split each side again into two, now in xi direction
+    DO iNb=1,2
+      small(:,:,:,iNb+2*(jNb-1))=0.
+      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+        DO p=0,PP_N
+          DO l=0,PP_N
+            small(:,p,q,iNb+2*(jNb-1))=small(:,p,q,iNb+2*(jNb-1)) +MInt(l,p,iNb)*tmp_jNb(:,l,q)
+          END DO !l=1,PP_N
+        END DO
+      END DO 
+    END DO !iNb=1,2
+  END DO !jNb=1,2
+
+CASE(2) !1->2 in eta
+  DO jNb=1,2
+    small(:,:,:,jNb)=0.
+    DO q=0,PP_N
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        DO l=0,PP_N
+          small(:,p,q,jNb)=small(:,p,q,jNb) +MInt(l,q,jNb)*Big(:,p,l)
+        END DO
+      END DO
+    END DO
+  END DO !jNb=1,2
+
+CASE(3) !1->2 in xi
+  DO iNb=1,2
+    small(:,:,:,iNb)=0.
+    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
+      DO p=0,PP_N
+        DO l=0,PP_N
+          small(:,p,q,iNb)=small(:,p,q,iNb) +MInt(l,p,iNb)*Big(:,l,q)
+        END DO
+      END DO
+    END DO
+  END DO !iNb=1,2
+END SELECT ! mortarType(SideID)
+
+END SUBROUTINE InterpolateBigToSmall
+
+!==================================================================================================================================
+!> interpolates the data from the big  mortar  side to the small (and intermediate for 4-1) sides, stored in "small" 
+!> ALL means that the big side and the intermediate sides are stored as well in 'small' array
+!>
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
+!>
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>
+!==================================================================================================================================
+SUBROUTINE InterpolateBigToSmall_ALL(ndim1,whichMortarType,Big,Small)
+! MODULES
+USE MOD_Preproc
+!USE MOD_Mortar_Vars, ONLY: Mint
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER, INTENT(IN)  :: ndim1  !< size of first dimension of array
+INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
+REAL,INTENT(IN)      :: Big(  1:ndim1,0:PP_N,0:PP_N) !< solution on the big side 
+REAL,INTENT(INOUT)   :: small(1:ndim1,0:PP_N,0:PP_N,-2:4)
+                                                    !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
+                                                    !< 2-1 mortar: sol. on big (0) and small (1:2)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER      :: p,q,l,iNb,jNb
+!==================================================================================================================================
+small(:,:,:,0)=Big(:,:,:) !save big mortar solution, too
+
+SELECT CASE(WhichMortarType)
+CASE(1) !1->4
+  !first  split 1 side into two, in eta direction
+  DO jNb=1,2
+    small(:,:,:,jNb-3)=0.
+    DO q=0,PP_N
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        DO l=0,PP_N
+          small(:,p,q,jNb-3)=small(:,p,q,jNb-3) +MInt(l,q,jNb)*Big(:,p,l)
+        END DO
+      END DO
+    END DO
+    ! then split each side again into two, now in xi direction
+    DO iNb=1,2
+      small(:,:,:,iNb+2*(jNb-1))=0.
+      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+        DO p=0,PP_N
+          DO l=0,PP_N
+            small(:,p,q,iNb+2*(jNb-1))=small(:,p,q,iNb+2*(jNb-1)) +MInt(l,p,iNb)*small(:,l,q,jNb-3)
+          END DO !l=1,PP_N
+        END DO
+      END DO 
+    END DO !iNb=1,2
+  END DO !jNb=1,2
+
+CASE(2) !1->2 in eta
+  DO jNb=1,2
+    small(:,:,:,jNb)=0.
+    DO q=0,PP_N
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        DO l=0,PP_N
+          small(:,p,q,jNb)=small(:,p,q,jNb) +MInt(l,q,jNb)*Big(:,p,l)
+        END DO
+      END DO
+    END DO
+  END DO !jNb=1,2
+
+CASE(3) !1->2 in xi
+  DO iNb=1,2
+    small(:,:,:,iNb)=0.
+    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
+      DO p=0,PP_N
+        DO l=0,PP_N
+          small(:,p,q,iNb)=small(:,p,q,iNb) +MInt(l,p,iNb)*Big(:,l,q)
+        END DO
+      END DO
+    END DO
+  END DO !iNb=1,2
+END SELECT ! mortarType(SideID)
+
+END SUBROUTINE InterpolateBigToSmall_ALL
+
 END MODULE MOD_Mortar_Vars
