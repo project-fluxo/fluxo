@@ -114,8 +114,43 @@ def job_definition():
    caseID=100 
    baseopts={"FLUXO_EQNSYSNAME"       :"linearscalaradvection",
              "_BUILD_FLUXO_POST"      :"ON"}
-   run_opt_fsp={'runs/linadv/freestream': 
-                 {'tags': ['linadv','freestream'],
+   run_opt_fsp_conf={'runs/linadv/freestream/conforming': 
+                 {'tags': ['linadv','freestream','conforming'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   run_opt_fsp_nonconf_coll={'runs/linadv/freestream/nonconforming_collmortar': 
+                 {'tags': ['linadv','freestream','nonconforming','collocation-mortar'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   run_opt_fsp_nonconf_proj={'runs/linadv/freestream/nonconforming_projmortar': 
+                 {'tags': ['linadv','freestream','nonconforming','projection-mortar'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   run_opt_linfunc_conf={'runs/linadv/linfunc/conforming': 
+                 {'tags': ['linadv','linfunc','conforming'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   run_opt_linfunc_nonconf_coll={'runs/linadv/linfunc/nonconforming_collmortar': 
+                 {'tags': ['linadv','linfunc','nonconforming','collocation-mortar'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   run_opt_linfunc_nonconf_proj={'runs/linadv/linfunc/nonconforming_projmortar': 
+                 {'tags': ['linadv','linfunc','nonconforming','projection-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
@@ -132,7 +167,11 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'ON',
                         'FLUXO_PARABOLIC_LIFTING':'br1',
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_proj,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_proj,
+                      }
          }
       
       
@@ -147,7 +186,11 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'ON',
                         'FLUXO_PARABOLIC_LIFTING':'br1'
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
@@ -160,19 +203,27 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'ON',
                         'FLUXO_PARABOLIC_LIFTING':'br1',
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['linadv_nopara_type1_gauss']={
           'case': caseID,
-          'tags': ['linadv','standardDG','GL'],
+          'tags': ['linadv','standardDG','gauss'],
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'1',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS',
                         'FLUXO_PARABOLIC'        :'OFF',
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
@@ -185,7 +236,11 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'ON',
                         'FLUXO_PARABOLIC_LIFTING':'br2',
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_proj,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_proj,
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
@@ -198,7 +253,11 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'ON',
                         'FLUXO_PARABOLIC_LIFTING':'br2',
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,    
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    volfluxes=['-1','0','1']
@@ -214,7 +273,54 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'OFF',
                         'FLUXO_EQN_VOLFLUX'      :volflux,
                        },
-          'run_opts': {**run_opt_fsp,}
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_linfunc_conf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # TEST FOR JESSE_MORTAR: (CENTRAL FLUX+CURVED+MORTAR ONLY FSP with JESSE_MORTAR)
+   run_opt_fsp_nonconf_coll_central={'runs/linadv/freestream/nonconforming_collmortar_central': 
+                 {'tags': ['linadv','freestream','nonconforming','jesse-mortar'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
+                              },
+                 },
+             }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['linadv_split_jesse_mortar']={
+          'case': caseID,
+          'tags': ['linadv','split-form','GL','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_nonconf_coll_central,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['linadv_split_br1_jesse_mortar']={
+          'case': caseID,
+          'tags': ['linadv','split-form','GL','br1','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_nonconf_coll_central,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                      }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    #============================================================================
