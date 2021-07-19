@@ -115,44 +115,60 @@ def job_definition():
    baseopts={"FLUXO_EQNSYSNAME"       :"linearscalaradvection",
              "_BUILD_FLUXO_POST"      :"ON"}
    run_opt_fsp_conf={'runs/linadv/freestream/conforming': 
-                 {'tags': ['linadv','freestream','conforming'],
+                 {'tags': ['linadv','freestream','curved','conforming'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
                  },
              }
    run_opt_fsp_nonconf_coll={'runs/linadv/freestream/nonconforming_collmortar': 
-                 {'tags': ['linadv','freestream','nonconforming','collocation-mortar'],
+                 {'tags': ['linadv','freestream','curved','nonconforming','collocation-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
                  },
              }
    run_opt_fsp_nonconf_proj={'runs/linadv/freestream/nonconforming_projmortar': 
-                 {'tags': ['linadv','freestream','nonconforming','projection-mortar'],
+                 {'tags': ['linadv','freestream','curved','nonconforming','projection-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
                  },
              }
    run_opt_linfunc_conf={'runs/linadv/linfunc/conforming': 
-                 {'tags': ['linadv','linfunc','conforming'],
+                 {'tags': ['linadv','linfunc','curved','conforming'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
                  },
              }
    run_opt_linfunc_nonconf_coll={'runs/linadv/linfunc/nonconforming_collmortar': 
-                 {'tags': ['linadv','linfunc','nonconforming','collocation-mortar'],
+                 {'tags': ['linadv','linfunc','curved','nonconforming','collocation-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
                               },
                  },
              }
    run_opt_linfunc_nonconf_proj={'runs/linadv/linfunc/nonconforming_projmortar': 
-                 {'tags': ['linadv','linfunc','nonconforming','projection-mortar'],
+                 {'tags': ['linadv','linfunc','curved','nonconforming','projection-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
                                             'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                              },
+                 },
+             }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # TEST FOR JESSE_MORTAR: (CENTRAL FLUX+CURVED+MORTAR ONLY FSP with JESSE_MORTAR)
+   run_opt_fsp_nonconf_coll_central={'runs/linadv/freestream/nonconforming_collmortar_central': 
+                 {'tags': ['linadv','freestream','curved','nonconforming','collocation-mortar','centralflux'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-10} },
+                              },
+                 },
+             }
+   run_opt_linfunc_nonconf_coll_central={'runs/linadv/linfunc/nonconforming_collmortar_central': 
+                 {'tags': ['linadv','linfunc','curved','nonconforming','collocation-mortar','centralflux'],
+                  'test_opts':{ 'err_Linf':{'func': check_error ,
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-10} },
                               },
                  },
              }
@@ -278,15 +294,6 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   # TEST FOR JESSE_MORTAR: (CENTRAL FLUX+CURVED+MORTAR ONLY FSP with JESSE_MORTAR)
-   run_opt_fsp_nonconf_coll_central={'runs/linadv/freestream/nonconforming_collmortar_central': 
-                 {'tags': ['linadv','freestream','nonconforming','jesse-mortar'],
-                  'test_opts':{ 'err_Linf':{'func': check_error ,
-                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
-                              },
-                 },
-             }
-   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['linadv_split_jesse_mortar']={
           'case': caseID,
@@ -301,6 +308,7 @@ def job_definition():
                        **run_opt_fsp_nonconf_coll_central,
                        **run_opt_linfunc_conf,
                        **run_opt_linfunc_nonconf_coll,
+                       **run_opt_linfunc_nonconf_coll_central,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -320,6 +328,7 @@ def job_definition():
                        **run_opt_fsp_nonconf_coll_central,
                        **run_opt_linfunc_conf,
                        **run_opt_linfunc_nonconf_coll,
+                       **run_opt_linfunc_nonconf_coll_central,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
