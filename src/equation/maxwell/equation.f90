@@ -81,6 +81,11 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "1: standard DG Flux with metric dealiasing" &
                             ,"0")
 #endif /*PP_DiscType==2*/
+#ifdef JESSE_MORTAR
+CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
+                                              "[DEFAULT = volumeFlux] or choose ID from volumeFlux list "&
+                                             ,"1")
+#endif /*JESSE_MORTAR*/
 END SUBROUTINE DefineParametersEquation
 
 !==================================================================================================================================
@@ -91,12 +96,13 @@ SUBROUTINE InitEquation()
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_ReadInTools
+USE MOD_StringTools       ,ONLY: INTTOSTR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars 
-#if (PP_DiscType==2)
+#if (PP_DiscType==2 || defined(JESSE_MORTAR) )
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
 USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
-#endif /*PP_DiscType==2*/
+#endif /*PP_DiscType==2 or JESSE_MORTAR*/
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -164,6 +170,21 @@ CASE DEFAULT
          "volume flux not implemented")
 END SELECT
 #endif /*PP_DiscType==2*/
+
+#ifdef JESSE_MORTAR
+WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+SELECT CASE(WhichMortarFlux)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: central flux '
+  MortarFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: central flux with averaged metric'
+  MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE DEFAULT
+  CALL ABORT(__STAMP__,&
+         "volume flux not implemented")
+END SELECT
+#endif /*JESSE_MORTAR*/
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MAXWELL DONE!'
