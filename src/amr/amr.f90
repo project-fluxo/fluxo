@@ -1,6 +1,7 @@
 !==================================================================================================================================
 ! Copyright (c) 2018 - 2020 Alexander Astanin
 ! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -101,7 +102,7 @@ SUBROUTINE DefineParametersAMR()
  CALL prms%CreateIntOption(  'InitialRefinement',       " Initial refinement to be used\n"//&
                                                         "  0: Use the custom indicator\n"//&
                                                         "  1: Refine the elements in the sphere with r=IniHalfwidthAMR\n"//&
-                                                        "  2: Do nothing",&
+                                                        "  2: Do nothing (needed to restart AMR simulation properly)",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
 END SUBROUTINE DefineParametersAMR
@@ -124,6 +125,7 @@ SUBROUTINE InitAMR()
     use MOD_Interpolation_Vars  ,only: NodeType
     use MOD_Basis               ,only: InitializeVandermonde
     use MOD_Interpolation       ,only: GetNodesAndWeights
+    use MOD_Mortar_vars         ,only: MortarBasis_BigToSmall,MortarBasis_SmallToBig_projection
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
     !----------------------------------------------------------------------------------------------------------------------------------
@@ -206,20 +208,21 @@ SUBROUTINE InitAMR()
     ! -------------------------------------------------
     CALL GetNodesAndWeights(PP_N,NodeType,xi_In,wIP=w_in,wIPBary=wBary_In)
     
-    ! Refinement operators (ATTENTION: we use the TRANSPOSED Vandermonde matrices since the refinement rouines can be called with these matrices AND with the Mortar matrices, which are transposed)
-    allocate (Vdm_Interp_0_1_T(0:PP_N,0:PP_N), Vdm_Interp_0_2_T(0:PP_N,0:PP_N))
+    ! Refinement operators, simply interpolation  (use 1D mortar routine)
+    allocate (M_0_1(0:PP_N,0:PP_N), M_0_2(0:PP_N,0:PP_N))
+    CALL MortarBasis_BigToSmall(PP_N,NodeType,   M_0_1,M_0_2)
+
     
-    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In-1.),Vdm_Interp_0_1_T)
-    CALL InitializeVandermonde(PP_N,PP_N,wBary_In,xi_In,0.5*(xi_In+1.),Vdm_Interp_0_2_T)
-    Vdm_Interp_0_1_T = transpose(Vdm_Interp_0_1_T)
-    Vdm_Interp_0_2_T = transpose(Vdm_Interp_0_2_T)
-    
-    ! Coarsening operators
+    ! Coarsening operators, interpolation for the mapping
     N_2 = PP_N/2
     allocate( Vdm_Interp_1_0(0:N_2,0:PP_N),Vdm_Interp_2_0(N_2+1:PP_N,0:PP_N) ) ! Temporary
     
     CALL InitializeVandermonde(PP_N,N_2              ,wBary_In,xi_In,2.0*xi_In(0    :N_2 )+1.,Vdm_Interp_1_0)
     CALL InitializeVandermonde(PP_N,N_2-mod(PP_N+1,2),wBary_In,xi_In,2.0*xi_In(N_2+1:PP_N)-1.,Vdm_Interp_2_0)
+
+    ! USE MORTAR L2 PROJECTION 1D MATRIX for projection when coarsening of solution
+    ALLOCATE(M_1_0(0:PP_N,0:PP_N), M_2_0(0:PP_N,0:PP_N))
+    CALL MortarBasis_SmallToBig_Projection(PP_N,NodeType,   M_1_0,M_2_0)
         
     AMRInitIsDone=.TRUE.
     SWRITE(UNIT_stdOut,'(A)')' INIT AMR DONE!'
@@ -335,9 +338,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
 #endif  /*MPI*/
   USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
-  use MOD_Mortar_Vars,        only: Mint
-  use MOD_AMR_Vars,           only: Vdm_Interp_0_1_T,Vdm_Interp_0_2_T
   use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
+  use MOD_Mortar  ,           only: FinalizeMortarArrays,InitMortarArrays
 #if POSITIVITYPRES
   use MOD_PositivityPreservation, only: FinalizePositivityPreservation, InitPositivityPreservation
 #endif /*POSITIVITYPRES*/
@@ -350,6 +352,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #if SHOCKCAPTURE
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
 #endif /*SHOCKCAPTURE*/
+  use MOD_Equation,           only: InitEquationAfterAdapt
   USE, INTRINSIC :: ISO_C_BINDING
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! ARGUMENTS
@@ -420,8 +423,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     IF (Ie .LT. 0) THEN
       !This is refine and this and next 7 elements [iElem: iElem+7] number negative and 
       ! contains the number of child element 
-      call ProjectSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie),Vdm_Interp_0_1_T,Vdm_Interp_0_2_T)
-      call ProjectSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie), Mint(:,:,1), Mint(:,:,2) )
+      call InterpolateSolution_Refinement(3      ,Elem_xGP_New(:,:,:,:,iElem:iElem+7), Elem_xGP(:,:,:,:,-Ie))
+      call InterpolateSolution_Refinement(PP_nVar,U_New       (:,:,:,:,iElem:iElem+7), U(:,:,:,:,-Ie))
       iElem=iElem+7;
     ELSE IF (ChangeElem(2,iElem) .GT. 0) THEN
       !  This is COARSE. Array ChangeElem(:,iElem) Contains 
@@ -502,6 +505,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
           
 #endif  /*MPI*/
   
+! ==========================================================================
+! Count and organize sides (nSides, nMPISides_MINE, nMPISides_YOUR, etc.)
+! ==========================================================================
   CALL GetData(p4est_ptr,DATAPtr)
 
 #if MPI
@@ -582,7 +588,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 
   nMortarSides    = FortranData%nMortarInnerSides +  FortranData%nMortarMPISides
 
-  CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,4,nMortarSides])
+  CALL C_F_POINTER(FortranData%MIPtr, MInfo,[2,5,nMortarSides])
   deallocate(MortarInfo)
   ALLOCATE(MortarInfo(MI_FLIP,0:4,nMortarSides),SOURCE = MInfo)
 
@@ -755,7 +761,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   call FinalizePositivityPreservation()
   call InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
-
+  call InitEquationAfterAdapt()
 ! =========
 ! Finish up
 ! =========  
@@ -829,7 +835,7 @@ END SUBROUTINE RunAMR
 !===================================================================================================================================
   subroutine ProjectSolution_Coarsening(Unew, Uold, sJold)
     use MOD_PreProc     , only: PP_N
-    use MOD_Mortar_Vars , only: M_proj !M_1_0=M_proj(:,:,1),M_2_0=M_proj(:,:,2)
+    use MOD_AMR_Vars    , only: M_1_0,M_2_0
     implicit none
     !-arguments-----------------------------------------------
     real, intent(inout) :: Unew(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
@@ -849,14 +855,14 @@ END SUBROUTINE RunAMR
     Unew = 0.0
     do r=0, PP_N ; do q=0, PP_N ; do p=0, PP_N
       do s=0, PP_N ; do m=0, PP_N ; do l=0, PP_N
-        Unew(:,p,q,r) = Unew(:,p,q,r) + M_proj(l,p,1)*M_proj(m,q,1)*M_proj(s,r,1) * JUold(:,l,m,s,1) &
-                                      + M_proj(l,p,2)*M_proj(m,q,1)*M_proj(s,r,1) * JUold(:,l,m,s,2) &
-                                      + M_proj(l,p,1)*M_proj(m,q,2)*M_proj(s,r,1) * JUold(:,l,m,s,3) &
-                                      + M_proj(l,p,2)*M_proj(m,q,2)*M_proj(s,r,1) * JUold(:,l,m,s,4) &
-                                      + M_proj(l,p,1)*M_proj(m,q,1)*M_proj(s,r,2) * JUold(:,l,m,s,5) &
-                                      + M_proj(l,p,2)*M_proj(m,q,1)*M_proj(s,r,2) * JUold(:,l,m,s,6) &
-                                      + M_proj(l,p,1)*M_proj(m,q,2)*M_proj(s,r,2) * JUold(:,l,m,s,7) &
-                                      + M_proj(l,p,2)*M_proj(m,q,2)*M_proj(s,r,2) * JUold(:,l,m,s,8) 
+        Unew(:,p,q,r) = Unew(:,p,q,r) + M_1_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,1) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,2) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,3) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_1_0(s,r) * JUold(:,l,m,s,4) &
+                                      + M_1_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,5) &
+                                      + M_2_0(l,p)*M_1_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,6) &
+                                      + M_1_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,7) &
+                                      + M_2_0(l,p)*M_2_0(m,q)*M_2_0(s,r) * JUold(:,l,m,s,8) 
       end do       ; end do       ; end do
     end do       ; end do       ; end do
     
@@ -867,15 +873,14 @@ END SUBROUTINE RunAMR
 !>                               integrals are evaluated only on the fine elements
 !>  2. Coordinates: Using the interpolation matrices
 !===================================================================================================================================
-  subroutine ProjectSolution_Refinement(nVar,Unew, Uold,M_0_1,M_0_2)
+  subroutine InterpolateSolution_Refinement(nVar,Unew, Uold)
     use MOD_PreProc     , only: PP_N
+    use MOD_AMR_vars    , only: M_0_1,M_0_2
     implicit none
     !-arguments-----------------------------------------------
     integer, intent(in)    :: nVar
     real   , intent(inout) :: Unew(nVar,0:PP_N,0:PP_N,0:PP_N,8)
     real   , intent(in)    :: Uold(nVar,0:PP_N,0:PP_N,0:PP_N)
-    real   , intent(in)    :: M_0_1    (0:PP_N,0:PP_N)
-    real   , intent(in)    :: M_0_2    (0:PP_N,0:PP_N)
     !-local-variables-----------------------------------------
     integer :: l,m,s,p,q,r
     !---------------------------------------------------------
@@ -894,7 +899,7 @@ END SUBROUTINE RunAMR
       end do       ; end do       ; end do
     end do       ; end do       ; end do
     
-  end subroutine ProjectSolution_Refinement
+  end subroutine InterpolateSolution_Refinement
 !===================================================================================================================================
 !> Does a simple interpolation (extrapolation) from element 1 to the big element. This works if Ngeo<=N
 !===================================================================================================================================
@@ -1268,6 +1273,12 @@ IMPLICIT NONE
 IF (.NOT. UseAMR) THEN
   RETURN;
 ENDIF
+SDEALLOCATE(Vdm_Interp_1_0)
+SDEALLOCATE(Vdm_Interp_2_0)
+SDEALLOCATE(M_0_1)
+SDEALLOCATE(M_0_2)
+SDEALLOCATE(M_1_0)
+SDEALLOCATE(M_2_0)
 CALL p4est_destroy(P4EST_PTR);
 CALL p4est_connectivity_destroy(CONNECTIVITY_PTR)
 CALL p4est_finalize()

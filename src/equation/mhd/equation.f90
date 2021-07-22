@@ -27,12 +27,16 @@ INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
 
+INTERFACE InitEquationAfterAdapt
+MODULE PROCEDURE InitEquationAfterAdapt
+END INTERFACE
+
 INTERFACE FillIni
   MODULE PROCEDURE FillIni
 END INTERFACE
 
 INTERFACE ExactFunc
-  MODULE PROCEDURE ExactFunc 
+  MODULE PROCEDURE ExactFunc
 END INTERFACE
 
 INTERFACE CalcSource
@@ -44,18 +48,19 @@ INTERFACE FinalizeEquation
 END INTERFACE
 
 PUBLIC:: InitEquation
+PUBLIC:: InitEquationAfterAdapt
 PUBLIC:: SetRiemannSolver
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
 PUBLIC:: FinalizeEquation
-PUBLIC:: DefineParametersEquation 
+PUBLIC:: DefineParametersEquation
 !==================================================================================================================================
 
 CONTAINS
 
 !==================================================================================================================================
-!> Define parameters 
+!> Define parameters
 !==================================================================================================================================
 SUBROUTINE DefineParametersEquation()
 ! MODULES
@@ -254,16 +259,21 @@ SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVo
 #endif
 CALL SetVolumeFlux(whichVolumeFlux)
 #ifdef JESSE_MORTAR
+#if PP_VolFlux==-1
 WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+#else
+WhichMortarFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...MortarFlux defined at compile time:',WhichMortarFlux
+#endif
 CALL SetMortarFlux(whichMortarFlux)
 #endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 
 #if NONCONS==1
   SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: POWELL    '
-#elif NONCONS==2                                                     
+#elif NONCONS==2
   SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: BRACKBILL '
-#elif NONCONS==3                                                     
+#elif NONCONS==3
   SWRITE(UNIT_stdOut,'(A)') 'Non-conservative terms active: JANHUNEN  '
 #endif /*NONCONS*/
 
@@ -275,7 +285,29 @@ END SUBROUTINE InitEquation
 
 
 !==================================================================================================================================
-!> Set the pointer of the riemann solver 
+!> Reinitialize equation after mesh adaptation
+!==================================================================================================================================
+SUBROUTINE InitEquationAfterAdapt()
+! MODULES
+#ifdef PP_GLM
+USE MOD_Equation_Vars,ONLY: GLM_init
+#endif /*PP_GLM*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+#ifdef PP_GLM
+GLM_init=.FALSE.
+#endif /*PP_GLM*/
+END SUBROUTINE InitEquationAfterAdapt
+
+
+!==================================================================================================================================
+!> Set the pointer of the riemann solver
 !==================================================================================================================================
 SUBROUTINE SetRiemannSolver(which)
 ! MODULES
@@ -302,13 +334,13 @@ CASE(1)
   SolveRiemannProblem => RiemannSolverByRusanov
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC'
-  SolveRiemannProblem => RiemannSolverByHLLC 
+  SolveRiemannProblem => RiemannSolverByHLLC
 CASE(3)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
   SolveRiemannProblem => RiemannSolverByRoe
 CASE(4)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
-  SolveRiemannProblem => RiemannSolverByHLL  
+  SolveRiemannProblem => RiemannSolverByHLL
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLD'
   IF(ABS(mu_0-1.).GT.1.0E-12) &

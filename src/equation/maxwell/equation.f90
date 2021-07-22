@@ -30,6 +30,10 @@ INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
 
+INTERFACE InitEquationAfterAdapt
+MODULE PROCEDURE InitEquationAfterAdapt
+END INTERFACE
+
 INTERFACE FillIni
   MODULE PROCEDURE FillIni
 END INTERFACE
@@ -48,6 +52,7 @@ END INTERFACE
 
 PUBLIC:: DefineParametersEquation
 PUBLIC:: InitEquation
+PUBLIC:: InitEquationAfterAdapt
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
@@ -190,6 +195,23 @@ EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT MAXWELL DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
+
+
+!==================================================================================================================================
+!> Reinitialize equation after mesh adaptation
+!==================================================================================================================================
+SUBROUTINE InitEquationAfterAdapt()
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+END SUBROUTINE InitEquationAfterAdapt
+
 
 !==================================================================================================================================
 !> Fill the initial DG solution with a given exactfunction

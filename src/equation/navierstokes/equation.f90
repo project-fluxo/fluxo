@@ -28,6 +28,10 @@ INTERFACE InitEquation
   MODULE PROCEDURE InitEquation
 END INTERFACE
 
+INTERFACE InitEquationAfterAdapt
+MODULE PROCEDURE InitEquationAfterAdapt
+END INTERFACE
+
 INTERFACE FillIni
   MODULE PROCEDURE FillIni
 END INTERFACE
@@ -46,6 +50,7 @@ END INTERFACE
 
 PUBLIC:: DefineParametersEquation
 PUBLIC:: InitEquation
+PUBLIC:: InitEquationAfterAdapt
 PUBLIC:: FillIni
 PUBLIC:: ExactFunc
 PUBLIC:: CalcSource
@@ -448,9 +453,14 @@ CASE DEFAULT
 END SELECT
 
 #ifdef JESSE_MORTAR
+#if PP_VolFlux==-1
 WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+#else
+WhichMortarFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...MortarFlux defined at compile time:',WhichMortarFlux
+#endif
 useEntropyMortar=.FALSE.
-SELECT CASE(WhichVolumeFlux)
+SELECT CASE(WhichMortarFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG'
   MortarFluxAverageVec => StandardDGFluxVec
@@ -477,6 +487,7 @@ CASE(6)
 CASE(7)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP + press. aver.'
   MortarFluxAverageVec => ggFluxVec
+  useEntropyMortar=.TRUE.
 CASE(8)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Kenndy & Gruber (pirozolli version)'
   MortarFluxAverageVec => KennedyAndGruberFluxVec2
@@ -503,6 +514,22 @@ EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
+
+
+!==================================================================================================================================
+!> Reinitialize equation after mesh adaptation
+!==================================================================================================================================
+SUBROUTINE InitEquationAfterAdapt()
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+END SUBROUTINE InitEquationAfterAdapt
 
 
 !==================================================================================================================================

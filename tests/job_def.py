@@ -873,21 +873,33 @@ def job_definition():
             }
    
    run_opt_fsp_conf={'runs/navst/freestream/conforming':
-         {'tags': ['navierstokes','freestream','conforming','restart'] ,
+         {'tags': ['navierstokes','freestream','curved','conforming','restart'] ,
           'restartfile': 'NAVIERSTOKES_FREESTREAM_State_0000000.000000000.h5',
           'test_opts':{'err_Linf':{'func': check_error ,'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
                       },
          },
       }
-   run_opt_fsp_nonconf={'runs/navst/freestream/nonconforming':
-         {'tags': ['navierstokes','freestream','nonconforming'] ,
+   run_opt_fsp_nonconf_proj={'runs/navst/freestream/nonconforming_projmortar':
+         {'tags': ['navierstokes','freestream','curved','nonconforming','projection-mortar'] ,
           'test_opts':{'err_Linf':{'func': check_error ,'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   run_opt_fsp_nonconf_coll={'runs/navst/freestream/nonconforming_collmortar':
+         {'tags': ['navierstokes','freestream','curved','nonconforming','collocation-mortar'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   run_opt_fsp_nonconf_coll_central={'runs/navst/freestream/nonconforming_collmortar_central':
+         {'tags': ['navierstokes','freestream','curved','nonconforming','collocation-mortar','centralflux'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-10} } ,
                       },
          },
       }
    # Entropy conservation test with EC-KEP flux (with and without shock-capturing)
    run_opt_entropyCons={'runs/navst/softBlast/entropyCons':
-         {'tags': ['navierstokes','entropyCons','conforming'] ,
+         {'tags': ['navierstokes','entropyCons','conforming','curved'] ,
           'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
                                        'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
                       },
@@ -895,7 +907,25 @@ def job_definition():
       } 
    # Entropy stability test with EC-KEP flux and LLF (with and without shock-capturing)
    run_opt_entropyStab={'runs/navst/softBlast/entropyStab':
-         {'tags': ['navierstokes','entropyCons','conforming'] ,
+         {'tags': ['navierstokes','entropyCons','conforming','curved'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      } 
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # TEST FOR JESSE_MORTAR: (CURVED+MORTAR ONLY EC with JESSE_MORTAR)
+   # Entropy conservation test with EC-KEP flux (with and without shock-capturing)
+   run_opt_entropyCons_nonconf={'runs/navst/softBlast/entropyCons_nonconforming':
+         {'tags': ['navierstokes','entropyCons','nonconforming','curved'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      } 
+   # Entropy stability test with EC-KEP flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab_nonconf={'runs/navst/softBlast/entropyStab_nonconforming':
+         {'tags': ['navierstokes','entropyCons','nonconforming','curved'] ,
           'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
@@ -914,7 +944,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'cons_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -931,7 +961,7 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'5',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -947,7 +977,28 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_br1_entropy_var_jesse_mortar']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','br1','entropy_var','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyStab,
+                       **run_opt_entropyCons_nonconf,
+                       **run_opt_entropyStab_nonconf,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -963,7 +1014,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -980,7 +1031,7 @@ def job_definition():
                         "FLUXO_PARABOLIC_LIFTING_VAR":"cons_var",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -997,7 +1048,7 @@ def job_definition():
                         "FLUXO_PARABOLIC_LIFTING_VAR":"cons_var",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1011,7 +1062,7 @@ def job_definition():
                         "FLUXO_PARABOLIC"        :"OFF",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1020,9 +1071,10 @@ def job_definition():
       volflux=volfluxes[vvv]
       caseID=caseID+1
       
-      my_run_opts={**run_opt_fsp_conf, 
-                   **run_opt_fsp_nonconf,
-                  }
+      my_run_opts={**run_opt_fsp_conf }
+      if vvv!=1:
+        my_run_opts={**my_run_opts,
+                     ** run_opt_fsp_nonconf_coll }
       if vvv==0 or vvv==2:
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
@@ -1052,7 +1104,7 @@ def job_definition():
                         "FLUXO_TESTCASE"         :"ns_angularmomentum",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1078,7 +1130,7 @@ def job_definition():
                         "FLUXO_SHOCK_NFVSE_CORR" :"ON",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_shock_posit,
                       }
          }
@@ -1104,7 +1156,7 @@ def job_definition():
                         "FLUXO_SHOCKCAP_NFVSE"   :"ON",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_shock_SC,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
@@ -1152,7 +1204,7 @@ def job_definition():
                         "FLUXO_SHOCKCAP_NFVSE"   :"ON",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_SC_TVD,
                        **run_opt_fsp_SC_TVD_ES_fix,
                        **run_opt_fsp_SC_TVD_ES_Fjordholm,
@@ -1180,7 +1232,7 @@ def job_definition():
                         "FLUXO_BUILD_P4EST"      :"OFF",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_p4est,
                       }
          }
@@ -1196,14 +1248,14 @@ def job_definition():
                         "FLUXO_POSITIVITYPRES"   :"ON",
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_shock_posit,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    # New test: Soft blast with SC, BR2, and non-conforming
    run_opt_nonConf_parabolic={'runs/navst/softBlast/nonconfParabolic':
-         {'tags': ['navierstokes','blast','nonconforming','br2','SC'] ,
+         {'tags': ['navierstokes','blast','curved','nonconforming','projection-mortar','br2','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
                                                     'to_be': [5.945798911280E-01,   2.065011304993E-01,   2.003460892178E-01,   2.207665371548E-01,   2.168581765236E+00],
@@ -1229,4 +1281,99 @@ def job_definition():
                        **run_opt_nonConf_parabolic,
                       }
          }
+   #============================================================================
+   #============================================================================
+   #PERFORMANCE, Navierstokes, 4000 < caseID
+   #============================================================================
+   #============================================================================
+   caseID=4000
+   baseopts={ 'FLUXO_EQNSYSNAME' :'navierstokes',
+              'FLUXO_TESTCASE'   :'default'
+            }
+   
+   perf_run_opt_ec_conf={'runs/navst/performance/EC_conforming':
+         {'tags': ['navierstokes','curved','conforming'] ,
+         },
+      }
+   perf_run_opt_ec_nonconf_2to1={'runs/navst/performance/EC_nonconforming_2to1':
+         {'tags': ['navierstokes','curved','nonconforming','2to1-mortar'] ,
+         },
+      }
+   perf_run_opt_ec_nonconf_4to1={'runs/navst/performance/EC_nonconforming_4to1':
+         {'tags': ['navierstokes','curved','nonconforming','4to1-mortar'] ,
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_nopara_EC_performance']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','performance'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_jesse_nopara_EC_performance']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','performance','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_br1_entropy_vars_EC_performance']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','performance','br1'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_jesse_br1_entropy_vars_EC_performance']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','performance','br1','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+
+
+
    return jobs

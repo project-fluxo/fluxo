@@ -255,10 +255,13 @@ LOGICAL,INTENT(OUT)                  :: Exists   !< result: dataset exists
 ! LOCAL VARIABLES
 INTEGER(HID_T)                       :: DSet_ID
 INTEGER                              :: hdferr
+LOGICAL                              :: isAttrib
 !==================================================================================================================================
 CALL h5eset_auto_f(0, hdferr)
 ! Open the dataset with default properties.
-IF(PRESENT(attrib).AND.attrib)THEN
+isAttrib = .FALSE.
+IF(PRESENT(attrib)) isAttrib=attrib
+IF(isAttrib)THEN
   CALL H5AOPEN_F(Loc_ID, TRIM(DSetName), DSet_ID, iError)
   CALL H5ACLOSE_F(DSet_ID, iError)
 ELSE

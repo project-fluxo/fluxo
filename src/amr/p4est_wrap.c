@@ -1,5 +1,7 @@
 //!==================================================================================================================================
 //! Copyright (c) 2018 - 2020 Alexander Astanin
+//! Copyright (c) 2018 - 2020 Andrés Rueda
+//! Copyright (c) 2020 - 2021 Florian Hindenlang
 //!
 //! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 //! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -501,7 +503,11 @@ Elm_iter(p4est_iter_volume_info_t *info, void *user_data) {
 
 }
 
-
+//////////////////////////////////////////////////////////
+// SetElementToSide_iter: 
+//  * Fills the ElementToSide AND ALSO the SideToElement array
+//  * Is called for each p4est quad
+//////////////////////////////////////////////////////////
 static void
 SetElementToSide_iter(p4est_iter_volume_info_t *info, void *user_data) {
     int i, j;
@@ -545,6 +551,11 @@ SetElementToSide_iter(p4est_iter_volume_info_t *info, void *user_data) {
     return;
 }
 
+//////////////////////////////////////////////////////////
+// SetSideToElement_iter: 
+//  * Fills the MortarType, MortarInfo, and BC arrays
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j;
@@ -564,9 +575,8 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
     int which_face, iSide;
     p4est_iter_face_side_t *side[2];
     sc_array_t *sides = &(info->sides);
-
-    int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
-
+    
+    // Check if this is a boundary face. If it is, fill the BC array
     if (sides->elem_count == 1) //Or sides->elem_num == 1
     {
 
@@ -581,9 +591,12 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
 
         return;
     }
+    
+    // Check if this is a non-conforming face. If it is, fill the MortarInfo and MortarType arrays
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
     if (side[0]->is_hanging || side[1]->is_hanging) { //TODO: Complete Mortar Faces
+        // This is a non-conforming face
 
         iBigSide = side[0]->is_hanging ? 1 : 0;
         iSmallSides = side[1]->is_hanging ? 1 : 0;
@@ -591,38 +604,42 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
         int SmallFace = side[iSmallSides]->face;
         p4est_inner_data_t *Bigdataquad;
         if (side[iBigSide]->is.full.is_ghost == 0) {
+            // The mortar (big) side belongs to the current processor
+            
             quad = side[iBigSide]->is.full.quad;
             dataquad = (p4est_inner_data_t *) quad->p.user_data;
             int BigSideID = dataquad->SidesID[BigFace];
             int ADD = 0;
-            int firstMortarInnerSide = 1 + data->nBCSides; //1
-            int firstInnerSide = firstMortarInnerSide + data->nMortarInnerSides; //1 + 0 = 1
-            int firstMPISide = firstInnerSide + data->nInnerSides; // 1 + 8 = 9 
-            int firstMortarMPISide = firstMPISide + data->nMPISides; // 9 + 14 = 21
-            int lastMortarInnerSide = firstInnerSide - 1; // = 0
+            int firstMortarInnerSide = 1 + data->nBCSides;
+            int firstInnerSide = firstMortarInnerSide + data->nMortarInnerSides;
+            int firstMPISide = firstInnerSide + data->nInnerSides;
+            int firstMortarMPISide = firstMPISide + data->nMPISides;
+            int lastMortarInnerSide = firstInnerSide - 1;
             if (BigSideID <= lastMortarInnerSide) { //Inner Mortar
                 ADD = firstMortarInnerSide;
             } else {   //MPI Mortar
-                ADD = firstMortarMPISide - data->nMortarInnerSides; // 21 - 0 = 21
+                ADD = firstMortarMPISide - data->nMortarInnerSides;
             }
 
 
-            int SideID = BigSideID + 1 - ADD; //  1 + 1 - 21 = -19 Index for MPI Sides
+            int SideID = BigSideID + 1 - ADD; // Mortar index in MortarInfo array
 
 
             i = 1;
-            MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1; //MortarType
+            MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1;      // MortarType(1,:)=1: Four small sides in mortar
             i = 2;
-            MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID;
-            i = 1;
-            jIndex=0;
-            MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = BigSideID;
+            MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID; // MortarType(2,:):= Position in MortarInfo array
+            // i=1, jIndex=0
+            MortarInfo[((SideID - 1) * 5 ) * 2 ] = BigSideID;
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
+            
+            // Loop over the small sides and assign MortarInfo
+            for (j = 0; j < P8EST_HALF; j++)
             {
-                if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) {
-
+                if (side[iSmallSides]->is.hanging.is_ghost[j] == 0) { 
+                    // Small side is not MPI
+                    
                     quad = side[iSmallSides]->is.hanging.quad[j];
                     dataquad = (p4est_inner_data_t *) quad->p.user_data;
                     int iSide = dataquad->SidesID[SmallFace];
@@ -631,13 +648,15 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int Pside = BigFace;
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
-                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
+                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip); // jIndex is 1...4
+                    
                     i = 1;
                     MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
                     MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = 0 * flip;
                 } else {
-                    /// Use GHOST DATA
+                    // Small side is MPI (Use GHOST DATA)
+                    
                     int ghostid = side[iSmallSides]->is.hanging.quadid[j];
                     int iSide = ghost_data[ghostid].SidesID[SmallFace];
                     int flip = ghost_data[ghostid].flips[SmallFace];
@@ -646,8 +665,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
-
-                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
+                    
                     i = 1;
                     MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
@@ -656,16 +674,22 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                 }
             }
 
-        } else {
-
+        } else { 
+            // The mortar (big) side belongs to another processor: Do nothing...
         }
 
         return;
     } else {
+        // This is a conforming face: Do nothing...
         return;
     }
 }
 
+//////////////////////////////////////////////////////////
+// SidesCounter_iter: 
+//  * Counts nSides, nBCSides, nMPISides, nInnerSides, nMortarInnerSides, and nMortarMPISides
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j, iBigSide = 0, iSmallSide = 0;
@@ -679,7 +703,7 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     sc_array_t *sides = &(info->sides);
 
     if (sides->elem_count == 1) {
-
+        // This is a boundary face
         data->nSides++;
         data->nBCSides++;
         return;
@@ -688,20 +712,20 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
     if (side[0]->is_hanging || side[1]->is_hanging) {
-        //One Side is Mortar
+        // This is a non-conforming face
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
 
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
+        if (side[iBigSide]->is.full.is_ghost == 0)
         {
-
-            for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
+            // The mortar (big) side belongs to the current processor
+            for (j = 0; j < P8EST_HALF; j++) //Check if the small sides are MPI
             {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
                     ghost++;
                 }
             }
-            if (ghost == 0) //There is no small mpi sides. Add Mortar inner side
+            if (ghost == 0) //There are no small mpi sides. Add Mortar inner side
             {
                 data->nMortarInnerSides++;
             } else //One or more small mpi sides. Add Big side as MPIMortar
@@ -712,7 +736,9 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
             data->nSides += 4;              //Total nmber of sides
             data->nSides++;                 //Add also a MortarSide to nSides
             data->nInnerSides += 4 - ghost; //Number of inner sides
-        } else { //We use only 4 small sides and don't take into account the big side
+        } else { 
+            // The mortar (big) side belongs to another processor
+            // ... We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
@@ -723,32 +749,28 @@ SidesCounter_iter(p4est_iter_face_info_t *info, void *user_data) {
             data->nSides += (4 - ghost);    //Small sides are MPI sides. Ghost is for another proc.
             data->nMPISides += (4 - ghost); //Small sides  are MPI Sides
         }
-    } else //Then it is a one side
+    } else //Then it is a conforming side
     {
 
         if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost) {
-            //Debug
-            int SideIn = 0;
-            int SideGhost = 1;
-            if (side[0]->is.full.is_ghost) {
-                SideIn = 1;
-                SideGhost = 0;
-            }
-            quad = side[SideIn]->is.full.quad;
-            dataquad = (p4est_inner_data_t *) quad->p.user_data;
-            //Debug
+            // This is an MPI side
             data->nSides++;
             data->nMPISides++;
 
-        } else //Not Ghost
+        } else 
         {
+            // This is an inner side
             data->nSides++;
             data->nInnerSides++;
         }
     }
 }
 
-
+//////////////////////////////////////////////////////////
+// SidesCounter2_iter: 
+//  * Counts the number of MPI sides that are shared with each neighbor processor (nMPISidesCount[proc])
+//  * Is called for each p4est face
+//////////////////////////////////////////////////////////
 static void
 SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     int i, j, iBigSide = 0, iSmallSide = 0;
@@ -760,7 +782,6 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     int ghost = 0;
     p4est_iter_face_side_t *side[2];
     sc_array_t *sides = &(info->sides);
-    int AlreadyCount = 0; // This Flag set to 1 if there is a simple side and we just one number for this side
 
     if (sides->elem_count == 1) {
 
@@ -770,13 +791,13 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
     if (side[0]->is_hanging || side[1]->is_hanging) {
-        //One Side is Mortar
+        // This is a non-conforming face
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
         iSmallSide = side[0]->is_hanging != 0 ? 0 : 1;
 
-        if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
+        if (side[iBigSide]->is.full.is_ghost == 0) 
         {
-
+            // The mortar (big) side belongs to the current processor
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
                 if (side[iSmallSide]->is.hanging.is_ghost[j]) {
@@ -786,7 +807,9 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
                 }
             }
 
-        } else { //We use only 4 small sides and don't take into account the big side
+        } else { 
+            // The mortar (big) side belongs to another processor
+            // ... We use only 4 small sides and don't take into account the big side
 
             for (j = 0; j < P8EST_HALF; j++) {
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
@@ -797,14 +820,12 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
             }
 
         }
-    } else //Then it is a one side
+    } else 
     {
-
+      // It is a conforming face/side
         if (side[0]->is.full.is_ghost || side[1]->is.full.is_ghost) {
-            int SideIn = 0;
             int SideGhost = 1;
             if (side[0]->is.full.is_ghost) {
-                SideIn = 1;
                 SideGhost = 0;
             }
             int ghostid = side[SideGhost]->is.full.quadid;
@@ -815,7 +836,7 @@ SidesCounter2_iter(p4est_iter_face_info_t *info, void *user_data) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// This function is used to sed SideID from 1 to nMPISides_Proc(iNbProc) for every 
+// This function is used to set SideID from 1 to nMPISides_Proc(iNbProc) for every 
 // NB Processor. Then it is used with shifting to setup the correct number
 //
 //
@@ -1235,43 +1256,48 @@ int GetNElems(p4est_t *p4est){
 void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     // Allocate EtS and StE
     int i, j, iElem, iSide;
-    i = 1;
-    int nElems = p4est_fortran_data->nElems;
     int nSides = p4est_fortran_data->nSides;
+    
     p4est_inner_data_t *ghost_data = p4est_fortran_data->ghost_data_ptr;
     p8est_ghost_t *ghost = p4est_fortran_data->ghost_ptr;
 
     int *EtS = p4est_fortran_data->EtSPtr;//= (int *)malloc(2 * 6 * nElems * sizeof(int));
-
+    
+    // Initialize SideToElem array
     int *StE = p4est_fortran_data->StEPtr;//! = (int *)malloc(5 * nSides * sizeof(int));
-    StE[1] = -1;
-
-    for (iSide = 1; iSide <= nSides; ++iSide)
+    for (iSide = 1; iSide <= nSides; ++iSide){
         for (i = 1; i <= 5; i++) {
             StE[(iSide - 1) * 5 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
+    }
 
-    // Now Mortar Type
+    // Initialize MortarType array
     int *MoTy = p4est_fortran_data->MTPtr;//! = (int *)malloc(2 * nSides * sizeof(int));
-    for (iSide = 1; iSide <= nSides; ++iSide)
+    for (iSide = 1; iSide <= nSides; ++iSide){
         for (i = 1; i <= 2; i++) {
             MoTy[(iSide - 1) * 2 + (i - 1)] = -1; //iElem + j*1000 + i * 10000;
         }
+    }
 
-    // Now MortarInfo
+    // Initialize MortarInfo array
     int nMortarSides = p4est_fortran_data->nMortarInnerSides + p4est_fortran_data->nMortarMPISides;
 
-    int *MoInf = p4est_fortran_data->MIPtr = (int *) malloc(2 * 4 * nMortarSides * sizeof(int));
-    for (iSide = 1; iSide <= nMortarSides; ++iSide)
-        for (i = 1; i <= 2; i++)
-            for (j = 1; i <= 4; i++) {
-                MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
+    int *MoInf = p4est_fortran_data->MIPtr = (int *) malloc(2 * 5 * nMortarSides * sizeof(int));
+    for (iSide = 1; iSide <= nMortarSides; ++iSide){
+        for (j = 0; j <= 4; j++) {
+            for (i = 1; i <= 2; i++){
+                MoInf[((iSide - 1) * 5 + (j)) * 2 + (i - 1)] = -1;
             }
-
+        }
+    }
+    
+    // Initialize BC array
     int *BCs = p4est_fortran_data->BCs = (int *) malloc(p4est_fortran_data->nBCSides * sizeof(int32_t));
     for (iSide = 1; iSide <= p4est_fortran_data->nBCSides; ++iSide) {
         BCs[iSide - 1] = -1;
     }
+    
+    // Now iterate to fill the arrays
     p4est->user_pointer = (void *) ghost_data;
     p4est_iterate(p4est,                      /* the forest */
                   ghost,                      /* the ghost layer May be LAter!!! */
@@ -1292,7 +1318,6 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
 }
 
 void GetData(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
-    int i1, j1 = 0, k1 = 0;
     int rank = 0;
     p4est_locidx_t local_num_quad, num_ghost = 0;
 
@@ -1889,60 +1914,6 @@ void p4est_loadbalancing_go(p4est_t *p4est, void *user_pointer) {
 
     return;
 
-}
-
-
-void p4est_loadbalancing(p4est_t *p4est, void *user_pointer) {
-    p4est_balance_data_t *data = (p4est_balance_data_t *) user_pointer;
-    int nVar = data->nVar;
-    int PP_N = data->PP_N;
-    int nElems = p4est->local_num_quadrants;
-    data->nElems = 1;// We use this field as a counter
-    int Datasize = data->DataSize;
-    // Try to avoid copying the data
-
-    p4est_t *p4est1 = p4est;//p4est_copy(p4est, 0); // 0 - no data to copy
-
-    p4est_reset_data(p4est1, Datasize, partition_init_fn, user_pointer);
-    int allow_coarsening = 1;
-    p4est_partition(p4est1, allow_coarsening, NULL);
-    // Return values to the two big array
-    p4est1->user_pointer = user_pointer;
-
-    nElems = p4est1->local_num_quadrants;
-    //Create to Array to return to the FLUXO
-    int P1 = PP_N + 1;
-    int P2 = P1 * P1;
-    int P3 = P2 * P1;
-    int Usize = nElems * nVar * P3;
-    int GPsize = nElems * 3 * P3;
-    data->DataSetU = (double *) malloc(Usize * sizeof(double));
-    data->DataSetElem_xGP = (double *) malloc(GPsize * sizeof(double));
-    data->nElems = 1;
-    p4est_iterate(p4est1, /* the forest */
-                  NULL,
-                  NULL,
-                  ReturnData,
-                  NULL,
-                  NULL,
-                  NULL);
-    // The return data is set up
-    p4est_reset_data(p4est1, sizeof(p4est_inner_data_t), NULL, NULL);
-    int nEl = 0;
-    p4est_iterate(p4est1,                     /* the forest */
-                  NULL,                   /* the ghost layer May be LAter!!! */
-                  (void *) &nEl,        /* the synchronized ghost data */
-                  ElementCounterNew_iter, /* callback to compute each quad's
-                                             interior contribution to du/dt */
-                  NULL,                   /* SidesCount_iter,            /* callback to compute each quads'
-                                             faces' contributions to du/du */
-                  NULL,                   /* there is no callback for the
-                                             edges between quadrants */
-                  NULL);
-
-    p4est = p4est1;
-    data->nElems = p4est1->local_num_quadrants;
-    return;
 }
 
 //From Hopest, but was changed to connectivity,  not p4est
