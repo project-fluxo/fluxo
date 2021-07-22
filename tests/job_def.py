@@ -145,14 +145,14 @@ def job_definition():
    run_opt_linfunc_nonconf_coll={'runs/linadv/linfunc/nonconforming_collmortar': 
                  {'tags': ['linadv','linfunc','curved','nonconforming','collocation-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
-                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 5e-12} },
                               },
                  },
              }
    run_opt_linfunc_nonconf_proj={'runs/linadv/linfunc/nonconforming_projmortar': 
                  {'tags': ['linadv','linfunc','curved','nonconforming','projection-mortar'],
                   'test_opts':{ 'err_Linf':{'func': check_error ,
-                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                                            'f_kwargs': {'whichError':'L_inf ','err_tol': 5e-12} },
                               },
                  },
              }
@@ -483,7 +483,7 @@ def job_definition():
       } 
    # Entropy stability test with EC flux and LLF (with and without shock-capturing)
    run_opt_entropyStab={'runs/mhd/softBlast/entropyStab':
-         {'tags': ['mhd','entropyCons','conforming'] ,
+         {'tags': ['mhd','entropyStab','conforming'] ,
           'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
@@ -778,7 +778,7 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.804813249457E+00,   5.517578664708E-01,   5.597476535066E-01,   4.138627951187E-01,   1.284407297899E+00,   3.777790394332E-01,   3.096901992672E-01,   3.895851478715E-01,   5.355148669546E-01],
+                                                    'to_be': [1.261761744974E+00,   2.526794751686E-01,   4.997058936099E-01,   2.538598040961E-01,   1.334587620025E-01,   3.300824659568E-02,   3.606116713989E-02,   5.261862613468E-02,   5.334768630614E-02],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -789,7 +789,7 @@ def job_definition():
           'restartfile': '../p4est_SC/MHD_ENTROPYCONS_State_0000000.400000000.h5',
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.804813249457E+00,   5.517578664708E-01,   5.597476535066E-01,   4.138627951187E-01,   1.284407297899E+00,   3.777790394332E-01,   3.096901992672E-01,   3.895851478715E-01,   5.355148669546E-01],
+                                                    'to_be': [1.261761744974E+00,   2.526794751686E-01,   4.997058936099E-01,   2.538598040961E-01,   1.334587620025E-01,   3.300824659568E-02,   3.606116713989E-02,   5.261862613468E-02,   5.334768630614E-02],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -827,7 +827,7 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC','br1'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.804801447128E+00,   5.517563598585E-01,   5.597450372181E-01,   4.138619747972E-01,   1.284406351905E+00,   3.777785377465E-01,   3.096900072869E-01,   3.895846561534E-01,   5.355136203722E-01],
+                                                    'to_be': [1.261756394089E+00,   2.526782825771E-01,   4.997038296246E-01,   2.538586067527E-01,   1.334584918103E-01,   3.300829302005E-02,   3.606115177897E-02,   5.261867832852E-02,   5.334763579369E-02],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
