@@ -136,7 +136,7 @@ test2 = MATMUL(TRANSPOSE(M_1_0),test1)+MATMUL(TRANSPOSE(M_2_0),test2)
 error = SUM(ABS(0.5d0*test2-1.33d0))/REAL(PP_N+1)
 SWRITE(UNIT_StdOut,*)'Error of project constant back to big side:',error
 
-IF(error.GT. 10.*PP_RealTolerance) THEN
+IF(error.GT. 100.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
     'problems in building Mortar 2',999,error)
 END IF
@@ -161,7 +161,7 @@ SWRITE(UNIT_StdOut,*)'Error of mean value of polynomial, projected back to big s
 
 END ASSOCIATE !M_0_1,M_0_2,M_1_0,M_2_0
 
-IF(error.GT. 10.*PP_RealTolerance) THEN
+IF(error.GT. 100.*PP_RealTolerance) THEN
   CALL abort(__STAMP__,&
     'problems in building Mortar 3',999,error)
 ELSE
