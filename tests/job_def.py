@@ -460,14 +460,21 @@ def job_definition():
             }
    
    run_opt_fsp_conf={'runs/mhd/freestream/conforming':
-         {'tags': ['mhd','freestream','conforming'] ,
+         {'tags': ['mhd','freestream','curved','conforming'] ,
           'test_opts':{'err_Linf':{'func': check_error ,
                                    'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
                       },
          },
       }
-   run_opt_fsp_nonconf={'runs/mhd/freestream/nonconforming':
-         {'tags': ['mhd','freestream','nonconforming'] ,
+   run_opt_fsp_nonconf_proj={'runs/mhd/freestream/nonconforming_projmortar':
+         {'tags': ['mhd','freestream','curved','nonconforming','projection-mortar'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
+   run_opt_fsp_nonconf_coll={'runs/mhd/freestream/nonconforming_collmortar':
+         {'tags': ['mhd','freestream','curved','nonconforming','collocation-mortar'] ,
           'test_opts':{'err_Linf':{'func': check_error ,
                                    'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
                       },
@@ -475,7 +482,15 @@ def job_definition():
       }
    # Entropy conservation test with EC flux (with and without shock-capturing)
    run_opt_entropyCons={'runs/mhd/softBlast/entropyCons':
-         {'tags': ['mhd','entropyCons','conforming'] ,
+         {'tags': ['mhd','entropyCons','curved','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      } 
+   # Entropy conservation test with EC flux (needs coll. + Jesse_mortars!)
+   run_opt_entropyCons_nonconf={'runs/mhd/softBlast/entropyCons_nonconf':
+         {'tags': ['mhd','entropyCons','curved','nonconforming'] ,
           'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
                                        'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
                       },
@@ -483,7 +498,22 @@ def job_definition():
       } 
    # Entropy stability test with EC flux and LLF (with and without shock-capturing)
    run_opt_entropyStab={'runs/mhd/softBlast/entropyStab':
-         {'tags': ['mhd','entropyStab','conforming'] ,
+         {'tags': ['mhd','entropyStab','curved','conforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }  
+   run_opt_entropyStab_nonconf={'runs/mhd/softBlast/entropyStab_nonconf':
+         {'tags': ['mhd','entropyStab','curved','nonconforming'] ,
+          'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
+                                  'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }  
+   # Entropy stability test with EC flux and LLF (with and without shock-capturing)
+   run_opt_entropyStab_FloGor9waves={'runs/mhd/softBlast/entropyStab_FloGor9waves':
+         {'tags': ['mhd','entropyStab','curved','conforming','FloGor'] ,
           'test_opts':{'dSdU*Ut':{'func': check_all_errors ,
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
@@ -503,7 +533,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'cons_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -523,16 +553,40 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'10',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
+   jobs['mhd_split_glm_noncons_br1entr_jesse']={
+          'case': caseID ,
+          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux','jesse-mortar'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'  :'ON',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyCons_nonconf,
+                       **run_opt_entropyStab,
+                       **run_opt_entropyStab_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
    jobs['mhd_split_glm_noncons_br1entr_ecvolflux_testcase_mhdeq']={
           'case': caseID ,
-          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux'] ,
+          'tags': ['mhd','split-form','br1','GL','GLM','NONCONS','ECflux','FloGor'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -545,10 +599,12 @@ def job_definition():
                         'FLUXO_EQN_VOLFLUX'      :'12',
                         'FLUXO_TESTCASE'         :'mhd_equilibrium'
                        },
-          'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+          'run_opts': {
+                       **run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -567,7 +623,7 @@ def job_definition():
                        },
           'run_opts': {**run_opt_entropyCons,
                        **run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -584,7 +640,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -602,7 +658,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'cons_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -624,7 +680,7 @@ def job_definition():
           'run_opts': {**run_opt_entropyCons,
                        **run_opt_entropyStab,
                        **run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -641,7 +697,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -659,35 +715,7 @@ def job_definition():
                         'FLUXO_TESTCASE'         :'mhd_equilibrium'
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
-                      }
-         }
-   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   volfluxes=['0','10','12']
-   for  vvv  in range(0,len(volfluxes)):
-      volflux=volfluxes[vvv]
-      caseID=caseID+1
-      
-      my_run_opts={**run_opt_fsp_conf, 
-                   **run_opt_fsp_nonconf,
-                  }
-      if vvv==1 or vvv==2:
-        my_run_opts={**my_run_opts,
-                     **run_opt_entropyCons,
-                    }
-      
-      jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
-          'case': caseID ,
-          'tags': ['mhd','split-form','GL','NONCONS'] ,
-          'build_opts':{**baseopts,
-                        'FLUXO_DISCTYPE'         :'2',
-                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
-                        'FLUXO_EQN_GLM'          :'OFF',
-                        'FLUXO_EQN_NONCONS'      :'ON',
-                        'FLUXO_PARABOLIC'        :'OFF',
-                        'FLUXO_EQN_VOLFLUX'      : volflux,
-                       },
-          'run_opts': {**my_run_opts,
+                       **run_opt_fsp_nonconf_proj,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -703,7 +731,7 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'OFF',
                        },
           'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -730,11 +758,13 @@ def job_definition():
                         'FLUXO_SHOCKCAP_NFVSE'   :'ON',
                         'FLUXO_SHOCKINDICATOR'   :'custom',
                        },
-          'run_opts': {**run_opt_fsp_conf,
-                       **run_opt_fsp_nonconf,
+          'run_opts': {
+                       **run_opt_fsp_conf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_SC_first,
                        **run_opt_entropyCons,
                        **run_opt_entropyStab,
+                       **run_opt_entropyStab_FloGor9waves,
                       },
 
          }
@@ -765,7 +795,7 @@ def job_definition():
                         'FLUXO_PARABOLIC_LIFTING_VAR':'entropy_var',
                        },
           'run_opts': {**run_opt_fsp_conf,
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_SC_first,
                        **run_opt_fsp_SC_TVD_ES,
                        **run_opt_entropyCons,
@@ -814,7 +844,7 @@ def job_definition():
                        },
           'run_opts': {
                        **run_opt_fsp_conf,
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_SC_first,
                        **run_opt_p4est_SC,
                        **run_opt_p4est_SC_restart,
@@ -854,7 +884,7 @@ def job_definition():
                        },
           'run_opts': {
                        **run_opt_fsp_conf,
-                       **run_opt_fsp_nonconf,
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_fsp_SC_first,
                        **run_opt_p4est_SC_br1,
                       },
@@ -930,7 +960,16 @@ def job_definition():
                                   'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
                       },
          },
-      } 
+      }
+   # Entropy conservation test with Ranocha EC-KEP flux (with and without shock-capturing)
+   run_opt_entropyCons_Ranocha={'runs/navst/softBlast/entropyCons_Ranocha':
+         {'tags': ['navierstokes','entropyCons','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      }
+
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['navierstokes_type1_br1_GL']={
@@ -1079,6 +1118,7 @@ def job_definition():
         my_run_opts={**my_run_opts,
                      **run_opt_entropyCons,
                      **run_opt_entropyStab,
+                     **run_opt_entropyCons_Ranocha,
                     }
       
       jobs['build_navierstokes_type2_nopara_volFlux_'+volflux]={
@@ -1281,6 +1321,133 @@ def job_definition():
                        **run_opt_nonConf_parabolic,
                       }
          }
+
+   #============================================================================
+   #============================================================================
+   #PERFORMANCE, MHD, 3000 < caseID
+   #============================================================================
+   #============================================================================
+   caseID=3000
+   baseopts={ 'FLUXO_EQNSYSNAME' :'mhd',
+              'FLUXO_EQN_GLM'    :'ON',
+            }
+   
+   perf_run_opt_ec_conf={'runs/mhd/performance/EC_conforming':
+         {'tags': ['mhd','curved','conforming'] ,
+         },
+      }
+   perf_run_opt_ec_nonconf_2to1={'runs/mhd/performance/EC_nonconforming_2to1':
+         {'tags': ['mhd','curved','nonconforming','2to1-mortar'] ,
+         },
+      }
+   perf_run_opt_ec_nonconf_4to1={'runs/mhd/performance/EC_nonconforming_4to1':
+         {'tags': ['mhd','curved','nonconforming','4to1-mortar'] ,
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_nopara_no-noncons_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        'FLUXO_EQN_NONCONS'      :'OFF',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_jesse_nopara_no-noncons_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        'FLUXO_EQN_NONCONS'      :'OFF',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_nopara_noncons_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_jesse_nopara_noncons_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_noncons_br1_entropy_vars_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance','br1'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_noncons_jesse_br1_entropy_vars_EC_performance']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','performance','br1','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        "FLUXO_PARABOLIC"        :"ON",
+                        "FLUXO_PARABOLIC_LIFTING":"br1",
+                        "FLUXO_PARABOLIC_LIFTING_VAR":"entropy_var",
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**perf_run_opt_ec_conf, 
+                       **perf_run_opt_ec_nonconf_2to1, 
+                       **perf_run_opt_ec_nonconf_4to1, 
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    #============================================================================
    #============================================================================
    #PERFORMANCE, Navierstokes, 4000 < caseID

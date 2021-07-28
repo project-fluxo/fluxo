@@ -630,7 +630,7 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             i = 2;
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID; // MortarType(2,:):= Position in MortarInfo array
             // i=1, jIndex=0
-            MortarInfo[((SideID - 1) * 5 ) * 2 ] = BigSideID;
+            MortarInfo[((SideID - 1) * 5 ) * 2 ] = BigSideID;  // MortarInfo(sideID,0,1) points back to big SideID
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
             

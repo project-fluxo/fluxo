@@ -183,11 +183,6 @@ USE MOD_Mesh_Vars,  ONLY: MeshInitIsDone
 USE MOD_Mortar_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
-#ifdef JESSE_MORTAR
-INTEGER      :: doMPIsides,firstMortarSideID,lastMortarSideID
-INTEGER      :: MortarSideID,iSide
-REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
-#endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 IF(MortarInitIsDone.OR.(.NOT.MeshInitIsDone))THEN
    CALL CollectiveStop(__STAMP__,&
@@ -214,7 +209,6 @@ USE MOD_Mortar_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 #ifdef JESSE_MORTAR
-INTEGER      :: doMPIsides,firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,iSide
 REAL         :: Ns_loc(1:3,0:PP_N,0:PP_N)
 #endif /*JESSE_MORTAR*/

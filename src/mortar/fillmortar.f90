@@ -243,6 +243,7 @@ USE MOD_Mortar_Vars, ONLY: MProj
 #ifdef JESSE_MORTAR
 USE MOD_Mortar_Vars, ONLY: delta_flux_jesse
 #endif
+USE MOD_Globals,     ONLY : abort
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nSides
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide,FS2M
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
@@ -358,6 +359,9 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
       END DO !q=0,PP_N
     END DO !iNb=1,2
 
+  CASE DEFAULT
+    CALL abort(__STAMP__,&
+               'Wrong mortar type')
   END SELECT ! mortarType(MortarSideID)
 END DO !MortarSideID
 

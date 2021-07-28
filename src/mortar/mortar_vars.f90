@@ -11,6 +11,8 @@
 !
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
+#include "defines.h"
+
 !==================================================================================================================================
 !> Variables used for mortars: mortar interpolation and projection matrices
 !==================================================================================================================================
@@ -217,6 +219,7 @@ END SUBROUTINE MortarBasis_SmallToBig_projection
 SUBROUTINE InterpolateBigToSmall(ndim1,whichMortarType,Big,Small)
 ! MODULES
 USE MOD_Preproc
+USE MOD_Globals, ONLY: abort
 !USE MOD_Mortar_Vars, ONLY: Mint
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -281,6 +284,9 @@ CASE(3) !1->2 in xi
       END DO
     END DO
   END DO !iNb=1,2
+CASE DEFAULT
+  CALL abort(__STAMP__,&
+               'Wrong mortar type')
 END SELECT ! mortarType(SideID)
 
 END SUBROUTINE InterpolateBigToSmall
@@ -303,6 +309,7 @@ END SUBROUTINE InterpolateBigToSmall
 !==================================================================================================================================
 SUBROUTINE InterpolateBigToSmall_ALL(ndim1,whichMortarType,Big,Small)
 ! MODULES
+USE MOD_Globals, ONLY: abort
 USE MOD_Preproc
 !USE MOD_Mortar_Vars, ONLY: Mint
 IMPLICIT NONE
@@ -368,6 +375,9 @@ CASE(3) !1->2 in xi
       END DO
     END DO
   END DO !iNb=1,2
+CASE DEFAULT
+  CALL abort(__STAMP__,&
+               'Wrong mortar type')
 END SELECT ! mortarType(SideID)
 
 END SUBROUTINE InterpolateBigToSmall_ALL
