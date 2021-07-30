@@ -788,7 +788,7 @@ END SUBROUTINE RunAMR
 
         IMPLICIT NONE
         TYPE(p4est_fortran_data) :: FortranData
-        INTEGER     ::firstMasterSide, lastMasterSide, nMortarMPISide
+        INTEGER     ::firstMasterSide, lastMasterSide
 
         nBCSides            =   FortranData%nBCSides
         nElems              =   FortranData%nElems
@@ -797,7 +797,7 @@ END SUBROUTINE RunAMR
         nMortarInnerSides   =   FortranData%nMortarInnerSides
         nInnerSides         =   FortranData%nInnerSides
         ! Must be set later, for parallel version
-        nMortarMPISide         = FortranData%nMortarMPISides
+        nMortarMPISides        = FortranData%nMortarMPISides
         nMPISides_MINE         = FortranData%nMPISides_MINE
         nMPISides_YOUR         = FortranData%nMPISides_YOUR
 
