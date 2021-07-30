@@ -261,6 +261,7 @@ IMPLICIT NONE
 #ifdef JESSE_MORTAR
 SDEALLOCATE(U_small)
 SDEALLOCATE(Ns_small)
+SDEALLOCATE(delta_flux_jesse)
 #endif /*JESSE_MORTAR*/
 
 END SUBROUTINE FinalizeMortarArrays
