@@ -133,7 +133,7 @@ INTEGER             :: nMortarSides=0          !< total number of mortar sides
 INTEGER             :: nMortarInnerSides=0     !< number of inner mortar sides
 INTEGER             :: nMortarMPISides=0       !< number of mortar MPI sides
 INTEGER,ALLOCATABLE, TARGET :: MortarType(:,:)         !< Type of mortar [1] and position in mortar list [1:nSides]
-INTEGER,ALLOCATABLE, TARGET :: MortarInfo(:,:,:)       !< 1:2,1:4,1:nMortarSides: [1] nbSideID / flip, [2] max 4 mortar sides, [3] sides
+INTEGER,ALLOCATABLE, TARGET :: MortarInfo(:,:,:)       !< 1:2,0:4,1:nMortarSides: [1] nbSideID(1), flip(2), [2] big side(0), max 4 mortar sides(1:4), [3] mortar ID (1:nMortarSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255),ALLOCATABLE :: BoundaryName(:) !< names of the boundary conditions read from the mesh file
 CHARACTER(LEN=255)             :: MeshFile     !< name of hdf5 meshfile (write with ending .h5!)

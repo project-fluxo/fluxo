@@ -519,6 +519,22 @@ def job_definition():
                       },
          },
       }  
+   # Entropy conservation test with EC flux, SC, and AMR (needs coll. + Jesse_mortars!)
+   run_opt_entropyCons_AMR_SC={'runs/mhd/softBlast/entropyCons_AMR':
+         {'tags': ['mhd','entropyCons','curved','nonconforming','amr','SC'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      }
+   # Entropy stability test with EC flux + full wave dissipation, reconstructed FV-SC, and AMR (needs coll. + Jesse_mortars!)
+   run_opt_entropyStab_AMR_SC={'runs/mhd/softBlast/entropyStab_AMR':
+         {'tags': ['mhd','entropyStab','curved','nonconforming','amr','SC'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['mhd_type1_br1_cons_GL']={
@@ -890,6 +906,34 @@ def job_definition():
                       },
 
          }
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_nopara_p4est_SC_jesse']={
+          'case': caseID ,
+          'tags': ['mhd','split-form','SC','GL','GLM','NONCONS','p4est','amr','jesse-mortar'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'  :'ON',
+                        'FLUXO_PARABOLIC'        :'OFF',
+                        'FLUXO_SHOCKCAPTURE'     :'ON',
+                        'FLUXO_SHOCKCAP_NFVSE'   :'ON',
+                        'FLUXO_SHOCKINDICATOR'   :'custom',
+                        "FLUXO_AMR"              :"ON",
+                        "FLUXO_BUILD_P4EST"      :"OFF",
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {
+                       **run_opt_fsp_conf,
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_SC_first,
+                       **run_opt_entropyCons_AMR_SC,
+                       **run_opt_entropyStab_AMR_SC,
+                      },
+
+         }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    #============================================================================
@@ -969,7 +1013,23 @@ def job_definition():
                       },
          },
       }
-
+   
+   # Entropy conservation test with Ranocha EC-KEP flux, SC and AMR
+   run_opt_entropyCons_AMR={'runs/navst/softBlast/entropyCons_AMR':
+         {'tags': ['navierstokes','entropyCons','nonconforming','curved','amr','p4est'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      } 
+   # Entropy stability test with Ranocha EC-KEP flux, full wave dissipation, reconstructed FV-SC and AMR
+   run_opt_entropyStab_AMR={'runs/navst/softBlast/entropyStab_AMR':
+         {'tags': ['navierstokes','entropyStab','nonconforming','curved','amr','p4est'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':False} } ,
+                      },
+         },
+      } 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['navierstokes_type1_br1_GL']={
@@ -1321,7 +1381,28 @@ def job_definition():
                        **run_opt_nonConf_parabolic,
                       }
          }
-
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_p4est_SC_jesse_mortar']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','amr','p4est','SC','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_AMR"              :"ON",
+                        "FLUXO_BUILD_P4EST"      :"OFF",
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_p4est,
+                       **run_opt_entropyCons_AMR,
+                       **run_opt_entropyStab_AMR,
+                      }
+         }
    #============================================================================
    #============================================================================
    #PERFORMANCE, MHD, 3000 < caseID
