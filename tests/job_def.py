@@ -735,6 +735,32 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   volfluxes=['10','12']
+   for  vvv  in range(0,len(volfluxes)):
+      volflux=volfluxes[vvv]
+      caseID=caseID+1
+      
+      jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
+          'case': caseID ,
+          'tags': ['mhd','split-form','GL','NONCONS'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_PARABOLIC'        :'OFF',
+                        'FLUXO_EQN_VOLFLUX'      : volflux,
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_entropyCons,
+                       **run_opt_entropyCons_nonconf,
+                       **run_opt_entropyStab,
+                       **run_opt_entropyStab_nonconf,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['mhd_split_glm_no-noncons_nopara']={
           'case': caseID ,
