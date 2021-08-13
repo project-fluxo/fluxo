@@ -57,7 +57,8 @@ CALL prms%CreateStringOption('TimeDiscMethod', "Specifies the type of time-discr
                                                " a specific Runge-Kutta scheme. Possible values:\n"//&
                                                "  * standardrk3-3\n  * carpenterrk4-5\n  * niegemannrk4-14\n"//&
                                                "  * toulorgerk4-8c\n  * toulorgerk3-7c\n  * toulorgerk4-8f\n"//&
-                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18\n  * ssprk4-5", value='CarpenterRK4-5')
+                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18\n * ssprk3-3 * ssprk4-5",&
+                                                value='CarpenterRK4-5')
 CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mandatory).")
 CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0 (mandatory)")
 CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0 (mandatory)")
@@ -84,7 +85,6 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-CHARACTER(LEN=255):: TimeDiscMethod
 !==================================================================================================================================
 TimeDiscMethod = GETSTR('TimeDiscMethod','Carpenter RK4-5')
 CALL StripSpaces(TimeDiscMethod)
@@ -98,6 +98,8 @@ CASE('LSERKK3')
   TimeStep=>TimeStepByLSERKK3
 case('SSPRK2')
   TimeStep=>TimeStepBySSPRK2
+CASE('SSPRK33')
+  TimeStep=>TimeStepBySSPRK33
 END SELECT
 
 IF(TimeDiscInitIsDone)THEN
@@ -622,6 +624,70 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
   
 end subroutine TimeStepBySSPRK2
+!===================================================================================================================================
+!> SSPRK third order 3 stages (shu-osher)
+!> Butcher tableau 
+!> 
+!>   0   |
+!>   1   |  1
+!>   1/2 | 1/4  1/4
+!>  _____|_______________
+!>       | 1/6  1/6  2/3
+!>
+!> Stages:                                    | implementation:
+!> ----------------------------------------------------------------------------------------------
+!> k_1=ut(t_n,u_n)                            |  ut = R(t,u) , tmp=ut 
+!> u_1=u_n + dt * k1                          |  u  = u + dt*tmp
+!> k_2=ut(t_n+1*dt, u_1)                      |  ut = R(t+1*dt,u)
+!> u_2=u_n + dt *(1/4 *(k_1 +k_2))            |  u  = u + dt*((1/4-1)*tmp  + 1/4*ut) , tmp = tmp+ut
+!> k_3=f(t_n+0.5*dt, u_2)                     |  ut = R(t+0.5*dt,u)
+!> u_3=u_n + dt *(1/6 *(k_1 +k_2) +2/3*k_3)   |  u  = u + dt*((1/6-1/4)*tmp + 2/3*ut)
+!>
+!===================================================================================================================================
+SUBROUTINE TimeStepBySSPRK33(t)
+! MODULES
+USE MOD_PreProc
+USE MOD_Vector
+USE MOD_DG           ,ONLY: DGTimeDerivative
+USE MOD_DG_Vars      ,ONLY: U,Ut,nTotalU
+USE MOD_TimeDisc_Vars,ONLY: dt,CurrentStage
+USE MOD_Mesh_Vars    ,ONLY: nElems
+IMPLICIT NONE
+!-----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(IN)  :: t                                     !< current simulation time
+!-----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL             :: Ut_temp(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) ! temporal variable for Ut
+REAL,PARAMETER   :: cc(1:4)=(/ -0.75, 0.25, -1./12., 2./3. /)
+REAL             :: tStage,cc_dt(4)
+!===================================================================================================================================
+! Premultiply with dt
+cc_dt=cc*dt
+
+CurrentStage=1
+tStage=t
+CALL DGTimeDerivative(tStage)
+CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
+CALL VAXPBY(nTotalU,U,Ut,ConstIn=dt)         !U       = U + Ut*dt
+
+CurrentStage=2
+tStage=t+dt
+CALL DGTimeDerivative(tStage)
+CALL VZPAXPBY(nTotalU,U,cc_dt(1),Ut_temp,cc_dt(2),Ut)   !U       = U - 0.75*dt*Ut_temp + 0.25*dt*Ut
+CALL VAXPBY(nTotalU,Ut_temp,Ut)                         !Ut_temp = Ut_temp+ Ut
+
+CurrentStage=3
+tStage=t+0.5*dt
+CALL DGTimeDerivative(tStage)
+CALL VZPAXPBY(nTotalU,U,cc_dt(3),Ut_temp,cc_dt(4),Ut)   !U       = U - 1/12*dt*Ut_temp + 2/3*dt*Ut
+
+CurrentStage=1
+
+END SUBROUTINE TimeStepBySSPRK33
+
+
+
 !===================================================================================================================================
 !> Scaling of the CFL number, from paper GASSNER, KOPRIVA, "A comparision of the Gauss and Gauss-Lobatto
 !> Discontinuous Galerkin Spectral Element Method for Wave Propagation Problems" .

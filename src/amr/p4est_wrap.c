@@ -1,6 +1,7 @@
 //!==================================================================================================================================
 //! Copyright (c) 2018 - 2020 Alexander Astanin
 //! Copyright (c) 2018 - 2020 Andrés Rueda
+//! Copyright (c) 2020 - 2021 Florian Hindenlang
 //!
 //! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 //! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -628,6 +629,8 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = 1;      // MortarType(1,:)=1: Four small sides in mortar
             i = 2;
             MortarType[(BigSideID - 1) * 2 + (i - 1)] = SideID; // MortarType(2,:):= Position in MortarInfo array
+            // i=1, jIndex=0
+            MortarInfo[((SideID - 1) * 5 ) * 2 ] = BigSideID;  // MortarInfo(sideID,0,1) points back to big SideID
 
             p4est_inner_data_t *Smalldataquads[P8EST_HALF];
             
@@ -645,12 +648,12 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     int Pside = BigFace;
                     int PnbSide = SmallFace;
                     int PFlip = orientation;
-                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
+                    jIndex = GetHMortar(j, Pside, PnbSide, PFlip); // jIndex is 1...4
                     
                     i = 1;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
+                    MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = 0 * flip;
+                    MortarInfo[((SideID - 1) * 5  + (jIndex)) * 2 + (i - 1)] = 0 * flip;
                 } else {
                     // Small side is MPI (Use GHOST DATA)
                     
@@ -664,9 +667,9 @@ SetSideToElement_iter(p4est_iter_face_info_t *info, void *user_data) {
                     jIndex = GetHMortar(j, Pside, PnbSide, PFlip);
                     
                     i = 1;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = iSide;
+                    MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = iSide;
                     i = 2;
-                    MortarInfo[(SideID - 1) * 4 * 2 + (jIndex - 1) * 2 + (i - 1)] = flip;//Not Zero
+                    MortarInfo[((SideID - 1) * 5 + (jIndex)) * 2 + (i - 1)] = flip;//Not Zero
 
                 }
             }
@@ -1279,11 +1282,11 @@ void SetEtSandStE(p4est_t *p4est, p4est_fortran_data_t *p4est_fortran_data) {
     // Initialize MortarInfo array
     int nMortarSides = p4est_fortran_data->nMortarInnerSides + p4est_fortran_data->nMortarMPISides;
 
-    int *MoInf = p4est_fortran_data->MIPtr = (int *) malloc(2 * 4 * nMortarSides * sizeof(int));
+    int *MoInf = p4est_fortran_data->MIPtr = (int *) malloc(2 * 5 * nMortarSides * sizeof(int));
     for (iSide = 1; iSide <= nMortarSides; ++iSide){
-        for (j = 1; j <= 4; j++) {
+        for (j = 0; j <= 4; j++) {
             for (i = 1; i <= 2; i++){
-                MoInf[(iSide - 1) * 4 * 2 + (j - 1) * 2 + (i - 1)] = -1;
+                MoInf[((iSide - 1) * 5 + (j)) * 2 + (i - 1)] = -1;
             }
         }
     }

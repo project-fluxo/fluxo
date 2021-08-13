@@ -119,6 +119,11 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "10: Derigs er al. entropy conservative flux with metric dealiasing" //&
                                               "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
+#ifdef JESSE_MORTAR
+CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
+                                              "[default = volumeflux], or choose from volumeFlux list  " &
+                                             ,"1")
+#endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -130,6 +135,7 @@ SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
+USE MOD_StringTools       ,ONLY: INTTOSTR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars
@@ -253,6 +259,15 @@ WhichVolumeFlux = PP_VolFlux
 SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
 #endif
 CALL SetVolumeFlux(whichVolumeFlux)
+#ifdef JESSE_MORTAR
+#if PP_VolFlux==-1
+WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+#else
+WhichMortarFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...MortarFlux defined at compile time:',WhichMortarFlux
+#endif
+CALL SetMortarFlux(whichMortarFlux)
+#endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 
 #if NONCONS==1
@@ -288,6 +303,8 @@ IMPLICIT NONE
 GLM_init=.FALSE.
 #endif /*PP_GLM*/
 END SUBROUTINE InitEquationAfterAdapt
+
+
 !==================================================================================================================================
 !> Set the pointer of the riemann solver
 !==================================================================================================================================
@@ -400,7 +417,7 @@ CASE(1)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with Metrics Dealiasing'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE(10)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: KEPEC with Metrics Dealiasing'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Derigs et al. KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
@@ -410,6 +427,47 @@ CASE DEFAULT
          "volume flux not implemented")
 END SELECT
 END SUBROUTINE SetVolumeFlux
+
+#ifdef JESSE_MORTAR
+!==================================================================================================================================
+!> Set the pointer of the mortar flux 
+!==================================================================================================================================
+SUBROUTINE SetMortarFlux(which)
+! MODULES
+USE MOD_Globals
+USE MOD_Equation_Vars,ONLY: MortarFluxAverageVec,useEntropyMortar
+USE MOD_Flux_Average
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+INTEGER,INTENT(IN) :: which
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+useEntropyMortar=.FALSE.
+SELECT CASE(Which)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG'
+  MortarFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG with Metrics Dealiasing'
+  MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Derigs et al. KEPEC with Metrics Dealiasing'
+  MortarFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
+  useEntropyMortar=.TRUE.
+CASE(12)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: FloGor KEPEC with Metrics Dealiasing'
+  MortarFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
+  useEntropyMortar=.TRUE.
+CASE DEFAULT
+  CALL ABORT(__STAMP__,&
+         "Mortar flux not implemented")
+END SELECT
+END SUBROUTINE SetMortarFlux
+#endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 
 !==================================================================================================================================
@@ -429,7 +487,7 @@ REAL,INTENT(INOUT) :: U_in(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) !< initialized
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER                 :: i,j,k,iElem,counter
-REAL 			:: x,z,y,tol,d1,d2,tau,s,tau_max,r,h
+REAL                    :: x,z,y,tol,d1,d2,tau,s,tau_max,r,h
 !==================================================================================================================================
 ! Determine Size of the Loops, i.e. the number of grid cells in the
 ! corresponding directions
@@ -1529,8 +1587,8 @@ CASE(109) ! Geophysics plasma flow through sphere
     ELSE
       DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
         r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
-	h = 150.0/1820.0
-	tau = tau_max*EXP((1.0-r)/h)
+        h = 150.0/1820.0
+        tau = tau_max*EXP((1.0-r)/h)
         Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
         Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
       END DO; END DO; END DO ! i,j,k
@@ -1753,7 +1811,7 @@ CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
                         Metrics_gtilde(:,:,:,:,1), &
                         Metrics_htilde(:,:,:,:,1), &
                         ftildeElem,gtildeElem,htildeElem)
-CALL EvalUaux(U(:,:,:,:,1),UauxElem)
+CALL EvalUaux(nTotal_vol,U(:,:,:,:,1),UauxElem)
 ULaux=UauxElem(:,0,0,0)
 FrefL = fTildeElem(:,0,0,0)
 
@@ -1764,7 +1822,7 @@ CALL EvalAdvFluxTilde3D(             U(:,:,:,:,1), &
                         Metrics_gtilde(:,:,:,:,1), &
                         Metrics_htilde(:,:,:,:,1), &
                         ftildeElem,gtildeElem,htildeElem)
-CALL EvalUaux(U(:,:,:,:,1),UauxElem)
+CALL EvalUaux(nTotal_vol,U(:,:,:,:,1),UauxElem)
 URaux=UauxElem(:,0,0,0)
 FrefR = fTildeElem(:,0,0,0)
 

@@ -74,6 +74,12 @@ LOGICAL             :: EquationInitIsDone=.FALSE.
 #if (PP_DiscType==2)
 INTEGER             :: WhichVolumeFlux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec
+
+#ifdef JESSE_MORTAR
+INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*JESSE_MORTAR*/
+
 ABSTRACT INTERFACE
   PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,metric_L,metric_R,Fstar)
     REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state

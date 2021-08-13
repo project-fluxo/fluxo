@@ -78,7 +78,8 @@ SUBDIRLIST(LIFTINGS   ${CMAKE_CURRENT_SOURCE_DIR}/src/dg/)
 
 
 OPTION(FLUXO_ENABLE_MPI "Compile SINGLE or MPI version" ON)
-#OPTION(FLUXO_BUILD_MKL "Use MKL libraries instead of BLAS/LAPACK" OFF)
+#SET(FLUXO_ENABLE_LAPACK "off" CACHE STRING "link with LAPACK, (off/on/MKL)")
+#SET_PROPERTY(CACHE FLUXO_ENABLE_LAPACK PROPERTY STRINGS off on MKL )
 OPTION(FLUXO_BUILD_PAPI "Use PAPI library to perform performance measurements (e.g. flop counts)." OFF)
 OPTION(FLUXO_BUILD_HDF5 "Compile and build hdf5 library" OFF)
 OPTION(FLUXO_AMR        "Compile and build with p4est / AMR support" OFF)
@@ -138,6 +139,14 @@ IF(FLUXO_AMR)
 ELSE()
   UNSET(FLUXO_BUILD_P4EST CACHE )
   ADD_DEFINITIONS(-DUSE_AMR=0)
+ENDIF()
+
+SET(FLUXO_JESSE_MORTAR  OFF  CACHE BOOL "switch on/off the mortar implementation of Jesse's paper.")
+IF(FLUXO_JESSE_MORTAR)
+  ADD_DEFINITIONS(-DJESSE_MORTAR=1)
+  IF(NOT FLUXO_DISCTYPE EQUAL 2)
+    MESSAGE(SEND_ERROR " JESSE_MORTAR ONLY with Split form discretization (DiscType=2)!")
+  ENDIF()
 ENDIF()
 
 # Enable or disable unit tests
@@ -607,15 +616,17 @@ ENDIF()
 # =========================================================================
 # LAPACK/MKL library
 # =========================================================================
-# use Lapack/Blas for GNU
-#MESSAGE(STATUS "Using BLAS/Lapack library")
-#IF (FLUXO_BUILD_MKL)
-#  SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
-#ENDIF()
-#FIND_PACKAGE(LAPACK QUIET)
-#IF (LAPACK_FOUND)
-#  LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
-#ENDIF()
+#IF(NOT (FLUXO_ENABLE_LAPACK STREQUAL "off") )
+#  # use Lapack/Blas for GNU
+#  MESSAGE(STATUS "Using BLAS/Lapack library")
+#  IF (FLUXO_ENABLE_LAPACK STREQUAL "MKL" )
+#    SET(BLA_VENDOR "Intel") #search only for Intel BLAS (=MKL)
+#  ENDIF()
+#  FIND_PACKAGE(LAPACK QUIET)
+#  IF (LAPACK_FOUND)
+#    LIST(APPEND linkedlibs ${LAPACK_LIBRARIES})
+#  ENDIF()
+#ENDIF() 
 
 # =========================================================================
 # MPI
@@ -692,7 +703,6 @@ IF (FLUXO_PARABOLIC)
   FILE(GLOB liftingF90     ./src/dg/${FLUXO_PARABOLIC_LIFTING}/*.f90)
   LIST(APPEND dgF90 ${liftingF90})
 ENDIF()
-
 
 # define libs
 LIST(APPEND fluxoF90 ${dgF90})

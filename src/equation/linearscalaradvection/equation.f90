@@ -69,6 +69,7 @@ IMPLICIT NONE
 CALL prms%SetSection("Equation")
 CALL prms%CreateRealArrayOption('AdvVel',       "Advection velocity for advection part of LinAdv-Diff.")
 CALL prms%CreateRealOption(     'DiffC',        "Diffusion constant for diffusion part of LinAdv-Diff.","0.")
+CALL prms%CreateRealOption(     'upwind',       "=0.: central, =1.: upwind advective flux (real value).","1.")
 CALL prms%CreateRealArrayOption('IniWaveNumber'," Wave numbers used for exactfunction in linadv.","1.,1.,1.")
 CALL prms%CreateIntOption(     'IniExactFunc',  " Specifies exactfunc to be used for initialization ")
 #if (PP_DiscType==2)
@@ -76,8 +77,13 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "DG volume integral "//&
                                               "0: Standard DG Flux"//&
                                               "1: standard DG Flux with metric dealiasing" &
-                            ,"0")
+                            ,"1")
 #endif /*PP_DiscType==2*/
+#ifdef JESSE_MORTAR
+CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
+                                              "[DEFAULT = volumeFlux] or choose ID from volumeFlux list "&
+                                             ,"1")
+#endif /*JESSE_MORTAR*/
 END SUBROUTINE DefineParametersEquation
 
 
@@ -88,12 +94,13 @@ SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools,ONLY:GETREALARRAY,GETREAL,GETINT
+USE MOD_StringTools       ,ONLY: INTTOSTR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Equation_Vars
-#if (PP_DiscType==2)
+#if (PP_DiscType==2 || defined(JESSE_MORTAR) )
 USE MOD_Flux_Average,ONLY: standardDGFluxVec
 USE MOD_Flux_Average,ONLY: standardDGFluxDealiasedMetricVec
-#endif /*PP_DiscType==2*/
+#endif /*PP_DiscType==2 or JESSE_MORTAR*/
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -112,6 +119,7 @@ doCalcSource=.TRUE.
 AdvVel             = GETREALARRAY('AdvVel',3)
 ! Read the diffusion constant from ini file
 DiffC             = GETREAL('DiffC','0.')
+upwind            = GETREAL('upwind','1.')
 IniWaveNumber     = GETREALARRAY('IniWaveNumber',3,'1.,1.,1.')
 
 ! Read in boundary parameters
@@ -126,10 +134,10 @@ SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVo
 #endif
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG (central)'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with dealiased metric'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG (central) with dealiased metric'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
@@ -137,10 +145,27 @@ CASE DEFAULT
 END SELECT
 #endif /*PP_DiscType==2*/
 
+#ifdef JESSE_MORTAR
+WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+SELECT CASE(WhichMortarFlux)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: central flux '
+  MortarFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: central flux with averaged metric'
+  MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE DEFAULT
+  CALL ABORT(__STAMP__,&
+         "volume flux not implemented")
+END SELECT
+#endif /*JESSE_MORTAR*/
+
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT LINADV DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
+
+
 !==================================================================================================================================
 !> Reinitialize equation after mesh adaptation
 !==================================================================================================================================
@@ -155,6 +180,8 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 END SUBROUTINE InitEquationAfterAdapt
+
+
 !==================================================================================================================================
 !> fill the initial DG solution with a given exactfunction
 !==================================================================================================================================

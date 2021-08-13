@@ -31,6 +31,10 @@ INTERFACE U_Mortar
   MODULE PROCEDURE U_Mortar
 END INTERFACE
 
+INTERFACE U_Mortar_Eqn
+  MODULE PROCEDURE U_Mortar_Eqn
+END INTERFACE
+
 INTERFACE Flux_Mortar
   MODULE PROCEDURE Flux_Mortar
 END INTERFACE
@@ -39,39 +43,41 @@ INTERFACE Flux_Cons_Mortar
   MODULE PROCEDURE Flux_Cons_Mortar
 END INTERFACE
 
-PUBLIC::U_Mortar,Flux_Mortar,Flux_Cons_mortar
+PUBLIC::U_Mortar,U_Mortar_Eqn,Flux_Mortar,Flux_Cons_mortar
+
+#ifdef JESSE_MORTAR
+PUBLIC::Fill_delta_flux_jesse
+#endif
 
 CONTAINS
 
 !==================================================================================================================================
-!> Fills small non-conforming sides with data from the corresponding large side, using 1D interpolation operators M_0_1,M_0_2.
+!> Fills small non-conforming sides with data from the corresponding large side, using 1D interpolation operators MInt(:,:,1:2).
 !> This is used to obtain the face solution for flux computation.
 !>
 !> NOTE: that input arrays can be both normal solution or gradient data.
-!> NOTE2: fillmortar is only built for PP_N as even in case of overint mortarized data
 !>
-!>       Type 1               Type 2              Type3
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
 !>
-!>        eta                  eta                 eta
-!>         ^                    ^                   ^
-!>         |                    |                   |
-!>     +---+---+            +---+---+           +---+---+
-!>     | 3 | 4 |            |   2   |           |   |   |
-!>     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
-!>     | 1 | 2 |            |   1   |           |   |   |
-!>     +---+---+            +---+---+           +---+---+
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
 !>
 !==================================================================================================================================
 SUBROUTINE U_Mortar(Uface_master,Uface_slave,doMPISides)
 ! MODULES
 USE MOD_Preproc
-USE MOD_Globals,     ONLY : abort
-USE MOD_Mortar_Vars, ONLY: M_0_1,M_0_2
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
 USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
 USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+USE MOD_Mortar_Vars, ONLY: InterpolateBigToSmall
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -80,13 +86,11 @@ REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSl
 LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER      :: p,q,l
+INTEGER      :: p,q
 INTEGER      :: iMortar,nMortars
 INTEGER      :: firstMortarSideID,lastMortarSideID
-INTEGER      :: MortarSideID,SideID,locSide,flip
-REAL         :: U_tmp( PP_nVar,0:PP_N,0:PP_N,1:4)
-REAL         :: U_tmp2(PP_nVar,0:PP_N,0:PP_N,1:2)
-REAL,POINTER :: M1(:,:),M2(:,:)
+INTEGER      :: MortarSideID,SideID,iSide,flip
+REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,1:4)
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
@@ -96,121 +100,137 @@ ELSE
   lastMortarSideID =  lastMortarInnerSide
 END IF !doMPISides
 
-M1=>M_0_1 !interpolation from (-1,1) -> (-1,0) 
-M2=>M_0_2 !interpolation from (-1,1) -> (0,1) 
 
 DO MortarSideID=firstMortarSideID,lastMortarSideID
+  iSide=MortarType(2,MortarSideID) !ID in list 1:nMortarSides
 
-  SELECT CASE(MortarType(1,MortarSideID))
-  CASE(1) !1->4
-    !first  split 1 side into two, in eta direction
-    ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-    !    U_tmp2(iVar,p,:,1)  =  M1 * Uface_master(iVar,p,:,MortarSideID)
-    !    U_tmp2(iVar,p,:,2)  =  M2 * Uface_master(iVar,p,:,MortarSideID)
-    DO q=0,PP_N
-      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        U_tmp2(:,p,q,1)=                  M1(0,q)*Uface_master(:,p,0,MortarSideID)
-        U_tmp2(:,p,q,2)=                  M2(0,q)*Uface_master(:,p,0,MortarSideID)
-        DO l=1,PP_N
-          U_tmp2(:,p,q,1)=U_tmp2(:,p,q,1)+M1(l,q)*Uface_master(:,p,l,MortarSideID)
-          U_tmp2(:,p,q,2)=U_tmp2(:,p,q,2)+M2(l,q)*Uface_master(:,p,l,MortarSideID)
-        END DO
-      END DO
-    END DO
-    ! then split each side again into two, now in xi direction
-    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-      ! The following p- and l-loop are four MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    U_tmp(iVar,:,q,1)  =  M1 * U_tmp2(iVar,:,q,1)
-      !    U_tmp(iVar,:,q,2)  =  M2 * U_tmp2(iVar,:,q,1)
-      !    U_tmp(iVar,:,q,3)  =  M1 * U_tmp2(iVar,:,q,2)
-      !    U_tmp(iVar,:,q,4)  =  M2 * U_tmp2(iVar,:,q,2)
-      DO p=0,PP_N
-        U_tmp(:,p,q,1)=                 M1(0,p)*U_tmp2(:,0,q,1)
-        U_tmp(:,p,q,2)=                 M2(0,p)*U_tmp2(:,0,q,1)
-        U_tmp(:,p,q,3)=                 M1(0,p)*U_tmp2(:,0,q,2)
-        U_tmp(:,p,q,4)=                 M2(0,p)*U_tmp2(:,0,q,2)
-        DO l=1,PP_N
-          U_tmp(:,p,q,1)=U_tmp(:,p,q,1)+M1(l,p)*U_tmp2(:,l,q,1)
-          U_tmp(:,p,q,2)=U_tmp(:,p,q,2)+M2(l,p)*U_tmp2(:,l,q,1)
-          U_tmp(:,p,q,3)=U_tmp(:,p,q,3)+M1(l,p)*U_tmp2(:,l,q,2)
-          U_tmp(:,p,q,4)=U_tmp(:,p,q,4)+M2(l,p)*U_tmp2(:,l,q,2)
-        END DO !l=1,PP_N
-      END DO
-    END DO 
-
-  CASE(2) !1->2 in eta
-    ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-    !    U_tmp(iVar,p,:,1)  =  M1 * Uface_master(iVar,p,:,MortarSideID)
-    !    U_tmp(iVar,p,:,2)  =  M2 * Uface_master(iVar,p,:,MortarSideID)
-    DO q=0,PP_N
-      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        U_tmp(:,p,q,1)=                 M1(0,q)*Uface_master(:,p,0,MortarSideID)
-        U_tmp(:,p,q,2)=                 M2(0,q)*Uface_master(:,p,0,MortarSideID)
-        DO l=1,PP_N
-          U_tmp(:,p,q,1)=U_tmp(:,p,q,1)+M1(l,q)*Uface_master(:,p,l,MortarSideID)
-          U_tmp(:,p,q,2)=U_tmp(:,p,q,2)+M2(l,q)*Uface_master(:,p,l,MortarSideID)
-        END DO
-      END DO
-    END DO
-
-  CASE(3) !1->2 in xi
-    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction
-      ! The following p- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    U_tmp(iVar,:,q,1)  =  M1 * Uface_master(iVar,:,q,MortarSideID)
-      !    U_tmp(iVar,:,q,2)  =  M2 * Uface_master(iVar,:,q,MortarSideID)
-      DO p=0,PP_N
-        U_tmp(:,p,q,1)=                 M1(0,p)*Uface_master(:,0,q,MortarSideID)
-        U_tmp(:,p,q,2)=                 M2(0,p)*Uface_master(:,0,q,MortarSideID)
-        DO l=1,PP_N
-          U_tmp(:,p,q,1)=U_tmp(:,p,q,1)+M1(l,p)*Uface_master(:,l,q,MortarSideID)
-          U_tmp(:,p,q,2)=U_tmp(:,p,q,2)+M2(l,p)*Uface_master(:,l,q,MortarSideID)
-        END DO
-      END DO
-    END DO
-  CASE DEFAULT
-    CALL abort(__STAMP__,&
-               'Wrong mortar type')
-  END SELECT ! mortarType(SideID)
- 
+  CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small_loc(:,:,:,:))
   !Now save the small sides into master/slave arrays
   IF(MortarType(1,MortarSideID).EQ.1)THEN
     nMortars=4
   ELSE
     nMortars=2
   END IF !MortarType
-  locSide=MortarType(2,MortarSideID)
+  !iSide=MortarType(2,MortarSideID)
   DO iMortar=1,nMortars
-    SideID= MortarInfo(MI_SIDEID,iMortar,locSide)
-    flip  = MortarInfo(MI_FLIP,iMortar,locSide)
+    SideID= MortarInfo(MI_SIDEID,iMortar,iSide)
+    flip  = MortarInfo(MI_FLIP,iMortar,iSide)
     SELECT CASE(flip)
-      CASE(0) ! master side
-        Uface_master(:,:,:,SideID)=U_tmp(:,:,:,iMortar)
-      CASE(1:4) ! slave side
+      CASE(0) ! small master side
+        Uface_master(:,:,:,SideID)=U_small_loc(:,:,:,iMortar)
+      CASE(1:4) ! small slave side
         DO q=0,PP_N; DO p=0,PP_N
-          Uface_slave(:,p,q,SideID)=U_tmp(:,FS2M(1,p,q,flip), &
-                                           FS2M(2,p,q,flip),iMortar)
+          Uface_slave(:,p,q,SideID)=U_small_loc(:,FS2M(1,p,q,flip), &
+                                              FS2M(2,p,q,flip),iMortar)
         END DO; END DO ! q, p
     END SELECT !flip(iMortar)
   END DO !iMortar
 END DO !MortarSideID
 END SUBROUTINE U_Mortar
 
+!==================================================================================================================================
+!> Fills small non-conforming sides with data from the corresponding large side, using 1D interpolation operators MInt(:,:,1:2).
+!> This is used to obtain the face solution for flux computation.
+!>
+!> NOTE: input arrays can be only conservative face solution, 
+!> U_small array is filled here containing only big mortar face interpolations, needed for JESSE_MORTAR
+!>
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
+!>
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    |  -1   |          | 3 | 4 |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    |  -2   |          | 1 | 2 |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>
+!==================================================================================================================================
+SUBROUTINE U_Mortar_Eqn(Uface_master,Uface_slave,doMPISides)
+! MODULES
+USE MOD_Preproc
+USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
+USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide
+USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
+USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
+USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
+#if defined(JESSE_MORTAR)
+USE MOD_Mortar_Vars, ONLY: U_small
+#else
+USE MOD_Mortar_Vars, ONLY: InterpolateBigToSmall
+#endif
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+REAL,INTENT(INOUT) :: Uface_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides) !< (INOUT) can be U or Grad_Ux/y/z_master
+REAL,INTENT(INOUT) :: Uface_slave( 1:PP_nVar,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide) !< (INOUT) can be U or Grad_Ux/y/z_master
+LOGICAL,INTENT(IN) :: doMPISides                                 !< flag whether MPI sides are processed
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER      :: p,q
+INTEGER      :: iMortar,nMortars
+INTEGER      :: firstMortarSideID,lastMortarSideID
+INTEGER      :: MortarSideID,SideID,iSide,flip
+REAL         :: U_small_loc(1:PP_nVar,0:PP_N,0:PP_N,1:4)
+!==================================================================================================================================
+IF(doMPISides)THEN
+  firstMortarSideID = firstMortarMPISide
+  lastMortarSideID =  lastMortarMPISide
+ELSE
+  firstMortarSideID = firstMortarInnerSide
+  lastMortarSideID =  lastMortarInnerSide
+END IF !doMPISides
+
+
+DO MortarSideID=firstMortarSideID,lastMortarSideID
+  iSide=MortarType(2,MortarSideID) !ID in list 1:nMortarSides
+
+#if defined(JESSE_MORTAR)
+  CALL InterpolateBigToSmall_ALL_Eqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+  U_small_loc=U_small(:,:,:,1:4,iSide)
+#else
+  CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small_loc(:,:,:,:))
+#endif
+  !Now save the small sides into master/slave arrays
+  IF(MortarType(1,MortarSideID).EQ.1)THEN
+    nMortars=4
+  ELSE
+    nMortars=2
+  END IF !MortarType
+  !iSide=MortarType(2,MortarSideID)
+  DO iMortar=1,nMortars
+    SideID= MortarInfo(MI_SIDEID,iMortar,iSide)
+    flip  = MortarInfo(MI_FLIP,iMortar,iSide)
+    SELECT CASE(flip)
+      CASE(0) ! small master side
+        Uface_master(:,:,:,SideID)=U_small_loc(:,:,:,iMortar)
+      CASE(1:4) ! small slave side
+        DO q=0,PP_N; DO p=0,PP_N
+          Uface_slave(:,p,q,SideID)=U_small_loc(:,FS2M(1,p,q,flip), &
+                                                  FS2M(2,p,q,flip),iMortar)
+        END DO; END DO ! q, p
+    END SELECT !flip(iMortar)
+  END DO !iMortar
+END DO !MortarSideID
+END SUBROUTINE U_Mortar_Eqn
 
 !==================================================================================================================================
-!>  Fills master side from small non-conforming sides, using 1D projection operators M_1_0,M_2_0
+!>  Fills master side from small non-conforming sides, using 1D projection operators Mproj(:,:,1:2)
 !>
 !> This routine is used to project the numerical flux at the small sides of the nonconforming interface to the corresponding large
 !>  ones.
 !>
-!>        Type 1               Type 2              Type3
-!>         eta                  eta                 eta
-!>          ^                    ^                   ^
-!>          |                    |                   |
-!>      +---+---+            +---+---+           +---+---+
-!>      | 3 | 4 |            |   2   |           |   |   |
-!>      +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
-!>      | 1 | 2 |            |   1   |           |   |   |
-!>      +---+---+            +---+---+           +---+---+
+!>  Type 1,1st step    Type 1 ,2nd step        Type 2              Type3
+!>
+!>       eta                eta                  eta                 eta
+!>        ^                  ^                    ^                   ^
+!>        |                  |                    |                   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
+!>    | 3 | 4 |          |  -1   |            |   2   |           |   |   |
+!>    +---+---+ --->     +---+---+ --->  xi   +---+---+ --->  xi  + 1 + 2 + --->  xi
+!>    | 1 | 2 |          |  -2   |            |   1   |           |   |   |
+!>    +---+---+          +---+---+            +---+---+           +---+---+
 !>
 !> flag weak changes the sign of incoming flux. 
 !> when used for lifting, weak=.false, since volint of lifting is in strong form
@@ -219,8 +239,11 @@ END SUBROUTINE U_Mortar
 SUBROUTINE Flux_Mortar(Flux_master,Flux_slave,doMPISides,weak)
 ! MODULES
 USE MOD_Preproc
+USE MOD_Mortar_Vars, ONLY: MProj
+#ifdef JESSE_MORTAR
+USE MOD_Mortar_Vars, ONLY: delta_flux_jesse
+#endif
 USE MOD_Globals,     ONLY : abort
-USE MOD_Mortar_Vars, ONLY: M_1_0,M_2_0
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nSides
 USE MOD_Mesh_Vars,   ONLY: firstMortarInnerSide,lastMortarInnerSide,FS2M
 USE MOD_Mesh_Vars,   ONLY: firstMortarMPISide,lastMortarMPISide
@@ -235,16 +258,15 @@ REAL,INTENT(IN   )   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSl
                                                                       !< set +F_slave in call if surfint is strong (lifting)
                                                             
 LOGICAL,INTENT(IN) :: doMPISides                                    !< flag whether MPI sides are processed
-LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong or weak form is used
+LOGICAL,INTENT(IN) :: weak                                          !< flag whether strong(lifting) or weak(equation) form is used 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER      :: p,q,l
+INTEGER      :: p,q,l,iNb,jNb
 INTEGER      :: iMortar,nMortars
 INTEGER      :: firstMortarSideID,lastMortarSideID
 INTEGER      :: MortarSideID,SideID,iSide,flip
-REAL         :: Flux_m( PP_nVar,0:PP_N,0:PP_N,1:4)
-REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N,1:2)
-REAL,POINTER :: M1(:,:),M2(:,:)
+REAL         :: Flux_small(PP_nVar,0:PP_N,0:PP_N,1:4)
+REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N)
 !==================================================================================================================================
 IF(doMPISides)THEN
   firstMortarSideID = firstMortarMPISide
@@ -254,7 +276,6 @@ ELSE
   lastMortarSideID =  lastMortarInnerSide
 END IF !doMPISides
 
-M1=>M_1_0; M2=>M_2_0
 DO MortarSideID=firstMortarSideID,lastMortarSideID
 
   nMortars=MERGE(4,2,MortarType(1,MortarSideID).EQ.1)
@@ -264,78 +285,86 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
     flip   = MortarInfo(MI_FLIP,iMortar,iSide)
     SELECT CASE(flip)
     CASE(0) ! small master side
-      Flux_m(:,:,:,iMortar)=Flux_master(:,:,:,SideID)
+      Flux_small(:,:,:,iMortar)=Flux_master(:,:,:,SideID)
     CASE(1:4) ! slave sides (should only occur for MPI)
       IF(weak)THEN
         DO q=0,PP_N; DO p=0,PP_N
-          Flux_m(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)=-Flux_slave(:,p,q,SideID)
+          Flux_small(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)=-Flux_slave(:,p,q,SideID)
         END DO; END DO !p,q
       ELSE    ! do not change sign if strong form when used for lifting! 
         DO q=0,PP_N; DO p=0,PP_N
-          Flux_m(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)= Flux_slave(:,p,q,SideID)
+          Flux_small(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iMortar)= Flux_slave(:,p,q,SideID)
         END DO; END DO !p,q
       END IF !weak
     END SELECT !slave sides
   END DO
+
+  Flux_master(:,:,:,MortarSideID)=0.
+#ifdef JESSE_MORTAR
+  IF(weak)THEN !use 'weak' flag to identify that its called from eqn, not for lifting flux!!!
+    !add previously computed two-point correction flux (Fill_delta_flux_jesse must be called before!!) 
+    Flux_master(:,:,:,MortarSideID)=delta_Flux_Jesse(:,:,:,iSide)
+  END IF
+#endif
+
   SELECT CASE(MortarType(1,MortarSideID))
   CASE(1) !1->4
     ! first in xi
-    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-      ! The following p- and l-loop are four MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_tmp(iVar,:,q,1)  =  M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
-      !    Flux_tmp(iVar,:,q,2)  =  M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
-      DO p=0,PP_N
-        Flux_tmp(:,p,q,1)=                      M1(0,p)*Flux_m(:,0,q,1)+M2(0,p)*Flux_m(:,0,q,2)
-        Flux_tmp(:,p,q,2)=                      M1(0,p)*Flux_m(:,0,q,3)+M2(0,p)*Flux_m(:,0,q,4)
-        DO l=1,PP_N
-          Flux_tmp(:,p,q,1)=Flux_tmp(:,p,q,1) + M1(l,p)*Flux_m(:,l,q,1)+M2(l,p)*Flux_m(:,l,q,2)
-          Flux_tmp(:,p,q,2)=Flux_tmp(:,p,q,2) + M1(l,p)*Flux_m(:,l,q,3)+M2(l,p)*Flux_m(:,l,q,4)
-        END DO !l=1,PP_N
-      END DO !p=0,PP_N
-    END DO !q=0,PP_N
-    !then in eta
-    ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-    !    Flux_m(iVar,p,:,MortarSideID)  =  M1 * Flux_tmp(iVar,p,:,1) + M2 * Flux_tmp(iVar,p,:,2)
-    DO q=0,PP_N
+    DO jNb=1,2
+      Flux_tmp(:,:,:)=0.
+      DO iNb=1,2
+        DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+          DO p=0,PP_N
+            DO l=0,PP_N
+              Flux_tmp(:,p,q)=Flux_tmp(:,p,q) + Mproj(l,p,iNb)*Flux_small(:,l,q,iNb+2*(jNb-1))
+            END DO !l=0,PP_N
+          END DO !p=0,PP_N
+        END DO !q=0,PP_N
+      END DO !iNb=1,2
+
+      !then in eta (l,q)
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        Flux_master(:,p,q,MortarSideID)=    M1(0,q)*Flux_tmp(:,p,0,1)+M2(0,q)*Flux_tmp(:,p,0,2)
-        DO l=1,PP_N
-          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
-                                   + M1(l,q)*Flux_tmp(:,p,l,1)+M2(l,q)*Flux_tmp(:,p,l,2)
-        END DO !l=1,PP_N
+        DO q=0,PP_N
+!          Flux_master(:,p,q,MortarSideID)= 0. 
+          DO l=0,PP_N
+            Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
+                                                  + Mproj(l,q,jNb)*Flux_tmp(:,p,l) 
+          END DO !l=1,PP_N
+        END DO !q=0,PP_N
       END DO !p=0,PP_N
-    END DO !q=0,PP_N
+    END DO !jNb=1,2
 
   CASE(2) !1->2 in eta
-    DO q=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-      ! The following q- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_m(iVar,p,:,MortarSideID)  =  M1 * Flux_m(iVar,p,:,1) + M2 * Flux_m(iVar,p,:,2)
+    DO jNb=1,2
       DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
-        Flux_master(:,p,q,MortarSideID)=    M1(0,q)*Flux_m(:,p,0,1)+M2(0,q)*Flux_m(:,p,0,2)
-        DO l=1,PP_N
-          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
-                                   + M1(l,q)*Flux_m(:,p,l,1)+M2(l,q)*Flux_m(:,p,l,2)
-        END DO !l=1,PP_N
+        DO q=0,PP_N !index big side 
+          DO l=0,PP_N !index small side
+            Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID) &
+                                            + Mproj(l,q,jNb)*Flux_small(:,p,l,jNb)
+          END DO !l=0,PP_N
+        END DO !q=0,PP_N
       END DO !p=0,PP_N
-    END DO !q=0,PP_N
+    END DO !jNb=1,2
 
   CASE(3) !1->2 in xi
-    DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
-      ! The following p- and l-loop are two MATMULs: (ATTENTION M1 and M2 are already transposed in mortar.f90)
-      !    Flux_m(iVar,:,q,MortarSideID)  =   M1 * Flux_m(iVar,:,q,1) + M2 * Flux_m(iVar,:,q,2)
-      DO p=0,PP_N
-        Flux_master(:,p,q,MortarSideID)=    M1(0,p)*Flux_m(:,0,q,1)+M2(0,p)*Flux_m(:,0,q,2)
-        DO l=1,PP_N
-          Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)  &
-                                   + M1(l,p)*Flux_m(:,l,q,1)+M2(l,p)*Flux_m(:,l,q,2)
-        END DO !l=1,PP_N
-      END DO !p=0,PP_N
-    END DO !q=0,PP_N
+    DO iNb=1,2
+      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+        DO p=0,PP_N !index big side
+!          Flux_master(:,p,q,MortarSideID)= 0.
+          DO l=0,PP_N !index small side
+            Flux_master(:,p,q,MortarSideID)=Flux_master(:,p,q,MortarSideID)  &
+                                            + Mproj(l,p,iNb)*Flux_small(:,l,q,iNb)
+          END DO !l=0,PP_N
+        END DO !p=0,PP_N
+      END DO !q=0,PP_N
+    END DO !iNb=1,2
+
   CASE DEFAULT
     CALL abort(__STAMP__,&
                'Wrong mortar type')
   END SELECT ! mortarType(MortarSideID)
 END DO !MortarSideID
+
 END SUBROUTINE Flux_Mortar
 
 
@@ -362,5 +391,318 @@ LOGICAL,INTENT(IN) :: weak                                          !< flag whet
 CALL Flux_Mortar(Flux(:,:,:,1:nSides),Flux(:,:,:,FirstSlaveSide:LastSlaveSide),doMPIsides,weak)
 
 END SUBROUTINE Flux_Cons_mortar
+
+
+#ifdef JESSE_MORTAR
+!==================================================================================================================================
+!>  if useEntropyMortar=.TRUE. , Data is transformed to entropy variables before interpolation 
+!>  and transformed back to conservative after interpolation 
+!>  else conservative variables are used
+!>
+!==================================================================================================================================
+SUBROUTINE InterpolateBigToSmall_ALL_Eqn(whichMortarType,BigCons,SmallCons)
+! MODULES
+USE MOD_Preproc
+#if defined(navierstokes) || defined(mhd)
+USE MOD_Equation_Vars, ONLY: useEntropyMortar,ConsToEntropyVec,EntropyToConsVec
+#endif
+USE MOD_Mortar_vars, ONLY: InterpolateBigToSmall_ALL
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER, INTENT(IN)  :: whichMortarType   !< either 1,2,3
+REAL,INTENT(IN)      :: BigCons(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
+REAL,INTENT(INOUT)   :: smallCons(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+                                                    !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
+                                                    !< 2-1 mortar: sol. on big (0) and small (1:2)
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+#if defined(navierstokes) || defined(mhd)
+REAL         :: BigEnt(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
+REAL         :: smallEnt(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+!==================================================================================================================================
+IF(useEntropyMortar)THEN
+  smallCons(:,:,:,0)=BigCons(:,:,:) !save big mortar Cons solution, too
+  CALL ConsToEntropyVec((PP_N+1)*(PP_N+1),BigEnt,BigCons)
+  CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigEnt,SmallEnt)
+  SELECT CASE(WhichMortarType)
+  CASE(1) !1->4
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,smallEnt(:,:,:,-2:1), SmallCons(:,:,:,-2:1))
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*4,smallEnt(:,:,:, 1:4), SmallCons(:,:,:, 1:4))
+  CASE(2,3) !1->2 in eta,1->2 in xi
+    CALL EntropyToConsVec((PP_N+1)*(PP_N+1)*2,smallEnt(:,:,:, 1:2), SmallCons(:,:,:, 1:2))
+  END SELECT ! mortarType(SideID)
+ELSE
+  CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigCons,SmallCons)
+END IF
+#else 
+CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigCons,SmallCons)
+#endif /* (defined(navierstokes) || defined(mhd)) */
+
+END SUBROUTINE InterpolateBigToSmall_ALL_Eqn
+
+!==================================================================================================================================
+!> Computes the two-point flux correction (Jesse's paper: https://arxiv.org/pdf/2005.03237.pdf) and stores it in "delta_flux_jesse" 
+!> small side surface metric is already scaled by factor of 2 for 2-1 mortar or 4 for 4-1 mortar, to be the same polynomial
+!> and then 0.5 must be put in the projection matrix Mproj=>Mproj_h
+!==================================================================================================================================
+SUBROUTINE Fill_delta_Flux_Jesse()
+! MODULES
+USE MOD_Preproc
+USE MOD_Mortar_Vars, ONLY: Mint,Mproj_h,U_small,Ns_small
+USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo,nMortarSides
+USE MOD_Equation_Vars,ONLY: MortarFluxAverageVec
+USE MOD_Mortar_Vars, ONLY: delta_flux_jesse !<<<<== is filled
+#if defined(navierstokes) || defined(mhd)
+USE MOD_Equation_Vars,ONLY: nAuxVar
+USE MOD_Flux_Average, ONLY: EvalUaux
+#endif /*navierstokes || mhd */
+#if defined(NONCONS)
+USE MOD_Flux_Average, ONLY: AddNonConsFluxVec
+#endif /*NONCONS*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER      :: p,q,l,r,iNb,jNb
+INTEGER      :: MortarSideID,iSide
+REAL         :: Flux_tmp(PP_nVar,0:PP_N,0:PP_N)
+REAL         :: Flux_tp_l(PP_nVar,0:PP_N)
+REAL         :: Flux_corr_l(PP_nVar)
+#if defined(navierstokes) || defined(mhd)
+REAL         :: Uaux_small(1:nAuxVar,0:PP_N,0:PP_N,-2:4)
+#endif /*navierstokes || mhd */
+#ifdef NONCONS
+REAL         :: Flux_tp(PP_nVar,0:PP_N,0:PP_N)
+REAL         :: Flux_tp_T(PP_nVar,0:PP_N,0:PP_N)
+#endif
+!==================================================================================================================================
+
+delta_Flux_jesse(:,:,:,:)= 0. 
+DO iSide=1,nMortarSides
+
+  MortarSideID=MortarInfo(MI_SIDEID,0,iSide)
+  SELECT CASE(MortarType(1,MortarSideID))
+  CASE(1) !1->4
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*7,U_small(:,:,:,-2:4,iSide),Uaux_small(:,:,:,-2:4))
+#endif /*navierstokes || mhd */
+
+    ! first in xi
+    DO jNb=1,2
+      Flux_tmp(:,:,:)= 0.
+      DO iNb=1,2
+        DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+#ifdef NONCONS
+          DO l=0,PP_N !index small side                       
+            DO p=0,PP_N ! index big side                                     !<this is the intermediate side!>
+              CALL MortarFluxAverageVec(   U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
+                                        Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
+                                          Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide),Flux_tp(:,l,p))
+              Flux_tp_T(:,p,l)=Flux_tp(:,l,p)
+              CALL AddNonConsFluxVec(      U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
+                                        Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
+                                          Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide), Flux_tp_T(:,p,l))
+              CALL AddNonConsFluxVec(      U_small(:,p,q,jNb-3,iSide),   U_small(:,l,q,iNb+2*(jNb-1),iSide), &
+                                        Uaux_small(:,p,q,jNb-3)      ,Uaux_small(:,l,q,iNb+2*(jNb-1))      , &
+                                          Ns_small(:,p,q,jNb-3,iSide),  Ns_small(:,l,q,iNb+2*(jNb-1),iSide), Flux_tp(:,l,p))
+            END DO !p
+          END DO !l
+          DO l=0,PP_N !index small side                       
+            Flux_corr_l(:)=0.
+            DO r=0,PP_N  !index big side
+              Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+            END DO !r=0,PP_N
+            DO p=0,PP_N !index big side
+              Flux_tmp(:,p,q)=Flux_tmp(:,p,q)  &
+                                  + Mproj_h(l,p,iNb)*(Flux_tp(:,l,p)-Flux_corr_l(:))
+            END DO !p=0,PP_N
+          END DO !l=0,PP_N
+#else 
+          DO l=0,PP_N !index small side                       
+            DO p=0,PP_N ! index big side                                     !<this is the intermediate side!>
+              CALL MortarFluxAverageVec( U_small(:,l,q,iNb+2*(jNb-1),iSide),   U_small(:,p,q,jNb-3,iSide), &
+#if defined(navierstokes) || defined(mhd)
+                                      Uaux_small(:,l,q,iNb+2*(jNb-1))      ,Uaux_small(:,p,q,jNb-3)      , &
+#endif /*navierstokes || mhd */
+                                        Ns_small(:,l,q,iNb+2*(jNb-1),iSide),  Ns_small(:,p,q,jNb-3,iSide),Flux_tp_l(:,p))
+            END DO
+            Flux_corr_l(:)=0.
+            DO r=0,PP_N  !index big side
+              Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_l(:,r)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+            END DO !r=0,PP_N
+            DO p=0,PP_N !index big side
+              Flux_tmp(:,p,q)=Flux_tmp(:,p,q)  &
+                                  + Mproj_h(l,p,iNb)*(Flux_tp_l(:,p)-Flux_corr_l(:))
+            END DO !p=0,PP_N
+          END DO !l=0,PP_N
+#endif /*NONCONS*/
+        END DO !q=0,PP_N
+      END DO !iNb=1,2
+      !then in eta (l,q)
+     
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        !mortar flux in eta (l,q), for fixed p 
+#ifdef NONCONS
+        DO l=0,PP_N !index small side                      
+          DO q=0,PP_N  !index big side                              !<this is the big side>
+            CALL MortarFluxAverageVec(   U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,    0,iSide), &
+                                      Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,    0)      , &
+                                        Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,    0,iSide),Flux_tp(:,l,q))
+            Flux_tp_T(:,q,l)=Flux_tp(:,l,q) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,    0,iSide), &
+                                      Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,    0)      , &
+                                        Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,    0,iSide), Flux_tp_T(:,q,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,    0,iSide),   U_small(:,p,l,jNb-3,iSide), &
+                                      Uaux_small(:,p,q,    0)      ,Uaux_small(:,p,l,jNb-3)      , &
+                                        Ns_small(:,p,q,    0,iSide),  Ns_small(:,p,l,jNb-3,iSide), Flux_tp(:,l,q))
+          END DO !q
+        END DO !l
+        DO l=0,PP_N !index small side                      
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tmp(:,p,l)+ Flux_tp(:,l,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#else
+        DO l=0,PP_N !index small side                      
+          DO q=0,PP_N  !index big side                             !<this is the big side>
+            CALL MortarFluxAverageVec( U_small(:,p,l,jNb-3,iSide),   U_small(:,p,q,0,iSide), &
+#if defined(navierstokes) || defined(mhd)
+                                    Uaux_small(:,p,l,jNb-3)      ,Uaux_small(:,p,q,0)      , &
+#endif /*navierstokes*/
+                                      Ns_small(:,p,l,jNb-3,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
+          END DO
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_l(:,r)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tmp(:,p,l)+ Flux_tp_l(:,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#endif /*NONCONS*/
+      END DO !p=0,PP_N
+    END DO !jNb=1,2
+
+  CASE(2) !1->2 in eta
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*3,U_small(:,:,:,0:2,iSide),Uaux_small(:,:,:,0:2))
+#endif /*navierstokes || mhd */
+    DO jNb=1,2
+      DO p=0,PP_N ! for every xi-layer perform Mortar operation in eta-direction 
+        !mortar flux in eta (l,q), for fixed p 
+#ifdef NONCONS
+        DO l=0,PP_N !index small side
+          DO q=0,PP_N ! index big side                             !<this is the big side!>
+            CALL MortarFluxAverageVec(   U_small(:,p,l,jNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,  0,iSide),Flux_tp(:,l,q))
+            Flux_tp_T(:,q,l)=Flux_tp(:,l,q) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,p,l,jNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,  0,iSide), Flux_tp_T(:,q,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,  0,iSide),   U_small(:,p,l,jNb,iSide), &
+                                      Uaux_small(:,p,q,  0)      ,Uaux_small(:,p,l,jNb)      , &
+                                        Ns_small(:,p,q,  0,iSide),  Ns_small(:,p,l,jNb,iSide), Flux_tp(:,l,q))
+          END DO !q
+        END DO !l
+        DO l=0,PP_N !index small side
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tp(:,l,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#else
+        DO l=0,PP_N !index small side                      
+          DO q=0,PP_N  !index big side                         !<this is the big side>
+            CALL MortarFluxAverageVec( U_small(:,p,l,jNb,iSide),   U_small(:,p,q,0,iSide), &
+#if defined(navierstokes) || defined(mhd)
+                                    Uaux_small(:,p,l,jNb)      ,Uaux_small(:,p,q,0)      , &
+#endif /*navierstokes || mhd */
+                                      Ns_small(:,p,l,jNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,q))
+          END DO
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N !index big side
+            Flux_corr_l(:)= Flux_corr_l(:) + Flux_tp_l(:,r)*Mint(r,l,jNb) !is the reduction with *lagbaseBig_r(etamortar_l)
+          END DO !r
+          DO q=0,PP_N !index big side 
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                            + Mproj_h(l,q,jNb)*(Flux_tp_l(:,q) - Flux_corr_l(:))
+          END DO !q=0,PP_N
+        END DO !l=0,PP_N
+#endif /*NONCONS*/
+      END DO !p=0,PP_N
+    END DO !jNb=1,2
+
+  CASE(3) !1->2 in xi
+#if defined(navierstokes) || defined(mhd)
+    CALL EvalUaux((PP_N+1)*(PP_N+1)*3,U_small(:,:,:,0:2,iSide),Uaux_small(:,:,:,0:2))
+#endif /*navierstokes || mhd */
+    DO iNb=1,2
+      DO q=0,PP_N ! for every eta-layer perform Mortar operation in xi-direction 
+#ifdef NONCONS
+        DO l=0,PP_N !index small side
+          DO p=0,PP_N ! index big side                             !<this is the big side!> 
+            CALL MortarFluxAverageVec(   U_small(:,l,q,iNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,  0,iSide),Flux_tp(:,l,p))
+            Flux_tp_T(:,p,l)=Flux_tp(:,l,p) !symmetric flux
+            CALL AddNonConsFluxVec(      U_small(:,l,q,iNb,iSide),   U_small(:,p,q,  0,iSide), &
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,  0)      , &
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,  0,iSide), Flux_tp_T(:,p,l))
+            CALL AddNonConsFluxVec(      U_small(:,p,q,  0,iSide),   U_small(:,l,q,iNb,iSide), &
+                                      Uaux_small(:,p,q,  0)      ,Uaux_small(:,l,q,iNb)      , &
+                                        Ns_small(:,p,q,  0,iSide),  Ns_small(:,l,q,iNb,iSide), Flux_tp(:,l,p))
+          END DO !p
+        END DO !l
+        DO l=0,PP_N !index small side
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N  !index big side
+            Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_T(:,r,l)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+          END DO !r=0,PP_N
+          DO p=0,PP_N !index big side
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                              + Mproj_h(l,p,iNb)*(Flux_tp(:,l,p)-Flux_corr_l(:))
+          END DO !p=0,PP_N
+        END DO !l=0,PP_N
+#else
+        DO l=0,PP_N !index small side
+          DO p=0,PP_N ! index big side                              !<this is the big side!>
+            CALL MortarFluxAverageVec(   U_small(:,l,q,iNb,iSide),   U_small(:,p,q,0,iSide), &
+#if defined(navierstokes) || defined(mhd)
+                                      Uaux_small(:,l,q,iNb)      ,Uaux_small(:,p,q,0)      , &
+#endif /*navierstokes || mhd */
+                                        Ns_small(:,l,q,iNb,iSide),  Ns_small(:,p,q,0,iSide),Flux_tp_l(:,p))
+          END DO
+          Flux_corr_l(:)=0.
+          DO r=0,PP_N  !index big side
+            Flux_corr_l(:)=Flux_corr_l(:) + Flux_tp_l(:,r)*Mint(r,l,iNb) !is the reduction with *lagbaseBig_r(ximortar_l)
+          END DO !r=0,PP_N
+          DO p=0,PP_N !index big side
+            delta_flux_jesse(:,p,q,iSide)=delta_flux_jesse(:,p,q,iSide) &
+                                              + Mproj_h(l,p,iNb)*(Flux_tp_l(:,p)-Flux_corr_l(:))
+          END DO !p=0,PP_N
+        END DO !l=0,PP_N
+#endif /* NONCONS*/
+      END DO !q=0,PP_N
+    END DO !iNb=1,2
+
+  END SELECT ! mortarType(MortarSideID)
+END DO !MortarSideID
+
+END SUBROUTINE Fill_delta_Flux_Jesse
+#endif /*JESSE_MORTAR*/
+
 
 END MODULE MOD_FillMortar

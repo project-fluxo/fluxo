@@ -134,7 +134,7 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
                                               "DG volume integral "//&
                                               "  0: Standard DG"//&
-                                              "  1: Standard DG with metirc dealiasing"//&
+                                              "  1: Standard DG with metric dealiasing"//&
                                               "  2: Kennedy-Gruber"//&
                                               "  3: Ducros"//&
                                               "  4: Morinishi"//&
@@ -146,6 +146,11 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               " 10: EC Ismail and Roe"//&
                                               " 32: Ranocha entropy conservative flux with metric dealiasing" &
                                              ,"0")
+#ifdef JESSE_MORTAR
+CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
+                                              "[DEFAULT = volumeFlux] or choose ID from volumeFlux list "&
+                                             ,"1")
+#endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 END SUBROUTINE DefineParametersEquation
 
@@ -158,6 +163,7 @@ SUBROUTINE InitEquation()
 ! MODULES
 USE MOD_Globals
 USE MOD_ReadInTools       ,ONLY:COUNTOPTION,GETINT,GETREAL,GETREALARRAY,GETINTARRAY,GETLOGICAL
+USE MOD_StringTools       ,ONLY: INTTOSTR
 USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars
@@ -174,7 +180,7 @@ USE MOD_Flux_Average
 REAL    :: Tref
 #endif /*PP_VISC==2*/
 INTEGER :: i,iSide
-INTEGER :: MaxBCState,locType,locState,nRefState
+INTEGER :: MaxBCState,locType,locState
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -409,7 +415,7 @@ CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
   VolumeFluxAverageVec => StandardDGFluxVec
 CASE(1)
-  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with metirc dealiasing'
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG with metric dealiasing'
   VolumeFluxAverageVec => StandardDGFluxDealiasedMetricVec
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Kennedy-Gruber'
@@ -445,12 +451,70 @@ CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
 END SELECT
+
+#ifdef JESSE_MORTAR
+#if PP_VolFlux==-1
+WhichMortarFlux = GETINT('MortarFlux',INTTOSTR(whichVolumeFlux))
+#else
+WhichMortarFlux = PP_VolFlux
+SWRITE(UNIT_stdOut,'(A,I4)') '   ...MortarFlux defined at compile time:',WhichMortarFlux
+#endif
+useEntropyMortar=.FALSE.
+SELECT CASE(WhichMortarFlux)
+CASE(0)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG'
+  MortarFluxAverageVec => StandardDGFluxVec
+CASE(1)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Standard DG with metirc dealiasing'
+  MortarFluxAverageVec => StandardDGFluxDealiasedMetricVec
+CASE(2)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Kennedy-Gruber'
+  MortarFluxAverageVec => KennedyAndGruberFluxVec1
+CASE(3)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Ducros'
+  MortarFluxAverageVec => DucrosFluxVec
+CASE(4)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Morinishi'
+  MortarFluxAverageVec => MorinishiFluxVec
+CASE(5)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: EC-KEP'
+  MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec
+  useEntropyMortar=.TRUE.
+CASE(6)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP'
+  MortarFluxAverageVec => EntropyAndEnergyConservingFluxVec2
+  useEntropyMortar=.TRUE.
+CASE(7)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: approx. EC-KEP + press. aver.'
+  MortarFluxAverageVec => ggFluxVec
+  useEntropyMortar=.TRUE.
+CASE(8)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Kenndy & Gruber (pirozolli version)'
+  MortarFluxAverageVec => KennedyAndGruberFluxVec2
+CASE(9)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Gassner Winter Walch'
+  MortarFluxAverageVec => GassnerWintersWalchFluxVec
+CASE(10)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Two-Point EC Ismail and Roe'
+  MortarFluxAverageVec => TwoPointEntropyConservingFluxVec
+  useEntropyMortar=.TRUE.
+CASE(32)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Mortar: Ranocha KEPEC with Metrics Dealiasing'
+  MortarFluxAverageVec => RanochaFluxVec
+  useEntropyMortar=.TRUE.
+CASE DEFAULT
+  CALL ABORT(__STAMP__,&
+         "Mortar flux not implemented")
+END SELECT
+
+#endif /*JESSE_MORTAR*/
 #endif /*PP_DiscType==2*/
 
 EquationInitIsDone=.TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT NAVIER-STOKES DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitEquation
+
 !==================================================================================================================================
 !> Reinitialize equation after mesh adaptation
 !==================================================================================================================================
@@ -465,6 +529,7 @@ IMPLICIT NONE
 ! LOCAL VARIABLES
 !==================================================================================================================================
 END SUBROUTINE InitEquationAfterAdapt
+
 !==================================================================================================================================
 !> fill the initial DG solution with a given exactfunction
 !==================================================================================================================================
@@ -507,7 +572,7 @@ USE MOD_Preproc
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,KappaM1,KappaP1,MachShock,PreShockDens,AdvVel,RefStateCons,RefStatePrim,IniRefState
 USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniHalfwidth,IniAmplitude,IniAxis,IniWaveNumber
-USE MOD_Equation_Vars,ONLY:PrimToCons
+USE MOD_Equation_Vars,ONLY:PrimToCons,nRefState
 USE MOD_TimeDisc_Vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 IMPLICIT NONE
@@ -877,6 +942,23 @@ case(15)
   CALL PrimToCons(prim,resu)
 
   resu(5) = resu(5) + blast_ener_normalized * exp(-0.5*(r2/blast_sigma)**2)
+CASE(140) ! Kelvin Helmhots instability
+  prim(1) = 1. + 0.5 * 1.0 * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05))     !  density
+  prim(2) = 1. * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05) - 1.)     !  density
+  prim(3) = 0.01 * sin(2*PP_Pi * x(1)) * (exp(-1*(x(2) - 0.5)**2/0.2/0.2) + exp(-1*(x(2) - 1.5)**2/0.2/0.2)) 
+  prim(4) = 0.
+  prim(5)   = 10.
+  ! print *, "prim = ", prim
+  CALL PrimToCons(prim,resu)
+CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplitude, radius=IniHalfwidth 
+  IF(nRefState.LT.2) CALL abort(__STAMP__, &
+         ' 2 states needed for case 201')
+  r_len=SQRT(SUM((x-IniCenter(:))**2))
+  a=EXP(5.*(r_len-IniHalfwidth)/IniAmplitude)
+  a=a/(a+1.)
+  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  CALL PrimToCons(Prim,Resu)
+
 END SELECT ! ExactFunction
 
 IF(fullBoundaryOrder)THEN ! add resu_t, resu_tt if time dependant

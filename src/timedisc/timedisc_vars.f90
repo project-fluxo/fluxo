@@ -61,6 +61,7 @@ LOGICAL          :: TimediscInitIsDone=.FALSE.!< Indicate wheter InitTimeDisc ro
 !----------------------------------------------------------------------------------------------------------------------------------
 
 ! NOTE: using simple arrays to store coefs, if using classes or types performance seems to degrade
+CHARACTER(LEN=50)   :: TimeDiscMethod !< input parameter, choice of time discretization method
 CHARACTER(LEN=50)   :: TimeDiscName  !< name of specific time discretization scheme
 CHARACTER(LEN=50)   :: TimeDiscType  !< general type of time discretization scheme
 INTEGER             :: nRKStages     !< number of stages of Runge-Kutta method
@@ -113,6 +114,8 @@ CASE('ketchesonrk4-20','ketchesonrk4-18')
 #endif
 case('ssprk4-5')
   TimeDiscType='SSPRK2'
+CASE('ssprk3-3')
+  TimeDiscType='SSPRK33'
 CASE DEFAULT
   CALL CollectiveStop(__STAMP__,&
                       'Unknown method of time discretization: '//TRIM(TimeDiscMethod))
@@ -175,6 +178,25 @@ CASE('standardrk3-3')
   RKA(2:nRKStages) = (/ 5./9.,153./128. /)
   RKb(1:nRKStages) = (/ 1./3., 15./16., 8./15. /)
   RKc(2:nRKStages) = (/ 1./3., 0.75 /)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+! Strong Stability preserving 3 stage 3rd order (shu-osher), same stability region as Standard RK3-3
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CASE('ssprk3-3')
+
+  TimeDiscName = 'SSP RK3-3'
+  nRKStages=3
+#if PARABOLIC
+  RelativeDFL=1.
+#endif
+  fullBoundaryOrder=.FALSE.
+
+#if (PP_NodeType==1)
+  CFLScaleAlpha(1:15) = &
+  (/ 1.2285, 1.0485, 0.9101, 0.8066, 0.7268, 0.6626, 0.6109, 0.5670, 0.5299, 0.4973, 0.4703, 0.4455, 0.4230, 0.4039, 0.3859 /)
+#elif (PP_NodeType==2)
+  CFLScaleAlpha(1:15) = &
+  (/ 3.1871, 2.2444, 1.7797, 1.5075, 1.3230, 1.1857, 1.0800, 0.9945, 0.9247, 0.8651, 0.8134, 0.7695, 0.7301, 0.6952, 0.6649 /)
+#endif /*PP_NodeType*/
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Runge-Kutta 4 - Carpenter 1994 NASA Report
