@@ -347,7 +347,7 @@ END SUBROUTINE CalcMetrics
 !==================================================================================================================================
 SUBROUTINE CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N,iElem)
 ! MODULES
-USE MOD_Preproc,     ONLY: PP_N
+USE MOD_Preproc
 USE MOD_Globals,        ONLY:CROSS
 USE MOD_Mesh_Vars,      ONLY:ElemToSide,MortarType
 USE MOD_Mesh_Vars,      ONLY:NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
@@ -453,7 +453,7 @@ END SUBROUTINE CalcSurfMetrics
 !==================================================================================================================================
 SUBROUTINE SurfMetricsFromJa(NormalDir,TangDir,NormalSign,Ja_Face,NormVec,TangVec1,TangVec2,SurfElem)
 ! MODULES
-USE MOD_Preproc,     ONLY: PP_N
+USE MOD_Preproc
 USE MOD_Globals,     ONLY: CROSS
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE

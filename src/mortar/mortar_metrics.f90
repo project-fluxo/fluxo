@@ -60,7 +60,7 @@ CONTAINS
 SUBROUTINE Mortar_CalcSurfMetrics(SideID,Face_Ja,Face_xGP,&
                                   Mortar_Ja,Mortar_xGP,nbSideID)
 ! MODULES
-USE MOD_Preproc, ONLY:PP_N 
+USE MOD_Preproc
 USE MOD_Mesh_Vars,   ONLY: MortarType,MortarInfo
 USE MOD_Mortar_Vars,  ONLY: InterpolateBigToSmall
 IMPLICIT NONE
