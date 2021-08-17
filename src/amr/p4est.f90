@@ -103,12 +103,6 @@ INTERFACE
         TYPE(C_PTR), VALUE :: Memory
     END subroutine free_data_memory
 
-    subroutine free_balance_memory(Memory) BIND(C, NAME = 'free_balance_memory')
-        IMPORT :: C_PTR
-        TYPE(C_PTR), VALUE :: Memory
-    END subroutine free_balance_memory
-
-
     subroutine free_savemesh_memory(Memory) BIND(C, NAME = 'savef_data_destroy')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: Memory

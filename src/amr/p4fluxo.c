@@ -23,17 +23,6 @@ void free_data_memory(void *N) {
     return;
 }
 
-void free_balance_memory(void *N) {
-    p4est_balance_data_t *data = (p4est_balance_data_t *) N;
-
-    pfree(data->DataSetU);
-
-    pfree(data->DataSetElem_xGP);
-
-
-    return;
-}
-
 void pfree(void *A) {
 
     if (A != NULL) {

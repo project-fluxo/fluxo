@@ -34,7 +34,7 @@ CONTAINS
 !> Specifies the initial AMR refinement
 !==================================================================================================================================
 subroutine InitialAMRRefinement()
-  USE MOD_PreProc     , only: PP_N
+  USE MOD_PreProc
   use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel, IniHalfwidthAMR
   use MOD_AMR         , only: RunAMR
   use MOD_Mesh_Vars   , only: nElems, Elem_xGP

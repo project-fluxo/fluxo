@@ -61,16 +61,6 @@ typedef struct p4est_inner_data {
     uint8_t weight;
 } p4est_inner_data_t;
 
-typedef struct p4est_balance_data {
-    int nVar;
-    int PP_N;
-    int nElems;
-    int DataSize;
-    void *DataSetU;
-    void *DataSetElem_xGP; //for                                                      each process and 1 beyond * /
-} p4est_balance_data_t;
-
-
 typedef struct p4est_balance_datav2 {
     int DataSize; //DataSize of 1 Elem
     int GPSize; //DataSize of 1 ElemxGP
@@ -160,7 +150,5 @@ typedef struct p4est_SetSide_data {
 } p4est_SetSide_data_t;
 
 void free_data_memory(void *N);
-
-void free_balance_memory(void *N);
 
 #endif /* P4FLUXO_H */

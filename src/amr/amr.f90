@@ -319,8 +319,8 @@ END FUNCTION CheckP4estFileExist
 !>  The main SUBROUTINE used to adapt the mesh (Coarsening and refining).
 !==================================================================================================================================
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
-  USE MOD_Globals
-  USE MOD_PreProc,            ONLY: PP_N
+  USE MOD_PreProc
+  USE MOD_Globals ,           ONLY: nProcessors, MPIroot
   USE MOD_Analyze_Vars,       ONLY: ElemVol
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
@@ -330,14 +330,13 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
-  USE MOD_TimeDisc_Vars,      ONLY:   dtElem
+  USE MOD_TimeDisc_Vars,      ONLY: dtElem
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
 #if MPI 
   USE MOD_MPI_Vars,           ONLY: NbProc , nMPISides_MINE_Proc, nMPISides_YOUR_Proc, offsetMPISides_YOUR, offsetMPISides_MINE 
   USE MOD_MPI_Vars,           ONLY: nMPISides_Proc, nMPISides_send, nMPISides_rec, OffsetMPISides_send, OffsetMPISides_rec
   USE MOD_MPI_Vars,           ONLY: MPIRequest_U, MPIRequest_Flux, nNbProcs
 #endif  /*MPI*/
-  USE MOD_Globals ,           ONLY: nProcessors, MPIroot, myrank
   use MOD_GetBoundaryFlux,    only: InitBC,FinalizeBC
   use MOD_Mortar  ,           only: FinalizeMortarArrays,InitMortarArrays
 #if POSITIVITYPRES
@@ -834,7 +833,7 @@ END SUBROUTINE RunAMR
 !> ATTENTION: The projected solution must be scaled with the Jacobians because the projection integrals are evaluated on the fine and coarse elements
 !===================================================================================================================================
   subroutine ProjectSolution_Coarsening(Unew, Uold, sJold)
-    use MOD_PreProc     , only: PP_N
+    use MOD_PreProc
     use MOD_AMR_Vars    , only: M_1_0,M_2_0
     implicit none
     !-arguments-----------------------------------------------
@@ -874,7 +873,7 @@ END SUBROUTINE RunAMR
 !>  2. Coordinates: Using the interpolation matrices
 !===================================================================================================================================
   subroutine InterpolateSolution_Refinement(nVar,Unew, Uold)
-    use MOD_PreProc     , only: PP_N
+    use MOD_PreProc
     use MOD_AMR_vars    , only: M_0_1,M_0_2
     implicit none
     !-arguments-----------------------------------------------
@@ -904,7 +903,7 @@ END SUBROUTINE RunAMR
 !> Does a simple interpolation (extrapolation) from element 1 to the big element. This works if Ngeo<=N
 !===================================================================================================================================
   subroutine InterpolateCoords_Coarsening(Xnew, Xold)
-    use MOD_PreProc     , only: PP_N
+    use MOD_PreProc
     use MOD_AMR_Vars    , only: Vdm_Interp_1_0, Vdm_Interp_2_0, N_2
     implicit none
     !-arguments-----------------------------------------------
@@ -966,7 +965,7 @@ SUBROUTINE LoadBalancingAMR(ElemWasCoarsened,new_nElems)
 #if SHOCK_NFVSE
   use MOD_NFVSE_Vars        , only: alpha
 #endif /*SHOCK_NFVSE*/
-  USE MOD_PreProc,            ONLY: PP_N
+  USE MOD_PreProc
   USE, INTRINSIC :: ISO_C_BINDING
   IMPLICIT NONE
   !----------------------------------------------------------------------------------------------------------------------------------
@@ -1035,7 +1034,7 @@ SUBROUTINE SaveMesh(FileString)
   ! MODULES
   USE MOD_AMR_Vars
   USE MOD_P4EST
-  USE MOD_PreProc,            ONLY: PP_N
+  USE MOD_PreProc
   USE MOD_Mesh_vars,           ONLY: nElems, nGlobalElems, offsetElem, BoundaryName, BoundaryType, nBCs, Elem_xGP, NGeo
   USE MOD_Globals,             only: myrank,nProcessors, MPIRoot, UNIT_stdOut
   USE MOD_IO_HDF5

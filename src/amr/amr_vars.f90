@@ -90,16 +90,6 @@ TYPE P4EST_FORTRAN_DATA
     TYPE(C_PTR) ::  ghost_to_proc_Ptr; !Used in C only
 END TYPE P4EST_FORTRAN_DATA
 
-TYPE p4est_balance_data
-    INTEGER     ::  nVar
-    INTEGER     ::  PP
-    INTEGER     ::  nElems;
-    INTEGER     ::  DataSize
-    TYPE(C_PTR) ::  DataSetU;
-    TYPE(C_PTR) ::  DataSetElem_xGP;
-END TYPE p4est_balance_data
-
-
 TYPE p4est_balance_datav2
     INTEGER     ::  DataSize !DataSize of 1 Elem U = number of REALs
     INTEGER     ::  GPSize !DataSize of 1 ElemxGP = number of REALs
