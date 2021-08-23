@@ -1,6 +1,7 @@
 !===================================================================================================================================
 ! Copyright (c) 2018 - 2020 Alexander Astanin
 ! Copyright (c) 2020 - 2021 Florian Hindenlang
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
