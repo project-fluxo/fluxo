@@ -491,13 +491,13 @@ contains
     !-arguments---------------------------------------------------------------------------------------------------------------------
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
     !-local-variables---------------------------------------------------------------------------------------------------------------
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htilde   ! transformed inter-subcell flux in zeta (with ghost cells)
 #if NONCONS
     ! For the right interfaces:
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftildeR  ! transformed inter-subcell flux in xi (with ghost cells)
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtildeR  ! transformed inter-subcell flux in eta (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: ftildeR  ! transformed inter-subcell flux in xi (with ghost cells)
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: gtildeR  ! transformed inter-subcell flux in eta (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) :: htildeR  ! transformed inter-subcell flux in zeta (with ghost cells)
 #endif /*NONCONS*/
     real,dimension(PP_nVar)                         :: F_FV
@@ -540,12 +540,12 @@ contains
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         ! Get Finite Volume Ut
 #if NONCONS
-        F_FV =   sWGP(i) * ( ftildeR(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
-               + sWGP(j) * ( gtildeR(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
+        F_FV =   sWGP(i) * ( ftildeR(:,j,k,i) - ftilde(:,j  ,k  ,i-1) ) &
+               + sWGP(j) * ( gtildeR(:,i,k,j) - gtilde(:,i  ,k  ,j-1) ) &
                + sWGP(k) * ( htildeR(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
 #else
-        F_FV =   sWGP(i) * ( ftilde(:,i,j,k) - ftilde(:,i-1,j  ,k  ) ) &
-               + sWGP(j) * ( gtilde(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
+        F_FV =   sWGP(i) * ( ftilde(:,j,k,i) - ftilde(:,j  ,k  ,i-1) ) &
+               + sWGP(j) * ( gtilde(:,i,k,j) - gtilde(:,i  ,k  ,j-1) ) &
                + sWGP(k) * ( htilde(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
 #endif /*NONCONS*/
                
@@ -577,22 +577,18 @@ contains
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: G   !< Left flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
 #if NONCONS
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: GR  !< Right flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
 #endif /*NONCONS*/
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
     real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
-    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#if NONCONS
-    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#endif /*NONCONS*/
     !-------------------------------------------------------------------------
     
 !   *****************
@@ -611,51 +607,31 @@ contains
 !   *********
 !   Xi-planes
 !   *********
-    F_  = 0.0
+
     U_ = reshape(U , shape(U_), order = [1,4,2,3])
-#if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
     
 !   Fill inner interfaces
 !   ---------------------
-    call Compute_FVFluxes_1D(U_,U_,F_ , &
+    call Compute_FVFluxes_1D(U_,U_,F , &
 #if NONCONS
-                                U_,FR_, &
+                                U_,FR, &
 #endif /*NONCONS*/
                                    sCM % xi)
     
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
-#if NONCONS
-    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
-#endif /*NONCONS*/
 
 !   **********    
 !   Eta-planes
 !   **********
-    F_ = 0.0
     U_ = reshape(U , shape(U_), order = [1,2,4,3])
-#if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
     
 !   Fill inner interfaces
 !   ---------------------
-    call Compute_FVFluxes_1D(U_,U_,F_ , &
+    call Compute_FVFluxes_1D(U_,U_,G , &
 #if NONCONS
-                                U_,FR_, &
+                                U_,GR, &
 #endif /*NONCONS*/
                                    sCM % eta)
     
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
-#if NONCONS
-    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
-#endif /*NONCONS*/
 
 !   ***********    
 !   Zeta-planes
@@ -670,6 +646,8 @@ contains
   end subroutine Compute_FVFluxes_1st_Order
 !===================================================================================================================================
 !> Solves the inner Riemann problems and outputs a FV consistent flux using a second-order reconstruction of the primitive variables
+!> ATTENTION: 1) The nonconservative terms use the nodal (non-reconstructed) solution. It is unclear if the use of the reconstructed
+!>               solution is beneficial for the non-conservative terms
 !===================================================================================================================================
   subroutine Compute_FVFluxes_TVD(U, F , G , H , &
 #if NONCONS
@@ -683,12 +661,12 @@ contains
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: G   !< Left flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
 #if NONCONS
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: GR  !< Right flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
 #endif /*NONCONS*/
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
@@ -700,9 +678,7 @@ contains
     real :: prim_(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables after reshape
     real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
     real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
-    real :: F_ (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
 #if NONCONS
-    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
     real :: U_ (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
 #endif /*NONCONS*/
     !-------------------------------------------------------------------------
@@ -725,7 +701,6 @@ contains
 !   *********
 !   Xi-planes
 !   *********
-    F_  = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
 #if NONCONS
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
@@ -740,27 +715,15 @@ contains
     
 !   Fill fluxes
 !   -----------
+    call Compute_FVFluxes_1D(UL,UR,F , &
 #if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
-    
-    call Compute_FVFluxes_1D(UL,UR,F_ , &
-#if NONCONS
-                                U_,FR_, &
+                                U_,FR, &
 #endif /*NONCONS*/
                                 sCM % xi)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
-#if NONCONS
-    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
-#endif /*NONCONS*/
 
 !   **********    
 !   Eta-planes
 !   **********
-    F_ = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
 #if NONCONS
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
@@ -775,23 +738,11 @@ contains
     
 !   Fill fluxes
 !   -----------
+    call Compute_FVFluxes_1D(UL,UR,G , &
 #if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
-    
-    call Compute_FVFluxes_1D(UL,UR,F_ , &
-#if NONCONS
-                                U_,FR_, &
+                                U_,GR, &
 #endif /*NONCONS*/
                                          sCM % eta)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
-#if NONCONS
-    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
-#endif /*NONCONS*/
-
 
 !   ***********    
 !   Zeta-planes
@@ -835,12 +786,12 @@ contains
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: G   !< Left flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
 #if NONCONS
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: GR  !< Right flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
 #endif /*NONCONS*/
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
@@ -853,16 +804,11 @@ contains
     real :: prim_(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Primitive variables after reshape
     real :: primL(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables left
     real :: primR(PP_nVar,0:PP_N,0:PP_N, 0:PP_N)  ! Reconstructed Primitive variables right
-    real :: F_   (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#if NONCONS
-    real :: FR_(PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#endif /*NONCONS*/
     !-------------------------------------------------------------------------
     
 !   *****************
 !   Initialize values
 !   *****************
-    
     F   = 0.0
     G   = 0.0
     H   = 0.0
@@ -877,7 +823,6 @@ contains
 !   *********
 !   Xi-planes
 !   *********
-    F_  = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,4,2,3])
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
     
@@ -890,27 +835,15 @@ contains
         
 !   Fill inner interfaces
 !   ---------------------
+    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F , &
 #if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
-    
-    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F_ , &
-#if NONCONS
-                                             FR_, &
+                                             FR, &
 #endif /*NONCONS*/
                                              sCM % xi)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
-#if NONCONS
-    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
-#endif /*NONCONS*/
 
 !   **********    
 !   Eta-planes
 !   **********
-    F_ = 0.0
     prim_ = reshape(prim , shape(prim_), order = [1,2,4,3])
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
     
@@ -923,28 +856,15 @@ contains
         
 !   Fill inner interfaces
 !   ---------------------
+    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,G , &
 #if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
-    
-    call Compute_FVFluxes_1D_TVD2ES(U_,UL,UR,F_ , &
-#if NONCONS
-                                             FR_, &
+                                             GR, &
 #endif /*NONCONS*/
                                              sCM % eta)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
-#if NONCONS
-    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
-#endif /*NONCONS*/
 
 !   ***********    
 !   Zeta-planes
 !   ***********
-    primL = 0.0
-    primR = 0.0
     
 !   Do the solution reconstruction
 !   ------------------------------
@@ -1108,22 +1028,18 @@ contains
     implicit none
     !-arguments---------------------------------------------------------------
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N, 0:PP_N), intent(in)    :: U   !< The element solution
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: F   !< Left flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: G   !< Left flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: F   !< Left flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: G   !< Left flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: H   !< Left flux in zeta
 #if NONCONS
-    real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N), intent(inout) :: FR  !< Right flux in xi
-    real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N), intent(inout) :: GR  !< Right flux in eta
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: FR  !< Right flux in xi
+    real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: GR  !< Right flux in eta
     real,dimension(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N), intent(inout) :: HR  !< Right flux in zeta
 #endif /*NONCONS*/
     type(SubCellMetrics_t)                         , intent(in)    :: sCM       !< Sub-cell metric terms
     integer                                        , intent(in)    :: iElem
     !-local-variables---------------------------------------------------------
     real :: U_   (PP_nVar,0:PP_N,0:PP_N, 0:PP_N)
-    real :: F_   (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#if NONCONS
-    real :: FR_          (PP_nVar,0:PP_N,0:PP_N,-1:PP_N)
-#endif /*NONCONS*/
     !-------------------------------------------------------------------------
     
 !   *****************
@@ -1142,46 +1058,24 @@ contains
 !   *********
 !   Xi-planes
 !   *********
-    F_  = 0.0
     U_    = reshape(U    , shape(U_)   , order = [1,4,2,3])
-#if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
     
-    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,F_ , &
+    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,F , &
 #if NONCONS
-                                              FR_, &
+                                              FR, &
 #endif /*NONCONS*/
                                               sCM % xi  ,5,3,iElem)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    F  = reshape(F_ , shape(F ), order = [1,3,4,2])
-#if NONCONS
-    FR = reshape(FR_, shape(FR), order = [1,3,4,2])
-#endif /*NONCONS*/
 
 !   **********    
 !   Eta-planes
 !   **********
-    F_ = 0.0
     U_    = reshape(U    , shape(U_)   , order = [1,2,4,3])
-#if NONCONS
-    FR_ = 0.0
-#endif /*NONCONS*/
     
-    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,F_ , &
+    call Compute_FVFluxes_1D_TVD_Fjordholm(U_,G , &
 #if NONCONS
-                                              FR_, &
+                                              GR, &
 #endif /*NONCONS*/
                                               sCM % eta ,2,4,iElem)
-    
-!   Reshape arrays back to original storage structure
-!   -------------------------------------------------
-    G  = reshape(F_ , shape(G ), order = [1,2,4,3])
-#if NONCONS
-    GR = reshape(FR_, shape(GR), order = [1,2,4,3])
-#endif /*NONCONS*/
 
 !   ***********    
 !   Zeta-planes
