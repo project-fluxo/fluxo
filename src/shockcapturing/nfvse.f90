@@ -50,7 +50,7 @@ module MOD_NFVSE
   private
   public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE
   public :: DefineParametersNFVSE
-  public :: InitNFVSEAfterAdaptation
+  public :: InitNFVSEAfterAdaptation1, InitNFVSEAfterAdaptation2
   public :: CalcBlendingCoefficient
 #if NFVSE_CORR
   public :: Apply_NFVSE_Correction
@@ -373,12 +373,43 @@ contains
     
   end subroutine ComputeSubcellMetrics
 !===================================================================================================================================
-!> Reinitializes all variables that need reinitialization after the h-adaptation
+!> Transfers the blending coefficient to the new mesh after adaptation (but before load balancing!)
+!===================================================================================================================================  
+  subroutine InitNFVSEAfterAdaptation1(ChangeElem)
+    use MOD_Mesh_Vars          , only: nElems
+    use MOD_NFVSE_Vars         , only: alpha
+    implicit none
+    !-arguments-----------------------------------
+    integer, intent(in) :: ChangeElem(8,nElems)
+    !-local-variables-----------------------------
+    integer          :: eID
+    real,allocatable,target :: alphaNew(:)
+    !---------------------------------------------
+    
+    allocate ( alphaNew(nElems) )
+    ! Set with old values
+    do eID=1, nElems
+      if (ChangeElem(1,eID) < 0) then
+        ! refinement
+        alphaNew(eID) = alpha(-ChangeElem(1,eID))
+      elseif (ChangeElem(2,eID) > 0) then
+        ! coarsening
+        alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
+      else
+        ! simple reasignment
+        alphaNew(eID) = alpha(ChangeElem(1,eID))
+      endif
+    end do
+    call move_alloc(alphaNew,alpha)
+    
+  end subroutine InitNFVSEAfterAdaptation1
+!===================================================================================================================================
+!> Reinitializes all variables that need reinitialization after the h-adaptation (and after load balancing!)
 !> ATTENTION: The subcell metrics are always recomputed, as the metrics of the high-order DG elements
 !===================================================================================================================================
-  subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
+  subroutine InitNFVSEAfterAdaptation2(nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha_Master, alpha_Slave
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: FFV_m_FDG, alpha_old
@@ -389,11 +420,7 @@ contains
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
-    integer, intent(in) :: ChangeElem(8,nElems)
     integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld
-    !-local-variables-----------------------------
-    integer          :: eID
-    real,allocatable,target :: alphaNew(:)
     !---------------------------------------------
     
 !   Reallocate storage
@@ -426,31 +453,6 @@ contains
     alpha_Master = 0.0
     alpha_Slave  = 0.0
     
-    ! Check if we need the alpha from the previous mesh and assign it if we do!
-    if ( (ComputeAlpha==20 .and. ShockBlendCoef<-1.0) .or. (TimeRelFactor > alpha_min/alpha_max) ) then
-      allocate ( alphaNew(nElems) )
-      ! Set with old values
-      do eID=1, nElems
-        if (ChangeElem(1,eID) < 0) then
-          ! refinement
-          alphaNew(eID) = alpha(-ChangeElem(1,eID))
-        elseif (ChangeElem(2,eID) > 0) then
-          ! coarsening
-          alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
-        else
-          ! simple reasignment
-          alphaNew(eID) = alpha(ChangeElem(1,eID))
-        endif
-      end do
-      call move_alloc(alphaNew,alpha)
-    else ! The time relaxation has no effect, alpha can be set to 0
-      if (nElems /= nElemsOld) then
-        SDEALLOCATE(alpha)
-        allocate(alpha(nElems))
-      end if
-      alpha = 0.0
-    end if
-    
 !   Compute Subcell Metrics
 !   -----------------------
     call ComputeSubcellMetrics()
@@ -466,7 +468,7 @@ contains
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
-  end subroutine InitNFVSEAfterAdaptation
+  end subroutine InitNFVSEAfterAdaptation2
 !===================================================================================================================================
 !> Computes the "volume integral": Spatial contribution to Ut by the subcell finite volumes
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
