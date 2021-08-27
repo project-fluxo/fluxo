@@ -71,6 +71,9 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -95,6 +98,10 @@ ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 U=0.
 Ut=0.
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+Uaux=0.
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 nDOFElem=(PP_N+1)**3
 nTotal_face=(PP_N+1)*(PP_N+1)
@@ -183,6 +190,8 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 ! LOCAL VARIABLES 
 REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
 REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
+real,DIMENSION(2,0:N_in)           :: Vf
+real,DIMENSION(2,2)                :: B
 INTEGER                            :: i
 !===================================================================================================================================
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
@@ -202,23 +211,25 @@ END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
-#if PP_DiscType==2
-!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! DvolSurf^T = -DvolSurf
-ALLOCATE(Dvolsurf(0:N_in,0:N_in))
-ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
-!modified D matrix for fluxdifference volint
-Dvolsurf=2.0*D
-Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
-Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
-Dvolsurf_T= TRANSPOSE(Dvolsurf)
-#endif /*PP_DiscType==2*/
-
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
 CALL LagrangeInterpolationPolys(1.,N_in,xGP,wBary,L_Plus)
 L_HatPlus(:) = MATMUL(Minv,L_Plus)
 CALL LagrangeInterpolationPolys(-1.,N_in,xGP,wBary,L_Minus)
 L_HatMinus(:) = MATMUL(Minv,L_Minus)
 L_HatMinus0 = L_HatMinus(0)
+
+#if PP_DiscType==2
+!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! W*DvolSurf^T = -W*DvolSurf
+ALLOCATE(Dvolsurf(0:N_in,0:N_in))
+ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
+!modified D matrix for fluxdifference volint (for a generalized SBP property)
+Vf(1,:) = L_Minus
+Vf(2,:) = L_Plus
+B(1,:) = (/-1.0, 0.0/)
+B(2,:) = (/ 0.0, 1.0/)
+Dvolsurf  = 2.0*D - matmul(Minv,matmul(matmul(transpose(Vf),B),Vf))
+Dvolsurf_T= TRANSPOSE(Dvolsurf)
+#endif /*PP_DiscType==2*/
 END SUBROUTINE InitDGbasis
 
 !==================================================================================================================================

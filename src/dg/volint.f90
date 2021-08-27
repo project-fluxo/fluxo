@@ -173,9 +173,12 @@ SUBROUTINE VolInt_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
-USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
-USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
+USE MOD_DG_Vars     ,ONLY:DvolSurf_T,U
+#if (PP_NodeType==1)
+USE MOD_DG_Vars     ,ONLY:Uaux
+#endif /*(PP_NodeType==1)*/
+USE MOD_Mesh_Vars   ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
+USE MOD_Flux_Average,ONLY:EvalAdvFluxAverage3D
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -194,6 +197,9 @@ INTEGER                                           :: i,j,k,l,iElem
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalAdvFluxAverage3D(             U(:,:,:,:,iElem), &
+#if (PP_NodeType==1)
+                                      Uaux(:,:,:,:,iElem), &
+#endif /*(PP_NodeType==1)*/
                             metrics_fTilde(:,:,:,:,iElem), &
                             metrics_gTilde(:,:,:,:,iElem), &
                             metrics_hTilde(:,:,:,:,iElem), &

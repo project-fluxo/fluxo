@@ -45,6 +45,10 @@ REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D ma
                                                                 !< Dvolsurf(0,0)=2*sWGP(0)*Q(0,0)+swGP(0)=swGP(0)*(2*(-0.5)+1)=0
                                                                 !< Dvolsurf(N,N)=2*sWGP(N)*Q(N,N)-sWGP(N)=swGP(N)*(2*  0.5 -1)=0
 REAL,ALLOCATABLE                      :: Dvolsurf_T(:,:)        !< transpose of DvolSurf 
+#if (PP_NodeType==1)
+REAL,ALLOCATABLE,TARGET               :: Uaux(:,:,:,:,:)        !< Auxiliar variables for each node and element, 
+                                                                !< size \([1..nAuxVar,0..N,0..N,0..N,nElems]\). 
+#endif /*(PP_NodeType==1)*/
 #endif /*PP_DiscType==2*/
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)
                                                                 !< premultiplied by mass matrix

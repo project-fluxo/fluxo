@@ -51,6 +51,18 @@ USE MOD_Globals
 USE MOD_PreProc
 #if (PP_NodeType==1)
 USE MOD_DG_Vars,            ONLY: L_HatMinus
+#if (PP_DiscType==2)
+#if PP_VolFlux==-1
+use MOD_Equation_Vars,      ONLY: VolumeFluxAverageVec   ! TODO: Check how to use the flux_average defined at compile time!!
+#else
+use MOD_Flux_Average,       ONLY: PP_VolumeFluxAverageVec
+#endif /*PP_VolFlux==-1*/
+use MOD_Flux_Average,       ONLY: EvalUaux
+USE MOD_DG_Vars,            only: U,U_master,U_slave,Uaux
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde,NormalSigns
+USE MOD_Interpolation_Vars, ONLY: wGP
+#endif /*(PP_DiscType==2)*/
 #elif (PP_NodeType==2)
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
 #endif /*PP_NodeType*/ 
@@ -71,6 +83,11 @@ REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)
 INTEGER                         :: l
+#if (PP_DiscType==2)
+REAL                            :: FluxB(PP_nVar,0:PP_N),FluxB_sum(PP_nVar)
+REAL                            :: UauxB(nAuxVar)
+real, pointer                   :: metrics(:,:,:,:)
+#endif /*(PP_DiscType==2)*/
 #endif /*PP_NodeType*/ 
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
@@ -93,11 +110,37 @@ DO SideID=firstSideID,lastSideID
     flip=0
 #if (PP_NodeType==1)
     !gauss nodes
+#if (PP_DiscType==2)
+    ! Get the right metric terms
+    select case(locSide)
+      case(3,5) ; metrics => metrics_ftilde(:,:,:,:,ElemID)
+      case(2,4) ; metrics => metrics_gtilde(:,:,:,:,ElemID)
+      case(1,6) ; metrics => metrics_htilde(:,:,:,:,ElemID)
+    end select
+#endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
+#if (PP_DiscType==2)
+      ! Evaluate the auxiliar variables the boundary
+      call EvalUaux(1,U_master(:,p,q,SideID),UauxB)
+      ! Evaluate the correction term for the line
+      FluxB_sum = 0.0
+      DO l=0,PP_N
+        ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
+        CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
+                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
+                               metrics(:,ijk(1),ijk(2),ijk(3)),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                                 FluxB(:,l)                )
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
+      END DO !l=0,PP_N
+#endif /*PP_DiscType==2*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
         Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + Flux_master(:,p,q,SideID)*L_hatMinus(l)
+                                          + (Flux_master(:,p,q,SideID) & 
+#if (PP_DiscType==2)
+                                             - (FluxB_sum -FluxB(:,l))*NormalSigns(locSide) &
+#endif /*(PP_DiscType==2)*/
+                                                                        )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
@@ -118,11 +161,37 @@ DO SideID=firstSideID,lastSideID
     nbFlip    = SideToElem(S2E_FLIP,SideID)
 #if (PP_NodeType==1)
     !gauss nodes
+#if (PP_DiscType==2)
+    ! Get the right metric terms
+    select case(nblocSide)
+      case(3,5) ; metrics => metrics_ftilde(:,:,:,:,nbElemID)
+      case(2,4) ; metrics => metrics_gtilde(:,:,:,:,nbElemID)
+      case(1,6) ; metrics => metrics_htilde(:,:,:,:,nbElemID)
+    end select
+#endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
+#if (PP_DiscType==2)
+      ! Evaluate the auxiliar variables the boundary
+      call EvalUaux(1,U_slave(:,p,q,SideID),UauxB)
+      ! Evaluate the correction term for the line
+      FluxB_sum = 0.0
+      DO l=0,PP_N
+        ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
+        CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
+                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
+                               metrics(:,ijk(1),ijk(2),ijk(3)),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                                 FluxB(:,l)                )
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
+      END DO !l=0,PP_N
+#endif /*PP_DiscType==2*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
         Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) &
-                                          - Flux_slave(:,p,q,SideID)*L_hatMinus(l)
+                                          - (Flux_slave(:,p,q,SideID) &
+#if (PP_DiscType==2)
+                                             + (FluxB_sum -FluxB(:,l))*NormalSigns(nblocSide) &
+#endif /*(PP_DiscType==2)*/
+                                                                       )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)

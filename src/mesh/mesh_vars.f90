@@ -46,9 +46,9 @@ LOGICAL          :: MeshIsNonConforming
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Metrics on GaussPoints
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL,ALLOCATABLE :: Metrics_fTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes f (1:3,0:N,0:N,0:N,nElems)
-REAL,ALLOCATABLE :: Metrics_gTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes g (1:3,0:N,0:N,0:N,nElems)
-REAL,ALLOCATABLE :: Metrics_hTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes h (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_fTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes f (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_gTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes g (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_hTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes h (1:3,0:N,0:N,0:N,nElems)
 REAL,ALLOCATABLE :: dXGL_N      (:,:,:,:,:,:)    !< covariant Metric tensor, first dimension deriviatves d/dxi, d/deta, d/dzeta
                                                  !< second dimension X,Y,Z, on Gauss-Lobatto points!!!
 REAL,ALLOCATABLE :: detJac_Ref(:,:,:,:,:)        !< determinant of the mesh Jacobian for each Gauss point at degree 3*NGeo

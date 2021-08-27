@@ -127,12 +127,6 @@ ELSE()
   MESSAGE(SEND_ERROR " No such node type known.")
 ENDIF()
 
-IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
-  IF(FLUXO_DISCTYPE EQUAL 2)
-    MESSAGE(SEND_ERROR " Split form discretization (DiscType=2) + Gauss nodes is not possible! Choose either DiscType=2 + Gauss-Lob., or DiscType=1 + Gauss / Gauss-Lob. ")
-  ENDIF()
-ENDIF()
-
 IF(FLUXO_AMR)
   ADD_DEFINITIONS(-DUSE_AMR=1)
   SET(FLUXO_BUILD_P4EST  ON  CACHE BOOL "Build p4est library.")
