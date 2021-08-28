@@ -101,6 +101,12 @@ Ut=0.
 #if ((PP_NodeType==1) & (PP_DiscType==2))
 ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Uaux=0.
+ALLOCATE(V   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+V=0.
+ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+V_master=0.
+V_slave=0.
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 nDOFElem=(PP_N+1)**3
@@ -273,7 +279,6 @@ USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
 #endif
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
-USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 #if SHOCK_NFVSE
 use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
@@ -281,6 +286,10 @@ use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
 USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#if PP_NodeType==1
+USE MOD_DG_Vars             ,ONLY: V
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec
+#endif /*PP_NodeType==1*/
 #endif /*PP_DiscType==2*/
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
@@ -312,20 +321,25 @@ REAL,INTENT(IN)                 :: tIn                    !< Current time
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)
 
+! If we use ES Gauss methods, we need the entropy variables in all nodes
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+call ConsToEntropyVec(nTotal_IP,V,U)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+
 #if MPI
 ! Solution is always communicated on the U_Slave array
 ! start off with the receive command
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
-CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.TRUE.)
+CALL ProlongToFace_U(doMPISides=.TRUE.)
 CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
-CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
+CALL ProlongToFace_U(doMPISides=.FALSE.)
 CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.FALSE.)
 
 ! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
@@ -424,9 +438,61 @@ IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
 
 END SUBROUTINE DGTimeDerivative_weakForm
 
+!==================================================================================================================================
+!> Prolongs the conservatives variables to the sides
+!> In the case of Gauss disc2, we project the entropy variables and then transform back to conservative variables
+!==================================================================================================================================
+SUBROUTINE ProlongToFace_U(doMPISides)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+use MOD_Preproc
+USE MOD_Mesh_Vars           ,ONLY: SideToElem
+USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+USE MOD_Mesh_Vars           ,ONLY: firstMPISide_YOUR, nSides, lastMPISide_MINE
+USE MOD_DG_Vars             ,ONLY: U_master, U_slave
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+USE MOD_DG_Vars             ,ONLY: V, nTotal_face, V_master, V_slave
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec, EntropyToConsVec
+#else
+USE MOD_DG_Vars             ,ONLY: U
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+logical, intent(in) :: doMPISides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+integer :: sideID,firstSideID,lastSideID,ElemID,nbElemID
+!==================================================================================================================================
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+! Prolong the entropy variables
+CALL ProlongToFace(PP_nVar,V,V_master,V_slave,doMPISides=doMPISides)
+! Transform back to conservative variables
+IF(doMPISides)THEN
+  firstSideID = firstMPISide_YOUR
+   lastSideID = nSides
+ELSE
+  firstSideID = 1
+   lastSideID =  lastMPISide_MINE
+END IF
+do sideID=firstSideID, lastSideID
+  ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+  !master sides(ElemID,locSide and flip =-1 if not existing)
+  IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
+    call EntropyToConsVec(nTotal_face,V_master(:,:,:,sideID),U_master(:,:,:,sideID))
+  END IF
+  
+  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+  !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+  IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
+    call EntropyToConsVec(nTotal_face,V_slave(:,:,:,sideID),U_slave(:,:,:,sideID))
+  END IF
+end do
+#else
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
-
-
+END SUBROUTINE ProlongToFace_U
 !==================================================================================================================================
 !> Finalizes global variables of the module.
 !> Deallocate allocatable arrays, nullify pointers, set *InitIsDone = .FALSE.

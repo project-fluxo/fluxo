@@ -48,6 +48,12 @@ REAL,ALLOCATABLE                      :: Dvolsurf_T(:,:)        !< transpose of 
 #if (PP_NodeType==1)
 REAL,ALLOCATABLE,TARGET               :: Uaux(:,:,:,:,:)        !< Auxiliar variables for each node and element, 
                                                                 !< size \([1..nAuxVar,0..N,0..N,0..N,nElems]\). 
+REAL,ALLOCATABLE,TARGET               :: V   (:,:,:,:,:)        !< Entropy variables for each node and element, 
+                                                                !< size \([1..PP_nVar,0..N,0..N,0..N,nElems]\). 
+REAL,ALLOCATABLE                      :: V_master(:,:,:,:)      !< 2D Solution on face nodes for the master sides, 
+                                                                !< size \([1..nVar,0..N,0..N,all\_master\_sides]\) 
+
+REAL,ALLOCATABLE                      :: V_slave(:,:,:,:)       !< 2D Solution on face nodes for the slave sides, 
 #endif /*(PP_NodeType==1)*/
 #endif /*PP_DiscType==2*/
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)

@@ -60,7 +60,7 @@ use MOD_Flux_Average,       ONLY: PP_VolumeFluxAverageVec
 use MOD_Flux_Average,       ONLY: EvalUaux
 USE MOD_DG_Vars,            only: U,U_master,U_slave,Uaux
 USE MOD_Equation_Vars,      ONLY: nAuxVar
-USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde,NormalSigns
+USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde,NormalSigns,SurfElem,NormVec
 USE MOD_Interpolation_Vars, ONLY: wGP
 #endif /*(PP_DiscType==2)*/
 #elif (PP_NodeType==2)
@@ -113,9 +113,9 @@ DO SideID=firstSideID,lastSideID
 #if (PP_DiscType==2)
     ! Get the right metric terms
     select case(locSide)
-      case(3,5) ; metrics => metrics_ftilde(:,:,:,:,ElemID)
-      case(2,4) ; metrics => metrics_gtilde(:,:,:,:,ElemID)
-      case(1,6) ; metrics => metrics_htilde(:,:,:,:,ElemID)
+      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
+      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
+      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
     end select
 #endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
@@ -128,7 +128,7 @@ DO SideID=firstSideID,lastSideID
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
         CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
-                               metrics(:,ijk(1),ijk(2),ijk(3)),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                               metrics(:,ijk(1),ijk(2),ijk(3)),NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
         FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
       END DO !l=0,PP_N
@@ -164,9 +164,9 @@ DO SideID=firstSideID,lastSideID
 #if (PP_DiscType==2)
     ! Get the right metric terms
     select case(nblocSide)
-      case(3,5) ; metrics => metrics_ftilde(:,:,:,:,nbElemID)
-      case(2,4) ; metrics => metrics_gtilde(:,:,:,:,nbElemID)
-      case(1,6) ; metrics => metrics_htilde(:,:,:,:,nbElemID)
+      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,nbElemID)
+      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,nbElemID)
+      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,nbElemID)
     end select
 #endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
@@ -176,10 +176,10 @@ DO SideID=firstSideID,lastSideID
       ! Evaluate the correction term for the line
       FluxB_sum = 0.0
       DO l=0,PP_N
-        ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
+        ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
         CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
-                               metrics(:,ijk(1),ijk(2),ijk(3)),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                               metrics(:,ijk(1),ijk(2),ijk(3)),-NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
         FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
       END DO !l=0,PP_N
