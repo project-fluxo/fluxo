@@ -514,6 +514,12 @@ SDEALLOCATE(D_Hat_T)
 #if PP_DiscType==2
 SDEALLOCATE(Dvolsurf)
 SDEALLOCATE(Dvolsurf_T)
+#if PP_NodeType==1
+SDEALLOCATE(Uaux)
+SDEALLOCATE(V)
+SDEALLOCATE(V_master)
+SDEALLOCATE(V_slave)
+#endif /*PP_NodeType==1*/
 #endif /*PP_DiscType==2*/
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
