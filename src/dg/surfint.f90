@@ -52,12 +52,7 @@ USE MOD_PreProc
 #if (PP_NodeType==1)
 USE MOD_DG_Vars,            ONLY: L_HatMinus
 #if (PP_DiscType==2)
-#if PP_VolFlux==-1
-use MOD_Equation_Vars,      ONLY: VolumeFluxAverageVec   ! TODO: Check how to use the flux_average defined at compile time!!
-#else
-use MOD_Flux_Average,       ONLY: PP_VolumeFluxAverageVec
-#endif /*PP_VolFlux==-1*/
-use MOD_Flux_Average,       ONLY: EvalUaux
+use MOD_Flux_Average,       ONLY: EvalAdvFluxAverage, EvalUaux
 USE MOD_DG_Vars,            only: U,U_master,U_slave,Uaux
 USE MOD_Equation_Vars,      ONLY: nAuxVar
 USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde,NormalSigns,SurfElem,NormVec
@@ -126,7 +121,7 @@ DO SideID=firstSideID,lastSideID
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
-        CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
+        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
                                metrics(:,ijk(1),ijk(2),ijk(3)),NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
@@ -177,7 +172,7 @@ DO SideID=firstSideID,lastSideID
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
-        CALL VolumeFluxAverageVec(   U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
+        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
                                metrics(:,ijk(1),ijk(2),ijk(3)),-NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
