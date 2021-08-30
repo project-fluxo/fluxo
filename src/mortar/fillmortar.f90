@@ -157,6 +157,9 @@ USE MOD_Mesh_Vars,   ONLY: firstSlaveSide,lastSlaveSide
 USE MOD_Mesh_Vars,   ONLY: FS2M,nSides 
 #if defined(JESSE_MORTAR)
 USE MOD_Mortar_Vars, ONLY: U_small
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+USE MOD_DG_Vars,     ONLY: V_master
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 #else
 USE MOD_Mortar_Vars, ONLY: InterpolateBigToSmall
 #endif
@@ -187,7 +190,11 @@ DO MortarSideID=firstMortarSideID,lastMortarSideID
   iSide=MortarType(2,MortarSideID) !ID in list 1:nMortarSides
 
 #if defined(JESSE_MORTAR)
-  CALL InterpolateBigToSmall_ALL_Eqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small(:,:,:,:,iSide))
+  CALL InterpolateBigToSmall_ALL_Eqn(MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID), &
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+                                                                    V_master(:,:,:,MortarSideID), &
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+                                                                                                  U_small(:,:,:,:,iSide))
   U_small_loc=U_small(:,:,:,1:4,iSide)
 #else
   CALL InterpolateBigToSmall(PP_nVar,MortarType(1,MortarSideID),Uface_master(:,:,:,MortarSideID),U_small_loc(:,:,:,:))
@@ -398,9 +405,14 @@ END SUBROUTINE Flux_Cons_mortar
 !>  if useEntropyMortar=.TRUE. , Data is transformed to entropy variables before interpolation 
 !>  and transformed back to conservative after interpolation 
 !>  else conservative variables are used
-!>
+!> ATTENTION: 1) In the case of ES Gauss collocation methods, the entropy variables on the sides are already available. Therefore, 
+!>               we only need to interpolate the right quantities and then transform back to conservative variables
 !==================================================================================================================================
-SUBROUTINE InterpolateBigToSmall_ALL_Eqn(whichMortarType,BigCons,SmallCons)
+SUBROUTINE InterpolateBigToSmall_ALL_Eqn(whichMortarType,BigCons, &
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+                                                         BigEnt, &
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+                                                                  SmallCons)
 ! MODULES
 USE MOD_Preproc
 #if defined(navierstokes) || defined(mhd)
@@ -415,15 +427,21 @@ REAL,INTENT(IN)      :: BigCons(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the bi
 REAL,INTENT(INOUT)   :: smallCons(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
                                                     !< 4-1 mortar: sol. on intermediate level (-2:1) big (0) and small (1:4)
                                                     !< 2-1 mortar: sol. on big (0) and small (1:2)
+#if defined(navierstokes) || defined(mhd)
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+REAL,INTENT(IN)      :: BigEnt(  1:PP_nVar,0:PP_N,0:PP_N) !< Entropy variables on the big side 
+#else
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-#if defined(navierstokes) || defined(mhd)
-REAL         :: BigEnt(  1:PP_nVar,0:PP_N,0:PP_N) !< solution on the big side 
-REAL         :: smallEnt(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
+REAL                 :: BigEnt(  1:PP_nVar,0:PP_N,0:PP_N) !< Entropy variables on the big side 
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+REAL                 :: smallEnt(1:PP_nVar,0:PP_N,0:PP_N,-2:4)
 !==================================================================================================================================
 IF(useEntropyMortar)THEN
   smallCons(:,:,:,0)=BigCons(:,:,:) !save big mortar Cons solution, too
+#if (!((PP_NodeType==1) & (PP_DiscType==2)))
   CALL ConsToEntropyVec((PP_N+1)*(PP_N+1),BigEnt,BigCons)
+#endif /*(!((PP_NodeType==1) & (PP_DiscType==2)))*/
   CALL InterpolateBigToSmall_ALL(PP_nVar,whichMortarType,BigEnt,SmallEnt)
   SELECT CASE(WhichMortarType)
   CASE(1) !1->4

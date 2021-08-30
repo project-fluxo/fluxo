@@ -168,6 +168,7 @@ END SUBROUTINE VolInt_adv
 !> Computes the volume integral using flux differencing 
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut=0. and is updated with the volume flux derivatives
+!> Attention 3: If we are using ES Gauss collocation methods, we store Uaux here, since we'll need it for the surface integral
 !==================================================================================================================================
 SUBROUTINE VolInt_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------

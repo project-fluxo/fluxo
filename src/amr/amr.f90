@@ -329,6 +329,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_P4est,              ONLY: FillElemsChanges, GetNElems
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+  USE MOD_DG_Vars,            ONLY: Uaux, V, V_master, V_slave
+  USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
@@ -621,7 +625,13 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     IF (ALLOCATED(ElemVol))  THEN 
       DEALLOCATE(ElemVol); ALLOCATE(ElemVol(nElems)); 
     ENDIF 
-  
+    
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+    SDEALLOCATE(Uaux); ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    Uaux=0.
+    SDEALLOCATE(V   ); ALLOCATE(V   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    V=0.
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 #if PARABOLIC
     IF (ALLOCATED(gradPx))  THEN 
       DEALLOCATE(gradPx); ALLOCATE(gradPx(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
@@ -685,6 +695,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ENDIF
     DEALLOCATE(U_master)
     ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+    SDEALLOCATE(V_master); ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    V_master=0.
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
   
     DEALLOCATE(Flux_master)
     ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
@@ -727,6 +741,11 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /* PARABOLIC */
     DEALLOCATE(U_SLAVE)
     ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+    SDEALLOCATE(V_slave); ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+    V_slave=0.
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+    
     DEALLOCATE(Flux_SLAVE)
     
     ALLOCATE(Flux_slave(PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
