@@ -344,6 +344,8 @@ END SUBROUTINE CalcMetrics
 !> Prepares computation of the faces' normal, tangential vectors, surface area and Gauss points from volume metrics.
 !> Input is JaGL_N, the 3D element metrics on Cebychev-Lobatto points.
 !> For each side the volume metrics are interpolated to the surface and rotated into the side reference frame. 
+!> ATTENTION: 1) The surface metrics (NormVec,TangVec1,TangVec2,SurfElem) are in general only stored for the master sides, but...
+!>            2) If ES Gauss collocation methods are used, we also compute NormVec and SurfElem for the MPI slave sides 
 !==================================================================================================================================
 SUBROUTINE CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N,iElem)
 ! MODULES
@@ -355,6 +357,9 @@ USE MOD_Mesh_Vars,      ONLY:NormalDirs,TangDirs,NormalSigns
 USE MOD_Mappings,       ONLY:CGNS_SideToVol2
 USE MOD_ChangeBasis,    ONLY:ChangeBasis2D
 USE MOD_Mortar_Metrics, ONLY:Mortar_CalcSurfMetrics
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+USE MOD_Mesh_Vars,      ONLY:firstMPISide_YOUR, lastMPISide_YOUR, SideToElem, FS2M
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -373,11 +378,23 @@ REAL               :: Mortar_Ja(3,3,0:PP_N,0:PP_N,4)
 REAL               :: Mortar_xGP( 3,0:PP_N,0:PP_N,4)
 REAL               :: tmp(        3,0:PP_N,0:PP_N)
 REAL               :: tmp2(       3,0:PP_N,0:PP_N)
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+real               :: NormVec_tmp(3,0:PP_N,0:PP_N)  ! Temporary array to store the NormVec before storing with the master flip
+real               :: SurfElem_tmp (0:PP_N,0:PP_N)  ! Temporary array to store the SurfElem before storing with the master flip
+integer            :: nbFlip
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+logical            :: skipMPIslaves
 !==================================================================================================================================
 
+skipMPIslaves = .TRUE.
+
 DO iLocSide=1,6
-  IF(ElemToSide(E2S_FLIP,iLocSide,iElem).NE.0) CYCLE ! only master sides with flip=0
   SideID=ElemToSide(E2S_SIDE_ID,iLocSide,iElem)
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+  ! do not skip MPI slaves for ES Gauss collocation methods
+  skipMPIslaves = (SideID < firstMPISide_YOUR) .or. (SideID > lastMPISide_YOUR)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+  IF((ElemToSide(E2S_FLIP,iLocSide,iElem).NE.0) .and. skipMPIslaves) CYCLE ! master sides have flip=0
 
   SELECT CASE(iLocSide)
   CASE(XI_MINUS)
@@ -424,12 +441,27 @@ DO iLocSide=1,6
     END DO; END DO ! p,q
   END DO ! dd
 
-
   NormalDir=NormalDirs(iLocSide); TangDir=TangDirs(iLocSide); NormalSign=NormalSigns(iLocSide)
   CALL SurfMetricsFromJa(NormalDir,TangDir,NormalSign,Ja_Face,&
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),&
                          TangVec2(:,:,:,SideID),SurfElem(:,:,SideID))
-
+  
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+  ! Rotate metrics on MPI slave sides to the master frame of reference
+  if (ElemToSide(E2S_FLIP,iLocSide,iElem).NE.0) then
+    NormVec_tmp  = NormVec(:,:,:,SideID)
+    SurfElem_tmp = SurfElem (:,:,SideID)
+    nbFlip    = SideToElem(S2E_FLIP,SideID)
+    DO q=0,PP_N; DO p=0,PP_N
+      NormVec(:,p,q,SideID) = -NormVec_tmp(:,FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
+      SurfElem (p,q,SideID) =  SurfElem_tmp (FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
+      ! The tangential vectors are not needed, so we zero them
+      TangVec1(:,:,:,SideID) = 0.0
+      TangVec2(:,:,:,SideID) = 0.0
+    END DO ; END DO
+  end if
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+  
   !compute metrics for mortar faces, interpolate Ja_Face to small sides
   IF(MortarType(1,SideID).GT.0)THEN
     CALL Mortar_CalcSurfMetrics(SideID,Ja_Face,Face_xGP(:,:,:,SideID),&
