@@ -214,8 +214,10 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flu
 ! Compute advective flux
 CALL PP_VolumeFluxAverageVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 
+#if NONCONS
 ! Compute non-conservative flux
 CALL AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+#endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage
 
