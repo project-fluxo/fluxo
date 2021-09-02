@@ -121,11 +121,15 @@ DO SideID=firstSideID,lastSideID
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
+        CALL EvalAdvFluxAverage(U_master(:,p,q,SideID),                                               U(:,ijk(1),ijk(2),ijk(3),ElemID), &
+                                UauxB,                                                             Uaux(:,ijk(1),ijk(2),ijk(3),ElemID), &
+                                NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID),metrics(:,ijk(1),ijk(2),ijk(3)),        &
+                                  FluxB(:,l)    ) 
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
         CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
                                metrics(:,ijk(1),ijk(2),ijk(3)),NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
-        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
       END DO !l=0,PP_N
 #endif /*PP_DiscType==2*/
       DO l=0,PP_N
@@ -172,11 +176,15 @@ DO SideID=firstSideID,lastSideID
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
+        CALL EvalAdvFluxAverage(U_slave(:,p,q,SideID),                                                   U(:,ijk(1),ijk(2),ijk(3),nbElemID) , &
+                                UauxB,                                                                Uaux(:,ijk(1),ijk(2),ijk(3),nbElemID) , &
+                                -NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID),metrics(:,ijk(1),ijk(2),ijk(3)),           &
+                                 FluxB(:,l)                )
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
         CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
                                metrics(:,ijk(1),ijk(2),ijk(3)),-NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
                                  FluxB(:,l)                )
-        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
       END DO !l=0,PP_N
 #endif /*PP_DiscType==2*/
       DO l=0,PP_N

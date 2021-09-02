@@ -216,7 +216,7 @@ CALL PP_VolumeFluxAverageVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 
 #if NONCONS
 ! Compute non-conservative flux
-CALL AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+call AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 #endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage
@@ -287,70 +287,34 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: h !< add to
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i,j,k,l
-#if NONCONS==1 /*Powell*/
-INTEGER,PARAMETER:: vs=2
-INTEGER,PARAMETER:: ve=8
-#elif NONCONS==2 /*Brackbill*/
-INTEGER,PARAMETER:: vs=2
-INTEGER,PARAMETER:: ve=4
-#elif NONCONS==3 /*Janhunen*/
-INTEGER,PARAMETER:: vs=6
-INTEGER,PARAMETER:: ve=8
-#endif /*NONCONSTYPE*/
-REAL :: phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-REAL :: phi_GLM_f_s2(2),phi_GLM_g_s2(2),phi_GLM_h_s2(2) 
-#endif /*PP_GLM and PP_NC_GLM*/
 !==================================================================================================================================
-!phi=0.
+
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-#if NONCONS==1 /*Powell*/
-  Phi_s4(2:4)=0.25* U_in(6:8,i,j,k) ! B
-  Phi_s4(  5)=0.25* Uaux(  8,i,j,k) ! vB
-  Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k) ! v
-#elif NONCONS==2 /*Brackbill*/
-  Phi_s4(2:4)=0.25* U_in(6:8,i,j,k) ! B
-#elif NONCONS==3 /*Janhunen*/
-  Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k) ! v
-#endif /*NONCONSTYPE*/
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-  phi_GLM_f_s2(1:2) = (0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
-  phi_GLM_g_s2(1:2) = (0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
-  phi_GLM_h_s2(1:2) = (0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
-#endif /*PP_GLM and PP_NC_GLM*/
-
+  
   DO l=0,PP_N
-    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k)+(SUM(( M_f(:,i,j,k) &
-                                              +M_f(:,l,j,k))*U_in(6:8,l,j,k)))*Phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-    !nonconservative term to restore galilein invariance for GLM term: (grad\psi) (0,0,0,0,vec{v}\psi, 0,0,0, \vec{v})
-    ! => 5/9. component: 1/2 vec{Ja^d}_{(l,i),jk} . vec{v}_ijk \psi_ljk (\psi_ijk,1)
-    !
-    f((/5,9/),l,i,j,k) = f((/5,9/),l,i,j,k)  +U_in(9,l,j,k) *phi_GLM_f_s2(1:2)
-#endif /*PP_GLM and PP_NC_GLM*/
+    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,l,j,k),Uaux(:,i,j,k),Uaux(:,l,j,k),M_f(:,i,j,k),M_f(:,l,j,k),f(:,l,i,j,k))
   END DO !l=0,PP_N
 
   DO l=0,PP_N
-    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k)+(SUM(( M_g(:,i,j,k) & 
-                                              +M_g(:,i,l,k))*U_in(6:8,i,l,k)))*Phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-    g((/5,9/),l,i,j,k) = g((/5,9/),l,i,j,k)  +U_in(9,i,l,k) *phi_GLM_g_s2(1:2)
-#endif /*PP_GLM and PP_NC_GLM*/
+    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,i,l,k),Uaux(:,i,j,k),Uaux(:,i,l,k),M_g(:,i,j,k),M_g(:,i,l,k),g(:,l,i,j,k))
   END DO !l=0,PP_N
 
   DO l=0,PP_N
-    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k)+(SUM(( M_h(:,i,j,k) & 
-                                              +M_h(:,i,j,l))*U_in(6:8,i,j,l)))*Phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-    h((/5,9/),l,i,j,k) = h((/5,9/),l,i,j,k)  +U_in(9,i,j,l) *phi_GLM_h_s2(1:2)
-#endif /*PP_GLM and PP_NC_GLM*/
+    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,i,j,l),Uaux(:,i,j,k),Uaux(:,i,j,l),M_h(:,i,j,k),M_h(:,i,j,l),h(:,l,i,j,k))
   END DO !l=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE AddNonConsFluxTilde3D
-
 !==================================================================================================================================
-!> Compute transformed nonconservative MHD flux given left and right states and metrics 
+!> Compute transformed nonconservative MHD flux given left and right states and metrics:
+!> phi^◇ = 0.5*(B_L·metrics_L+B_R·{metrics})*phi_L^MHD + {psi}*metrics_L·phi_L^GLM
+!>
+!> phi^MHD is the Powell, Brackbill or Janhunen nonconservative term:
+!> * Powell:    phi^MHD = (0,B_1,B_2,B_3,v·B,v_1,v_2,v_3,0)
+!> * Brackbill: phi^MHD = (0,B_1,B_2,B_3,0,0,0,0)
+!> * Janhunen:  phi^MHD = (0,0,0,0,0,v_1,v_2,v_3,0)
+!> phi^GLM is the GLM nonconservative term
+!> * phi^GLM = (0,0,0,0,psi*v,0,0,0,v)
 !==================================================================================================================================
 PURE SUBROUTINE AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
@@ -369,21 +333,24 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: Fstar   !< added to flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+real :: Bhat
 !==================================================================================================================================
+
+Bhat = 0.5*(dot_product(metric_L,UL(6:8))+dot_product(0.5*(metric_L+metric_R),UR(6:8)))
+
 #if NONCONS==1 /*Powell*/
   ! Powell: Phi(2:8) =B,vB,v
-  Fstar(2:8) = Fstar(2:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*(/UL(6:8),UauxL(8),UauxL(2:4)/)
+  Fstar(2:8) = Fstar(2:8) +Bhat*(/UL(6:8),UauxL(8),UauxL(2:4)/)
 #elif NONCONS==2 /*Brackbill*/
   ! Brackbill: Phi(2:4) =B
-  Fstar(2:4) = Fstar(2:4) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UL(6:8)
+  Fstar(2:4) = Fstar(2:4) +Bhat*UR(6:8)))*UL(6:8)
 #elif NONCONS==3 /*Janhunen*/
   ! Janhunen: Phi(6:8) =v
-  Fstar(6:8) = Fstar(6:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UauxL(2:4)
+  Fstar(6:8) = Fstar(6:8) +Bhat*UR(6:8)))*UauxL(2:4)
 #endif /*NONCONSTYPE*/
 #if defined(PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
-  ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
-  Fstar((/5,9/)) = Fstar((/5,9/)) +(UR(9)*0.5*SUM(metric_L(:)*UauxL(2:4))) *(/UL(9),1./)
+  !nonconservative term to restore Galilean invariance for GLM term
+  Fstar((/5,9/)) = Fstar((/5,9/)) +(0.5*(UL(9)+UR(9))*SUM(metric_L*UauxL(2:4))) *(/UL(9),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
 
 END SUBROUTINE AddNonConsFluxVec
