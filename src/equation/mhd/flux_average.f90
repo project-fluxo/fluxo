@@ -282,20 +282,83 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(INOUT) :: h !< add to
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER             :: i,j,k,l
+#if NONCONS==1 /*Powell*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=8
+#elif NONCONS==2 /*Brackbill*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=4
+#elif NONCONS==3 /*Janhunen*/
+INTEGER,PARAMETER:: vs=6
+INTEGER,PARAMETER:: ve=8
+#endif /*NONCONSTYPE*/
+REAL :: Phi_MHD_s2(vs:ve)
+REAL :: Phi_GLM_s2(2)
+REAL :: Bhat_L
 !==================================================================================================================================
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+
+#if NONCONS==1 /*Powell*/
+  ! Powell: Phi(2:8) =B,vB,v
+  Phi_MHD_s2(vs:ve) = 0.5 * (/U_in(6:8,i,j,k),Uaux(8,i,j,k),Uaux(2:4,i,j,k)/)
+#elif NONCONS==2 /*Brackbill*/
+  ! Brackbill: Phi(2:4) =B
+  Phi_MHD_s2(vs:ve) = 0.5 * U_in(6:8,i,j,k)
+#elif NONCONS==3 /*Janhunen*/
+  ! Janhunen: Phi(6:8) =v
+  Phi_MHD_s2(vs:ve) = 0.5 * Uaux(2:4,i,j,k)
+#endif /*NONCONSTYPE*/
+  
+  ! Non-conservative terms in xi
+  !-----------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  Phi_GLM_s2 = 0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_f(:,i,j,k),U_in(6:8,i,j,k))
   
   DO l=0,PP_N
-    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,l,j,k),Uaux(:,i,j,k),Uaux(:,l,j,k),M_f(:,i,j,k),M_f(:,l,j,k),f(:,l,i,j,k))
+    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_f(:,i,j,k)+M_f(:,l,j,k)),U_in(6:8,l,j,k)))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    f((/5,9/),l,i,j,k) = f((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,l,j,k)) * Phi_GLM_s2
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
-
+  
+  ! Non-conservative terms in eta
+  !------------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  Phi_GLM_s2 = 0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_g(:,i,j,k),U_in(6:8,i,j,k))
+  
   DO l=0,PP_N
-    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,i,l,k),Uaux(:,i,j,k),Uaux(:,i,l,k),M_g(:,i,j,k),M_g(:,i,l,k),g(:,l,i,j,k))
+    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_g(:,i,j,k)+M_g(:,i,l,k)),U_in(6:8,i,l,k)))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    g((/5,9/),l,i,j,k) = g((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,l,k)) * Phi_GLM_s2
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
-
+  
+  ! Non-conservative terms in zeta
+  !-------------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  Phi_GLM_s2 = 0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_h(:,i,j,k),U_in(6:8,i,j,k))
+  
   DO l=0,PP_N
-    call AddNonConsFluxVec(U_in(:,i,j,k),U_in(:,i,j,l),Uaux(:,i,j,k),Uaux(:,i,j,l),M_h(:,i,j,k),M_h(:,i,j,l),h(:,l,i,j,k))
+    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_h(:,i,j,k)+M_h(:,i,j,l)),U_in(6:8,i,j,l)))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    h((/5,9/),l,i,j,k) = h((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,j,l)) * Phi_GLM_s2
+#endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
