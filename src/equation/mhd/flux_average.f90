@@ -338,10 +338,10 @@ Bhat = 0.5*(dot_product(metric_L,UL(6:8))+dot_product(0.5*(metric_L+metric_R),UR
   Fstar(2:8) = Fstar(2:8) +Bhat*(/UL(6:8),UauxL(8),UauxL(2:4)/)
 #elif NONCONS==2 /*Brackbill*/
   ! Brackbill: Phi(2:4) =B
-  Fstar(2:4) = Fstar(2:4) +Bhat*UR(6:8)*UL(6:8)
+  Fstar(2:4) = Fstar(2:4) +Bhat*UL(6:8)
 #elif NONCONS==3 /*Janhunen*/
   ! Janhunen: Phi(6:8) =v
-  Fstar(6:8) = Fstar(6:8) +Bhat*UR(6:8)*UauxL(2:4)
+  Fstar(6:8) = Fstar(6:8) +Bhat*UauxL(2:4)
 #endif /*NONCONSTYPE*/
 #if defined(PP_GLM) && defined (PP_NC_GLM)
   !nonconservative term to restore Galilean invariance for GLM term
