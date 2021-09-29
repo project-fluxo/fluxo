@@ -66,6 +66,9 @@ END INTERFACE
 PUBLIC::CalcMetrics
 PUBLIC::CalcSurfMetrics
 PUBLIC::SurfMetricsFromJa
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+PUBLIC::CalcESGaussSurfMetrics
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !==================================================================================================================================
 
 CONTAINS
@@ -512,5 +515,38 @@ DO q=0,PP_N; DO p=0,PP_N
   TangVec2(:,p,q) = CROSS(NormVec(:,p,q),TangVec1(:,p,q))
 END DO; END DO ! p,q
 END SUBROUTINE SurfMetricsFromJa
+
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+!==================================================================================================================================
+!> Computes the surface metrics that are only needed for ES-Gauss methods
+!==================================================================================================================================
+SUBROUTINE CalcESGaussSurfMetrics()
+! MODULES
+USE MOD_Preproc
+USE MOD_Mesh_Vars, ONLY: SurfMetrics, nElems, ElemToSide, NormalSigns, SurfElem, NormVec
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER :: iElem, locSide, sideID, p, q
+REAL    :: signMetrics
+!----------------------------------------------------------------------------------------------------------------------------------
+
+SDEALLOCATE(SurfMetrics)
+ALLOCATE(SurfMetrics   (3,0:PP_N,0:PP_N,6,nElems))
+DO iElem=1, nElems
+  DO locSide = 1, 6
+    DO q=0, PP_N ; DO p=0, PP_N
+      sideID = ElemToSide(E2S_SIDE_ID,locSide,iElem)
+      if (ElemToSide(E2S_FLIP,locSide,iElem) == 0) then
+        signMetrics = 1.0
+      else
+        signMetrics =-1.0
+      end if
+      SurfMetrics(:,p,q,locSide,iElem) = signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
+    END DO ; END DO
+  END DO
+END DO
+
+END SUBROUTINE CalcESGaussSurfMetrics
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 END MODULE MOD_Metrics

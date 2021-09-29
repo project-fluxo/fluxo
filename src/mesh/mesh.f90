@@ -321,7 +321,9 @@ SDEALLOCATE(NormVec)
 SDEALLOCATE(TangVec1)
 SDEALLOCATE(TangVec2)
 SDEALLOCATE(SurfElem)
-
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+SDEALLOCATE(SurfMetrics)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 ! mappings
 SDEALLOCATE(FS2M)

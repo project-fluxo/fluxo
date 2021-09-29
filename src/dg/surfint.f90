@@ -58,7 +58,7 @@ use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
 #endif /*NONCONS*/
 USE MOD_DG_Vars,            only: U,U_master,U_slave,Uaux
 USE MOD_Equation_Vars,      ONLY: nAuxVar
-USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde,NormalSigns,SurfElem,NormVec
+USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde, SurfMetrics, NormalSigns
 USE MOD_Interpolation_Vars, ONLY: wGP
 #endif /*(PP_DiscType==2)*/
 #elif (PP_NodeType==2)
@@ -127,16 +127,16 @@ DO SideID=firstSideID,lastSideID
         ! Evaluate flux between node and boundary (symmetric contribution)
         CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
-                               metrics(:,ijk(1),ijk(2),ijk(3)),NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
+                               metrics(:,ijk(1),ijk(2),ijk(3)),SurfMetrics(:,p,q,locSide,ElemID), &
                                  FluxB(:,l)                )
         ! Project 'boundary to volume' flux to the nodes 
 #if NONCONS
         ! Store flux in container
         FluxB_cont = FluxB(:,l)
         ! Add non-conservative flux from boundary to volume
-        call AddNonConsFluxVec(U_master(:,p,q,SideID),   U(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
-                                                UauxB,Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
-                                  NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), metrics(:,ijk(1),ijk(2),ijk(3)), &
+        call AddNonConsFluxVec(U_master(:,p,q,SideID)        ,      U(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
+                                                       UauxB ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
+                            SurfMetrics(:,p,q,locSide,ElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
                                   FluxB_cont)
         FluxB_sum = FluxB_sum + FluxB_cont* L_hatMinus(l)*wGP(l)
 #else
@@ -145,9 +145,9 @@ DO SideID=firstSideID,lastSideID
         
 #if NONCONS
         ! Compute non-conservative flux from volume to boundary
-        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
-                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
-                                metrics(:,ijk(1),ijk(2),ijk(3)),NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
+        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,ElemID),   U_master(:,p,q,SideID), &
+                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),   UauxB, &
+                                metrics(:,ijk(1),ijk(2),ijk(3))        ,SurfMetrics(:,p,q,locSide,ElemID), &
                                   FluxB(:,l))
 #endif /*NONCONS*/
         
@@ -198,18 +198,18 @@ DO SideID=firstSideID,lastSideID
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
         ! Evaluate flux between node and boundary (symmetric contribution)
-        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
-                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
-                               metrics(:,ijk(1),ijk(2),ijk(3)),-NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
+        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    U_slave(:,p,q,SideID), &
+                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    UauxB, &
+                               metrics(:,ijk(1),ijk(2),ijk(3))          ,SurfMetrics(:,p,q,nblocSide,nbElemID), &
                                  FluxB(:,l)                )
         ! Project 'boundary to volume' flux to the nodes 
 #if NONCONS
         ! Store flux in container
         FluxB_cont = FluxB(:,l)
         ! Add non-conservative flux from boundary to volume
-        call AddNonConsFluxVec(U_slave(:,p,q,SideID),   U(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
-                                               UauxB,Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
-                                 -NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), metrics(:,ijk(1),ijk(2),ijk(3)), &
+        call AddNonConsFluxVec(U_slave(:,p,q,SideID)            ,      U(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
+                                               UauxB            ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
+                           SurfMetrics(:,p,q,nblocSide,nbElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
                                   FluxB_cont)
         FluxB_sum = FluxB_sum + FluxB_cont* L_hatMinus(l)*wGP(l)
 #else
@@ -218,9 +218,9 @@ DO SideID=firstSideID,lastSideID
         
 #if NONCONS
         ! Compute non-conservative flux from volume to boundary
-        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),U_slave(:,p,q,SideID), &
-                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),UauxB, &
-                                metrics(:,ijk(1),ijk(2),ijk(3)),-NormalSigns(nblocSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID), &
+        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    U_slave(:,p,q,SideID), &
+                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    UauxB, &
+                                metrics(:,ijk(1),ijk(2),ijk(3))          ,SurfMetrics(:,p,q,nblocSide,nbElemID), &
                                   FluxB(:,l))
 #endif /*NONCONS*/
       END DO !l=0,PP_N

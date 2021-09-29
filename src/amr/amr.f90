@@ -331,6 +331,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
 #if ((PP_NodeType==1) & (PP_DiscType==2))
   USE MOD_DG_Vars,            ONLY: Uaux, V, V_master, V_slave
+  USE MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
   USE MOD_Equation_Vars,      ONLY: nAuxVar
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
@@ -755,7 +756,9 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 ! Recompute metric terms
 ! ======================
   CALL CalcMetrics((/0/))
-  
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+  call CalcESGaussSurfMetrics()
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 ! ================================================================================================
 ! Recover U in the elements that were coarsened (their U is currently scaled by the Jacobian: J*U)
 ! ================================================================================================

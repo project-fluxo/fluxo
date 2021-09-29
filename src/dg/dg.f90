@@ -73,6 +73,7 @@ USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
 #if ((PP_NodeType==1) & (PP_DiscType==2))
 USE MOD_Equation_Vars,      ONLY: nAuxVar
+use MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -81,7 +82,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
+! LOCAL VARIABLES
 !===================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.(.NOT.MeshInitIsDone).OR.(.NOT.EquationInitIsDone) &
    .OR.(.NOT.RestartInitIsDone).OR.DGInitIsDone)THEN
@@ -107,6 +108,7 @@ ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 V_master=0.
 V_slave=0.
+call CalcESGaussSurfMetrics()
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 nDOFElem=(PP_N+1)**3
