@@ -381,7 +381,7 @@ DO iElem=1,nElems
     Energy(2)  = Energy(2)+SUM(U(6:8,i,j,k,iElem)**2)*IntegrationWeight
     Energy(3)  = Energy(3)+U(5,i,j,k,iElem)*IntegrationWeight
 #ifdef PP_GLM
-    Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)*IntegrationWeight
+    Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)**2*IntegrationWeight
 #endif
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
@@ -395,7 +395,7 @@ END IF
 #endif /*MPI*/
 Energy(1)=0.5*Energy(1)/vol
 Energy(2)= s2mu_0*Energy(2)/vol
-Energy(4)= 0.5*Energy(4)/vol
+Energy(4)= s2mu_0*Energy(4)/vol
 END SUBROUTINE CalcEnergy
 
 

@@ -116,7 +116,7 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
                                               "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: Derigs er al. entropy conservative flux with metric dealiasing" //&
+                                              "10: Derigs et al. entropy conservative flux with metric dealiasing" //&
                                               "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #ifdef JESSE_MORTAR
@@ -955,7 +955,7 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
   Prim(8)=SQRT(1-Prim(7)*Prim(7))
   CALL PrimToCons(Prim,Resu)
 
-CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
+CASE(76) ! Kelvin-Helmholtz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
         ! eta=0, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=0.5 , constant field Bz=1
   Prim=0.
   Prim(8)=1.0
@@ -970,6 +970,55 @@ CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodi
   END DO
   Prim(3)=IniDisturbance*Prim(3)
   Prim(5)=0.2
+  CALL PrimToCons(Prim,Resu)
+
+CASE(7601) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(6) = 0.125
+  
+  CALL PrimToCons(Prim,Resu)
+  
+CASE(7602) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in y
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(7) = 0.125
+  
+  CALL PrimToCons(Prim,Resu)
+  
+CASE(7603) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x-y
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(6) = 0.125
+  prim(7) = 0.125
+  
   CALL PrimToCons(Prim,Resu)
 
 CASE(80) ! 2D island coalesence domain [-1,1]^2
@@ -1287,7 +1336,7 @@ CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
     Prim(1) = -0.225*r+3.7
   elseif (r <= 33.) then ! Low-density zone
     Prim(1) = 0.1
-  else  ! Jovial ionosphere
+  else  ! Jovian ionosphere
     Prim(1) = 1.6583*r - 54.625
 !#    Prim(1) = 0.1
   end if
