@@ -40,10 +40,10 @@ module MOD_NFVSE_Vars
   ! Metric terms on an inner face
   ! -----------------------------
   type :: InnerFaceMetrics_t
-    real, allocatable :: nv(:,:,:,:) !< Sub-cell normal vectors            : (1:3,0:N,0:N,0:N-1)
-    real, allocatable :: t1(:,:,:,:) !< Sub-cell tangent vectors (1)       : (1:3,0:N,0:N,0:N-1)
-    real, allocatable :: t2(:,:,:,:) !< Sub-cell tangent vectors (2)       : (1:3,0:N,0:N,0:N-1)
-    real, allocatable :: norm(:,:,:) !< Norm of the sub-cell normal vectors:     (0:N,0:N,0:N-1)
+    real, allocatable :: nv(:,:,:,:) !< Sub-cell normal vectors            : (1:3,0:N,0:N,-1:N)
+    real, allocatable :: t1(:,:,:,:) !< Sub-cell tangent vectors (1)       : (1:3,0:N,0:N,-1:N)
+    real, allocatable :: t2(:,:,:,:) !< Sub-cell tangent vectors (2)       : (1:3,0:N,0:N,-1:N)
+    real, allocatable :: norm(:,:,:) !< Norm of the sub-cell normal vectors:     (0:N,0:N,-1:N)
 !                             | | |_ Inner face index (FV BC idx)
 !                             | |___ (FV subcell idx)
 !                             |_____ (FV subcell idx)
