@@ -1475,6 +1475,10 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
+#ifdef PP_GLM
+USE MOD_Equation_Vars, ONLY:GLM_scr, GLM_ch
+use MOD_Basis        , ONLY:ALMOSTEQUAL
+#endif /*def PP_GLM*/
 USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1684,16 +1688,21 @@ CASE(111) ! Geophysics: Io interaction with its plasma torus (for shock-capturin
 
 CASE DEFAULT
   ! No source -> do nothing
+#ifdef PP_GLM
+  if (ALMOSTEQUAL(GLM_scr, 0.0)) &
+#endif /*def PP_GLM*/
   doCalcSource=.FALSE.
 END SELECT ! ExactFunction
 
-!#ifndef PP_GLM
-!CASE DEFAULT
-!  ! No source -> do nothing
-!  doCalcSource=.FALSE.
-!#endif /*PP_GLM*/
-!END SELECT ! ExactFunction
-!
+! Add the GLM damping
+#ifdef PP_GLM
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    Ut(9,i,j,k,iElem) = Ut(9,i,j,k,iElem)-GLM_scr*GLM_ch*U(9,i,j,k,iElem)
+  END DO; END DO; END DO ! i,j,k
+END DO ! iElem
+#endif /*def PP_GLM*/
+
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================
