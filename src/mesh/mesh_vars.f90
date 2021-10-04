@@ -40,9 +40,9 @@ REAL,ALLOCATABLE,TARGET :: Elem_xGP(:,:,:,:,:)          !< XYZ positions (first 
 REAL,ALLOCATABLE :: Face_xGP(:,:,:,:)            !< XYZ positions (first index 1:3) of the Face Gauss Point
 LOGICAL,ALLOCATABLE :: Elem_inCyl(:)         ! flag if elem is in Cylinder
 !----------------------------------------------------------------------------------------------------------------------------------
-! MORTAR DATA FOR NON-CONFORMING MESHES ORIGINATING FROM AN OCTREE BASIS (ONLY ALLOCATED IF isMortarMesh=.TRUE.!!!)
+! A flag to check if the mesh is non-conforming
 !----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: isMortarMesh               !< Marker whether non-conforming data is present (false for conforming meshes)
+LOGICAL          :: MeshIsNonConforming
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Metrics on GaussPoints
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -101,6 +101,7 @@ INTEGER             :: nGlobalElems=0          !< number of elements in mesh
 INTEGER             :: nElems=0                !< number of local elements
 INTEGER             :: offsetElem=0            !< for MPI, until now=0 Elems pointer array range: [offsetElem+1:offsetElem+nElems]
 INTEGER             :: nSides=0                !< =nInnerSides+nBCSides+nMPISides
+INTEGER             :: nGlobalUniqueSides=0    !< = total number of unique sides in mesh
 INTEGER             :: nSidesMaster=0          !< =sideIDMaster
 INTEGER             :: nSidesSlave=0           !< =nInnerSides+nBCSides+nMPISides
 INTEGER             :: nInnerSides=0           !< InnerSide index range: sideID [nBCSides+1:nBCSides+nInnerSides]
@@ -132,7 +133,7 @@ INTEGER             :: nMortarSides=0          !< total number of mortar sides
 INTEGER             :: nMortarInnerSides=0     !< number of inner mortar sides
 INTEGER             :: nMortarMPISides=0       !< number of mortar MPI sides
 INTEGER,ALLOCATABLE, TARGET :: MortarType(:,:)         !< Type of mortar [1] and position in mortar list [1:nSides]
-INTEGER,ALLOCATABLE, TARGET :: MortarInfo(:,:,:)       !< 1:2,1:4,1:nMortarSides: [1] nbSideID / flip, [2] max 4 mortar sides, [3] sides
+INTEGER,ALLOCATABLE, TARGET :: MortarInfo(:,:,:)       !< 1:2,0:4,1:nMortarSides: [1] nbSideID(1), flip(2), [2] big side(0), max 4 mortar sides(1:4), [3] mortar ID (1:nMortarSides)
 !----------------------------------------------------------------------------------------------------------------------------------
 CHARACTER(LEN=255),ALLOCATABLE :: BoundaryName(:) !< names of the boundary conditions read from the mesh file
 CHARACTER(LEN=255)             :: MeshFile     !< name of hdf5 meshfile (write with ending .h5!)
@@ -280,7 +281,7 @@ DO iElem=FirstElemInd,LastElemInd
   DEALLOCATE(aElem%Side)
   DEALLOCATE(aElem)
 END DO
-DEALLOCATE(Elems)
+if (nElems>0) DEALLOCATE(Elems)
 END SUBROUTINE deleteMeshPointer
 
 

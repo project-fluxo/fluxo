@@ -30,8 +30,12 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! GLOBAL VARIABLES 
 !-----------------------------------------------------------------------------------------------------------------------------------
-LOGICAL          :: PositivityPreservationInitIsDone = .FALSE.
-LOGICAL          :: PositivityPreservationInitFirst  = .TRUE.
+LOGICAL           :: PositivityPreservationInitIsDone = .FALSE.
+LOGICAL           :: PositivityPreservationInitFirst  = .TRUE.
+real              :: PositivityEpsilon
+real              :: PositivityDelta
+real, allocatable :: Jac(:,:,:,:)  ! det of jacobian.
+real, allocatable :: vol      (:)  ! Volume of cell.
 !===================================================================================================================================
 
 END MODULE MOD_PositivityPreservation_Vars

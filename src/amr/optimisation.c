@@ -10,9 +10,6 @@
 //!
 //! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 //!==================================================================================================================================
-//#include "p8est.h"
-//#include <p8est_iterate.h>
-//#include <p4est_to_p8est.h>
 #include "p4fluxo.h"
 #include "optimisation.h"
 
@@ -44,8 +41,6 @@ MortarOptimisation(p4est_iter_face_info_t *info, void *user_data) {
     side[0] = p4est_iter_fside_array_index_int(sides, 0);
     side[1] = p4est_iter_fside_array_index_int(sides, 1);
 
-    // direction = side[0]->face / 2; /* 0 == x, 1 == y, 2 == z */
-    // minus = side[0]->face % 2;
     if (side[0]->is_hanging || side[1]->is_hanging) {
         //One Side is Mortar
         iBigSide = side[0]->is_hanging == 0 ? 0 : 1;
@@ -54,18 +49,14 @@ MortarOptimisation(p4est_iter_face_info_t *info, void *user_data) {
         int SmallFace = side[iSmallSide]->face;
         if (side[iBigSide]->is.full.is_ghost == 0) //Big side is not MPI
         {
-            // int flip = GetHFlip(BigFace, SmallFace, orientation);
             for (j = 0; j < P8EST_HALF; j++) //Check if the other sides MPI
             {
-                //quad=side[i]->is.hanging.quad[j];
                 if (side[iSmallSide]->is.hanging.is_ghost[j] == 0) {
                     ghostor++; // not ghost side, but local
                     continue;
                 } else {
                     int ghostid = side[iSmallSide]->is.hanging.quadid[j];
                     int SidesID = ghost_data[ghostid].SidesID[SmallFace];
-
-                    //side[iSmallSide]->is.hanging.is_ghost[j]
 
                     if ((SidesID > FirstMPIMINESide) && (SidesID <= LastMPIMINESide))
                         ghost++;

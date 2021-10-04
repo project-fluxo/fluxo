@@ -57,7 +57,8 @@ CALL prms%CreateStringOption('TimeDiscMethod', "Specifies the type of time-discr
                                                " a specific Runge-Kutta scheme. Possible values:\n"//&
                                                "  * standardrk3-3\n  * carpenterrk4-5\n  * niegemannrk4-14\n"//&
                                                "  * toulorgerk4-8c\n  * toulorgerk3-7c\n  * toulorgerk4-8f\n"//&
-                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18\n  * ssprk4-5", value='CarpenterRK4-5')
+                                               "  * ketchesonrk4-20\n  * ketchesonrk4-18\n * ssprk3-3 * ssprk4-5",&
+                                                value='CarpenterRK4-5')
 CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mandatory).")
 CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0 (mandatory)")
 CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0 (mandatory)")
@@ -84,7 +85,6 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-CHARACTER(LEN=255):: TimeDiscMethod
 !==================================================================================================================================
 TimeDiscMethod = GETSTR('TimeDiscMethod','Carpenter RK4-5')
 CALL StripSpaces(TimeDiscMethod)
@@ -162,7 +162,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 #if USE_AMR
 USE MOD_AMR_tracking        ,ONLY: PerformAMR,InitData,InitialAMRRefinement
-USE MOD_AMR_Vars            ,ONLY: UseAMR, nWriteDataAMR, nDoAMR
+USE MOD_AMR_Vars            ,ONLY: UseAMR, nWriteDataAMR, nDoAMR, nDoAMRShift
 USE MOD_AMR                 ,ONLY: WriteStateAMR
 #endif
 IMPLICIT NONE
@@ -237,7 +237,7 @@ IF((t.GE.tEnd).OR.maxIter.EQ.0) RETURN
 
 #if USE_AMR
 writeCounterAMR = 0
-doAMR = 0
+doAMR = nDoAMRShift
 #endif /*USE_AMR*/
 
 iter=0
@@ -626,6 +626,23 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
 end subroutine TimeStepBySSPRK2
 !===================================================================================================================================
 !> Strong-Stability-Preserving Runge-Kutta integration of Shu and Osher
+!> Butcher tableau 
+!> 
+!>   0   |
+!>   1   |  1
+!>   1/2 | 1/4  1/4
+!>  _____|_______________
+!>       | 1/6  1/6  2/3
+!>
+!> Stages:                                    
+!> -------------------------------------------
+!> k_1=ut(t_n,u_n)                            
+!> u_1=u_n + dt * k1                          
+!> k_2=ut(t_n+1*dt, u_1)                      
+!> u_2=u_n + dt *(1/4 *(k_1 +k_2))            
+!> k_3=f(t_n+0.5*dt, u_2)                     
+!> u_3=u_n + dt *(1/6 *(k_1 +k_2) +2/3*k_3)   
+!>
 !===================================================================================================================================
 subroutine TimeStepByShuSSPRK(t)
   use MOD_PreProc

@@ -262,7 +262,10 @@ USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Vector              ,ONLY: VNullify,V2D_M_V1D
 USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave
-USE MOD_FillMortar          ,ONLY: U_Mortar,Flux_Mortar
+USE MOD_FillMortar          ,ONLY: U_Mortar_Eqn,Flux_Mortar
+#ifdef JESSE_MORTAR
+USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
+#endif
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
@@ -311,14 +314,14 @@ CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
 CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.TRUE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
+CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
 CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
-CALL U_Mortar(U_master,U_slave,doMPISides=.FALSE.)
+CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.FALSE.)
 
 ! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
 #if SHOCK_NFVSE
@@ -384,6 +387,10 @@ CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPI
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
 CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+
+#ifdef JESSE_MORTAR
+CALL  fill_delta_flux_jesse() !must be called before Flux_mortar!
+#endif
 
 ! here, weak=T:-F_slave is used, since small sides can be slave and must be added to big sides, which are always master!
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)

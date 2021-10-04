@@ -57,13 +57,11 @@ INTERFACE
     SUBROUTINE p4estDelMPIData(data_ptr) BIND(C, NAME = 'p4estDelMPIData_f')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: data_ptr
-        !TYPE(C_PTR) ::p4est_new
     END SUBROUTINE p4estDelMPIData
 
     SUBROUTINE p4est_destroy(P4) BIND(C, NAME = 'p4est_destroy_f')
         IMPORT :: C_PTR
         TYPE(C_PTR) :: P4
-        !TYPE(C_PTR) ::p4est_new
     END SUBROUTINE p4est_destroy
 
 
@@ -77,22 +75,11 @@ INTERFACE
     SUBROUTINE p4est_ResetElementNumber(P4) BIND(C, NAME = 'ResetElementNumber')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4
-        !TYPE(C_PTR) ::p4est_new
     END SUBROUTINE p4est_ResetElementNumber
 
     SUBROUTINE p4est_finalize() BIND(C, NAME = 'p4est_finalize')
         IMPORT :: C_INT
-        !TYPE(C_PTR) :: P4
-        !TYPE(C_PTR) ::p4est_new
-        !INTEGER(C_INT) ::p4est_finalize
     END SUBROUTINE p4est_finalize
-
-    SUBROUTINE p4est_loadbalancing(P4, user_pointer)  BIND(C, NAME = 'p4est_loadbalancing')
-        IMPORT :: C_PTR
-        TYPE(C_PTR), VALUE :: P4
-        TYPE(C_PTR), VALUE :: user_pointer
-    END SUBROUTINE p4est_loadbalancing
-
 
     SUBROUTINE p4est_loadbalancing_init(P4, user_pointer)  BIND(C, NAME = 'p4est_loadbalancing_init')
         IMPORT :: C_PTR
@@ -109,7 +96,6 @@ INTERFACE
     SUBROUTINE p4est_connectivity_destroy(CONN) BIND(C, NAME = 'p4est_connectivity_destroy_f')
         IMPORT :: C_PTR
         TYPE(C_PTR) :: CONN
-        !TYPE(C_PTR) ::p4est_new
     END SUBROUTINE p4est_connectivity_destroy
 
     subroutine free_data_memory(Memory) BIND(C, NAME = 'free_data_memory')
@@ -141,7 +127,6 @@ INTERFACE
     SUBROUTINE GetData(P4EST, P4fortrandata) BIND(C, NAME = 'GetData')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4EST
-        ! TYPE(C_PTR) ::GetData
         TYPE(C_PTR), VALUE :: P4fortrandata
     END SUBROUTINE GetData
 
@@ -149,7 +134,6 @@ INTERFACE
     SUBROUTINE SetEtSandStE(P4EST, P4fortrandata) BIND(C, NAME = 'SetEtSandStE')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4EST
-        ! TYPE(C_PTR) ::GetData
         TYPE(C_PTR), VALUE :: P4fortrandata
     END SUBROUTINE SetEtSandStE
 
@@ -168,7 +152,6 @@ INTERFACE
     SUBROUTINE RefineCoarse(P4EST, ElemToRC) BIND(C, NAME = 'RefineCoarse')
         IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4EST, ElemToRC
-        ! TYPE(C_PTR) ::RefineCoarse
     END SUBROUTINE RefineCoarse
 
     FUNCTION SaveMeshP4(P4EST) BIND(C, NAME = 'save_mesh') !
@@ -179,18 +162,15 @@ INTERFACE
 
     subroutine SaveP4(P4EST, FNAME) BIND(C, NAME = 'save_p4est') !
         USE ISO_C_BINDING
-        ! IMPORT :: C_PTR
         TYPE(C_PTR), VALUE :: P4EST
         CHARACTER(KIND = C_CHAR), DIMENSION(*) :: FNAME
 
-        ! TYPE(C_PTR) ::SaveMeshP4
     END subroutine SaveP4
 
     FUNCTION LoadP4(COMM, FNAME) BIND(C, NAME = 'load_p4est') !
         USE ISO_C_BINDING
         INTEGER(C_INT), VALUE :: COMM
         CHARACTER(KIND = C_CHAR), DIMENSION(*) :: FNAME
-        ! TYPE(C_PTR),VALUE ::
         TYPE(C_PTR) :: LoadP4
     END FUNCTION LoadP4
 
@@ -258,7 +238,6 @@ CONTAINS
     SUBROUTINE InitAMR_P4est()
         USE MOD_AMR_vars, ONLY : P4EST_PTR, CONNECTIVITY_PTR
 
-        ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
         P4EST_PTR = P4EST_NEW(CONNECTIVITY_PTR);
 
     END SUBROUTINE InitAMR_P4est
@@ -275,13 +254,10 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
         CHARACTER(LEN = 255, KIND = C_CHAR) :: SAVE_STRING = '123456789' // C_NULL_CHAR
-        ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
         SAVE_STRING = (TRIM(FileString) // C_NULL_CHAR)
-        ! PRINT *, TRIM(DIGIT_STRING), "n"
         IF(MPIRoot)THEN
             WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' WRITE FOREST TO P4EST FILE: '
             WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(SAVE_STRING)
-            ! GETTIME(StartT)
         END IF
         CALL SaveP4(P4EST_PTR, TRIM(SAVE_STRING));
     END SUBROUTINE SaveP4est
@@ -298,33 +274,26 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
         CHARACTER(LEN = 255, KIND = C_CHAR) :: FileName = '123456789' // C_NULL_CHAR
-        ! CONNECTIVITY_PTR = P8EST_CONNECTIVITY_NEW_PERIODIC();
         FileName = TRIM(FileString) // C_NULL_CHAR
         IF(MPIRoot)THEN
             WRITE(UNIT_stdOut,'(a)',ADVANCE='NO')' READ FOREST FROM P4EST FILE: '
             WRITE(UNIT_stdOut,'(A)',ADVANCE='YES')TRIM(FileString)
-            ! GETTIME(StartT)
         END IF
-        ! print *, "myrank =", myRank, TRIM(DIGIT_STRING)
 #if MPI 
         P4EST_PTR = LoadP4(MPI_COMM_WORLD, TRIM(FileName));
 #else  /*MPI*/
         P4EST_PTR = LoadP4(INT(Z'44000000',KIND=4), TRIM(FileName));
 #endif  /*MPI*/
         
-        
-
         CONNECTIVITY_PTR = GetConnectivity(P4EST_PTR)
 
         RETURN
 
-        !write(*,"(Z32)")  CONNECTIVITY_PTR
     END SUBROUTINE LoadP4est
 
 
     SUBROUTINE p4estSetMPIData()
         USE MOD_AMR_vars, ONLY : P4EST_PTR, p4est_mpi_data
-        ! USE MOD_MPI_Vars,            ONLY:
         USE MOD_Mesh_Vars, ONLY : offsetElem, nElems, nGlobalElems
 #if MPI        
         USE MOD_MPI_Vars, ONLY : offsetElemMPI
@@ -340,11 +309,6 @@ CONTAINS
         nElems = DATAF%local_num_quad
         nGlobalElems = DATAF%global_num_quad
 
-        ! DATAF%mpisize
-        ! DATAF%mpirank
-        ! DATAF%local_num_quad
-        ! DATAF%global_num_quad
-        ! TYPE(C_PTR) ::  offsetMPI;
         IF (DataF%mpisize.EQ.1) THEN
             nElems = nGlobalElems   !local number of Elements
             offsetElem = 0
@@ -361,7 +325,6 @@ CONTAINS
         NULLIFY(Offset_f)
         NULLIFY(DATAF)
         CALL p4estDelMPIData(DataPtr)
-        ! NULLIFY(DataPtr)
     END SUBROUTINE p4estSetMPIData
 
 END MODULE MOD_P4EST

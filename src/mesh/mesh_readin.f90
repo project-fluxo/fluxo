@@ -111,7 +111,8 @@ IF(nUserBCs .GT. 0)THEN
   END DO
 END IF
 DO iUserBC=1,nUserBCs
-  IF(.NOT.UserBCFound(iUserBC)) CALL Abort(__STAMP__,&
+  IF(.NOT.UserBCFound(iUserBC)) CALL Abort(&
+    __STAMP__,&
     'Boundary condition specified in parameter file has not been found: '//TRIM(BoundaryName(iUserBC)))
 END DO
 DEALLOCATE(UserBCFound)
@@ -171,14 +172,15 @@ USE MOD_Mesh_Vars,          ONLY:tElem,tSide
 USE MOD_Mesh_Vars,          ONLY:NGeo
 USE MOD_Mesh_Vars,          ONLY:NodeCoords
 USE MOD_Mesh_Vars,          ONLY:offsetElem,nElems,nGlobalElems
-USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides
-USE MOD_Mesh_Vars,          ONLY:nMortarSides,isMortarMesh
+USE MOD_Mesh_Vars,          ONLY:nSides,nInnerSides,nBCSides,nMPISides,nAnalyzeSides,nGlobalUniqueSides
+USE MOD_Mesh_Vars,          ONLY:nMortarSides
 USE MOD_Mesh_Vars,          ONLY:useCurveds
 USE MOD_Mesh_Vars,          ONLY:BoundaryType
 USE MOD_Mesh_Vars,          ONLY:MeshInitIsDone
 USE MOD_Mesh_Vars,          ONLY:Elems
 USE MOD_Mesh_Vars,          ONLY:GETNEWELEM,GETNEWSIDE
 USE MOD_Mesh_Vars,          ONLY:NodeTypeMesh
+use MOD_Mesh_Vars,          ONLY:MeshIsNonConforming
 #if USE_AMR
 USE MOD_AMR_Vars,           ONLY:UseAMR
 USE MOD_P4EST,              ONLY: p4estSetMPIData
@@ -220,7 +222,8 @@ LOGICAL                        :: dsExists
 IF(MESHInitIsDone) RETURN
 IF(MPIRoot)THEN
   INQUIRE (FILE=TRIM(FileString), EXIST=fileExists)
-  IF(.NOT.FileExists)  CALL CollectiveStop(__STAMP__, &
+  IF(.NOT.FileExists)  CALL CollectiveStop(&
+    __STAMP__, &
     'readMesh from data file "'//TRIM(FileString)//'" does not exist')
 END IF
 
@@ -237,11 +240,18 @@ END IF
 CHECKSAFEINT(HSize(2),4)
 nGlobalElems=INT(HSize(2),4)
 DEALLOCATE(HSize)
+CALL ReadAttribute(File_ID,'nUniqueSides',1,IntegerScalar=nGlobalUniqueSides)
 #if MPI
+#if USE_AMR
+IF (.not. UseAMR) THEN
+#endif /*USE_AMR*/
 IF(nGlobalElems.LT.nProcessors) THEN
   CALL Abort(__STAMP__,&
   'ERROR: Number of elements (1) is smaller then number of processors (2)!',nGlobalElems,REAL(nProcessors))
 END IF
+#if USE_AMR
+END IF
+#endif /*USE_AMR*/
 
 !simple partition: nGlobalelems/nprocs, do this on proc 0
 IF(ALLOCATED(offsetElemMPI)) DEALLOCATE(offsetElemMPI)
@@ -263,7 +273,6 @@ ELSE
   nElems=offsetElemMPI(myRank+1)-offsetElemMPI(myRank)
   offsetElem=offsetElemMPI(myRank)
   LOGWRITE(*,*)'offset,nElems',offsetElem,nElems
-
 #if USE_AMR
  ENDIF
 #endif/*USE_AMR*/
@@ -275,6 +284,10 @@ offsetElem=0          ! offset is the index of first entry, hdf5 array starts at
 #endif /* MPI */
 
 CALL readBCs()
+
+#if USE_AMR
+if (nElems > 0) then
+#endif /*USE_AMR*/
 !----------------------------------------------------------------------------------------------------------------------------
 !                              ELEMENTS
 !----------------------------------------------------------------------------------------------------------------------------
@@ -330,12 +343,12 @@ DO iElem=FirstElemInd,LastElemInd
       END SELECT
       ALLOCATE(aSide%MortarSide(aSide%nMortars))
       DO iMortar=1,aSide%nMortars
-        aSide%MortarSide(iMortar)%sp=>GETNEWSIDE()
+        aSide%MortarSide(iMortar)%sp=>GETNEWSIDE()  !mortarType=0
       END DO
     ELSE
       aSide%nMortars=0
     END IF
-    IF(SideInfo(SIDE_Type,iSide).LT.0) aSide%MortarType=-1 !marks side as belonging to a mortar
+    IF(SideInfo(SIDE_Type,iSide).LT.0) aSide%MortarType=-10 !marks small neighbor  side as belonging to a mortar
 
     IF(aSide%MortarType.LE.0)THEN
       aSide%Elem=>aElem
@@ -479,14 +492,30 @@ nNodes=nElems*(NGeo+1)**3
 !  CALL ReadArray('Elem_IJK',2,(/3,nElems/),offsetElem,2,IntegerArray=Elem_IJK)
 !END IF
 
-! Get Mortar specific arrays
-dsExists=.FALSE.
-iMortar=0
-CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
-IF(dsExists)&
-  CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-isMortarMesh=(iMortar.EQ.1)
-
+#if USE_AMR
+else ! nElems>0
+  ! Define indices to avoind entering in loops
+  FirstElemInd=0
+  LastElemInd=-1
+  
+  ! We have to read from hdf5, such that parallel read-in does not freeze
+  ALLOCATE(ElemInfo(ElemInfoSize,1))
+  CALL ReadArray('ElemInfo',2,(/ElemInfoSize,1/),1,2,IntegerArray=ElemInfo)
+  deallocate(ElemInfo)
+  
+  ALLOCATE(SideInfo(SideInfoSize,1))
+  CALL ReadArray('SideInfo',2,(/SideInfoSize,1/),1,2,IntegerArray=SideInfo)
+  DEALLOCATE(SideInfo)
+  
+  IF(useCurveds)THEN
+    ALLOCATE(NodeCoords(3,0:NGeo,0:NGeo,0:NGeo,1))
+    CALL ReadArray('NodeCoords',2,(/3,(NGeo+1)**3/),(NGeo+1)**3,2,RealArray=NodeCoords)
+  ELSE
+    ALLOCATE(NodeCoords(   3,0:1,   0:1,   0:1,   1))
+    CALL ReadArray('NodeCoords',2,(/3,(NGeo+1)**3/),(NGeo+1)**3,2,RealArray=NodeCoords) 
+  end if
+end if !nElems>0
+#endif /*USE_AMR*/
 
 CALL CloseDataFile()
 
@@ -505,7 +534,7 @@ nMPISides=0
 #if MPI
 ALLOCATE(MPISideCount(0:nProcessors-1))
 MPISideCount=0
-#endif
+#endif /*MPI*/
 DO iElem=FirstElemInd,LastElemInd
   aElem=>Elems(iElem)%ep
   DO iLocSide=1,6
@@ -537,7 +566,7 @@ DO iElem=FirstElemInd,LastElemInd
               nPeriodicSides=nPeriodicSides+1
 #if MPI
               IF(aSide%NbProc.NE.-1) nMPIPeriodics=nMPIPeriodics+1
-#endif
+#endif /*MPI*/
             END IF
           ELSE
             IF(aSide%MortarType.EQ.0)THEN !really a BC side
@@ -551,7 +580,7 @@ DO iElem=FirstElemInd,LastElemInd
           nMPISides=nMPISides+1
           MPISideCount(aSide%NbProc)=MPISideCount(aSide%NbProc)+1
         END IF
-#endif
+#endif /*MPI*/
       END IF
     END DO !iMortar
   END DO !iLocSide
@@ -565,6 +594,7 @@ LOGWRITE(*,'(A22,I8)')'nMortarSides:',nMortarSides
 LOGWRITE(*,'(A22,I8)')'nInnerSides:',nInnerSides
 LOGWRITE(*,'(A22,I8)')'nMPISides:',nMPISides
 LOGWRITE(*,*)'-------------------------------------------------------'
+LOGWRITE_BARRIER
  !now MPI sides
 ! TODO: Check nMortarSides
 #if MPI
@@ -592,7 +622,6 @@ ELSE
   END DO
 END IF
 DEALLOCATE(MPISideCount)
-
 #endif /*MPI*/
 
 ReduceData(1)=nElems
@@ -609,6 +638,14 @@ ReduceData(10)=nMPIPeriodics
 #if MPI
 CALL MPI_REDUCE(ReduceData,ReduceData_glob,10,MPI_INTEGER,MPI_SUM,0,MPI_COMM_WORLD,iError)
 ReduceData=ReduceData_glob
+#endif /*MPI*/
+
+! Check if the mesh is non-conforming and broadcast the information
+IF(MPIRoot)THEN
+  MeshIsNonConforming = (ReduceData(9)>0)
+END IF
+#if MPI
+call MPI_Bcast(MeshIsNonConforming, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, iError)
 #endif /*MPI*/
 
 IF(MPIRoot)THEN

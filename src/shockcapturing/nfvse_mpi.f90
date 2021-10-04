@@ -36,6 +36,8 @@ contains
     integer :: sideID, ElemID, nbElemID
     !-------------------------------------------------------------------------------------------------------------------------------
     
+!   First prolong alpha to all non-BC sides!
+!   ----------------------------------------
     do sideID=firstMortarInnerSide, nSides
       ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
       !master sides(ElemID,locSide and flip =-1 if not existing)
@@ -50,15 +52,21 @@ contains
       end if
     end do
     
+!   Fill the small INNER non-conforming sides with the big sides' alpha
+!   ATTENTION: This has to be done before calling Start_BlendCoeff_MPICommunication!!
+!   ---------------------------------------------------------------------------------
+    call Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.FALSE.)
+    
+!   Send and receive alpha from master and slave sides
+!   --------------------------------------------------
 #if MPI
     call Start_BlendCoeff_MPICommunication()
 #endif /*MPI*/
     
-    call Alpha_Mortar(alpha_Master,alpha_Slave,doMPISides=.FALSE.)
   end subroutine ProlongBlendingCoeffToFaces
 !===================================================================================================================================
 !> Propagate the blending coefficient to the neighbor elements
-!> -> First the routine makes sure that all the MPI communication is done
+!> -> First the routine makes sure that the MPI communication is done
 !> -> Then, the blending coefficient is set to alpha = max (alpha, alpha_neighbor)
 !===================================================================================================================================
   subroutine PropagateBlendingCoeff()
@@ -150,7 +158,7 @@ contains
   subroutine Start_BlendCoeff_MPICommunication()
     use MOD_NFVSE_Vars         , only: alpha_Master, alpha_Slave
     use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
-    use MOD_Mesh_Vars          , only: firstSlaveSide, LastSlaveSide
+    use MOD_Mesh_Vars          , only: firstSlaveSide, LastSlaveSide,firstMortarInnerSide,nSides
     use MOD_NFVSE_Vars         , only: MPIRequest_alpha
     implicit none
     !-------------------------------------------------------------------------------------------------------------------------------
@@ -162,7 +170,7 @@ contains
                              MPIRequest_alpha(:,1), SendID=2) ! Receive MINE (sendID=2)
     
     ! receive the master
-    call StartReceiveMPIData(alpha_Master(firstSlaveSide:lastSlaveSide), 1, firstSlaveSide, lastSlaveSide, &
+    call StartReceiveMPIData(alpha_Master, 1, firstMortarInnerSide,nSides, &
                              MPIRequest_alpha(:,2), SendID=1) ! Receive YOUR  (sendID=1) 
     
     ! transfer the mortar to the right MPI faces 
@@ -173,7 +181,7 @@ contains
                              MPIRequest_alpha(:,3), SendID=2) ! SEND YOUR (sendID=2) 
     
     ! Send the master
-    call StartSendMPIData   (alpha_Master(firstSlaveSide:lastSlaveSide), 1, firstSlaveSide, lastSlaveSide, &
+    call StartSendMPIData   (alpha_Master, 1, firstMortarInnerSide, nSides, &
                              MPIRequest_alpha(:,4),SendID=1) 
     
   end subroutine Start_BlendCoeff_MPICommunication

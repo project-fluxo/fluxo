@@ -1,5 +1,5 @@
 !==================================================================================================================================
-! Copyright (c) 2016 - 2017 Andrew Winterss
+! Copyright (c) 2016 - 2017 Andrew Winters
 ! Copyright (c) 2017 - 2019 Marvin Bohm
 ! Copyright (c) 2020 - 2020 Andrés Rueda
 !
@@ -15,7 +15,7 @@
 #include "defines.h"
 
 !==================================================================================================================================
-!> Module for the positivity preservation routines
+!> Module that contains an implementation of Zhang and Shu's positivity limiter
 !==================================================================================================================================
 
 
@@ -49,10 +49,6 @@ PUBLIC::MakeSolutionPositive
 #endif /*POSITIVITYPRES*/
 PUBLIC::FinalizePositivityPreservation
 
-
-real, allocatable :: Jac(:,:,:,:)  ! det of jacobian.
-real, allocatable :: vol      (:)  ! Volume of cell.
-
 !===================================================================================================================================
 CONTAINS
 
@@ -65,6 +61,14 @@ USE MOD_ReadInTools ,ONLY: prms
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("PositivityPreservation")
+
+call prms%CreateRealOption(     "PositivityDelta",  " Factor to compute the minimum density/pressure as a function of the element's mean value:\n"// &
+                                                    "   rho_min = PositivityDelta * rho_mean\n"// &
+                                                    "   p_min = PositivityDelta * p(U_mean)", "0.0")
+
+call prms%CreateRealOption(   "PositivityEpsilon",  " Factor to compute the corrected density/pressure as a function of the element's mean value. If the nodal pressure/density get below rho_min/p_min, they get corrected to: \n"// &
+                                                    "   rho_new >= PositivityEpsilon * rho_mean\n"// &
+                                                    "   p_new >= PositivityEpsilon * p(U_mean)", "0.001")
 END SUBROUTINE DefineParametersPositivityPreservation
 
 
@@ -102,16 +106,17 @@ do l=1, nElems
   end do       ; end do       ; end do
 end do
 
-PositivityPreservationInitIsDone = .TRUE.
-
 if (PositivityPreservationInitFirst) then
   SWRITE(UNIT_StdOut,'(132("-"))')
   SWRITE(UNIT_stdOut,'(A)') ' INIT POSITIVITYPRESERVATION...'
+  PositivityDelta   = GETREAL('PositivityDelta'  ,'0.0')
+  PositivityEpsilon = GETREAL('PositivityEpsilon','0.001')
   SWRITE(UNIT_stdOut,'(A)')' INIT POSITIVITYPRESERVATION DONE!'
   SWRITE(UNIT_StdOut,'(132("-"))')
   PositivityPreservationInitFirst = .FALSE.
 end if
 
+PositivityPreservationInitIsDone = .TRUE.
 END SUBROUTINE InitPositivityPreservation
 
 #if POSITIVITYPRES
@@ -124,6 +129,7 @@ USE MOD_PreProc
 USE MOD_Interpolation_Vars         , ONLY: wGP
 use MOD_Equation_Vars              , only: Get_Pressure
 USE MOD_mesh_Vars                  , ONLY: nElems
+use MOD_PositivityPreservation_Vars, only: PositivityEpsilon, PositivityDelta, Jac, vol
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -135,62 +141,59 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems),INTENT(INOUT) :: U
 ! LOCAL VARIABLES
 !===================================================================================================================================
 INTEGER                                      :: i,j,k,l
-REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N) :: Uloc
-REAL,DIMENSION(0:PP_N,0:PP_N,0:PP_N)         :: p
 REAL,DIMENSION(PP_nVar)                      :: Umean
-REAL                                         :: delta,rho_min,p_min,p_mean
+REAL                                         :: delta,rho_min,p_min,p_mean,p_curr
 
 DO l = 1,nElems
-  Uloc    = U(:,:,:,:,l)
   Umean   = 0.
-! Get minimum value of the density
+  ! Get minimum value of the density
   rho_min = HUGE(1.)
   DO k = 0,PP_N
     DO j = 0,PP_N
       DO i = 0,PP_N
-        Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
-        rho_min = MIN(rho_min,Uloc(1,i,j,k))
-      END DO ! i
-    END DO ! j
-  END DO ! k
-! Compute the cell average
-  Umean = Umean/vol(l)
-! Limit the density
-  IF(rho_min.LT.0.) THEN
-    delta = Umean(1)/(Umean(1) - rho_min)
-    delta = 0.999*delta ! make delta > 0
-    DO k = 0,PP_N
-      DO j = 0,PP_N
-        DO i = 0,PP_N
-          Uloc(1,i,j,k) = Umean(1) + delta*(Uloc(1,i,j,k) - Umean(1))
-        END DO ! i
-      END DO ! j
-    END DO ! k
-  END IF
-! Get the minimum value of the pressure and the new Umean
-  Umean = 0.0
-  p_min = HUGE(1.)
-  DO k = 0,PP_N
-    DO j = 0,PP_N
-      DO i = 0,PP_N
-        Umean   = Umean + Uloc(:,i,j,k)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
-        call Get_Pressure(Uloc(:,i,j,k),p(i,j,k))
-        p_min = MIN(p_min,p(i,j,k))
+        Umean   = Umean + U(:,i,j,k,l)*wGP(i)*wGP(j)*wGP(k)*Jac(i,j,k,l)
+        rho_min = MIN(rho_min,U(1,i,j,k,l))
       END DO ! i
     END DO ! j
   END DO ! k
   ! Compute the cell average
   Umean = Umean/vol(l)
   
-! Limit the pressure
-  IF (p_min.LT.0.) THEN
-    call Get_Pressure(Umean,p_mean) ! We compute the pressure with the mean value, as we assume that Jensen's inequality holds
-    delta  = p_mean/(p_mean - p_min)
-    delta  = 0.999*delta ! make delta > 0
+  ! Limit the density
+  IF(rho_min.LT.PositivityDelta*Umean(1)) THEN
+    delta = Umean(1)/(Umean(1) - rho_min)
+    delta = (1.-PositivityEpsilon)*delta ! make delta > 0
     DO k = 0,PP_N
       DO j = 0,PP_N
         DO i = 0,PP_N
-          U(:,i,j,k,l) = Umean + delta*(Uloc(:,i,j,k) - Umean)
+          U(1,i,j,k,l) = Umean(1) + delta*(U(1,i,j,k,l) - Umean(1))
+        END DO ! i
+      END DO ! j
+    END DO ! k
+  END IF
+  
+  ! Get the minimum value of the pressure
+  p_min = HUGE(1.)
+  DO k = 0,PP_N
+    DO j = 0,PP_N
+      DO i = 0,PP_N
+        call Get_Pressure(U(:,i,j,k,l),p_curr)
+        p_min = MIN(p_min,p_curr)
+      END DO ! i
+    END DO ! j
+  END DO ! k
+  
+  ! We compute the pressure with the mean value, as we assume that Jensen's inequality holds  
+  call Get_Pressure(Umean,p_mean) 
+  
+  ! Limit the pressure
+  IF (p_min.LT.PositivityDelta*p_mean) THEN
+    delta  = p_mean/(p_mean - p_min)
+    delta  = (1.-PositivityEpsilon)*delta ! make delta > 0
+    DO k = 0,PP_N
+      DO j = 0,PP_N
+        DO i = 0,PP_N
+          U(:,i,j,k,l) = Umean + delta*(U(:,i,j,k,l) - Umean)
         END DO ! i
       END DO ! j
     END DO ! k

@@ -74,7 +74,8 @@ contains
                                              
     call prms%CreateIntOption     (  "ComputeAlpha",  " Specifies how to compute the blending coefficient:\n"//&
                                               "   1: Use the shock indicator\n"//&
-                                              "   2: Randomly assign the blending coef.\n"//&
+                                              "   2: Randomly assign the blending coef.,changes over time\n"//&
+                                              "   20: Randomly assign the blending coef.0<alpha<alpha_max, fixed over time\n"//&
                                               "   3: Fixed blending coef. (alpha=ShockBlendCoef)"&
                                              ,"1")
     call prms%CreateRealOption(   "ShockBlendCoef",  " Fixed blending coefficient to be used with ComputeAlpha=3", "0.0")
@@ -106,7 +107,7 @@ contains
     USE MOD_Globals
     use MOD_NFVSE_Vars
     use MOD_ReadInTools        , only: GETINT, GETREAL, GETLOGICAL
-    USE MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide, isMortarMesh, firstMortarInnerSide
+    USE MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide, MeshIsNonConforming, firstMortarInnerSide
     use MOD_Interpolation_Vars , only: wGP, xGP
     use MOD_Equation_Vars      , only: RiemannVolFluxAndDissipMatrices
 #if USE_AMR
@@ -153,7 +154,7 @@ contains
     ! ---------------------
     
     ! Check if the mesh can be non-conforming
-    MeshNonConforming = isMortarMesh
+    MeshNonConforming = MeshIsNonConforming
 #if USE_AMR
     MeshNonConforming = UseAMR .or. MeshNonConforming
 #endif /*USE_AMR*/
@@ -371,7 +372,7 @@ contains
 !===================================================================================================================================
   subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
     USE MOD_Globals
-    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min
+    use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: alpha_old
@@ -407,6 +408,7 @@ contains
       allocate ( SubCellMetrics(nElems) )
       call SubCellMetrics % construct(PP_N)
 #if NFVSE_CORR
+      ! TODO: Call IDP method
       SDEALLOCATE(FFV_m_FDG)
       SDEALLOCATE(alpha_old)
       allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
@@ -421,14 +423,8 @@ contains
     alpha_Master = 0.0
     alpha_Slave  = 0.0
     
-    if (TimeRelFactor <= alpha_min/alpha_max) then
-      ! The time relaxation has no effect, alpha can be set to 0
-      if (nElems /= nElemsOld) then
-        SDEALLOCATE(alpha)
-        allocate(alpha(nElems))
-      end if
-      alpha = 0.0
-    else
+    ! Check if we need the alpha from the previous mesh and assign it if we do!
+    if ( (ComputeAlpha==20 .and. ShockBlendCoef<-1.0) .or. (TimeRelFactor > alpha_min/alpha_max) ) then
       allocate ( alphaNew(nElems) )
       ! Set with old values
       do eID=1, nElems
@@ -444,6 +440,12 @@ contains
         endif
       end do
       call move_alloc(alphaNew,alpha)
+    else ! The time relaxation has no effect, alpha can be set to 0
+      if (nElems /= nElemsOld) then
+        SDEALLOCATE(alpha)
+        allocate(alpha(nElems))
+      end if
+      alpha = 0.0
     end if
     
 !   Compute Subcell Metrics
@@ -1063,14 +1065,6 @@ contains
       real :: Dmat (PP_nVar)
       real :: Rmat (PP_nVar,PP_nVar)
       real :: RmatT(PP_nVar,PP_nVar)
-      ! for the continuous (RELU) switch
-      !real :: alpha
-!#      ! For second variant of fix
-!#      real :: Dmat_r (PP_nVar)
-!#      real :: Rmat_r (PP_nVar,PP_nVar)
-!#      real :: RmatT_r(PP_nVar,PP_nVar)
-!#      real :: RT_Dv2 (PP_nVar), RT_Dv2_r(PP_nVar)
-!#      real :: Fstar_r(PP_nVar)
       !---------------------------------------------------------------------
       
       ! Loop over the face and get the ES flux
@@ -1104,38 +1098,6 @@ contains
         else  ! Reconstructed is ES
           F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv_r)
         end if
-        ! Continuous switch
-!        alpha = minval(RT_Vjump*RT_Vjump_r)
-!        if (alpha <= 0.0) then
-!          alpha = 0.0
-!        elseif(alpha <= 1000.0*epsilon(1.0)) then
-!          alpha = alpha*0.001/epsilon(1.0)
-!        else
-!          alpha = 1. !exp(-epsilon(1.0)/(alpha))
-!        end if
-!        Fstar = Fstar - 0.5*MATMUL(Rmatrix,MATMUL(Dmatrix, alpha*RT_Vjump_r + (1.-alpha)*RT_Vjump  ))
-        
-!#        ! Check sign condition and compute flux
-!#        ! Second variant: Use the dissipation matrices computed with the reconstructed states
-!#        !     *This does not seem to work very well (the method falls to first order almost always!!)
-!#        ! ***********************************************************************************
-        
-!#        ! Get dissipation matrices for reconstructed state
-!#        call RiemannVolFluxAndDissipMatrices(U_L_r,U_R_r,Fstar_r,Dmat_r,Rmat_r)
-!#        RmatT_r = TRANSPOSE(Rmat_r)
-        
-!#        ! Scale entropy jump with the right-eigV mat
-!#        RT_Dv2   = matmul(RmatT_r,RT_Dv)
-!#        RT_Dv2_r = matmul(RmatT_r,RT_Dv_r)
-        
-!#        ! Discrete switch    
-!#        if ( any(RT_Dv2*RT_Dv2_r < -1.e-10) ) then ! Reconstructed is not ES
-!#          ! Now we need to compute the scaled entropy vars jump with the nodal matrix
-!#          RT_Dv    = matmul(RmatT,RT_Dv)
-!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat,Dmat*RT_Dv)
-!#        else  ! Reconstructed is ES
-!#          F(:,j,k) = F(:,j,k) - 0.5*matmul(Rmat_r,Dmat_r*RT_Dv2_r)
-!#        end if
         
         ! Rotate flux back to 3D frame
         ! ----------------------------
@@ -1598,7 +1560,7 @@ contains
     use MOD_ShockCapturing_Vars, only: Shock_Indicator
     ! For reconstruction on boundaries
 #if MPI
-    use MOD_Mesh_Vars          , only: firstSlaveSide, lastSlaveSide
+    use MOD_Mesh_Vars          , only: nSides
     use MOD_NFVSE_Vars         , only: ReconsBoundaries, MPIRequest_Umaster, RECONS_NEIGHBOR
     use MOD_MPI                , only: StartReceiveMPIData,StartSendMPIData
     USE MOD_MPI_Vars
@@ -1620,11 +1582,11 @@ contains
 #if MPI
     if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev) then
       ! receive the master
-      call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartReceiveMPIData(U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
       
       ! Send the master
-      call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartSendMPIData   (U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,2),SendID=1) 
     end if
 #endif /*MPI*/
@@ -1645,6 +1607,12 @@ contains
         do eID=1, nElems
           call RANDOM_NUMBER(alpha(eID))
         end do
+      case(20)   ! Random indicator, fixed over time (using shockBlendCoef as a switch)
+        if(shockBlendCoef.GT.-1.)THEN
+          call RANDOM_NUMBER(alpha(:))
+          alpha=alpha*alpha_max
+          shockBlendCoef=-2.
+        end if
         
       case(3)   ! Fixed blending coefficients
         alpha = ShockBlendCoef

@@ -78,62 +78,6 @@ CONTAINS
         SWRITE(UNIT_StdOut, '(132("."))')
     END SUBROUTINE ReadBCs
 
-    ! BC must be set by FLUXO
-    SUBROUTINE SetUserBCs()
-        !===================================================================================================================================
-        ! The user can redefine boundaries in the ini file. We create the mappings for the boundaries.
-        !===================================================================================================================================
-        ! MODULES
-        USE MOD_Globals
-        USE MOD_Mesh_Vars, ONLY : BoundaryName, BoundaryType, nBCs, nUserBCs
-
-        USE MOD_ReadinTools, ONLY : GETSTR, GETINTARRAY
-        ! IMPLICIT VARIABLE HANDLING
-        IMPLICIT NONE
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! INPUT VARIABLES
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! OUTPUT VARIABLES
-        !-----------------------------------------------------------------------------------------------------------------------------------
-        ! LOCAL VARIABLES
-        INTEGER :: BCMapping(nBCs)
-        CHARACTER(LEN = 255), ALLOCATABLE :: BoundaryNameUser(:)
-        INTEGER, ALLOCATABLE :: BoundaryTypeUser(:, :)
-        INTEGER :: iBC, iUserBC
-        !===================================================================================================================================
-        ! read in boundary conditions, will overwrite BCs from meshfile!
-        ! nUserBCs = CNTSTR('BoundaryName',0)
-        ! print *, "=============> HERE! <===================", nUserBCs
-        ! IF(nUserBCs.EQ.0)
-        RETURN
-
-        ! Read user BC
-        ALLOCATE(BoundaryNameUser(nUserBCs))
-        ALLOCATE(BoundaryTypeUser(nUserBCs, 2))
-        DO iBC = 1, nUserBCs
-            BoundaryNameUser(iBC) = GETSTR('BoundaryName')
-            BoundaryTypeUser(iBC, :) = GETINTARRAY('BoundaryType', 2) !(/Type,State/)
-        END DO
-
-        ! Override BCs
-        BCMapping = 0
-        DO iBC = 1, nBCs
-            DO iUserBC = 1, nUserBCs
-                IF(INDEX(TRIM(BoundaryNameUser(iUserBC)), TRIM(BoundaryName(iBC))) .NE.0)THEN
-                    SWRITE(Unit_StdOut, '(A,A)')    ' |     Boundary in HDF file found | ', TRIM(BoundaryName(iBC))
-                    SWRITE(Unit_StdOut, '(A,I2,I2)')' |                            was | ', BoundaryType(1, iBC), BoundaryType(3, iBC)
-                    SWRITE(Unit_StdOut, '(A,I2,I2)')' |                      is set to | ', BoundaryTypeUser(iUserBC, 1:2)
-                    BoundaryType(BC_TYPE, iBC) = BoundaryTypeUser(iUserBC, 1)
-                    BoundaryType(BC_STATE, iBC) = BoundaryTypeUser(iUserBC, 2)
-                END IF
-            END DO
-        END DO
-
-        SWRITE(UNIT_StdOut, '(132("."))')
-        DEALLOCATE(BoundaryNameUser, BoundaryTypeUser)
-    END SUBROUTINE SetUserBCs
-
-
     SUBROUTINE ReadMeshHeader(FileString)
         !===================================================================================================================================
         ! Subroutine to read the mesh from a mesh data file
@@ -146,8 +90,7 @@ CONTAINS
 #endif /*USE_AMR*/
         USE MOD_Globals, ONLY : myrank, MPIRoot
         USE MODH_Mesh_Vars, ONLY : nGlobalTrees
-        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo, isMortarMesh
-        ! USE MODH_Mesh,     ONLY: SetCurvedInfo
+        USE MOD_Mesh_Vars, ONLY : nElems, Ngeo
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
         !-----------------------------------------------------------------------------------------------------------------------------------
@@ -157,52 +100,45 @@ CONTAINS
         ! OUTPUT VARIABLES
         !-----------------------------------------------------------------------------------------------------------------------------------
         ! LOCAL VARIABLES
-        LOGICAL :: isMesh, dsExists
+        LOGICAL :: isMesh, dsExists, hasAMRmortars
         INTEGER :: NGEO1, nGlobalTrees1, iMortar
         !===================================================================================================================================
         CALL CheckIfMesh(FileString, isMesh)
         IF(.NOT.isMesh) CALL abort(__STAMP__, &
                 'ERROR: Given file ' // TRIM(FileString) // ' is no valid mesh file.')
 
-        ! print *, "READ IN PROGRESS"
         !Create a Communicator with MPI root processor
-        
         CALL OpenDataFile(FileString, create = .FALSE., single = .FALSE., readOnly = .TRUE.)
         CALL ReadAttribute(File_ID, 'nElems', 1, IntegerScalar = nGlobalTrees1) !global number of elements
         CALL ReadAttribute(File_ID, 'Ngeo', 1, IntegerScalar = NGeo1)
-
+        
+        ! Check if the mesh was generated from an AMR tree by fluxo and stop if the p4est file is not present
 #if USE_AMR
           iMortar = 0
           dsExists = .FALSE.
-          CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
+          CALL DatasetExists(File_ID,'hasAMRmortars',dsExists,.TRUE.)
           IF(dsExists)&
-                CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-          isMortarMesh=(iMortar.EQ.1)
+                CALL ReadAttribute(File_ID,'hasAMRmortars',1,IntegerScalar=iMortar)
+          hasAMRmortars=(iMortar.EQ.1)
           
           IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
             ! Error, we can't Run AMR on Mortar Mesh without p4est file
             CALL CollectiveStop(__STAMP__,&
-             "Error, we cannot use AMR on Mortar Mesh without p4est file.")
+             "ERROR: We cannot use AMR on an Octree-generated mesh without a p4est file.")
           ENDIF
 #endif /*USE_AMR*/
 
         nGlobalTrees = nGlobalTrees1
         nElems = nGlobalTrees1
         nGeo = Ngeo1
-        ! CALL SetCurvedInfo()
-        ! useCurveds=.TRUE. ! TODO: maybe implement as optional parameter
-
+        
         CALL GetDataSize(File_ID, 'NodeCoords', nDims, HSize)
-        ! nDims=3
+        
         IF(HSize(2).NE.(NGeo + 1)**3 * nGlobalTrees) CALL abort(__STAMP__, &
                 'ERROR: Number of nodes in NodeCoords is not consistent with nTrees and NGeo.')
         DEALLOCATE(HSize)
 
-        ! RETURN
-
         CALL readBCs()
-
-        CALL setUserBCs()
 
         CALL CloseDataFile()
 
@@ -221,9 +157,7 @@ CONTAINS
         USE MOD_Mesh_Vars, ONLY : NGeo
         USE MOD_AMR_Vars, ONLY : H2P_VertexMap, H2P_FaceMap
         USE MOD_AMR_Vars, ONLY : connectivity_ptr
-        ! USE MODH_P4EST_Binding, ONLY: p4_connectivity_treevertex
         USE MOD_P4EST, ONLY : p4_connectivity_treevertex, p4_build_bcs
-        ! USE MODH_P4EST,           ONLY: getHFlip
         ! IMPLICIT VARIABLE HANDLING
         IMPLICIT NONE
         !-----------------------------------------------------------------------------------------------------------------------------------
@@ -376,7 +310,7 @@ CONTAINS
                 ! The number (-1,-2,-3) is the Type of mortar
                 IF(ElemID.LT.0)THEN ! mortar Sides attached!
                     CALL abort(__STAMP__, &
-                            'Only conforming meshes in readin.')
+                            'ERROR: We cannot use AMR on a non-conforming mesh without a p4est file.')
                 END IF
             END DO !i=1,locnSides
         END DO !iElem
@@ -416,25 +350,13 @@ CONTAINS
                     IF(bSide%ind.NE.aSide%ind)&
                             CALL abort(__STAMP__, &
                                     'SideInfo: Index of side and neighbor side have to be identical!')
-                ELSE !MPI
-                    ! #ifdef MPI
-                    !       aSide%connection=>GETNEWSIDE()
-                    !       aSide%connection%flip=aSide%flip
-                    !       aSide%connection%Elem=>GETNEWELEM()
-                    !       aSide%NbProc = ELEMIPROC(elemID)
-                    ! #else
-                    !       CALL abort(__STAMP__, &
-                    !         ' elemID of neighbor not in global Elem list ')
-                    ! #endif
                 END IF
             END DO !iLocSide
         END DO !iElem
 
         DEALLOCATE(ElemInfo, SideInfo)
-        ! ENDIF ! MPIRoot
+        
         CALL CloseDataFile()
-        ! IF (MPIRoot) THEN
-
 
         !----------------------------------------------------------------------------------------------------------------------------
         !                  P4EST MESH CONNECTIVITY
@@ -521,15 +443,12 @@ CONTAINS
             END DO !iTree
         END IF !num_periodics>0
 
-        ! IF (MPIRoot) THEN
         CALL p4_connectivity_treevertex(num_vertices, num_trees, vertices, tree_to_vertex, &
                 num_periodics, JoinFaces, connectivity_ptr)
-        ! ENDIF
 
         DEALLOCATE(Vertices, tree_to_vertex)
         IF(num_periodics.GT.0) DEALLOCATE(JoinFaces)
 
-        ! INTEGER(KIND=C_INT32_T) :: TreeToBC(0:5,nTrees)
         ALLOCATE(TreeToBC(0:5, nTrees))
         ! Now pack BC to the tree_to_attr in Connectivity
         TreeToBC = -1
@@ -540,53 +459,9 @@ CONTAINS
                 TreeToBC(H2P_FaceMap(iSide), iTree) = aSide%BCIndex
             END DO
         END DO
-        !Print *, TreeToBC(:,1)
         CALL p4_build_bcs(connectivity_ptr, nTrees, TreeToBC)
 
         DEALLOCATE(TreeToBC)
-        ! COUNT SIDES
-
-        ! nBCSides=0
-        ! nSides=0
-        ! nPeriodicSides=0
-        ! DO iTree=1,nTrees
-        !   aElem=>Trees(iTree)%ep
-        !   DO iLocSide=1,6
-        !     aSide=>aElem%Side(iLocSide)%sp
-        !     aSide%tmp=0
-        !   END DO !iLocSide
-        ! END DO !iTree
-        ! DO iTree=1,nTrees
-        !   aElem=>Trees(iTree)%ep
-        !   DO iLocSide=1,6
-        !     aSide=>aElem%Side(iLocSide)%sp
-
-        !     IF(aSide%tmp.EQ.0)THEN
-        !       nSides=nSides+1
-        !       aSide%tmp=-1 !used as marker
-        !       IF(ASSOCIATED(aSide%connection)) aSide%connection%tmp=-1
-        !       IF(aSide%BCindex.NE.0)THEN !side is BC or periodic side
-        !         IF(ASSOCIATED(aSide%connection))THEN
-        !           nPeriodicSides=nPeriodicSides+1
-        !         ELSE
-        !           nBCSides=nBCSides+1
-        !         END IF
-        !       END IF
-        !     END IF
-        !   END DO !iLocSide
-        ! END DO !iTree
-
-
-        ! WRITE(*,*)'-------------------------------------------------------'
-        ! WRITE(*,'(A22,I8)' )'NGeo:',NGeo
-        ! WRITE(*,'(A22,X7L)')'useCurveds:',useCurveds
-        ! WRITE(*,'(A22,I8)' )'nTrees:',nTrees
-        ! WRITE(*,'(A22,I8)' )'nNodes:',nNodes
-        ! WRITE(*,'(A22,I8)' )'nSides:',nSides
-        ! WRITE(*,'(A22,I8)' )'nBCSides:',nBCSides
-        ! WRITE(*,'(A22,I8)' )'nPeriodicSides:',nPeriodicSides
-        ! WRITE(*,*)'-------------------------------------------------------'
-        ! ENDIF !MPIRoot
     END SUBROUTINE ReadMeshFromHDF5
 
 

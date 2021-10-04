@@ -15,10 +15,6 @@
 !===================================================================================================================================
 
 ! We include the file that contains all configure-time settings.
-#ifdef MPI
-/* TODO: it should work to compile Fluxo with MPI defined. */
-/* #define MPI */
-#endif
 
 ! Change if p4est changes its types
 ! Ideally, this should be in a different file
@@ -29,7 +25,6 @@
 #define P4EST_F90_QLEVEL INTEGER(KIND=C_INT8_T)
 
 ! Abbrevations
-! #define __STAMP__ __FILE__,__LINE__,__DATE__,__TIME__
  
 #ifdef GNU
 #  define IEEE_IS_NAN ISNAN
@@ -42,7 +37,7 @@
 #  define SWRITE WRITE
 #  define IPWRITE WRITE
 #endif
-! #define ERRWRITE(a,b) CALL CreateErrFile(); WRITE(UNIT_errOut,b)
+
 #define LOGWRITE(a,b) IF(Logging) WRITE(UNIT_logOut,b)
 #define SDEALLOCATE(A) IF(ALLOCATED(A)) DEALLOCATE(A)
 

@@ -50,13 +50,13 @@ subroutine InitialAMRRefinement()
   if (.not. UseAMR) return
   
   select case (InitialRefinement)  
-    case default ! Use the default indicator up to max-level
+    case default ! (0) Use the default indicator up to max-level
       do iter = 1,MaxLevel
         call PerformAMR()
         call InitData()
       end do
     
-    case(1) ! Refine any element containing a node in the spherewith radius r=IniHalfwidthAMR to the MaxLevel
+    case(1) ! Refine any element containing a node in the sphere with radius r=IniHalfwidthAMR to the MaxLevel
       do iter = 1,MaxLevel
         allocate (ElemToRefineAndCoarse(1:nElems))!
         
@@ -89,16 +89,20 @@ subroutine InitialAMRRefinement()
         deallocate (ElemToRefineAndCoarse)
       end do
       call InitData()
+    case(2) ! Do nothing
+      allocate (ElemToRefineAndCoarse(1:nElems))
+      ElemToRefineAndCoarse = MinLevel
+      
+      CALL RunAMR(ElemToRefineAndCoarse)
+      deallocate (ElemToRefineAndCoarse)
   end select
-  
-
 end subroutine
 
 
     SUBROUTINE PerformAMR()
         USE MOD_PreProc
         USE MOD_DG_Vars,                ONLY : U
-        USE MOD_AMR,                    ONLY : RunAMR, LoadBalancingAMR, SaveMesh;
+        USE MOD_AMR,                    ONLY : RunAMR, SaveMesh;
         USE MOD_Mesh_Vars,              ONLY : nElems
         USE MOD_Basis,                  ONLY : BuildLegendreVdm
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal, AMR_Indicator

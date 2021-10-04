@@ -139,23 +139,7 @@ IF(.NOT.validMesh) &
 useCurveds=GETLOGICAL('useCurveds','.TRUE.')
 CALL OpenDataFile(MeshFile,create=.FALSE.,single=.FALSE.,readOnly=.TRUE.)
 CALL ReadAttribute(File_ID,'Ngeo',1,IntegerScalar=NGeo)
-#if USE_AMR
 
-IF (UseAMR) THEN
-  iMortar = 0
-  dsExists = .FALSE.
-  CALL DatasetExists(File_ID,'isMortarMesh',dsExists,.TRUE.)
-  IF(dsExists)&
-    CALL ReadAttribute(File_ID,'isMortarMesh',1,IntegerScalar=iMortar)
-  isMortarMesh=(iMortar.EQ.1)
-
-  IF ((iMortar .EQ. 1) .AND. (.NOT. p4estFileExist)) THEN
-    ! Error, we can't Run AMR on Mortar Mesh without p4est file
-    CALL CollectiveStop(__STAMP__,&
-    "Error, we cannot use AMR on Mortar Mesh without p4est file.")
-  ENDIF
-ENDIF
-#endif /*USE_AMR*/
 CALL CloseDataFile()
 
 CALL readMesh(MeshFile) !set nElems
@@ -205,16 +189,17 @@ nSidesMaster    = lastMasterSide-firstMasterSide+1
 nSidesSlave     = lastSlaveSide -firstSlaveSide+1
 
 LOGWRITE(*,*)'-------------------------------------------------------'
-LOGWRITE(*,'(A25,I8)')   'first/lastMasterSide     ', firstMasterSide,lastMasterSide
-LOGWRITE(*,'(A25,I8)')   'first/lastSlaveSide      ', firstSlaveSide, lastSlaveSide
+LOGWRITE(*,'(A25,I8,I8)')'first/lastMasterSide     ', firstMasterSide     ,lastMasterSide
+LOGWRITE(*,'(A25,I8,I8)')'first/lastSlaveSide      ', firstSlaveSide      ,lastSlaveSide
 LOGWRITE(*,*)'-------------------------------------------------------'
 LOGWRITE(*,'(A25,I8,I8)')'first/lastBCSide         ', firstBCSide         ,lastBCSide
 LOGWRITE(*,'(A25,I8,I8)')'first/lastMortarInnerSide', firstMortarInnerSide,lastMortarInnerSide
 LOGWRITE(*,'(A25,I8,I8)')'first/lastInnerSide      ', firstInnerSide      ,lastInnerSide
 LOGWRITE(*,'(A25,I8,I8)')'first/lastMPISide_MINE   ', firstMPISide_MINE   ,lastMPISide_MINE
 LOGWRITE(*,'(A25,I8,I8)')'first/lastMPISide_YOUR   ', firstMPISide_YOUR   ,lastMPISide_YOUR
-LOGWRITE(*,'(A30,I8,I8)')'first/lastMortarMPISide  ', firstMortarMPISide  ,lastMortarMPISide
+LOGWRITE(*,'(A25,I8,I8)')'first/lastMortarMPISide  ', firstMortarMPISide  ,lastMortarMPISide
 LOGWRITE(*,*)'-------------------------------------------------------'
+LOGWRITE_BARRIER
 
 ! fill ElemToSide, SideToElem,BC
 ALLOCATE(ElemToSide(2,6,nElems))
@@ -228,7 +213,7 @@ AnalyzeSide = 0
 
 !NOTE: nMortarSides=nMortarInnerSides+nMortarMPISides
 ALLOCATE(MortarType(2,1:nSides))              ! 1: Type, 2: Index in MortarInfo
-ALLOCATE(MortarInfo(MI_FLIP,4,nMortarSides)) ! [1]: 1: Neighbour sides, 2: Flip, [2]: small sides
+ALLOCATE(MortarInfo(MI_FLIP,0:4,nMortarSides)) ! [1]: 1: Neighbour sides, 2: Flip, [2]: 0:big side 1..4:small sides
 MortarType=-1
 MortarInfo=-1
 

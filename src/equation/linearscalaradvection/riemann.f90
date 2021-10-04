@@ -44,7 +44,7 @@ SUBROUTINE Riemann(F,U_L,U_R,&
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:AdvVel,DiffC
+USE MOD_Equation_Vars,ONLY:AdvVel,DiffC,upwind
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -72,7 +72,8 @@ REAL                                             :: LambdaMax(0:PP_N,0:PP_N)
 !==================================================================================================================================
 LambdaMax = AdvVel(1)*nv(1,:,:) +  AdvVel(2)*nv(2,:,:) + AdvVel(3)*nv(3,:,:)
 ! Compute the classic upwind flux into normal direction for each face GP
-F(1,:,:) = 0.5*( (LambdaMax + ABS(LambdaMax))*U_L(1,:,:) + (LambdaMax-ABS(LambdaMax))*U_R(1,:,: ))
+!F(1,:,:) = 0.5*((LambdaMax + ABS(LambdaMax))*U_L(1,:,:) + (LambdaMax-ABS(LambdaMax))*U_R(1,:,: ))
+F(1,:,:) = 0.5*(LambdaMax*(U_L(1,:,:) + U_R(1,:,: )) - upwind*ABS(LambdaMax)*(U_R(1,:,:)-U_L(1,:,:)))
 #if PARABOLIC
 ! Diffusion flux
 F(1,:,:) = F(1,:,:)-DiffC*0.5*(  (gradUx_L(1,:,:)+gradUx_R(1,:,:))*nv(1,:,:) &

@@ -225,6 +225,8 @@ END SUBROUTINE StartReceiveMPIData
 !> Subroutine that performs the send operations for the face data that has to be exchanged between processors.
 !> this routine has no interface, since the FaceData is cast from an array
 !>  (1:PP_nVar,0:PP_N,0:PP_N,LowerBound:upperBound) to an array (1:DataSize,LowerBound:upperBound)
+!> BE CAREFUL: FaceData MUST BE A GLOBAL ARRAY, must be passed as a whole, 
+!>             with the correct LowerBound/UpperBound from its allocated bounds!!! NO CHUNKS CAN BE PASSED!
 !==================================================================================================================================
 SUBROUTINE StartSendMPIData(FaceData,DataSize,LowerBound,UpperBound,MPIRequest,SendID)
 ! MODULES

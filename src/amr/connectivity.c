@@ -1,5 +1,6 @@
 //!==================================================================================================================================
 //! Copyright (c) 2018 - 2020 Alexander Astanin
+//! Copyright (c) 2018 - 2020 Andrés Rueda
 //!
 //! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 //! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -67,7 +68,7 @@ const int P2H_MortarMap[9][4] = //   !p4est mortar ID, MortarCase -> iMortar CGN
      {1, 2, 3, 4},
      {1, 3, 2, 4},
      {2, 1, 4, 3},
-     {2, 4, 1, 1},
+     {2, 4, 1, 3},
      {4, 2, 3, 1},
      {4, 3, 2, 1},
      {3, 1, 4, 2},
@@ -79,7 +80,6 @@ int GetHFlip(int PSide0, int PSide1, int PFlip)
     
     int HSide0 = P2H_side[PSide0];
     // !2. First node CGNS -> p4est
-    // int PNode0=H2P_FaceNodeMap[1][HSide0];
     int PNode0 = H2P_FaceNodeMap[HSide0][1];
     // !3. Get oriented node on neighbour side, formula and matrices see paper Burstedde p4est, 2011
     int PNode1 = Pmatrix[ Qmatrix[ Rmatrix[PSide0][PSide1] ][PFlip] ][PNode0];
@@ -96,7 +96,6 @@ int GetHMortar(int PMortar, int PSide, int PnbSide, int PFlip)
     int PNodeB = Pmatrix[Qmatrix[Rmatrix[PnbSide][PSide]][PFlip]][1];
     int HNode1 = P2H_FaceNodeMap[PSide][PNodeA];
     int HNode2 = P2H_FaceNodeMap[PSide][PNodeB];
-    // GetHMortar = P2H_MortarMap(PMortar, H_MortarCase(HNode1, HNode2));
     int GetHMortar = P2H_MortarMap[H_MortarCase[HNode1][HNode2]][PMortar];
     return GetHMortar;
 }

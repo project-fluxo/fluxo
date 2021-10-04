@@ -86,7 +86,7 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftilde,gtilde,htilde ! tran
 INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 DO iElem=1,nElems
-  ! Compute for all Gauss point values already the tranformed fluxes
+  ! Compute for all Gauss point values already the transformed fluxes
   CALL EvalFluxTilde3D(             U(:,:,:,:,iElem), &
                        metrics_fTilde(:,:,:,:,iElem), &
                        metrics_gTilde(:,:,:,:,iElem), &
@@ -137,7 +137,7 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N)      :: ftilde,gtilde,htilde ! tran
 INTEGER                                           :: i,j,k,l,iElem
 !==================================================================================================================================
 DO iElem=1,nElems
-  ! Compute for all Gauss point values already the tranformed fluxes
+  ! Compute for all Gauss point values already the transformed fluxes
   CALL EvalAdvFluxTilde3D(          U(:,:,:,:,iElem), &
                        metrics_fTilde(:,:,:,:,iElem), &
                        metrics_gTilde(:,:,:,:,iElem), &

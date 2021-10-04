@@ -113,13 +113,22 @@ INTERFACE GassnerWintersWalchFluxVec
    MODULE PROCEDURE GassnerWintersWalchFluxVec
 END INTERFACE
 
-INTERFACE LN_MEAN 
+INTERFACE RanochaFlux
+   MODULE PROCEDURE RanochaFlux
+END INTERFACE
+
+INTERFACE RanochaFluxVec
+   MODULE PROCEDURE RanochaFluxVec
+END INTERFACE
+
+INTERFACE LN_MEAN
    MODULE PROCEDURE LN_MEAN
 END INTERFACE
 
 
 #if (PP_DiscType==2)
 PUBLIC:: EvalAdvFluxAverage3D
+PUBLIC:: EvalUaux
 #endif /*PP_DiscType==2*/
 PUBLIC:: StandardDGFlux
 PUBLIC:: StandardDGFluxVec
@@ -142,6 +151,8 @@ PUBLIC:: ggflux
 PUBLIC:: ggfluxVec
 PUBLIC:: GassnerWintersWalchFlux
 PUBLIC:: GassnerWintersWalchFluxVec
+PUBLIC:: RanochaFlux
+PUBLIC:: RanochaFluxVec
 PUBLIC:: LN_MEAN
 
 !==================================================================================================================================
@@ -149,7 +160,7 @@ PUBLIC:: LN_MEAN
 #if PP_VolFlux==-1
 #  define PP_VolumeFluxAverageVec VolumeFluxAverageVec
 #elif PP_VolFlux==0
-#  define PP_VolumeFluxAverageVec StandardDGFluxVec 
+#  define PP_VolumeFluxAverageVec StandardDGFluxVec
 #elif PP_VolFlux==1
 #  define PP_VolumeFluxAverageVec StandardDGFluxDealiasedMetricVec
 #elif PP_VolFlux==2
@@ -170,6 +181,8 @@ PUBLIC:: LN_MEAN
 #  define PP_VolumeFluxAverageVec GassnerWintersWalchFluxVec
 #elif PP_VolFlux==10
 #  define PP_VolumeFluxAverageVec TwoPointEntropyConservingFluxVec
+#elif PP_VolFlux==32
+#  define PP_VolumeFluxAverageVec RanochaFluxVec
 #endif
 !==================================================================================================================================
 
@@ -178,7 +191,7 @@ CONTAINS
 
 #if (PP_DiscType==2)
 !==================================================================================================================================
-!> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
+!> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics
 !==================================================================================================================================
 SUBROUTINE EvalAdvFluxAverage3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
@@ -187,7 +200,10 @@ USE MOD_PreProc
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 #endif
 USE MOD_Equation_Vars  ,ONLY:nAuxVar
-use MOD_DG_Vars        , only: Qp
+!#if IDP? TODO: Check if must be removed...
+use MOD_DG_Vars        ,only: Qp
+!
+use MOD_DG_Vars        ,only: nTotal_vol
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -205,10 +221,10 @@ INTEGER        :: i,j,k,l
 
 
 !opt_v1
-CALL EvalUaux(U_in,Uaux)
+CALL EvalUaux(nTotal_vol,U_in,Uaux)
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
-  !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k)
   ftilde(:,i,i,j,k)=0.
   DO l=i+1,PP_N
     CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,l,j,k), &
@@ -224,7 +240,7 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
-  !gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  !gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k)
   gtilde(:,j,i,j,k)=0.
   DO l=j+1,PP_N
     CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,l,k), &
@@ -240,7 +256,7 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
-  !htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  !htilde(:,k,i,j,k)=htilde_c(:,i,j,k)
   htilde(:,k,i,j,k)=0.
   DO l=k+1,PP_N
     CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,j,l), &
@@ -260,24 +276,24 @@ END SUBROUTINE EvalAdvFluxAverage3D
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2) from state U
 !==================================================================================================================================
-PURE SUBROUTINE EvalUaux(U_in,Uaux)
+PURE SUBROUTINE EvalUaux(np,U_in,Uaux)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1
-USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-REAL,DIMENSION(PP_nVar,1:nTotal_vol),INTENT(IN)  :: U_in
+INTEGER                     ,INTENT(IN)  :: np !size of input/output arrays
+REAL,DIMENSION(PP_nVar,1:np),INTENT(IN)  :: U_in
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
-REAL,INTENT(OUT)    :: Uaux(nAuxVar,1:nTotal_vol)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
+REAL,INTENT(OUT)    :: Uaux(nAuxVar,1:np)  !<auxiliary variables:(srho,v1,v2,v3,p,|v|^2)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER             :: i 
+INTEGER             :: i
 REAL                :: srho,vel(1:3),v2
 !==================================================================================================================================
-DO i=1,nTotal_vol
+DO i=1,np
   ! auxiliary variables
   srho = 1./U_in(1,i) 
   vel  = U_in(2:4,i)*srho
@@ -346,7 +362,7 @@ END SUBROUTINE StandardDGFlux
 
 
 !==================================================================================================================================
-!> Computes the standard DG euler flux transformed with the metrics 
+!> Computes the standard DG euler flux transformed with the metrics
 !> fstar=1/2((fL*metric1L+gL*metric2L+h*metric3L)+(fR*metric1R+gR*metric2R+h*metric3R)  )
 !==================================================================================================================================
 PURE SUBROUTINE StandardDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
@@ -502,7 +518,7 @@ end subroutine SecretDGFluxVec
 
 
 !==================================================================================================================================
-!> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 ) 
+!> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 )
 !> where for curved metrics, metric=1/2(metric_L+metric_R) is taken!
 !==================================================================================================================================
 PURE SUBROUTINE StandardDGFluxDealiasedMetricVec(UL,UR,UauxL,UauxR,metric_L,metric_R, Fstar)
@@ -622,8 +638,8 @@ HHat   = kappa_p2Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 ! Entropy conserving flux
 Fstar(1) = rhoHat*uHat
 Fstar(2) = Fstar(1)*uHat + p1Hat
-Fstar(3) = Fstar(1)*vHat 
-Fstar(4) = Fstar(1)*wHat 
+Fstar(3) = Fstar(1)*vHat
+Fstar(4) = Fstar(1)*wHat
 Fstar(5) = Fstar(1)*HHat
 END SUBROUTINE TwoPointEntropyConservingFlux
 
@@ -720,13 +736,13 @@ Fstar(5)  = 0.5*(qHat*kappaP1*sKappaM1*(z5LN/z1LN)+uHat*Fstar(2)+vHat*Fstar(3)+w
 !Fstar(5) = uHat*rhoHat_HHat
 !
 !Gstar(1) = rhoHat*vHat
-!Gstar(2) = Fstar(3)              !rhoHat*vHat*uHat 
+!Gstar(2) = Fstar(3)              !rhoHat*vHat*uHat
 !Gstar(3) = Gstar(1)*vHat + p1Hat
 !Gstar(4) = Gstar(1)*wHat
 !Gstar(5) = vHat*rhoHat_HHat
 !
 !Hstar(1) = rhoHat*wHat
-!Hstar(2) = Fstar(4)              !rhoHat*wHat*uHat 
+!Hstar(2) = Fstar(4)              !rhoHat*wHat*uHat
 !Hstar(3) = Gstar(4)              !rhoHat*wHat*vHat
 !Hstar(4) = Hstar(1)*wHat + p1Hat
 !Hstar(5) = wHat*rhoHat_HHat
@@ -771,7 +787,7 @@ rhoHat = 0.5*(UL(1) + UR(1))
 uHat   = 0.5*(VelU_L + VelU_R)
 vHat   = 0.5*(VelV_L + VelV_R)
 wHat   = 0.5*(VelW_L + VelW_R)
-p1Hat  = 0.5*kappaM1*(UL(5)+UR(5)-0.5*( UL(2)*VelU_L + UL(3)*VelV_L + UL(4)*VelW_L  & 
+p1Hat  = 0.5*kappaM1*(UL(5)+UR(5)-0.5*( UL(2)*VelU_L + UL(3)*VelV_L + UL(4)*VelW_L  &
                                        +UR(2)*VelU_R + UR(3)*VelV_R + UR(4)*VelW_R  )) !   0.5*(p_L + p_R)
 eHat   = 0.5*(sRho_L*UL(5)+sRho_R*UR(5)) !0.5*(e_L + e_R)
 aHat   = SQRT(kappa*p1Hat/rhoHat)
@@ -779,7 +795,7 @@ HHat   = kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 ! Kennedy and Gruber skew-symmetric flux
 Fstar(1) = rhoHat*uHat
 Fstar(2) = Fstar(1)*uHat + p1Hat
-Fstar(3) = Fstar(1)*vHat 
+Fstar(3) = Fstar(1)*vHat
 Fstar(4) = Fstar(1)*wHat
 Fstar(5) = Fstar(1)*eHat + p1Hat*uHat
 END SUBROUTINE KennedyAndGruberFlux1
@@ -845,20 +861,20 @@ Fstar(5) = Fstar(1)*eHat + p1Hat*qHat ! =\sum_i=1^3 (0.5*rhoHat*(eL+eR)*0.5*(u_i
 !! Kennedy and Gruber skew-symmetric flux
 !Fstar(1) = rhoHat*uHat
 !Fstar(2) = Fstar(1)*uHat + p1Hat
-!Fstar(3) = Fstar(1)*vHat 
-!Fstar(4) = Fstar(1)*wHat 
+!Fstar(3) = Fstar(1)*vHat
+!Fstar(4) = Fstar(1)*wHat
 !Fstar(5) = Fstar(1)*eHat + p1Hat*uHat !=0.5*rhoHat*(eL+eR)*0.5*(uL+uR)+p1Hat*0.5*(uL+uR)
 !
 !Gstar(1) = rhoHat*vHat
-!Gstar(2) = Fstar(3)               ! rhoHat*vHat*uHat 
+!Gstar(2) = Fstar(3)               ! rhoHat*vHat*uHat
 !Gstar(3) = Gstar(1)*vHat + p1Hat
-!Gstar(4) = Gstar(1)*wHat 
+!Gstar(4) = Gstar(1)*wHat
 !Gstar(5) = Gstar(1)*eHat + p1Hat*vHat !=0.5*rhoHat*(eL+eR)*0.5*(vL+vR)+p1Hat*0.5*(vL+vR)
 !
 !Hstar(1) = rhoHat*wHat
-!Hstar(2) = Fstar(4)               !rhoHat*wHat*uHat 
+!Hstar(2) = Fstar(4)               !rhoHat*wHat*uHat
 !Hstar(3) = Gstar(4)               !rhoHat*wHat*vHat
-!Hstar(4) = Hstar(1)*wHat + p1Hat 
+!Hstar(4) = Hstar(1)*wHat + p1Hat
 !Hstar(5) = Hstar(1)*eHat + p1Hat*wHat !=0.5*rhoHat*(eL+eR)*0.5*(wL+wR)+p1Hat*0.5*(wL+wR)
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
@@ -892,7 +908,7 @@ sRho_R = 1./UR(1); VelU_R = sRho_R*UR(2) ;  VelV_R = sRho_R*UR(3) ; VelW_R = sRh
 
 p_L    = kappaM1*(UL(5) - 0.5*(UL(2)*VelU_L + UL(3)*VelV_L + UL(4)*VelW_L))
 p_R    = kappaM1*(UR(5) - 0.5*(UR(2)*VelU_R + UR(3)*VelV_R + UR(4)*VelW_R))
-!H_L    = (UL(5)+p_L)*sRho_L  
+!H_L    = (UL(5)+p_L)*sRho_L
 !H_R    = (UR(5)+p_R)*sRho_R
 
 ! Convenience variables for the velocity, density, pressure as well as sound speed and enthalpy
@@ -949,7 +965,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
            VelW_L =>UauxL(4), VelW_R =>UauxR(4), &
               p_L =>UauxL(5),    p_R =>UauxR(5)  )
 
-!H_L    = (rhoE_L+p_L)*sRho_L  
+!H_L    = (rhoE_L+p_L)*sRho_L
 !H_R    = (rhoE_R+p_R)*sRho_R
 
 ! Convenience variables for the velocity, density, pressure as well as sound speed and enthalpy
@@ -972,19 +988,19 @@ Fstar(5) = Fstar(1)*HHat
 !! Kennedy and Gruber skew-symmetric flux
 !Fstar(1) = rhoHat*uHat
 !Fstar(2) = Fstar(1)*uHat + p1Hat
-!Fstar(3) = Fstar(1)*vHat 
-!Fstar(4) = Fstar(1)*wHat 
+!Fstar(3) = Fstar(1)*vHat
+!Fstar(4) = Fstar(1)*wHat
 !Fstar(5) = Fstar(1)*HHat
 !
 !Gstar(1) = rhoHat*vHat
-!Gstar(2) = Fstar(3)               !rhoHat*vHat*uHat 
+!Gstar(2) = Fstar(3)               !rhoHat*vHat*uHat
 !Gstar(3) = Gstar(1)*vHat + p1Hat
-!Gstar(4) = Gstar(1)*wHat 
+!Gstar(4) = Gstar(1)*wHat
 !Gstar(5) = Gstar(1)*HHat
 !
 !Hstar(1) = rhoHat*wHat
-!Hstar(2) = Fstar(4)               !rhoHat*wHat*uHat 
-!Hstar(3) = Gstar(4)               !rhoHat*wHat*vHat 
+!Hstar(2) = Fstar(4)               !rhoHat*wHat*uHat
+!Hstar(3) = Gstar(4)               !rhoHat*wHat*vHat
 !Hstar(4) = Hstar(1)*wHat + p1Hat
 !Hstar(5) = Hstar(1)*HHat
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
@@ -1027,7 +1043,7 @@ rhoHat = 0.5*(UL(1) + UR(1))
 uHat   = 0.5*(VelU_L + VelU_R)
 vHat   = 0.5*(VelV_L + VelV_R)
 wHat   = 0.5*(VelW_L + VelW_R)
-p1Hat  = 0.5*kappaM1*(UL(5)+UR(5)-0.5*( UL(2)*VelU_L + UL(3)*VelV_L + UL(4)*VelW_L  & 
+p1Hat  = 0.5*kappaM1*(UL(5)+UR(5)-0.5*( UL(2)*VelU_L + UL(3)*VelV_L + UL(4)*VelW_L  &
                                        +UR(2)*VelU_R + UR(3)*VelV_R + UR(4)*VelW_R  )) !   0.5*(p_L + p_R)
 aHat   = SQRT(kappa*p1Hat/rhoHat)
 HHat   = kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
@@ -1035,8 +1051,8 @@ HHat   = kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 qLR      = 0.5*uHat
 Fstar(1) = rhoHat*(qLR+qLR)                            !rhoHat*uHat
 Fstar(2) = qLR*( UL(2) + UR(2)) + p1Hat
-Fstar(3) = qLR*( UL(3) + UR(3)) 
-Fstar(4) = qLR*( UL(4) + UR(4)) 
+Fstar(3) = qLR*( UL(3) + UR(3))
+Fstar(4) = qLR*( UL(4) + UR(4))
 Fstar(5) = qLR*((UL(5) + UR(5)) + (p1Hat+p1Hat))
 END SUBROUTINE DucrosFlux
 
@@ -1096,26 +1112,26 @@ qHat=uHat*metric(1)+vHat*metric(2)+wHat*metric(3)
 Fstar(1) =   rhoHat*qHat
 Fstar(2) =  rhouHat*qHat +metric(1)*p1Hat
 Fstar(3) =  rhovHat*qHat +metric(2)*p1Hat
-Fstar(4) =  rhowHat*qHat +metric(3)*p1Hat 
+Fstar(4) =  rhowHat*qHat +metric(3)*p1Hat
 Fstar(5) = (rhoEhat      + p1Hat)*qHat
 
 !! Decros et. al. skew-symmetric flux
 !Fstar(1) =   rhoHat*uHat            !=0.5*rhoHat*(velU_L+velU_R)
 !Fstar(2) =  rhouHat*uHat + p1Hat
-!Fstar(3) =  rhovHat*uHat 
-!Fstar(4) =  rhowHat*uHat 
+!Fstar(3) =  rhovHat*uHat
+!Fstar(4) =  rhowHat*uHat
 !Fstar(5) = (rhoEhat      + p1Hat)*uHat
 !
 !Gstar(1) =   rhoHat*vHat
 !Gstar(2) =  rhouHat*vHat
-!Gstar(3) =  rhovHat*vHat + p1Hat 
-!Gstar(4) =  rhowHat*vHat 
+!Gstar(3) =  rhovHat*vHat + p1Hat
+!Gstar(4) =  rhowHat*vHat
 !Gstar(5) = (rhoEhat      + p1Hat)*vHat
 !
 !Hstar(1) =   rhoHat*wHat
 !Hstar(2) =  rhouHat*wHat
 !Hstar(3) =  rhovHat*wHat
-!Hstar(4) =  rhowHat*wHat + p1Hat  
+!Hstar(4) =  rhowHat*wHat + p1Hat
 !Hstar(5) = (rhoEhat      + p1Hat)*wHat
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE DucrosFluxVec
@@ -1167,8 +1183,8 @@ rhoqs2_L = 0.5*UL(1)*qL
 rhoqs2_R = 0.5*UR(1)*qR
 Fstar(1) = (rhoqs2_L + rhoqs2_R)
 Fstar(2) = Fstar(1)*uhat + p1Hat
-Fstar(3) = Fstar(1)*vHat 
-Fstar(4) = Fstar(1)*wHat 
+Fstar(3) = Fstar(1)*vHat
+Fstar(4) = Fstar(1)*wHat
 Fstar(5) = 0.5*( kappa*skappaM1*(p_L*qL + p_R*qR) -(rhoqs2_L*vel2_L + rhoqs2_R*vel2_R) )&
            + rhoqs2_L*(VelU_L*uHat + VelV_L*vHat + VelW_L*wHat) &
            + rhoqs2_R*(VelU_R*uHat + VelV_R*vHat + VelW_R*wHat)
@@ -1241,8 +1257,8 @@ Fstar(5) = 0.5*( kappa*skappaM1*(p_L*q_L + p_R*q_R) -(rhoqs2_L*vel2_L + rhoqs2_R
 !rhoqs2_R = 0.5*rho_R*VelU_R
 !Fstar(1) = (rhoqs2_L + rhoqs2_R)
 !Fstar(2) = Fstar(1)*uhat + p1Hat
-!Fstar(3) = Fstar(1)*vHat 
-!Fstar(4) = Fstar(1)*wHat 
+!Fstar(3) = Fstar(1)*vHat
+!Fstar(4) = Fstar(1)*wHat
 !Fstar(5) = 0.5*( kappa*skappaM1*(p_L*velU_L + p_R*velU_R) -(rhoqs2_L*vel2_L + rhoqs2_R*vel2_R) ) &
 !           + rhoqs2_L*vvhat_L+ rhoqs2_R*vvhat_R
 !
@@ -1250,8 +1266,8 @@ Fstar(5) = 0.5*( kappa*skappaM1*(p_L*q_L + p_R*q_R) -(rhoqs2_L*vel2_L + rhoqs2_R
 !rhoqs2_R = 0.5*rho_R*VelV_R
 !Gstar(1) = (rhoqs2_L + rhoqs2_R)
 !Gstar(2) = Gstar(1)*uhat
-!Gstar(3) = Gstar(1)*vHat + p1Hat 
-!Gstar(4) = Gstar(1)*wHat 
+!Gstar(3) = Gstar(1)*vHat + p1Hat
+!Gstar(4) = Gstar(1)*wHat
 !Gstar(5) = 0.5*( kappa*skappaM1*(p_L*velV_L + p_R*velV_R) -(rhoqs2_L*vel2_L + rhoqs2_R*vel2_R) ) &
 !           + rhoqs2_L*vvhat_L+ rhoqs2_R*vvhat_R
 !
@@ -1259,8 +1275,8 @@ Fstar(5) = 0.5*( kappa*skappaM1*(p_L*q_L + p_R*q_R) -(rhoqs2_L*vel2_L + rhoqs2_R
 !rhoqs2_R = 0.5*rho_R*VelW_R
 !Hstar(1) = (rhoqs2_L + rhoqs2_R)
 !Hstar(2) = Hstar(1)*uhat
-!Hstar(3) = Hstar(1)*vHat 
-!Hstar(4) = Hstar(1)*wHat + p1Hat 
+!Hstar(3) = Hstar(1)*vHat
+!Hstar(4) = Hstar(1)*wHat + p1Hat
 !Hstar(5) = 0.5*( kappa*skappaM1*(p_L*velW_L + p_R*velW_R) -(rhoqs2_L*vel2_L + rhoqs2_R*vel2_R) ) &
 !           + rhoqs2_L*vvhat_L+ rhoqs2_R*vvhat_R
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
@@ -1392,26 +1408,26 @@ qHat=uHat*metric(1)+vHat*metric(2)+wHat*metric(3)
 Fstar(1) = rhoHat*qHat
 Fstar(2) = Fstar(1)*uHat + metric(1)*p1Hat
 Fstar(3) = Fstar(1)*vHat + metric(2)*p1Hat
-Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat 
+Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat
 Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - 0.5*(Vel2_L+Vel2_R)) &
            + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 
 !! Entropy conserving and kinetic energy conserving flux
 !Fstar(1) = rhoHat*uHat
 !Fstar(2) = Fstar(1)*uHat + p1Hat
-!Fstar(3) = Fstar(1)*vHat 
-!Fstar(4) = Fstar(1)*wHat 
+!Fstar(3) = Fstar(1)*vHat
+!Fstar(4) = Fstar(1)*wHat
 !Fstar(5) = Fstar(1)*HHat + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 !
 !Gstar(1) = rhoHat*vHat
-!Gstar(2) = Fstar(3)              !rhoHat*vHat*uHat 
+!Gstar(2) = Fstar(3)              !rhoHat*vHat*uHat
 !Gstar(3) = Gstar(1)*vHat + p1Hat
-!Gstar(4) = Gstar(1)*wHat 
+!Gstar(4) = Gstar(1)*wHat
 !Gstar(5) = Gstar(1)*HHat + uHat*Gstar(2) + vHat*Gstar(3) + wHat*Gstar(4)
 !
 !Hstar(1) = rhoHat*wHat
-!Hstar(2) = Fstar(4)              !rhoHat*wHat*uHat 
-!Hstar(3) = Gstar(4)              !rhoHat*wHat*vHat 
+!Hstar(2) = Fstar(4)              !rhoHat*wHat*uHat
+!Hstar(3) = Gstar(4)              !rhoHat*wHat*vHat
 !Hstar(4) = Hstar(1)*wHat + p1Hat
 !Hstar(5) = Hstar(1)*HHat + uHat*Hstar(2) + vHat*Hstar(3) + wHat*Hstar(4)
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
@@ -1848,7 +1864,7 @@ Fstar(5) = qhat*Hhat
 !Gstar(1) = rhoHat*vHat
 !Gstar(2) = Fstar(3) !vHat*uHat
 !Gstar(3) = vHat*vHat + p1Hat
-!Gstar(4) = vHat*wHat 
+!Gstar(4) = vHat*wHat
 !Gstar(5) = vhat*Hhat
 !
 !Hstar(1) = rhoHat*wHat
@@ -1861,11 +1877,141 @@ END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE GassnerWintersWalchFluxVec
 
 !==================================================================================================================================
+!> entropy conservation and kinetic Energy preservation only for compressible Euler case
+!> following H.Ranocha thesis "Generalised Summation-by-Parts Operators and Entropy Stability
+!> of Numerical Methods for Hyperbolic Balance Laws" from TU Braunschweig
+!==================================================================================================================================
+PURE SUBROUTINE RanochaFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: srho_L,srho_R,v2_L,v2_R
+REAL            :: p_L,p_R,p_avg
+REAL            :: v_L(3),v_R(3)
+REAL            :: rho_sp_L, rho_sp_R, rho_sp_MEAN
+REAL            :: v2_ZIP
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+           rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
+              E_L =>UL(5)   ,    E_R =>UR(5)   )
+! Get the inverse density, velocity, and pressure on left and right
+srho_L = 1./rho_L
+srho_R = 1./rho_R
+v_L = rhoV_L(:)*srho_L
+v_R = rhoV_R(:)*srho_R
+
+v2_L = SUM(v_L(:)*v_L(:))
+v2_R = SUM(v_R(:)*v_R(:))
+
+p_L    = kappaM1*(E_L - 0.5*rho_L*v2_L)
+p_R    = kappaM1*(E_R - 0.5*rho_R*v2_R)
+
+! Get the averages for the numerical flux
+
+rhoHat  = LN_MEAN( rho_L, rho_R)
+uHat   = 0.5 * ( v_L(1) +  v_R(1) )
+vHat   = 0.5 * ( v_L(2) +  v_R(2) )
+wHat   = 0.5 * ( v_L(3) +  v_R(3) )
+v2_ZIP = 0.5 * (v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
+p1Hat  = 0.5*(p_L+p_R)
+aHat   = SQRT(kappa*p1Hat/rhoHat)
+HHat   = kappa*p1Hat*skappaM1/rhoHat + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
+
+rho_sp_L = rho_L / p_L
+rho_sp_R = rho_R / p_R
+rho_sp_MEAN = LN_MEAN( rho_sp_L , rho_sp_R )
+
+! Entropy conserving and kinetic energy conserving flux
+
+Fstar(1) = rhoHat*uHat
+Fstar(2) = Fstar(1)*uHat + p1Hat
+Fstar(3) = Fstar(1)*vHat
+Fstar(4) = Fstar(1)*wHat
+Fstar(5) = Fstar(1)*(v2_ZIP + 1./rho_sp_MEAN*sKappaM1)+0.5*(p_L*v_R(1) + p_R*v_L(1))
+
+END ASSOCIATE
+END SUBROUTINE RanochaFlux
+
+
+!==================================================================================================================================
+!> entropy conservation and kinetic Energy preservation only for compressible Euler case
+!> following H.Ranocha thesis "Generalised Summation-by-Parts Operators and Entropy Stability
+!> of Numerical Methods for Hyperbolic Balance Laws" from TU Braunschweig
+!> directly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
+PURE SUBROUTINE RanochaFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:sKappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                   :: vAvg(3)
+REAL                   :: rhoLN
+REAL                   :: vm_L,vm_R
+REAL                   :: rho_sp_L, rho_sp_R, rho_sp_MEAN
+REAL                   :: p_avg,v2_ZIP
+REAL                   :: metric(3)
+!==================================================================================================================================
+metric = 0.5*(metric_L+metric_R)
+
+ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
+              v_L =>UauxL(2:4),  v_R =>UauxR(2:4), &
+              p_L =>UauxL(5),    p_R =>UauxR(5)  )  !pressure
+
+! Get the averages for the numerical flux
+rhoLN  = LN_MEAN( rho_L, rho_R)
+vAvg   = 0.5*( v_L(:)+ v_R(:))
+v2_ZIP = 0.5*(v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
+p_avg  = 0.5*(p_L+p_R)
+
+vm_L=SUM(v_L(:)*metric(:))
+vm_R=SUM(v_R(:)*metric(:))
+
+rho_sp_L = rho_L / p_L
+rho_sp_R = rho_R / p_R
+rho_sp_MEAN = LN_MEAN( rho_sp_L , rho_sp_R )
+
+! Entropy conserving and kinetic energy conserving flux
+Fstar(1) = rhoLN*0.5*(vm_L+vm_R)
+Fstar(2) = Fstar(1)*vAvg(1) + metric(1)*p_avg
+Fstar(3) = Fstar(1)*vAvg(2) + metric(2)*p_avg
+Fstar(4) = Fstar(1)*vAvg(3) + metric(3)*p_avg
+Fstar(5) = Fstar(1)*(v2_ZIP+1./rho_sp_MEAN*sKappaM1)+0.5*(p_L*vm_R+p_R*vm_L)
+
+END ASSOCIATE !rho_L/R,rhov1_L/R,...
+END SUBROUTINE RanochaFluxVec
+
+!==================================================================================================================================
 !> Computes the logarithmic mean: (aR-aL)/(LOG(aR)-LOG(aL)) = (aR-aL)/LOG(aR/aL)
 !> Problem: if aL~= aR, then 0/0, but should tend to --> 0.5*(aR+aL)
 !>
-!> introduce xi=aR/aL and f=(aR-aL)/(aR+aL) = (xi-1)/(xi+1) 
-!> => xi=(1+f)/(1-f) 
+!> introduce xi=aR/aL and f=(aR-aL)/(aR+aL) = (xi-1)/(xi+1)
+!> => xi=(1+f)/(1-f)
 !> => Log(xi) = log(1+f)-log(1-f), and for smaRl f (f^2<1.0E-02) :
 !>
 !>    Log(xi) ~=     (f - 1/2 f^2 + 1/3 f^3 - 1/4 f^4 + 1/5 f^5 - 1/6 f^6 + 1/7 f^7)
@@ -1887,7 +2033,7 @@ REAL            :: LN_MEAN  !< result
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCaR VaLIABLES
 REAL           :: Xi,u
-REAL,PARAMETER :: eps=1.0E-4  ! tolerance for f^2, such that switch is smooth in double precision 
+REAL,PARAMETER :: eps=1.0E-4  ! tolerance for f^2, such that switch is smooth in double precision
 !==================================================================================================================================
 Xi = aR/aL
 u=(Xi*(Xi-2.)+1.)/(Xi*(Xi+2.)+1.) !u=f^2, f=(aR-aL)/(aR+aL)=(xi-1)/(xi+1)

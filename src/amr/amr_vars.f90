@@ -1,5 +1,6 @@
 !===================================================================================================================================
 ! Copyright (c) 2018 - 2020 Alexander Astanin
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -34,15 +35,16 @@ INTEGER                     :: MaxLevel             ! Loaded from .ini file
 INTEGER                     :: MinLevel             ! Loaded from .ini file
 INTEGER                     :: nWriteDataAMR             ! Loaded from .ini file
 INTEGER                     :: nDoAMR               ! Time-step interval to do AMR
+INTEGER                     :: nDoAMRShift          ! Initial shift fot time-step interval to do AMR
 integer                     :: InitialRefinement    ! Initial refinement switch
 integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
 real                        :: IniHalfwidthAMR
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
-real, allocatable           :: Vdm_Interp_0_1_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [-1,0]
-real, allocatable           :: Vdm_Interp_0_2_T(:,:)  ! Interpolation Vandermonde matrix from [-1,1] to [0,1]
 real, allocatable           :: Vdm_Interp_1_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to first half of [-1,3]
 real, allocatable           :: Vdm_Interp_2_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to second half of [-3,1]
+real, allocatable           :: M_0_1(:,:),M_0_2(:,:)  ! 1D Interpolation from big to small [-1,1] to [-1,0] / [0,1] 
+real, allocatable           :: M_1_0(:,:),M_2_0(:,:)  ! 1D L2 Projection matrix for small to big [-1,0]/[0,1] to [-1,1]  
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
 type(Indicator_PerssonPeraire) :: AMR_Indicator

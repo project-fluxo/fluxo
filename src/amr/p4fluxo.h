@@ -12,9 +12,6 @@
 //!=================================================================================================================================
 #ifndef P4FLUXO_H
 #define P4FLUXO_H
-
-// #include "stdio.h"
-// #include "malloc.h"
 #if defined(__MACH__)
 #include <stdlib.h>
 #else
@@ -29,7 +26,6 @@
 #include <p4est_to_p8est.h>
 
 #define nullptr ((void*)0)
-#define NON_OPTIMIZED
 #define MORTAR_SIDE_WEIGHT 1
 static sc_MPI_Comm mpicomm;
 
@@ -49,14 +45,11 @@ typedef struct p4est_savef_data {
 } p4est_savef_data_t;
 
 typedef struct savemesh_inner_data {
-
-    // int OldElementID[8];
     int ElementID;
     int SidesID[6];
     int8_t flips[6];
     int MortarSides[6][4];
     int nbElementID[6][4];
-    // int8_t CoarsedRefined;
 } savemesh_inner_data_t;
 
 typedef struct p4est_inner_data {
@@ -66,22 +59,15 @@ typedef struct p4est_inner_data {
     int SidesID[6];
     uint8_t flips[6];
     uint8_t weight;
-#ifndef NON_OPTIMIZED
-    int OldSidesID[6];
-    int8_t SidesRatio[6];// 0 = Sides the same. -1 = Side is smaller as the NB. +1 = Side is Bigger as NB
-    int8_t IsChanged;
-#endif
 } p4est_inner_data_t;
 
 typedef struct p4est_balance_data {
-
     int nVar;
     int PP_N;
     int nElems;
     int DataSize;
     void *DataSetU;
     void *DataSetElem_xGP; //for                                                      each process and 1 beyond * /
-    // int8_t CoarsedRefined;
 } p4est_balance_data_t;
 
 
@@ -111,7 +97,6 @@ typedef struct p4est_mpi_data {
     p4est_gloidx_t global_num_quad;
     p4est_gloidx_t *offsetMPI; // size [mpisize+1] p4est_gloidx_t     *global_first_quadrant; /**< first global quadrant index
     //for                                                      each process and 1 beyond * /
-    // int8_t CoarsedRefined;
 } p4est_mpi_data_t;
 
 typedef struct p4est_fortran_data {
@@ -122,7 +107,6 @@ typedef struct p4est_fortran_data {
     int nMortarInnerSides;
     int nInnerSides;
     int nMPISides;
-    //int nMPISides_MINE;//int nMPISides_YOUR;
     int nMortarMPISides;
     //Pointers to Arrays ElemToSide, SideToElem usw.
     void *EtSPtr; // !
@@ -159,11 +143,6 @@ typedef struct p4est_SetMPISide_data {
     int nMPISides_MINE;
     int *offsetMPISides_MINE;
     int *offsetMPISides_YOUR;
-
-    // int nMPISides;
-    //int nMPISides_MINE;//int nMPISides_YOUR;
-    // int nMortarMPISides;
-    //Pointers to Arrays ElemToSide, SideToElem usw.
 } p4est_SetMPISide_data_t;
 
 //Auxilary COMMON data 
@@ -178,11 +157,6 @@ typedef struct p4est_SetSide_data {
     int CurrentInnerSide;
     int CurrentMPISide;
     int CurrentMPIMortarSide;
-    // int nInnerSides;
-    // int nMPISides;
-    //int nMPISides_MINE;//int nMPISides_YOUR;
-    // int nMortarMPISides;
-    //Pointers to Arrays ElemToSide, SideToElem usw.
 } p4est_SetSide_data_t;
 
 void free_data_memory(void *N);

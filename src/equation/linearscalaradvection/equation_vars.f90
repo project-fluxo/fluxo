@@ -29,6 +29,7 @@ SAVE
 !----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL             :: doCalcSource            !< logical to define if a source term (e.g. exactfunc) is added
 REAL                :: AdvVel(3)               !< Advection velocity
+REAL                :: upwind                  !< =0. central flux, =1. upwind flux
 REAL                :: DiffC                   !< Diffusion constant
 REAL                :: IniWavenumber(3)        !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 INTEGER             :: IniExactFunc            !< Exact Function for initialization
@@ -47,6 +48,10 @@ INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point 
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec     !< procedure pointer to two-point average flux
 #endif /*PP_DiscType==2*/
 
+#ifdef JESSE_MORTAR
+INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
+PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
+#endif /*JESSE_MORTAR*/
 !==================================================================================================================================
 ABSTRACT INTERFACE
   PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,metric_L,metric_R,Fstar)

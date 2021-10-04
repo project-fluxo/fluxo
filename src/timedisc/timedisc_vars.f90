@@ -61,6 +61,7 @@ LOGICAL          :: TimediscInitIsDone=.FALSE.!< Indicate wheter InitTimeDisc ro
 !----------------------------------------------------------------------------------------------------------------------------------
 
 ! NOTE: using simple arrays to store coefs, if using classes or types performance seems to degrade
+CHARACTER(LEN=50)   :: TimeDiscMethod !< input parameter, choice of time discretization method
 CHARACTER(LEN=50)   :: TimeDiscName  !< name of specific time discretization scheme
 CHARACTER(LEN=50)   :: TimeDiscType  !< general type of time discretization scheme
 INTEGER             :: nRKStages     !< number of stages of Runge-Kutta method
@@ -123,7 +124,7 @@ END SELECT
 
 SELECT CASE (TimeDiscMethod)
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Strong-Stability-Preserving Runge-Kutta 4, 5 stages, Spiteri & Ruuth
+! Strong Stability preserving 3 stage 3rd order (shu-osher), same stability region as Standard RK3-3
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 CASE('ssprk3-3')
 
@@ -132,7 +133,8 @@ CASE('ssprk3-3')
 #if PARABOLIC
   RelativeDFL=1.
 #endif
-
+  fullBoundaryOrder=.FALSE.
+  
 ! TODO: Adjust CFLScaleAlpha!! ... These are the ones for standardrk3-3
 #if (PP_NodeType==1)
   CFLScaleAlpha(1:15) = &
@@ -147,8 +149,8 @@ CASE('ssprk3-3')
   RKa(2:nRKStages) = (/ 3./4. , 1./3. /)
   ! The coefficients that multiply dt*Ut
   RKb(2:nRKStages) = (/ 1./4. , 2./3. /)
-  ! The c coefficients (that scale dt)... Not known. TODO: Check if there's an expression for these..
-  RKc(2:nRKStages) = (/ 0.    , 0.    /)
+  ! The c coefficients (that scale dt)... From https://arxiv.org/pdf/1809.04807.pdf, Equation 22
+  RKc(2:nRKStages) = (/ 1.    , 0.5   /)
   
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Strong-Stability-Preserving Runge-Kutta 4, 5 stages, Spiteri & Ruuth

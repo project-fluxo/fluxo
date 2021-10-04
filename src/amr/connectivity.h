@@ -13,9 +13,6 @@
 #ifndef CONNECTIVITY_H
 
 #define CONNECTIVITY_H
-//!mapping from HOPEST node of local sides to P4EST nodes of local sides
-// int const H2P_FaceNodeMap[1 : 4, 1 : 6) = &RESHAPE((/ 0, 2, 3, 1, &0, 1, 3, 2, &0, 1, 3, 2, &1, 0, 2, 3, &0, 2, 3, 1, &0, 1, 3, 2 /), (/ 4, 6 /))
-//int const H2P_FaceNodeMap[1 : 4, 1 : 6) = &RESHAPE((/ 0, 2, 3, 1, &0, 1, 3, 2, &0, 1, 3, 2, &1, 0, 2, 3, &0, 2, 3, 1, &0, 1, 3, 2 /), (/ 4, 6 /))
 
 extern const int H2P_FaceNodeMap[7][5];
 //! mapping from P4EST node of local sides to HOPEST node of local sides

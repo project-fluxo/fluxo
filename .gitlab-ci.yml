@@ -133,7 +133,7 @@ variables:
     - cd tests; pwd
     - rm -rf dirx_1* log_1*.txt
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 100-199
-    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 101,102 ;  fi
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 101,102 ;  fi
     - mv dirx_1* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -147,7 +147,7 @@ variables:
     - cd tests; pwd
     - rm -rf dirx_2* log_2*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 200-299
-    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 201,202 ;  fi
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 201,202 ;  fi
     - mv dirx_2* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -161,7 +161,7 @@ variables:
     - cd tests; pwd
     - rm -rf dirx_3* log_3*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 300-399
-    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 301,302,316 ;  fi
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 301,302,316 ;  fi
     - mv dirx_3* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -175,7 +175,7 @@ variables:
     - cd tests; pwd
     - rm -rf dirx_4* log_4*
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 400-499
-    - else python3 build_tests.py -p 2 -stage 0 -buildhdf5 0 -build Release -case 401,402,413,414,416 ;  fi
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 401,402,413,414,416 ;  fi
     - mv dirx_4* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
   artifacts:
     <<: *common_arts
@@ -191,38 +191,38 @@ variables:
   stage: runs
   script:
     - cd tests; pwd
-    - rm -f tests/runs/linadv/*/log_1*.txt
+    - rm -f runs/linadv/*/*/log_1*.txt
     - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_1* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 100-199
-    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 101,102 ;  fi
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 101,102 ;  fi
   artifacts:
     <<: *common_arts
     paths:
-    - tests/runs/linadv/*/log_1*.txt
+    - tests/runs/linadv/*/*/log_1*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
-.job_script_runs_mhd: &script_runs_maxwell
+.job_script_runs_maxwell: &script_runs_maxwell
   stage: runs
   script:
     - cd tests; pwd
-    - rm -f tests/runs/maxwell/*/log_2*.txt
+    - rm -f runs/maxwell/*/*/log_2*.txt
     - rm -rf dirx_2*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_2* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 200-299
-    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 201,202 ;  fi
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 201,202 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
-    - tests/runs/maxwell/*/log_2*.txt
+    - tests/runs/maxwell/*/*/log_2*.txt
 
 # -------------------------------------------------------------------------------------------------------------------------------
 .job_script_runs_mhd: &script_runs_mhd
   stage: runs
   script:
     - cd tests; pwd
-    - rm -f tests/runs/mhd/*/*/log_3*.txt
+    - rm -f runs/mhd/*/*/log_3*.txt
     - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_3* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 300-399
-    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 301,302,316 ;  fi
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 301,302,316 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
@@ -233,10 +233,10 @@ variables:
   stage: runs
   script:
     - cd tests; pwd
-    - rm -f tests/runs/navst/*/*/log_4*.txt
+    - rm -f runs/navst/*/*/log_4*.txt
     - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* .
     - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 2 -stage 2 -build ${NIGHTLYBUILDMODE} -case 400-499
-    - else python3 build_tests.py -p 2 -stage 2 -build Release -case 401,402,413,414,416 ;  fi
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 401,402,413,414,416 ;  fi
   artifacts:
     <<: *common_arts
     paths: 
