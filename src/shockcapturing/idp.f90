@@ -953,7 +953,7 @@ contains
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
 #if barStates
-    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
+    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
     use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
@@ -996,6 +996,9 @@ contains
         s_min = huge(1.0)
         
 #if barStates
+        ! Previous entropy of the node (ubar_ii)
+        s_min = min(s_min, Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        
         ! TODO: Compute them for all interfaces before...
         !xi+
         s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
@@ -1103,7 +1106,7 @@ contains
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_MathEntropy, ConsToEntropy
 #if barStates
-    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
+    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
     use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
@@ -1145,6 +1148,10 @@ contains
         s_max = -huge(1.0)
         
 #if barStates
+        ! Previous entropy of the node (ubar_ii)
+        s_max = max(s_max, Get_MathEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        
+        ! TODO: Compute for all interfaces before the loop!
         !xi+
         s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
         !xi-
