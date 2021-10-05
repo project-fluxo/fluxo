@@ -100,6 +100,9 @@ contains
     
     if (IDPDensityTVD ) then
 #if barStates
+#if LOCAL_ALPHA
+      IDPneedsUsafe = .TRUE.
+#endif /*LOCAL_ALPHA*/
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev     = .TRUE.
       IDPneedsUprev_ext = .TRUE.
@@ -250,7 +253,7 @@ contains
     use MOD_NFVSE_Vars  , only: alpha, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars  , only: alpha_loc
-    use MOD_Analyze_Vars, only: wGPVol, Vol
+    use MOD_Analyze_Vars, only: wGPVol
     use MOD_Mesh_Vars   , only: nElems, sJ
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPSemiDiscEnt, IDPPositivity
@@ -287,6 +290,7 @@ contains
     maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
     
     amount_alpha = amount_alpha*amount_alpha_steps
+    ! TODO: how to do the local alpha amount??... This is not working:
 #if LOCAL_ALPHA
     curr_amount_alpha = 0.0
     do eID=1, nElems
@@ -521,9 +525,13 @@ contains
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ
+    use MOD_IDP_Vars      , only: Usafe
 #endif /*LOCAL_ALPHA*/
 #if barStates
-    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
+    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
     use MOD_IDP_Vars      , only: Usafe
 #endif /*barStates*/
@@ -541,6 +549,7 @@ contains
 #endif /*LOCAL_ALPHA*/
     real    :: rho_min, rho_max, rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
+    real    :: Qp, Qm, Pp, Pm
     integer :: eID
     integer :: i,j,k,l
     real, parameter :: eps = 1.e-10           ! Very small value
@@ -562,6 +571,10 @@ contains
         rho_max = -huge(1.0)
         
 #if barStates
+        ! Previous sol
+        rho_min = min(rho_min, Uprev  (1,i  ,j  ,k  ,eID))
+        rho_max = max(rho_max, Uprev  (1,i  ,j  ,k  ,eID))
+        
         !xi
         do l=i-1, i
           rho_min = min(rho_min, Ubar_xi  (1,l  ,j  ,k  ,eID))
@@ -598,7 +611,72 @@ contains
         end do
 #endif /*barStates*/
         
-        ! If U is in that range... nothing to correct
+#if LOCAL_ALPHA
+        ! Real Zalesak type limiter
+        ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
+        ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
+        !****************************************************************************************************************
+        if ( (U(1,i,j,k,eID) >= rho_min) .and. (U(1,i,j,k,eID) <= rho_max) ) cycle
+        
+        ! Upper/lower bounds for admissible increments
+        Qp = max(0.0,(rho_max-Usafe(1,i,j,k,eID))*sdt)
+        Qm = min(0.0,(rho_min-Usafe(1,i,j,k,eID))*sdt)
+        
+        ! Check the sign of Qp and Qm... !!!
+        if (Qp < 0) then
+          print*, '0>Qp=', Qp, i, j, k, eID
+          print*, 'rho_max', rho_max
+          print*, 'rho_saf', Usafe(1,i,j,k,eID)
+          read(*,*)
+!          stop 
+        end if
+        if (Qm > 0)  then
+          print*, '0<Qm=', Qm, i, j, k, eID
+          print*, 'rho_min', rho_min
+          print*, 'rho_saf', Usafe(1,i,j,k,eID)
+          read(*,*)
+!          stop
+        end if
+        
+        ! Positive contributions
+        Pp = 0.0
+        Pp = Pp + max(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
+        Pp = Pp + max(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pp = Pp + max(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
+        Pp = Pp + max(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pp = Pp + max(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
+        Pp = Pp + max(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pp = Pp*sJ(i,j,k,eID)
+        
+        ! Negative contributions
+        Pm = 0.0
+        Pm = Pm + min(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
+        Pm = Pm + min(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
+        Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm*sJ(i,j,k,eID)
+        
+        if (Pp==0) then
+          Qp = 1.0
+        else
+          Qp = Qp/Pp
+        end if
+        
+        if (Pm==0) then
+          Qm = 1.0
+        else
+          Qm = Qm/Pm
+        end if
+        
+        corr1 = 1.0 - min(1.0,Qp,Qm)
+        
+        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+        corr = max(corr,corr1)
+        
+#else
+        ! Naive limiter that gets out of bounds
         !********************************************
         if ( U(1,i,j,k,eID) < rho_min) then
           rho_safe = rho_min
@@ -617,6 +695,8 @@ contains
         corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
         corr = max(corr,corr1)
+        
+#endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
       
