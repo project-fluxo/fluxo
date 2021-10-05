@@ -39,7 +39,7 @@ contains
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
     call prms%CreateLogicalOption("IDPSemiDiscEnt",  " IDP correction on semi-discrete entropy balance?", "F")
-    call prms%CreateLogicalOption( "IDPDensityTVD",  " IDP(TVD) correction on density?", "F")
+    call prms%CreateLogicalOption( "IDPDensityTVD",  " IDP(TVD) correction on density? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
 !   Additional options
@@ -476,7 +476,8 @@ contains
       
       ! prolong MPI sides and do the mortar on the MPI sides
       CALL ProlongToFace(PP_nVar,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,doMPISides=.TRUE.)
-      !Mortars are not really working yet!!
+      
+      ! TODO: Mortars are not really working yet!!
       !CALL U_Mortar(U_master,U_slave,doMPISides=.TRUE.)
       
       ! send the slave
@@ -484,7 +485,7 @@ contains
                             MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
       
       ! receive the master
-      call StartReceiveMPIData(U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartReceiveMPIData(U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
       
 #endif /* MPI */
@@ -493,7 +494,7 @@ contains
       ! TODO: Add mortars!!
 #if MPI
       ! Send the master
-      call StartSendMPIData   (U_master(:,:,:,firstSlaveSide:lastSlaveSide), DataSizeSide, firstSlaveSide, lastSlaveSide, &
+      call StartSendMPIData   (U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,2),SendID=1) 
       
       
