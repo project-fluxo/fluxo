@@ -84,7 +84,7 @@ USE MOD_PreProc
 USE MOD_Mesh_Vars,     ONLY:NGeo,NgeoRef,nElems,offsetElem,crossProductMetrics,NodeTypeMesh
 USE MOD_Mesh_Vars,     ONLY:Metrics_fTilde,Metrics_gTilde,Metrics_hTilde
 USE MOD_Mesh_Vars,     ONLY:sJ,detJac_Ref
-USE MOD_Mesh_Vars,     ONLY:Vdm_GLN_N,dXGL_N
+USE MOD_Mesh_Vars,     ONLY:Vdm_GLN_N,Vdm_N_GLN,dXGL_N
 USE MOD_Mesh_Vars,     ONLY:NodeCoords,Elem_xGP
 USE MOD_Interpolation_Vars
 USE MOD_Interpolation, ONLY:GetVandermonde,GetNodesAndWeights,GetDerivativeMatrix
@@ -113,13 +113,11 @@ REAL    :: dX_NgeoRef( 3,3,0:NgeoRef,0:NgeoRef,0:NgeoRef) ! jacobi matrix on SOL
 
 REAL    :: R_GL_N(     3,3,0:PP_N,0:PP_N,0:PP_N)    ! buffer for metric terms, uses XGL_N,dXGL_N
 REAL    :: JaGL_N(     3,3,0:PP_N,0:PP_N,0:PP_N)    ! metric terms P\in N
-REAL    :: scaledJac(2)
+REAL    :: scaledJac
 
 ! Polynomial derivativion matrices
 REAL    :: DGL_NGeo(0:Ngeo,0:Ngeo)
 REAL    :: DGL_N(   0:PP_N,0:PP_N)
-REAL    :: Vdm_GLN_N1(   0:PP_N,0:PP_N)
- REAL    :: Vdm_N_GLN1(   0:PP_N,0:PP_N)
 
 ! Vandermonde matrices (N_OUT,N_IN)
 REAL    :: Vdm_EQNgeo_GLNgeo( 0:Ngeo   ,0:Ngeo)
@@ -137,13 +135,10 @@ IF (PRESENT(iElemIn)) THEN
   ForAMR = .TRUE.
 ENDIF
 
-IF (.NOT. ForAMR) THEN
-  Metrics_fTilde=0.
-  Metrics_gTilde=0.
-  Metrics_hTilde=0.
-ELSE
-  scaledJac=0.
-ENDIF
+Metrics_fTilde=0.
+Metrics_gTilde=0.
+Metrics_hTilde=0.
+
 ! Initialize Vandermonde and D matrices
 ! Only use modal Vandermonde for terms that need to be conserved as Jacobian if N_out>N_in
 ! Always use interpolation for the rest!
@@ -168,16 +163,13 @@ CALL GetVandermonde(    Ngeo   , NodeTypeGL  , PP_N    , NodeTypeGL, Vdm_GLNgeo_
 ! 
 CALL GetDerivativeMatrix(PP_N  , NodeTypeGL  , DGL_N)
 
-IF (ForAMR) THEN
-  CALL GetVandermonde(    PP_N, NodeTypeGL , PP_N, NodeType, Vdm_GLN_N1 , Vdm_N_GLN1 , modal=.FALSE. )
-ENDIF
 ! 2.d) derivatives (dXGL) by projection or by direct derivation (D_GL):
 CALL GetNodesAndWeights(PP_N   , NodeTypeGL  , xiGL_N  , wIPBary=wBaryGL_N)
 
 ! Outer loop over all elements
 DO iElem=1,nElems
   IF (ForAMR) THEN
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN1,Elem_xGP(:,:,:,:,iElem),XGL_N )
+    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_N_GLN,Elem_xGP(:,:,:,:,iElem),XGL_N )
     CALL ChangeBasis3D(3,PP_N,NGeo,Vdm_GLN_GLNGeo ,XGL_N   ,XGL_Ngeo)
   ELSE
     !1.a) Transform from EQUI_Ngeo to GL points on Ngeo and N
@@ -235,8 +227,8 @@ DO iElem=1,nElems
 
     
   ! check scaled Jacobians
-  scaledJac(2)=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
-  IF(scaledJac(2).LT.0.001) THEN
+  scaledJac=MINVAL(detJac_N(1,:,:,:))/MAXVAL(detJac_N(1,:,:,:))
+  IF(scaledJac.LT.0.001) THEN
     WRITE(Unit_StdOut,*) 'Too small scaled Jacobians found (GL/Gauss):', scaledJac
     CALL abort(__STAMP__,&
       'Scaled Jacobian lower then tolerance in global element:',iElem+offsetElem)
@@ -321,21 +313,11 @@ DO iElem=1,nElems
     END DO; END DO; END DO !i,j,k=0,N
   END IF !crossProductMetrics
 
-
   ! interpolate Metrics from Gauss-Lobatto N onto GaussPoints N
-  IF (ForAMR) THEN
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N1,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-    CALL CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N1,iElem)
-  ELSE 
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
-    CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
-    CALL CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N,iElem)
-  
-  ENDIF
-   
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(1,:,:,:,:),Metrics_fTilde(:,:,:,:,iElem))
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(2,:,:,:,:),Metrics_gTilde(:,:,:,:,iElem))
+  CALL ChangeBasis3D(3,PP_N,PP_N,Vdm_GLN_N,JaGL_N(3,:,:,:,:),Metrics_hTilde(:,:,:,:,iElem))
+  CALL CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N,iElem)
 
 END DO !iElem=1,nElems
 

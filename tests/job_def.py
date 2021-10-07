@@ -1553,7 +1553,11 @@ def job_definition():
                         "FLUXO_BUILD_P4EST"      :"OFF",
                         'FLUXO_JESSE_MORTAR'     :'ON',
                        },
-          'run_opts': {**run_opt_fsp_p4est,     # TODO: This is failing with L_inf = 3.417000016270E-11 > 1.e-11 (is this problematic?)
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       # #**run_opt_fsp_p4est,     # TODO: This is failing with L_inf = 3.417000016270E-11 > 1.e-11 (is this problematic?)
+                       **run_opt_entropyCons_AMR,
+                       **run_opt_entropyStab_AMR,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
