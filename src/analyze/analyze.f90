@@ -40,6 +40,7 @@ END INTERFACE
 
 PUBLIC:: DefineParametersAnalyze
 PUBLIC:: InitAnalyze
+PUBLIC:: InitAnalyzeAfterAdapt
 PUBLIC:: Analyze
 PUBLIC:: FinalizeAnalyze
 !==================================================================================================================================
@@ -293,8 +294,73 @@ END DO; END DO; END DO
 
 END SUBROUTINE InitAnalyzeBasis
 
+!==================================================================================================================================
+!> Re-initializes some variables after AMR
+!==================================================================================================================================
+SUBROUTINE InitAnalyzeAfterAdapt()
+! MODULES
+USE MOD_PreProc
+USE MOD_Globals
+USE MOD_Analyze_Vars
+use MOD_Mesh_Vars,    ONLY: nElems, sJ, nBCs, SurfElem, nSides, AnalyzeSide, Boundarytype
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER:: iElem,i,j,k,iSide,iSurf,iBC
+REAL   :: oldVol, oldSurf(nBCs)
+LOGICAL:: SurfIsWrong(nBCs)
+!==================================================================================================================================
 
+! precompute volume of the domain
+SDEALLOCATE(ElemVol)
+ALLOCATE(ElemVol(nElems))
+ElemVol=0.
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    ElemVol(iElem)=ElemVol(iElem)+wGPVol(i,j,k)/sJ(i,j,k,iElem)
+  END DO; END DO; END DO !i,j,k
+END DO ! iElem
 
+oldVol=Vol
+Vol=SUM(ElemVol) ! This shouldn't change, but we compute it to test if everything is ok
+
+! The surface of the boundaries shoudn't change either, but we recompute it to test if everything is ok
+! compute surface of each boundary
+oldSurf = Surf
+SDEALLOCATE(Surf)
+ALLOCATE(Surf(nBCs))
+Surf=0.
+DO iSide=1,nSides
+  iSurf=AnalyzeSide(iSide)
+  IF(iSurf.EQ.0) CYCLE
+  DO j=0,PP_N; DO i=0,PP_N
+    Surf(iSurf)=Surf(iSurf)+wGPSurf(i,j)*SurfElem(i,j,iSide)
+  END DO; END DO
+END DO
+#if MPI
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,Vol ,1   ,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,iError)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,Surf,nBCs,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,iError)
+#endif /*MPI*/
+
+if (abs(oldVol - Vol) > 1.e-13) then
+  SWRITE(*,*) 'ERROR. The domain is changing size!! (oldVol/newVol): ', oldVol, Vol
+  CALL CollectiveStop(__STAMP__,'Problems in AMR.')
+end if
+
+SurfIsWrong = .FALSE.
+do iBC=1,nBCs
+  IF(Boundarytype(iBC,BC_TYPE) .EQ. 1) CYCLE
+  if (abs(oldSurf(iBC) - Surf(iBC)) > 1.e-13) then
+    SurfIsWrong(iBC) = .TRUE.
+    SWRITE(*,*) 'ERROR. The boundary ', iBC, 'changed size!! (oldSurf/newSurf): ', oldSurf(iBC), Surf(iBC)
+  end if
+end do
+
+if (any(SurfIsWrong)) then
+  CALL CollectiveStop(__STAMP__,'Problems in AMR.')
+end if
+
+END SUBROUTINE InitAnalyzeAfterAdapt
 !==================================================================================================================================
 !> Controls analysis routines and is called at analyze time levels
 !> - calls generic error norm computation

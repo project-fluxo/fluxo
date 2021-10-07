@@ -321,7 +321,7 @@ END FUNCTION CheckP4estFileExist
 SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Globals
   USE MOD_PreProc,            ONLY: PP_N
-  USE MOD_Analyze_Vars,       ONLY: ElemVol
+  USE MOD_Analyze,            ONLY: InitAnalyzeAfterAdapt
   USE MOD_AMR_Vars,           ONLY: P4EST_FORTRAN_DATA, P4est_ptr, UseAMR, FortranData
   USE MOD_Mesh_Vars,          ONLY: Elem_xGP, ElemToSide, SideToElem, Face_xGP, NormVec, TangVec1, TangVec2
   USE MOD_Mesh_Vars,          ONLY: Metrics_fTilde, Metrics_gTilde, Metrics_hTilde,dXGL_N, sJ, SurfElem
@@ -334,7 +334,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
   USE MOD_Equation_Vars,      ONLY: nAuxVar
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
-  USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
+  USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, NGeoRef, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
 #if MPI 
@@ -369,7 +369,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   TYPE(C_PTR) :: DataPtr;
   INTEGER, POINTER :: MInfo(:,:,:), ChangeElem(:,:)
   INTEGER, POINTER :: nBCsF(:)
-  INTEGER :: i,j,k,iElem, nMortarSides, NGeoRef
+  INTEGER :: i,j,k,iElem, nMortarSides
   INTEGER :: nElemsOld, nSidesOld, LastSlaveSideOld, firstSlaveSideOld, firstMortarInnerSideOld
   integer, allocatable :: ElemWasCoarsened(:)
   integer :: max_nElems, min_nElems, sum_nElems
@@ -616,16 +616,11 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     SDEALLOCATE(sJ); ALLOCATE(            sJ(  0:PP_N,0:PP_N,0:PP_N,nElems))
     
     SDEALLOCATE(DetJac_Ref); 
-    NGeoRef=3*NGeo ! build jacobian at higher degree
     ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
     IF (ALLOCATED(dtElem))  THEN
       DEALLOCATE(dtElem); ALLOCATE(dtElem(nElems)); 
     ENDIF
-    
-    IF (ALLOCATED(ElemVol))  THEN 
-      DEALLOCATE(ElemVol); ALLOCATE(ElemVol(nElems)); 
-    ENDIF 
     
 #if ((PP_NodeType==1) & (PP_DiscType==2))
     SDEALLOCATE(Uaux); ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
@@ -779,6 +774,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #if SHOCKCAPTURE
   call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
+  call InitAnalyzeAfterAdapt()
 #if POSITIVITYPRES
   call FinalizePositivityPreservation()
   call InitPositivityPreservation()
