@@ -627,7 +627,7 @@ def job_definition():
    caseID=caseID+1
    jobs['mhd_split_noglm_noncons_nopara_testcase_tgv']={
           'case': caseID ,
-          'tags': ['mhd','split-form','GL','NONCONS','ECflux'] ,
+          'tags': ['mhd','split-form','GL','NONCONS','ECflux','jesse-mortar'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -636,6 +636,7 @@ def job_definition():
                         'FLUXO_PARABOLIC'        :'OFF',
                         'FLUXO_EQN_VOLFLUX'      :'10',
                         'FLUXO_TESTCASE'         :'taylorgreenvortex',
+                        'FLUXO_JESSE_MORTAR'     :'ON',                 # We need Jesse mortars to achieve FSP with LGL+noncons(no GLM)
                        },
           'run_opts': {**run_opt_entropyCons,
                        **run_opt_fsp_conf, 
@@ -742,7 +743,7 @@ def job_definition():
       
       jobs['mhd_split_noglm_noncons_nopara_volflux_'+volflux]={
           'case': caseID ,
-          'tags': ['mhd','split-form','GL','NONCONS'] ,
+          'tags': ['mhd','split-form','GL','NONCONS','jesse-mortar'] ,
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
@@ -1552,11 +1553,7 @@ def job_definition():
                         "FLUXO_BUILD_P4EST"      :"OFF",
                         'FLUXO_JESSE_MORTAR'     :'ON',
                        },
-          'run_opts': {**run_opt_fsp_conf, 
-                       **run_opt_fsp_nonconf_coll,
-                       # #**run_opt_fsp_p4est,     # TODO: This is failing with L_inf = 3.417000016270E-11 > 1.e-11 (is this problematic?)
-                       **run_opt_entropyCons_AMR,
-                       **run_opt_entropyStab_AMR,
+          'run_opts': {**run_opt_fsp_p4est,     # TODO: This is failing with L_inf = 3.417000016270E-11 > 1.e-11 (is this problematic?)
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
