@@ -687,7 +687,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /* PARABOLIC */
     IF (ALLOCATED(AnalyzeSide))  THEN 
         DEALLOCATE(AnalyzeSide); ALLOCATE(AnalyzeSide(1:nSides))
-        AnalyzeSide=0;
+        AnalyzeSide=0
     ENDIF
     DEALLOCATE(U_master)
     ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
@@ -699,7 +699,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     DEALLOCATE(Flux_master)
     ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
   ENDIF !  IF (nSidesOld .NE. nSides) THEN
-
+  
+  ! Re-initialize AnalyzeSide
+  if (FortranData%nBCSides > 0) AnalyzeSide(1:FortranData%nBCSides) = BC
+  
 ! ======================
 ! Recalculate parameters
 ! ======================
