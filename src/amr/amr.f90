@@ -701,6 +701,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   ENDIF !  IF (nSidesOld .NE. nSides) THEN
   
   ! Re-initialize AnalyzeSide
+  if (nSides > 0) AnalyzeSide=0
   if (FortranData%nBCSides > 0) AnalyzeSide(1:FortranData%nBCSides) = BC
   
 ! ======================
