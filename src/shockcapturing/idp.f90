@@ -125,6 +125,9 @@ contains
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
 #endif /*barStates*/
+#if LOCAL_ALPHA
+      IDPneedsUsafe = .TRUE.
+#endif /*LOCAL_ALPHA*/
     end if
     
     if (IDPSemiDiscEnt) then
@@ -659,13 +662,13 @@ contains
         Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
         Pm = Pm*sJ(i,j,k,eID)
         
-        if (Pp==0) then
+        if (Pp==0.0) then
           Qp = 1.0
         else
           Qp = Qp/Pp
         end if
         
-        if (Pm==0) then
+        if (Pm==0.0) then
           Qm = 1.0
         else
           Qm = Qm/Pm
@@ -692,9 +695,6 @@ contains
         ! Density correction
         a = (rho_safe - U(1,i,j,k,eID))
         corr1 = a / FFV_m_FDG(1,i,j,k,eID)
-#if LOCAL_ALPHA
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
         corr = max(corr,corr1)
         
 #endif /*LOCAL_ALPHA*/
@@ -949,6 +949,10 @@ contains
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
+    use MOD_IDP_Vars      , only: Usafe
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ
 #endif /*LOCAL_ALPHA*/
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
@@ -1034,7 +1038,52 @@ contains
         as = (s_min - Get_SpecEntropy(U(:,i,j,k,eID)))
 
         if (as <= max(eps,abs(s_min)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
-      
+        
+#if LOCAL_ALPHA
+        ! Initialization
+        
+        notInIter = .FALSE.
+        corr1 = alpha_loc(i,j,k,eID)
+        
+        ! Find blending coefficient for each neighbor node:
+        ! -------------------------------------------------
+        
+        ! xi-
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                             sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)), & ! Anti-difussive flux in xi-
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        ! xi+
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                            -sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in xi+
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        ! eta-
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                             sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)), & ! Anti-difussive flux in eta-
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        ! eta+
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                            -sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in eta+
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        ! zeta-
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                             sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)), & ! Anti-difussive flux in zeta-
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        ! zeta+
+        call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                                            -sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in zeta+
+                                             s_min,dt,sdt,eps, & ! some constants
+                                             corr1,notInIter)  ! in/out quantities
+        
+        ! Update corr_loc and corr
+        corr_loc(i,j,k) = (corr1 - alpha_loc(i,j,k,eID))*dt
+        corr = max(corr,corr1) 
+        
+#else
         ! Newton initialization:
         U_curr = U(:,i,j,k,eID)
         corr1 = 0.0
@@ -1053,7 +1102,7 @@ contains
           if (alpha(eID) + corr1 * sdt > alpha_maxIDP) then
             corr1 = (alpha_maxIDP - alpha(eID) ) * dt
           end if
-          if (corr1<0) corr1=0.0
+          if (corr1<0.0) corr1=0.0
           
           ! Check relative tolerance
           if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
@@ -1072,9 +1121,13 @@ contains
         if (iter > IDPMaxIter) notInIter =.TRUE.
         
 #if LOCAL_ALPHA
+        ! old version:
         corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
 #endif /*LOCAL_ALPHA*/
         corr = max(corr,corr1) ! Compute the element-wise maximum correction
+        
+#endif /*LOCAL_ALPHA*/
+        
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
@@ -1094,6 +1147,85 @@ contains
     end do !eID
     
   end subroutine IDP_LimitSpecEntropy  
+#if LOCAL_ALPHA
+!===================================================================================================================================
+!> Newton loop for each neighbor node's contribution
+!> ATTENTION: 1) We solve for beta:=1-alpha (to match FCT literature) and then return fluxo's alpha
+!===================================================================================================================================
+  subroutine NewtonLoopNeighbor_SpecEntropy(Usafe,Fan,smin,dt,sdt,eps,alpha,notInIter)
+    use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
+    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
+    implicit none
+    !-arguments----------------------------------------
+    real, intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
+    real, intent(in)    :: Fan  (PP_nVar) ! Mass-matrix-scaled antidiffusive flux with the right sign. Fan := ± sWGP*sJ*(F_DG - F_FV) ... (± must be consistent with the equation update)
+    real, intent(in)    :: smin           ! Goal entropy
+    real, intent(in)    :: dt             ! Time-step size
+    real, intent(in)    :: sdt            ! inverse of time-step size
+    real, intent(in)    :: eps            ! Small value for the entropy deviation
+    real, intent(inout) :: alpha          ! Current (nodal) blending coefficient. Gets updated here.
+    logical, intent(inout) :: notInIter   ! 
+    !-local-variables----------------------------------
+    real, parameter :: gamm = 6.0 ! 2*d, where d is the number of dimensions
+    real :: beta           ! FCT blending coefficient *times dt*. u^{n+1} = uFV^{n+1} + (beta) \sum_i Fan_i
+    real :: beta_old       ! beta from last iteration
+    real :: Ucurr(PP_nVar)
+    real :: dSdbeta        ! ds/d(beta)
+    real :: as
+    real :: new_alpha
+    integer :: iter
+    !--------------------------------------------------
+    
+    ! Compute current FCT blending coef
+    beta = (1.0 - alpha) * dt
+    
+    ! Compute current directional update
+    Ucurr = Usafe + beta * gamm * Fan
+    
+    ! Check entropy of this update
+    as = smin - Get_SpecEntropy(Ucurr)
+    if (as <= max(eps,abs(smin)*NEWTON_ABSTOL)) return ! this Neighbor contribution does NOT need entropy correction   
+      
+    ! Perform Newton iterations
+    NewtonLoopSpec: do iter=1, IDPMaxIter
+      beta_old = beta
+      
+      ! Evaluate dS/d(alpha)
+      dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),Fan)
+      
+      if ( abs(dSdbeta)<eps) exit NewtonLoopSpec ! Nothing to do here!
+      
+      ! Update correction
+      beta = beta + as / dSdbeta
+      if ( (1.0 - beta * sdt) < alpha) beta = (1.0 - alpha) * dt
+      if (beta < 0.0) beta = 0.0
+      
+      ! Check relative tolerance
+      if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit NewtonLoopSpec
+      
+      ! Get new U
+      Ucurr = Usafe + beta * gamm * Fan
+      
+      ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
+      as = smin-Get_SpecEntropy(Ucurr)
+      
+      ! Check absolute tolerance
+      if ( abs(as) < max(eps,abs(smin)*NEWTON_ABSTOL) ) exit NewtonLoopSpec  
+          
+    end do NewtonLoopSpec ! iter
+    
+    new_alpha = 1.0 - beta*sdt
+    if (alpha > new_alpha+eps) then
+      print*, 'WTF... alpha is getting smaller (old/new)', alpha, new_alpha
+      stop
+    else
+      alpha = new_alpha
+    end if
+    
+    if (iter > IDPMaxIter) notInIter = .TRUE.
+    
+  end subroutine NewtonLoopNeighbor_SpecEntropy
+#endif /*LOCAL_ALPHA*/
 !===================================================================================================================================
 !> Mathematical entropy correction (discrete local maximum principle)
 !===================================================================================================================================
