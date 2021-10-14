@@ -1167,7 +1167,7 @@ contains
     logical, intent(inout) :: notInIter   ! 
     !-local-variables----------------------------------
     real, parameter :: gamm = 6.0 ! 2*d, where d is the number of dimensions
-    real :: beta           ! FCT blending coefficient *times dt*. u^{n+1} = uFV^{n+1} + (beta) \sum_i Fan_i
+    real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
     real :: beta_old       ! beta from last iteration
     real :: Ucurr(PP_nVar)
     real :: dSdbeta        ! ds/d(beta)
@@ -1177,34 +1177,39 @@ contains
     !--------------------------------------------------
     
     ! Compute current FCT blending coef
-    beta = (1.0 - alpha) * dt
+    beta = (1.0 - alpha)
     
     ! Compute current directional update
-    Ucurr = Usafe + beta * gamm * Fan
+    Ucurr = Usafe + beta * dt * gamm * Fan
     
     ! Check entropy of this update
     as = smin - Get_SpecEntropy(Ucurr)
     if (as <= max(eps,abs(smin)*NEWTON_ABSTOL)) return ! this Neighbor contribution does NOT need entropy correction   
-      
+    
     ! Perform Newton iterations
     NewtonLoopSpec: do iter=1, IDPMaxIter
       beta_old = beta
       
       ! Evaluate dS/d(alpha)
-      dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),Fan)
+      dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),dt*gamm*Fan)
       
       if ( abs(dSdbeta)<eps) exit NewtonLoopSpec ! Nothing to do here!
       
       ! Update correction
-      beta = beta + as / dSdbeta
-      if ( (1.0 - beta * sdt) < alpha) beta = (1.0 - alpha) * dt
-      if (beta < 0.0) beta = 0.0
+      beta = beta - as / dSdbeta
       
-      ! Check relative tolerance
-      if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit NewtonLoopSpec
+      ! Check bounds
+      if ( (1.0 - beta) < alpha) then
+        beta = (1.0 - alpha)
+      elseif (beta < -eps) then
+        beta = 0.0
+      else
+        ! Check relative tolerance
+        if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit NewtonLoopSpec
+      end if
       
       ! Get new U
-      Ucurr = Usafe + beta * gamm * Fan
+      Ucurr = Usafe + beta *dt * gamm * Fan
       
       ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
       as = smin-Get_SpecEntropy(Ucurr)
@@ -1214,7 +1219,9 @@ contains
           
     end do NewtonLoopSpec ! iter
     
-    new_alpha = 1.0 - beta*sdt
+    if ( (beta<0.0) .and. (beta>=-eps) ) beta = 0.0
+    
+    new_alpha = 1.0 - beta
     if (alpha > new_alpha+eps) then
       print*, 'WTF... alpha is getting smaller (old/new)', alpha, new_alpha
       stop
