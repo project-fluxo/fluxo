@@ -44,6 +44,10 @@ USE MOD_DG_Vars            ,ONLY:U
 USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
 USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem
+#if SHOCK_NFVSE
+USE MOD_TimeDisc_Vars      ,ONLY:FVTimeStep
+USE MOD_NFVSE_Vars         ,ONLY:sWGP
+#endif /*SHOCK_NFVSE*/
 #if PARABOLIC
 USE MOD_Equation_Vars      ,ONLY:KappasPr
 USE MOD_TimeDisc_Vars      ,ONLY:DFLScale
@@ -70,14 +74,18 @@ INTEGER,INTENT(OUT)          :: errType       !< Error code
 ! LOCAL VARIABLES
 INTEGER                      :: i,j,k,iElem
 REAL                         :: sRho,v(3),p,c
-REAL                         :: TimeStepConv, TimeStepVisc,TimeStepViscElem
+REAL                         :: TimeStepConv, TimeStepFV, TimeStepVisc,TimeStepViscElem
 REAL                         :: maxLambda1,maxLambda2,maxLambda3
+REAL                         :: Lambda1,Lambda2,Lambda3
+#if SHOCK_NFVSE
+REAL                         :: TimeStepFVElem
+#endif /*SHOCK_NFVSE*/
 #if PARABOLIC
 REAL                         :: maxLambda_v1,maxLambda_v2,maxLambda_v3
 REAL                         :: muX,KappasPr_max
 #endif /*PARABOLIC*/
 #if MPI
-REAL                         :: buf(3)
+REAL                         :: buf(4)
 #endif /*MPI*/
 !==================================================================================================================================
 errType=0
@@ -87,10 +95,14 @@ KappasPr_max=MAX(4./3.,KappasPr)
 
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
+TimeStepFV  =HUGE(1.)
 DO iElem=1,nElems
   maxLambda1=1.0E-12
   maxLambda2=1.0E-12
   maxLambda3=1.0E-12
+#if SHOCK_NFVSE
+  TimeStepFVElem =-HUGE(1.) ! Initialize inverse of time-step size
+#endif /*SHOCK_NFVSE*/
 #if PARABOLIC
   MaxLambda_v1=1.0E-12  ! Viscous
   MaxLambda_v2=1.0E-12  ! Viscous
@@ -112,12 +124,21 @@ DO iElem=1,nElems
           errType=2
         END IF
         c=SQRT(kappa*p*sRho)
-        MaxLambda1=MAX(MaxLambda1,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_fTilde(:,i,j,k,iElem)*v)) + &
-                        c*SQRT(SUM(Metrics_fTilde(:,i,j,k,iElem)*Metrics_fTilde(:,i,j,k,iElem)))))
-        MaxLambda2=MAX(MaxLambda2,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_gTilde(:,i,j,k,iElem)*v)) + &
-                        c*SQRT(SUM(Metrics_gTilde(:,i,j,k,iElem)*Metrics_gTilde(:,i,j,k,iElem)))))
-        MaxLambda3=MAX(MaxLambda3,sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*v)) + &
-                        c*SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem)))))
+        Lambda1 = sJ(i,j,k,iElem)*(ABS(SUM(Metrics_fTilde(:,i,j,k,iElem)*v)) + &
+                        c*SQRT(SUM(Metrics_fTilde(:,i,j,k,iElem)*Metrics_fTilde(:,i,j,k,iElem))))
+        MaxLambda1=MAX(MaxLambda1,Lambda1)
+        Lambda2 = sJ(i,j,k,iElem)*(ABS(SUM(Metrics_gTilde(:,i,j,k,iElem)*v)) + &
+                        c*SQRT(SUM(Metrics_gTilde(:,i,j,k,iElem)*Metrics_gTilde(:,i,j,k,iElem))))
+        MaxLambda2=MAX(MaxLambda2,Lambda2)
+        Lambda3 = sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*v)) + &
+                        c*SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem))))
+        MaxLambda3=MAX(MaxLambda3,Lambda3)
+#if SHOCK_NFVSE
+        ! first compute the inverse of the time-step
+        TimeStepFVElem = max (TimeStepFVElem,Lambda1 * sWGP(i))
+        TimeStepFVElem = max (TimeStepFVElem,Lambda2 * sWGP(j))
+        TimeStepFVElem = max (TimeStepFVElem,Lambda3 * sWGP(k))
+#endif /*SHOCK_NFVSE*/
 #if PARABOLIC
         ! Viscous Eigenvalues
 #if   PP_VISC == 0
@@ -142,6 +163,17 @@ DO iElem=1,nElems
     ERRWRITE(*,*)'dt_conv=',TimeStepConv,' dt_visc=',TimeStepVisc
     errType=3
   END IF
+#if SHOCK_NFVSE
+  TimeStepFVElem=0.5/TimeStepFVElem
+  TimeStepFV=MIN(TimeStepFV,TimeStepFVElem)
+  dtElem(iElem)=MIN(dtElem(iElem),TimeStepFVElem)
+  IF(IEEE_IS_NAN(TimeStepFV))THEN
+    ERRWRITE(*,'(A,I0,A,I0)')'FV timestep NaN on proc ',myRank,' for element: ', iElem
+    ERRWRITE(*,'(A,3ES16.7)')'Position: Elem_xGP(:1,1,1,iElem)=',Elem_xGP(:,1,1,1,iElem)
+    ERRWRITE(*,*)'dt_FV=',TimeStepFV,' dt_conv=',TimeStepConv,'dt_visc=',TimeStepVisc
+    errType=5
+  END IF
+#endif /*SHOCK_NFVSE*/
 #if PARABOLIC
   TimeStepViscElem= DFLScale*4./(maxLambda_v1+maxLambda_v2+maxLambda_v3)
   TimeStepVisc= MIN(TimeStepVisc, TimeStepViscElem)
@@ -159,14 +191,18 @@ END DO ! iElem=1,nElems
 #if MPI
 buf(1)=TimeStepConv
 buf(2)=TimeStepVisc
-buf(3)=-REAL(errType)
-CALL MPI_ALLREDUCE(MPI_IN_PLACE,buf,3,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
+buf(3)=TimeStepFV
+buf(4)=-REAL(errType)
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,buf,4,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 TimeStepConv=buf(1)
 TimeStepVisc=buf(2)
-errType=NINT(-buf(3))
+TimeStepFV  =buf(3)
+errType=NINT(-buf(4))
 #endif /*MPI*/
-ViscousTimeStep=(TimeStepVisc .LT. TimeStepConv)
-CalcTimeStep=MIN(TimeStepConv,TimeStepVisc)
+ViscousTimeStep= (TimeStepVisc .LT. TimeStepConv) .and. (TimeStepVisc .LT. TimeStepFV)
+FVTimeStep     = (TimeStepFV .LT. TimeStepConv) .and. (TimeStepFV .LT. TimeStepVisc)
+
+CalcTimeStep=MIN(TimeStepConv,TimeStepVisc,TimeStepFV)
 END FUNCTION CALCTIMESTEP
 
 END MODULE MOD_CalcTimeStep

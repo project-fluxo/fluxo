@@ -53,7 +53,8 @@ INTEGER          :: maxWCT                    !< Maximum wall-clock time, only c
 LOGICAL          :: fullBoundaryOrder=.FALSE. !< temporal order degradation, occuring for
                                               !< time-dependant BCs, can easily be fixed when
                                               !< using 3 stage 3rd order RK schemes (no others!)
-LOGICAL          :: ViscousTimeStep=.FALSE.   !< Info wether we have convection of viscous dominated timestep
+LOGICAL          :: ViscousTimeStep=.FALSE.   !< Info wether we have a viscous dominated timestep
+LOGICAL          :: FVTimeStep=.FALSE.        !< Info wether we have a FV dominated timestep
 LOGICAL          :: TimediscInitIsDone=.FALSE.!< Indicate wheter InitTimeDisc routine has been run
 
 !----------------------------------------------------------------------------------------------------------------------------------

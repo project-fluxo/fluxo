@@ -261,6 +261,7 @@ IF(MPIroot)THEN
   WRITE(UNIT_StdOut,'(132("-"))')
   WRITE(UNIT_StdOut,'(A,ES16.7)')'Initial Timestep  : ', dt
   IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
+  IF(FVTimeStep) WRITE(UNIT_StdOut,'(A)')' FV timestep dominates! '
   WRITE(UNIT_StdOut,*)'CALCULATION RUNNING...'
 END IF ! MPIroot
 
@@ -398,6 +399,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
       WRITE(UNIT_stdOut,'(A,ES12.5,A,I4)')' CALCULATION TIME PER TSTEP/DOF: [',PID,' sec ], nRKstages:',nRKstages
       WRITE(UNIT_StdOut,'(A,ES16.7)')' Timestep   : ',dt_Min
       IF(ViscousTimeStep) WRITE(UNIT_StdOut,'(A)')' Viscous timestep dominates! '
+      IF(FVTimeStep) WRITE(UNIT_StdOut,'(A)')' FV timestep dominates! '
       WRITE(UNIT_stdOut,'(A,ES16.7)')'#Timesteps   : ',REAL(iter)
     END IF !MPIroot
     
