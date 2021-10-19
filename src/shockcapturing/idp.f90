@@ -155,7 +155,6 @@ contains
     ! Solution in the previous step (with external DOFs)
     if (IDPneedsUprev) then
       allocate ( Uprev      (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-      Uprev = 0.0
     end if
     
     ! Container for external Uprev
@@ -445,6 +444,7 @@ contains
 !   Get Usafe for each point and check validity
 !   *******************************************
     if (IDPneedsUsafe) then
+      
       do eID=1, nElems
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           
@@ -453,6 +453,7 @@ contains
           
           ! Check if this is a valid state
           call Get_Pressure(Usafe(:,i,j,k,eID),p_safe(i,j,k,eID))
+          
           if (p_safe(i,j,k,eID) < 0.) then
             print*, 'ERROR: safe pressure not safe el=', eID+offsetElem, p_safe(i,j,k,eID)
             stop
@@ -464,6 +465,7 @@ contains
         end do       ; end do       ; end do ! i,j,k
         
       end do !eID
+      
     end if
     
 #if !(barStates)
@@ -531,7 +533,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ
+    use MOD_Mesh_Vars     , only: sJ, offsetElem
     use MOD_IDP_Vars      , only: Usafe
 #endif /*LOCAL_ALPHA*/
 #if barStates
@@ -551,7 +553,7 @@ contains
 #if LOCAL_ALPHA
     real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
-    real    :: rho_min, rho_max, rho_safe
+    real    :: rho_min(0:PP_N,0:PP_N,0:PP_N), rho_max(0:PP_N,0:PP_N,0:PP_N), rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qp, Qm, Pp, Pm
     integer :: eID
@@ -571,47 +573,47 @@ contains
           
         ! Get the limit states
         !*********************
-        rho_min =  huge(1.0)
-        rho_max = -huge(1.0)
+        rho_min(i,j,k) =  huge(1.0)
+        rho_max(i,j,k) = -huge(1.0)
         
 #if barStates
         ! Previous sol
-        rho_min = min(rho_min, Uprev  (1,i  ,j  ,k  ,eID))
-        rho_max = max(rho_max, Uprev  (1,i  ,j  ,k  ,eID))
+        rho_min(i,j,k) = min(rho_min(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
+        rho_max(i,j,k) = max(rho_max(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
         
         !xi
-        do l=i-1, i
-          rho_min = min(rho_min, Ubar_xi  (1,l  ,j  ,k  ,eID))
-          rho_max = max(rho_max, Ubar_xi  (1,l  ,j  ,k  ,eID))
+        do l=i-1, i !min(i-1,0), max(i,PP_N-1)
+          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_xi  (1,l  ,j  ,k  ,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_xi  (1,l  ,j  ,k  ,eID))
         end do
         !eta
-        do l=j-1, j
-          rho_min = min(rho_min, Ubar_eta (1,i  ,l  ,k  ,eID))
-          rho_max = max(rho_max, Ubar_eta (1,i  ,l  ,k  ,eID))
+        do l=j-1, j !l=max(j-1,0), min(j,PP_N-1)
+          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
         end do
         !zeta
-        do l=k-1, k
-          rho_min = min(rho_min, Ubar_zeta(1,i  ,j  ,l  ,eID))
-          rho_max = max(rho_max, Ubar_zeta(1,i  ,j  ,l  ,eID))
+        do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
+          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
         end do
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          rho_min = min(rho_min, Usafe(1,l,j,k,eID))
-          rho_max = max(rho_max, Usafe(1,l,j,k,eID))
+          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,l,j,k,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,l,j,k,eID))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          rho_min = min(rho_min, Usafe(1,i,l,k,eID))
-          rho_max = max(rho_max, Usafe(1,i,l,k,eID))
+          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,i,l,k,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,i,l,k,eID))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          rho_min = min(rho_min, Usafe(1,i,j,l,eID))
-          rho_max = max(rho_max, Usafe(1,i,j,l,eID))
+          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,i,j,l,eID))
+          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,i,j,l,eID))
         end do
 #endif /*barStates*/
         
@@ -619,27 +621,26 @@ contains
         ! Real Zalesak type limiter
         ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
         ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
+        ! ATTENTION: corr is dalpha*dt
         !****************************************************************************************************************
-        if ( (U(1,i,j,k,eID) >= rho_min) .and. (U(1,i,j,k,eID) <= rho_max) ) cycle
+        if ( (U(1,i,j,k,eID) >= rho_min(i,j,k)) .and. (U(1,i,j,k,eID) <= rho_max(i,j,k)) ) cycle
         
         ! Upper/lower bounds for admissible increments
-        Qp = max(0.0,(rho_max-Usafe(1,i,j,k,eID))*sdt)
-        Qm = min(0.0,(rho_min-Usafe(1,i,j,k,eID))*sdt)
+        Qp = max(0.0,(rho_max(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
+        Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         
         ! Check the sign of Qp and Qm... !!!
         if (Qp < 0) then
-          print*, '0>Qp=', Qp, i, j, k, eID
-          print*, 'rho_max', rho_max
+          print*, 'Usafe is not within bounds: 0>Qp=', Qp, i, j, k, eID+offsetElem
+          print*, 'rho_max', rho_max(i,j,k)
           print*, 'rho_saf', Usafe(1,i,j,k,eID)
-          read(*,*)
-!          stop 
+          stop 
         end if
         if (Qm > 0)  then
-          print*, '0<Qm=', Qm, i, j, k, eID
-          print*, 'rho_min', rho_min
+          print*, 'Usafe is not within bounds: 0<Qm=', Qm, i, j, k, eID+offsetElem
+          print*, 'rho_min', rho_min(i,j,k)
           print*, 'rho_saf', Usafe(1,i,j,k,eID)
-          read(*,*)
-!          stop
+          stop
         end if
         
         ! Positive contributions
@@ -674,23 +675,24 @@ contains
           Qm = Qm/Pm
         end if
         
-        corr1 = 1.0 - min(1.0,Qp,Qm)
+        ! Compute corr as: dt*[(needed_alpha) - current_alpha] = dt*[(1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)]
+        corr1 = dt*(1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID))
         
         corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
         corr = max(corr,corr1)
         
 #else
-        ! Naive limiter that gets out of bounds
-        !********************************************
-        if ( U(1,i,j,k,eID) < rho_min) then
-          rho_safe = rho_min
-        elseif (U(1,i,j,k,eID) > rho_max) then
-          rho_safe = rho_max
+        ! Simple element-wise limiter
+        !****************************
+        if ( U(1,i,j,k,eID) < rho_min(i,j,k)) then
+          rho_safe = rho_min(i,j,k)
+        elseif (U(1,i,j,k,eID) > rho_max(i,j,k)) then
+          rho_safe = rho_max(i,j,k)
         else
-          cycle
+          cycle !nothing to do here!
         end if
         
-        if ( abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle !nothing to do here!
+        if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
         
         ! Density correction
         a = (rho_safe - U(1,i,j,k,eID))
@@ -700,7 +702,7 @@ contains
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
-      
+
 !       Do the correction if needed
 !       ---------------------------
       
@@ -712,6 +714,20 @@ contains
                                                               dt,sdt,eID)
       end if
       
+!     Check bounds in debug mode
+!     ---------------------------
+#if DEBUG
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        if (U(1,i,j,k,eID)<rho_min(i,j,k)-1.e-12) then
+          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k,eID), rho_min(i,j,k)
+          stop
+        end if
+        if (U(1,i,j,k,eID)>rho_max(i,j,k)+1.e-12) then
+          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k,eID), rho_max(i,j,k)
+          stop
+        end if
+      end do       ; end do       ; end do ! i,j,k
+#endif /* DEBUG */
     end do !eID
     
   end subroutine IDP_LimitDensityTVD
