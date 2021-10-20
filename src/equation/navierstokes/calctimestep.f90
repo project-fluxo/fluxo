@@ -43,9 +43,8 @@ USE MOD_PreProc
 USE MOD_DG_Vars            ,ONLY:U
 USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
-USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem
+USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem, FVTimeStep
 #if SHOCK_NFVSE
-USE MOD_TimeDisc_Vars      ,ONLY:FVTimeStep
 USE MOD_NFVSE_Vars         ,ONLY:sWGP
 #endif /*SHOCK_NFVSE*/
 #if PARABOLIC
@@ -135,9 +134,7 @@ DO iElem=1,nElems
         MaxLambda3=MAX(MaxLambda3,Lambda3)
 #if SHOCK_NFVSE
         ! first compute the inverse of the time-step
-        TimeStepFVElem = max (TimeStepFVElem,Lambda1 * sWGP(i))
-        TimeStepFVElem = max (TimeStepFVElem,Lambda2 * sWGP(j))
-        TimeStepFVElem = max (TimeStepFVElem,Lambda3 * sWGP(k))
+        TimeStepFVElem = max (TimeStepFVElem,Lambda1 * sWGP(i),Lambda2 * sWGP(j),Lambda3 * sWGP(k)) ! Subcell-local approximation of low-order CFL condition
 #endif /*SHOCK_NFVSE*/
 #if PARABOLIC
         ! Viscous Eigenvalues

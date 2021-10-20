@@ -207,7 +207,7 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 
-! Do first RK stage of first timestep to fill gradients
+! Do first evaluation of the time derivative to fill gradients
 dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
 
@@ -250,7 +250,7 @@ dt=CALCTIMESTEP(errType)
 nCalcTimestep=0
 dt_MinOld=-999.
 IF(errType.NE.0) CALL abort(__STAMP__,&
-  'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
+  'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN. Type/time:',errType,t)
 
 ! Run initial analyze
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -287,7 +287,7 @@ CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 #endif /*USE_AMR*/
 
-IF(nCalcTimestepMax.EQ.1)THEN
+  IF(nCalcTimestepMax.EQ.1)THEN
     dt_Min=CALCTIMESTEP(errType)
   ELSE
     ! be careful, this is using an estimator, when to recompute the timestep
@@ -301,7 +301,7 @@ IF(nCalcTimestepMax.EQ.1)THEN
   IF(errType.NE.0)THEN !error in time step computation
     CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
     CALL abort(__STAMP__,&
-   'Error: (1) density, (2) convective / (3) viscous timestep is NaN. Type/time:',errType,t)
+   'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN.',errType,t)
   END IF
 
   dt=dt_Min
