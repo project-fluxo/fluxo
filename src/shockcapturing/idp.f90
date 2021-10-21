@@ -38,7 +38,6 @@ contains
 !   --------------------------
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
-    call prms%CreateLogicalOption("IDPSemiDiscEnt",  " IDP correction on semi-discrete entropy balance?", "F")
     call prms%CreateLogicalOption( "IDPDensityTVD",  " IDP(TVD) correction on density? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
@@ -76,12 +75,8 @@ contains
     IDPDensityTVD  = GETLOGICAL('IDPDensityTVD' ,'F')
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
-    IDPSemiDiscEnt = GETLOGICAL('IDPSemiDiscEnt','F')
     
     ! Consistency check
-#if !defined(LOCAL_ALPHA)
-    if (IDPSemiDiscEnt) stop 'IDPSemiDiscEnt needs LOCAL_ALPHA'
-#endif
     if (IDPMathEntropy .and. IDPSpecEntropy) then
       stop 'Only one of the two can be selected: IDPMathEntropy/IDPSpecEntropy'
     end if
@@ -130,12 +125,6 @@ contains
 #endif /*LOCAL_ALPHA*/
     end if
     
-    if (IDPSemiDiscEnt) then
-      IDPneedsUprev     = .TRUE.
-      IDPneedsUprev_ext = .TRUE.
-    end if
-    
-    
 !   Allocate storage
 !   ----------------
     ! Alpha before limiting
@@ -181,9 +170,6 @@ contains
       allocate( Usafe_ext    (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
     end if
 #endif /*barStates*/
-    if (IDPSemiDiscEnt) then
-      allocate( Flux_ext     (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
-    end if
     
     ! Variables for local alpha
 #if LOCAL_ALPHA
@@ -200,13 +186,6 @@ contains
     ftilde_DG = 0.0
     gtilde_DG = 0.0
     htilde_DG = 0.0
-    
-    allocate ( rf_DG(-1:PP_N, 0:PP_N, 0:PP_N,1:nElems) )
-    allocate ( rg_DG( 0:PP_N,-1:PP_N, 0:PP_N,1:nElems) )
-    allocate ( rh_DG( 0:PP_N, 0:PP_N,-1:PP_N,1:nElems) )
-    rf_DG = 0.0
-    rg_DG = 0.0
-    rh_DG = 0.0
 #endif /*LOCAL_ALPHA*/
     
     ! Stencil for bounds
@@ -258,7 +237,7 @@ contains
     use MOD_Analyze_Vars, only: wGPVol
     use MOD_Mesh_Vars   , only: nElems, sJ
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPSemiDiscEnt, IDPPositivity
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -281,7 +260,6 @@ contains
     
 !   Perform limiting!
 !   -----------------
-    if (IDPSemiDiscEnt) call IDP_LimitSemiDiscEnt(U,Ut,dt,sdt)
     if (IDPDensityTVD)  call IDP_LimitDensityTVD (U,Ut,dt,sdt)
     if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U,Ut,dt,sdt)
     if (IDPMathEntropy) call IDP_LimitMathEntropy(U,Ut,dt,sdt)
@@ -732,232 +710,6 @@ contains
     end do !eID
     
   end subroutine IDP_LimitDensityTVD
-!===================================================================================================================================
-!> Semi-discrete entropy correction
-!> ATTENTION: 1) Needs debugging
-!>            2) Does not work with MPI
-!>            3) TODO: Check if the subcell limiting is valid
-!>            4) Only works for local alpha and disc2
-!===================================================================================================================================
-  subroutine IDP_LimitSemiDiscEnt(U,Ut,dt,sdt)
-    use MOD_PreProc       , only: PP_N
-    use MOD_Mesh_Vars     , only: nElems
-#if LOCAL_ALPHA
-    use MOD_NFVSE_Vars    , only: alpha
-#if LOCAL_ALPHA
-    use MOD_NFVSE_Vars    , only: alpha_loc
-#endif /*LOCAL_ALPHA*/
-    use MOD_Equation_Vars , only: ConsToEntropy, GetEntropyPot
-    use MOD_IDP_Vars      , only: Flux_ext, Uprev
-    use MOD_Globals       , only: nProcessors
-    use MOD_NFVSE_MPI     , only: Get_externalU
-    use MOD_DG_Vars       , only: Flux_master, Flux_slave
-    use MOD_NFVSE_Vars    , only: SubCellMetrics
-#if LOCAL_ALPHA
-    use MOD_NFVSE_Vars    , only: rf_DG, rg_DG, rh_DG, ftilde_FV, gtilde_FV, htilde_FV
-#endif /*LOCAL_ALPHA*/
-#endif /*LOCAL_ALPHA*/
-    implicit none
-    !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
-    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
-    real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
-    !-local-variables----------------------------------------
-    real    :: corr, corr1
-#if LOCAL_ALPHA
-    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-#endif /*LOCAL_ALPHA*/
-    integer :: eID
-    integer :: i,j,k
-    
-    real :: Ent_Jump(PP_nVar), Psi_Jump, r, rFV
-    real :: entVar(PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-    real :: entPot(3      ,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-    
-    real :: rf_FV(-1:PP_N, 0:PP_N, 0:PP_N)
-    real :: rg_FV( 0:PP_N,-1:PP_N, 0:PP_N)
-    real :: rh_FV( 0:PP_N, 0:PP_N,-1:PP_N)
-    
-    real, parameter :: eps = 1.e-10           ! Very small value
-    !--------------------------------------------------------
-    
-!   Some definitions
-!   ****************
-    rf_FV = 0.0
-    rg_FV = 0.0
-    rh_FV = 0.0
-    
-#if LOCAL_ALPHA
-    ! ATTENTION: 1) we are supposing that alpha=0 before limiting
-    
-    ! Get the boundary entropy production (same for FV and DG)
-    ! ********************************************************
-    
-    
-    ! TODO: Send the F_master across MPI interfaces
-#if MPI
-    if (nProcessors > 1) then
-      stop 'IDPSemiDiscEnt not working in parallel.. Send Flux_master!!'
-    end if
-#endif /*MPI*/
-    
-    ! Get the external fluxes in place (only working without BCs!!! TODO..)
-    call Get_externalU(PP_nVar,Flux_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),Flux_master,Flux_slave,fluxSign=.TRUE.)
-    
-    do eID=1, nElems
-      
-      ! Get entropy vars and potential
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        entVar(:,i,j,k) = ConsToEntropy(Uprev(:,i,j,k,eID))
-        entPot(:,i,j,k) = GetEntropyPot(Uprev(:,i,j,k,eID),entVar(:,i,j,k))
-      end do       ; end do       ; end do !i,j,k
-      
-      ! Get entropy vars and potential (boundaries)
-      do k=0, PP_N ; do j=0, PP_N
-        !xi-
-        entVar(:,-1,j,k) = ConsToEntropy(Uprev(:,-1,j,k,eID))
-        entPot(:,-1,j,k) = GetEntropyPot(Uprev(:,-1,j,k,eID),entVar(:,-1,j,k))
-        !xi+
-        entVar(:,PP_N+1,j,k) = ConsToEntropy(Uprev(:,PP_N+1,j,k,eID))
-        entPot(:,PP_N+1,j,k) = GetEntropyPot(Uprev(:,PP_N+1,j,k,eID),entVar(:,PP_N+1,j,k))
-        !eta-
-        entVar(:,j,-1,k) = ConsToEntropy(Uprev(:,j,-1,k,eID))
-        entPot(:,j,-1,k) = GetEntropyPot(Uprev(:,j,-1,k,eID),entVar(:,j,-1,k))
-        !eta+
-        entVar(:,j,PP_N+1,k) = ConsToEntropy(Uprev(:,j,PP_N+1,k,eID))
-        entPot(:,j,PP_N+1,k) = GetEntropyPot(Uprev(:,j,PP_N+1,k,eID),entVar(:,j,PP_N+1,k))
-        !zeta-
-        entVar(:,j,k,-1) = ConsToEntropy(Uprev(:,j,k,-1,eID))
-        entPot(:,j,k,-1) = GetEntropyPot(Uprev(:,j,k,-1,eID),entVar(:,j,k,-1))
-        !zeta+
-        entVar(:,j,k,PP_N+1) = ConsToEntropy(Uprev(:,j,k,PP_N+1,eID))
-        entPot(:,j,k,PP_N+1) = GetEntropyPot(Uprev(:,j,k,PP_N+1,eID),entVar(:,j,k,PP_N+1))
-      end do          ; end do !j,k
-      
-      ! Compute boundary entropy production
-      ! -----------------------------------
-      do k=0, PP_N  ; do j=0, PP_N
-        !xi- (minus flux)
-        Ent_Jump = entVar(:,0,j,k) - entVar(:,-1,j,k)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,-1  )*SubCellMetrics(eID) % xi % norm(j,k,-1  ), entPot(:,0     ,j,k) - entPot(:,-1  ,j,k) )
-        rf_DG(-1,j,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,5,eID)) - Psi_Jump
-        rf_FV(-1,j,k)     = rf_DG(-1,j,k,eID)
-        !xi+
-        Ent_Jump = entVar(:,PP_N+1,j,k) - entVar(:,PP_N,j,k)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,PP_N)*SubCellMetrics(eID) % xi % norm(j,k,PP_N), entPot(:,PP_N+1,j,k) - entPot(:,PP_N,j,k) )
-        rf_DG(PP_N,j,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,3,eID)) - Psi_Jump
-        rf_FV(PP_N,j,k)     = rf_DG(PP_N,j,k,eID)
-        !eta- (minus flux)
-        Ent_Jump = entVar(:,j,0,k) - entVar(:,j,-1,k)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,-1  )*SubCellMetrics(eID) % eta % norm(j,k,-1  ), entPot(:,j,0     ,k) - entPot(:,j,-1  ,k) )
-        rg_DG(j,-1,k,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,2,eID)) - Psi_Jump
-        rg_FV(j,-1,k)     = rg_DG(j,-1,k,eID)
-        !eta+
-        Ent_Jump = entVar(:,j,PP_N+1,k) - entVar(:,j,PP_N,k)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % eta % norm(j,k,PP_N), entPot(:,j,PP_N+1,k) - entPot(:,j,PP_N,k) )
-        rg_DG(j,PP_N,k,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,4,eID)) - Psi_Jump
-        rg_FV(j,PP_N,k)     = rg_DG(j,PP_N,k,eID)
-        !zeta- (minus flux)
-        Ent_Jump = entVar(:,j,k,0) - entVar(:,j,k,-1)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,-1  )*SubCellMetrics(eID) % zeta % norm(j,k,-1  ), entPot(:,j,k,0     ) - entPot(:,j,k,-1  ) )
-        rh_DG(j,k,-1,eID) = -dot_product(Ent_Jump,Flux_ext(:,j,k,1,eID)) - Psi_Jump
-        rh_FV(j,k,-1)     = rh_DG(j,k,-1,eID)
-        !zeta+
-        Ent_Jump = entVar(:,j,k,PP_N+1) - entVar(:,j,k,PP_N)
-        Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,j,k,PP_N)*SubCellMetrics(eID) % zeta % norm(j,k,PP_N), entPot(:,j,k,PP_N+1) - entPot(:,j,k,PP_N) )
-        rh_DG(j,k,PP_N,eID) = dot_product(Ent_Jump,Flux_ext(:,j,k,6,eID)) - Psi_Jump
-        rh_FV(j,k,PP_N)     = rh_DG(j,k,PP_N,eID)
-      end do        ; end do
-      
-      ! compute entropy production of FV
-      ! --------------------------------
-      !xi
-      do i=0, PP_N-1
-        do k=0, PP_N ; do j=0, PP_N
-          ! Jumps
-          Ent_Jump = entVar(:,i+1,j,k) - entVar(:,i,j,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % xi % nv(:,j,k,i)*SubCellMetrics(eID) % xi % norm(j,k,i), entPot(:,i+1,j,k) - entPot(:,i,j,k) )
-          ! Compute entropy production
-          rf_FV(i,j,k) = dot_product(Ent_Jump, ftilde_FV(:,i,j,k,eID)) - Psi_Jump
-        end do       ; end do !j,k
-      end do !i
-      !Eta
-      do j=0, PP_N-1
-        do k=0, PP_N ; do i=0, PP_N
-          ! Jumps
-          Ent_Jump = entVar(:,i,j+1,k) - entVar(:,i,j,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % eta % nv(:,i,k,j)*SubCellMetrics(eID) % eta % norm(i,k,j), entPot(:,i,j+1,k) - entPot(:,i,j,k) )
-          ! Compute entropy production
-          rg_FV(i,j,k) = dot_product(Ent_Jump, gtilde_FV(:,i,j,k,eID)) - Psi_Jump
-        end do       ; end do !j,k
-      end do !i
-      !Zeta
-      do k=0, PP_N-1
-        do j=0, PP_N ; do i=0, PP_N
-          ! Jumps
-          Ent_Jump = entVar(:,i,j,k+1) - entVar(:,i,j,k)
-          Psi_Jump = dot_product(SubCellMetrics(eID) % zeta % nv(:,i,j,k)*SubCellMetrics(eID) % zeta % norm(i,j,k), entPot(:,i,j,k+1) - entPot(:,i,j,k) )
-          ! Compute entropy production
-          rh_FV(i,j,k) = dot_product(Ent_Jump, htilde_FV(:,i,j,k,eID)) - Psi_Jump
-        end do       ; end do !j,k
-      end do !i
-      
-      ! Get corr factors!!!!
-      corr = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      corr_loc = 0.0
-#endif /*LOCAL_ALPHA*/
-
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        
-        ! Get the total DG production
-        !****************************
-        r = rf_DG(i,j,k,eID) + rf_DG(i-1,j,k,eID) + &
-            rg_DG(i,j,k,eID) + rg_DG(i,j-1,k,eID) + &
-            rh_DG(i,j,k,eID) + rh_DG(i,j,k-1,eID) 
-        
-        if (r < eps) cycle
-        
-        rFV = rf_FV(i,j,k) + rf_FV(i-1,j,k) + &
-              rg_FV(i,j,k) + rg_FV(i,j-1,k) + &
-              rh_FV(i,j,k) + rh_FV(i,j,k-1) 
-        
-        if (rFV > eps) then
-          print*, 'WARNING: Low-order method is not entropy dissipative!!', eID, i,j,k
-          stop
-        end if
-        
-        rFV = r - rFV
-        if (abs(rFV) < eps) cycle !nothing to do here
-        
-        ! correction
-        corr1 = r*dt/rFV
-#if LOCAL_ALPHA
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
-        corr = max(corr,corr1)
-        
-      end do       ; end do       ; end do ! i,j,k
-      
-!       Do the correction if needed
-!       ---------------------------
-      
-      if ( corr > 0. ) then
-        ! TODO: Check if this holds at the ubcell level
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
-      end if
-      
-    end do !nElems
-#else
-    stop 'IDPSemiDiscEnt only for local alpha'
-#endif /*LOCAL_ALPHA*/
-    
-  end subroutine IDP_LimitSemiDiscEnt
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
 !===================================================================================================================================
@@ -1739,7 +1491,6 @@ contains
     SDEALLOCATE( EntPrev_master)
     SDEALLOCATE( EntPrev_slave )
     SDEALLOCATE( EntPrev_ext   )
-    SDEALLOCATE( Flux_ext  )
     SDEALLOCATE( Ubar_xi  )
     SDEALLOCATE( Ubar_eta  )
     SDEALLOCATE( Ubar_zeta  )
@@ -1752,9 +1503,6 @@ contains
     SDEALLOCATE ( ftilde_DG )
     SDEALLOCATE ( gtilde_DG )
     SDEALLOCATE ( htilde_DG )
-    SDEALLOCATE ( rf_DG )
-    SDEALLOCATE ( rg_DG )
-    SDEALLOCATE ( rh_DG )
 #endif /*LOCAL_ALPHA*/
     
   end subroutine Finalize_IDP

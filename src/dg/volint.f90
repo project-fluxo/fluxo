@@ -195,8 +195,7 @@ USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
 USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
 #if LOCAL_ALPHA
-use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, rf_DG, rg_DG, rh_DG
-use MOD_IDP_Vars  , only: IDPSemiDiscEnt
+use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, sWGP
 use MOD_Interpolation_Vars , only: wGP
 USE MOD_DG_Vars   ,ONLY:D
 use MOD_Equation_Vars      , only: ConsToEntropy, GetEntropyPot
@@ -223,9 +222,6 @@ INTEGER                                           :: i,j,k,l,m,iElem
 ftilde_DG=0.0
 htilde_DG=0.0
 gtilde_DG=0.0
-rf_DG = 0.0
-rg_DG = 0.0
-rh_DG = 0.0
 #endif /*LOCAL_ALPHA*/
 
 DO iElem=1,nElems
@@ -251,59 +247,24 @@ DO iElem=1,nElems
         htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
       end do
     end do
-      
-    ! Entropy production
-    ! ******************
-    if (IDPSemiDiscEnt) then
-    
-      ! Get entropy vars and potential
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        entVar(:,i,j,k) = ConsToEntropy(U(:,i,j,k,iElem))
-        entPot(:,i,j,k) = GetEntropyPot(U(:,i,j,k,iElem),entVar(:,i,j,k))
-      end do       ; end do       ; end do !i,j,k
-      
-      ! Get the production terms
-      do j=0, PP_N-1
-        ! new
-        rf_DG(j,:,:,iElem) = rf_DG(j-1,:,:,iElem)  ! TODO: Should I have a minus sign here?
-        rg_DG(:,j,:,iElem) = rg_DG(:,j-1,:,iElem)
-        rh_DG(:,:,j,iElem) = rh_DG(:,:,j-1,iElem)
-        do i=0, PP_N
-          do m=0, PP_N ; do l=0, PP_N
-            rf_DG(j,l,m,iElem) = rf_DG(j,l,m,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,i,l,m)-entVar(:,j,l,m),ftilde(:,i,j,l,m)) - 0.5*dot_product(metrics_fTilde(:,i,l,m,iElem)+metrics_fTilde(:,j,l,m,iElem),entPot(:,i,l,m)-entPot(:,j,l,m)) )
-            rg_DG(l,j,m,iElem) = rg_DG(l,j,m,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,l,i,m)-entVar(:,l,j,m),gtilde(:,i,l,j,m)) - 0.5*dot_product(metrics_gTilde(:,l,i,m,iElem)+metrics_gTilde(:,l,j,m,iElem),entPot(:,l,i,m)-entPot(:,l,j,m)) )
-            rh_DG(l,m,j,iElem) = rh_DG(l,m,j,iElem) + wGP(j)*Dvolsurf_T(i,j) * (dot_product(entVar(:,l,m,i)-entVar(:,l,m,j),htilde(:,i,l,m,j)) - 0.5*dot_product(metrics_hTilde(:,l,m,i,iElem)+metrics_hTilde(:,l,m,j,iElem),entPot(:,l,m,i)-entPot(:,l,m,j)) )
-          end do       ; end do
-        end do
-!        !<<some debugging:
-!        if (any((rf_DG(j,:,:,iElem))>1.e-14)) then
-!          print*, iElem, j, 'rf'
-!          print*, rf_DG(j,:,:,iElem)
-!          read(*,*)
-!        end if
-!        if (any((rg_DG(:,j,:,iElem))>1.e-14)) then
-!          print*, iElem, j, 'rg'
-!          print*, rg_DG(:,j,:,iElem)
-!          read(*,*)
-!        end if
-!        if (any((rh_DG(:,:,j,iElem))>1.e-14)) then
-!          print*, iElem, j, 'rh'
-!          print*, rh_DG(:,:,j,iElem)
-!          read(*,*)
-!        end if
-!        !some debugging>>
-      end do
-    end if
 #endif /*LOCAL_ALPHA*/
   
   !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    
+#if LOCAL_ALPHA
+    Ut(:,i,j,k,iElem) =  sWGP(i) * ( ftilde_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j  ,k  ,iElem) ) &
+                       + sWGP(j) * ( gtilde_DG(:,i,j,k,iElem) - gtilde_DG(:,i  ,j-1,k  ,iElem) ) &
+                       + sWGP(k) * ( htilde_DG(:,i,j,k,iElem) - htilde_DG(:,i  ,j  ,k-1,iElem) )
+#else
     DO l=0,PP_N
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*ftilde(:,l,i,j,k)  &
                                             + Dvolsurf_T(l,j)*gtilde(:,l,i,j,k)  &
                                             + Dvolsurf_T(l,k)*htilde(:,l,i,j,k)
     END DO ! l
+#endif /*LOCAL_ALPHA*/
+    
   END DO; END DO; END DO ! i,j,k
   
 END DO ! iElem

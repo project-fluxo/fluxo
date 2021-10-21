@@ -6,7 +6,6 @@ module MOD_IDP_Vars
   ! IDP methods:
   logical           :: IDPMathEntropy = .FALSE.
   logical           :: IDPSpecEntropy = .FALSE.
-  logical           :: IDPSemiDiscEnt = .FALSE.
   logical           :: IDPPositivity  = .FALSE.
   logical           :: IDPDensityTVD  = .FALSE.
   
@@ -38,8 +37,6 @@ module MOD_IDP_Vars
   real,allocatable    :: Usafe         (:,:,:,:,:)
   real,allocatable    :: p_safe          (:,:,:,:)
   real,allocatable    :: Usafe_ext     (:,:,:,:,:)
-  
-  real,allocatable    :: Flux_ext      (:,:,:,:,:)
   
   real,allocatable    :: EntPrev       (:,:,:,:,:)
   real,allocatable    :: EntPrev_master(:,:,:,:)
