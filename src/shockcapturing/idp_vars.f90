@@ -26,7 +26,7 @@ module MOD_IDP_Vars
   ! Parameters:
   real, parameter :: alpha_maxIDP  = 1.0
   real, parameter :: NEWTON_RELTOL = 1.e-12 ! Relative tolerance to exit Newton loop
-  real, parameter :: NEWTON_ABSTOL = 1.e-8  ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
+  real, parameter :: NEWTON_ABSTOL = 1.e-14 ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
   
   ! Containers
   real,allocatable    :: FFV_m_FDG(:,:,:,:,:)

@@ -621,9 +621,10 @@ contains
         ! Real Zalesak type limiter
         ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
         ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
-        ! ATTENTION: corr is dalpha*dt
+        ! ATTENTION: 1) corr is dalpha*dt
+        !            2) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
+        !               for each interface, not each node
         !****************************************************************************************************************
-        if ( (U(1,i,j,k,eID) >= rho_min(i,j,k)) .and. (U(1,i,j,k,eID) <= rho_max(i,j,k)) ) cycle
         
         ! Upper/lower bounds for admissible increments
         Qp = max(0.0,(rho_max(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
@@ -991,12 +992,12 @@ contains
 #if LOCAL_ALPHA
     real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
-    real    :: s_min, as, U_curr(PP_nVar), dSdalpha
+    real    :: s_min(0:PP_N,0:PP_N,0:PP_N), as, U_curr(PP_nVar), dSdalpha
     integer :: eID
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
-    real, parameter :: eps = 1.e-10           ! Very small value
+    real, parameter :: eps = 1.e-14           ! Very small value
     !--------------------------------------------------------
     
     do eID=1, nElems
@@ -1013,51 +1014,50 @@ contains
         
         ! Get the limit states
         !*********************
-        s_min = huge(1.0)
+        s_min(i,j,k) = huge(1.0)
         
 #if barStates
         ! Previous entropy of the node (ubar_ii)
-        s_min = min(s_min, Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
         
         ! TODO: Compute them for all interfaces before...
         !xi+
-        s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
         !xi-
-        s_min = min(s_min, Get_SpecEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
         !eta+
-        s_min = min(s_min, Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
         !eta-
-        s_min = min(s_min, Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
         !zeta+
-        s_min = min(s_min, Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
         !zeta-
-        s_min = min(s_min, Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
 #else
         ! check stencil in xi
 !#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_min = min(s_min, EntPrev(1,l,j,k,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,l,j,k,eID))
         end do
         ! check stencil in eta
 !#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_min = min(s_min, EntPrev(1,i,l,k,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,i,l,k,eID))
         end do
         ! check stencil in zeta
 !#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_min = min(s_min, EntPrev(1,i,j,l,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,i,j,l,eID))
         end do
 #endif /*barStates*/
         
-        ! Difference between goal entropy and current entropy
-        as = (s_min - Get_SpecEntropy(U(:,i,j,k,eID)))
-
-        if (as <= max(eps,abs(s_min)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
-        
 #if LOCAL_ALPHA
-        ! Initialization
+        ! Subcell-wise limiter
+        ! ATTENTION: 1) We need to find the minimum alpha for each interface
+        !            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
+        !***************************************************************************************************************
         
+        ! Initialization
         notInIter = .FALSE.
         corr1 = alpha_loc(i,j,k,eID)
         
@@ -1067,32 +1067,32 @@ contains
         ! xi-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)), & ! Anti-difussive flux in xi-
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         ! xi+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in xi+
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         ! eta-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)), & ! Anti-difussive flux in eta-
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         ! eta+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in eta+
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         ! zeta-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)), & ! Anti-difussive flux in zeta-
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         ! zeta+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in zeta+
-                                             s_min,dt,sdt,eps, & ! some constants
+                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              corr1,notInIter)  ! in/out quantities
         
         ! Update corr_loc and corr
@@ -1100,6 +1100,13 @@ contains
         corr = max(corr,corr1) 
         
 #else
+        ! Simple element-wise limiter
+        !****************************
+        
+        ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
+        as = (s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k,eID)))
+        if (as <= max(eps,abs(s_min(i,j,k))*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
+
         ! Newton initialization:
         U_curr = U(:,i,j,k,eID)
         corr1 = 0.0
@@ -1115,31 +1122,33 @@ contains
           
           ! Update correction
           corr1 = corr1 + as / dSdalpha
-          if (alpha(eID) + corr1 * sdt > alpha_maxIDP) then
+          if (alpha(eID) + corr1 * sdt > alpha_maxIDP+eps) then
             corr1 = (alpha_maxIDP - alpha(eID) ) * dt
+          elseif (corr1<0.0) then
+            corr1=0.0
+          else
+            ! Check relative tolerance
+            if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
           end if
-          if (corr1<0.0) corr1=0.0
-          
-          ! Check relative tolerance
-          if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
           
           ! Get new U
           U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-          as = s_min-Get_SpecEntropy(U_curr)
+          as = s_min(i,j,k)-Get_SpecEntropy(U_curr)
           
           ! Check absolute tolerance
-          if ( abs(as) < max(eps,abs(s_min)*NEWTON_ABSTOL) ) exit NewtonLoopSpec  
+          if ( abs(as) < max(eps,abs(s_min(i,j,k))*NEWTON_ABSTOL) ) exit NewtonLoopSpec  
           
         end do NewtonLoopSpec ! iter
         
+        as = alpha(eID) + corr1 * sdt ! using as for new alpha
+        if ( (as > alpha_maxIDP) .and. (as <= alpha_maxIDP+eps)) then
+          corr1 = (alpha_maxIDP - alpha(eID) ) * dt
+        end if
+        
         if (iter > IDPMaxIter) notInIter =.TRUE.
         
-#if LOCAL_ALPHA
-        ! old version:
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-#endif /*LOCAL_ALPHA*/
         corr = max(corr,corr1) ! Compute the element-wise maximum correction
         
 #endif /*LOCAL_ALPHA*/
@@ -1159,6 +1168,17 @@ contains
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
+    
+!     Check bounds in debug mode
+!     ---------------------------
+#if DEBUG
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        if (Get_SpecEntropy(U(:,i,j,k,eID))<s_min(i,j,k)-1.e-12) then
+          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k,eID)), s_min(i,j,k), alpha_loc(i,j,k,eID), alpha_loc(i-1,j,k,eID), alpha_loc(i+1,j,k,eID), alpha_loc(i,j-1,k,eID), alpha_loc(i,j+1,k,eID), i,j,k,eID
+          stop
+        end if
+      end do       ; end do       ; end do ! i,j,k
+#endif /* DEBUG */
     
     end do !eID
     
