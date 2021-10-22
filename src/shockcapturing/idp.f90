@@ -527,9 +527,9 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real    :: corr, corr1
+    real    :: dalpha, dalpha1
 #if LOCAL_ALPHA
-    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: rho_min(0:PP_N,0:PP_N,0:PP_N), rho_max(0:PP_N,0:PP_N,0:PP_N), rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
@@ -541,9 +541,9 @@ contains
     
     do eID=1, nElems
       
-      corr = -epsilon(1.0) ! Safe initialization
+      dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
-      corr_loc = 0.0
+      dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
@@ -599,8 +599,7 @@ contains
         ! Real Zalesak type limiter
         ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
         ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
-        ! ATTENTION: 1) corr is dalpha*dt
-        !            2) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
+        ! ATTENTION: 1) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
         !               for each interface, not each node
         !****************************************************************************************************************
         
@@ -654,11 +653,11 @@ contains
           Qm = Qm/Pm
         end if
         
-        ! Compute corr as: dt*[(needed_alpha) - current_alpha] = dt*[(1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)]
-        corr1 = dt*(1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID))
+        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
+        dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
         
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
-        corr = max(corr,corr1)
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
+        dalpha = max(dalpha,dalpha1)
         
 #else
         ! Simple element-wise limiter
@@ -675,8 +674,8 @@ contains
         
         ! Density correction
         a = (rho_safe - U(1,i,j,k,eID))
-        corr1 = a / FFV_m_FDG(1,i,j,k,eID)
-        corr = max(corr,corr1)
+        dalpha1 = a*sdt / FFV_m_FDG(1,i,j,k,eID)
+        dalpha = max(dalpha,dalpha1)
         
 #endif /*LOCAL_ALPHA*/
         
@@ -685,10 +684,10 @@ contains
 !       Do the correction if needed
 !       ---------------------------
       
-      if ( corr > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+      if ( dalpha > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
@@ -740,9 +739,9 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real    :: corr, corr1, corr_old
+    real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
-    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: s_min(0:PP_N,0:PP_N,0:PP_N), as, U_curr(PP_nVar), dSdalpha
     integer :: eID
@@ -754,9 +753,9 @@ contains
     
     do eID=1, nElems
       
-      corr = -epsilon(1.0) ! Safe initialization
+      dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
-      corr_loc = 0.0
+      dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
@@ -811,7 +810,7 @@ contains
         
         ! Initialization
         notInIter = .FALSE.
-        corr1 = alpha_loc(i,j,k,eID)
+        dalpha1 = alpha_loc(i,j,k,eID)  ! Here dalpha1 is a place-holder for the actual blending coefficient
         
         ! Find blending coefficient for each neighbor node:
         ! -------------------------------------------------
@@ -820,36 +819,36 @@ contains
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)), & ! Anti-difussive flux in xi-
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         ! xi+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in xi+
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         ! eta-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)), & ! Anti-difussive flux in eta-
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         ! eta+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in eta+
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         ! zeta-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)), & ! Anti-difussive flux in zeta-
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         ! zeta+
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                             -sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in zeta+
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
-                                             corr1,notInIter)  ! in/out quantities
+                                             dalpha1,notInIter)  ! in/out quantities
         
-        ! Update corr_loc and corr
-        corr_loc(i,j,k) = (corr1 - alpha_loc(i,j,k,eID))*dt
-        corr = max(corr,corr1) 
+        ! Update dalpha_loc and dalpha
+        dalpha_loc(i,j,k) = dalpha1 - alpha_loc(i,j,k,eID)
+        dalpha = max(dalpha,dalpha1) 
         
 #else
         ! Simple element-wise limiter
@@ -861,30 +860,30 @@ contains
 
         ! Newton initialization:
         U_curr = U(:,i,j,k,eID)
-        corr1 = 0.0
+        dalpha1 = 0.0
         
         ! Perform Newton iterations
         NewtonLoopSpec: do iter=1, IDPMaxIter
-          corr_old = corr1
+          dalpha_old = dalpha1
           
           ! Evaluate dS/d(alpha)
-          dSdalpha = dot_product(ConsToSpecEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
+          dSdalpha = dot_product(ConsToSpecEntropy(U_curr),dt*FFV_m_FDG(:,i,j,k,eID))
           
           if ( abs(dSdalpha)<eps) exit NewtonLoopSpec ! Nothing to do here!
           
           ! Update correction
-          corr1 = corr1 + as / dSdalpha
-          if (alpha(eID) + corr1 * sdt > alpha_maxIDP+eps) then
-            corr1 = (alpha_maxIDP - alpha(eID) ) * dt
-          elseif (corr1<0.0) then
-            corr1=0.0
+          dalpha1 = dalpha1 + as / dSdalpha
+          if (alpha(eID) + dalpha1 > alpha_maxIDP+eps) then
+            dalpha1 = alpha_maxIDP - alpha(eID)
+          elseif (dalpha1<0.0) then
+            dalpha1=0.0
           else
             ! Check relative tolerance
-            if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
+            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
           end if
           
           ! Get new U
-          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
           as = s_min(i,j,k)-Get_SpecEntropy(U_curr)
@@ -894,14 +893,14 @@ contains
           
         end do NewtonLoopSpec ! iter
         
-        as = alpha(eID) + corr1 * sdt ! using as for new alpha
+        as = alpha(eID) + dalpha1 ! using as for new alpha
         if ( (as > alpha_maxIDP) .and. (as <= alpha_maxIDP+eps)) then
-          corr1 = (alpha_maxIDP - alpha(eID) ) * dt
+          dalpha1 = alpha_maxIDP - alpha(eID)
         end if
         
         if (iter > IDPMaxIter) notInIter =.TRUE.
         
-        corr = max(corr,corr1) ! Compute the element-wise maximum correction
+        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
         
 #endif /*LOCAL_ALPHA*/
         
@@ -913,10 +912,10 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
-      if ( corr > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+      if ( dalpha > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
@@ -926,7 +925,7 @@ contains
 #if DEBUG
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         if (Get_SpecEntropy(U(:,i,j,k,eID))<s_min(i,j,k)-1.e-12) then
-          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k,eID)), s_min(i,j,k), alpha_loc(i,j,k,eID), alpha_loc(i-1,j,k,eID), alpha_loc(i+1,j,k,eID), alpha_loc(i,j-1,k,eID), alpha_loc(i,j+1,k,eID), i,j,k,eID
+          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k,eID)), s_min(i,j,k)
           stop
         end if
       end do       ; end do       ; end do ! i,j,k
@@ -1047,23 +1046,23 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real    :: corr, corr1, corr_old
+    real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
-    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: s_max, as, U_curr(PP_nVar), dSdalpha
     integer :: eID
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
-    real, parameter :: eps = 1.e-10           ! Very small value
+    real, parameter :: eps = 1.e-14           ! Very small value
     !--------------------------------------------------------
     
     do eID=1, nElems
       
-      corr = -epsilon(1.0) ! Safe initialization
+      dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
-      corr_loc = 0.0
+      dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
@@ -1109,36 +1108,48 @@ contains
         end do
 #endif /*barStates*/
         
-        ! Difference between goal entropy and current entropy
+#if LOCAL_ALPHA
+        ! Subcell-wise limiter
+        ! ATTENTION: 1) We need to find the minimum alpha for each interface
+        !            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
+        !***************************************************************************************************************
+        stop 'subcell limiter not yet implemented for mathematical entropy!!'
+        !TODO!!
+        
+#else
+        ! Simple element-wise limiter
+        !****************************
+        
+        ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
         as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
-
         if (as >= -max(eps,abs(s_max)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
       
         ! Newton initialization:
         U_curr = U(:,i,j,k,eID)
-        corr1 = 0.0
+        dalpha1 = 0.0
         
         ! Perform Newton iterations
         NewtonLoop: do iter=1, IDPMaxIter
-          corr_old = corr1
+          dalpha_old = dalpha1
           
           ! Evaluate dS/d(alpha)
-          dSdalpha = dot_product(ConsToEntropy(U_curr),FFV_m_FDG(:,i,j,k,eID))
+          dSdalpha = dot_product(ConsToEntropy(U_curr),dt*FFV_m_FDG(:,i,j,k,eID))
           
           if ( abs(dSdalpha)<eps ) exit NewtonLoop ! Nothing to do here!
           
           ! Update correction
-          corr1 = corr1 + as / dSdalpha
-          if (alpha(eID) + corr1 * sdt > alpha_maxIDP) then
-            corr1 = (alpha_maxIDP - alpha(eID) ) * dt
+          dalpha1 = dalpha1 + as / dSdalpha
+          if (alpha(eID) + dalpha1 > alpha_maxIDP) then
+            dalpha1 = alpha_maxIDP - alpha(eID)
+          elseif (dalpha1<0) then
+            dalpha1=0.0
+          else
+            ! Check relative tolerance
+            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoop
           end if
-          if (corr1<0) corr1=0.0
-          
-          ! Check relative tolerance
-          if ( abs(corr_old-corr1)<= NEWTON_RELTOL ) exit NewtonLoop
           
           ! Get new U
-          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
           as = s_max-Get_MathEntropy(U_curr)
@@ -1151,9 +1162,12 @@ contains
         if (iter > IDPMaxIter) notInIter =.TRUE.
         
 #if LOCAL_ALPHA
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+        ! Not the right way to do local alpha
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
 #endif /*LOCAL_ALPHA*/
-        corr = max(corr,corr1) ! Compute the element-wise maximum correction
+        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
+        
+#endif /*LOCAL_ALPHA*/
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
@@ -1162,10 +1176,10 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
-      if ( corr > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+      if ( dalpha > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
@@ -1187,7 +1201,7 @@ contains
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: Usafe, p_safe
     use MOD_IDP_Vars      , only: FFV_m_FDG
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL
+    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
     !-arguments----------------------------------------------
@@ -1196,9 +1210,9 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
-    real    :: corr, corr1
+    real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
-    real    :: corr_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
+    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
@@ -1224,9 +1238,9 @@ contains
 !     Correct density
 !     ---------------
       
-      corr = -epsilon(1.0) ! Safe initialization
+      dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
-      corr_loc = 0.0
+      dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
         
 !     Compute correction factors
@@ -1237,11 +1251,12 @@ contains
         a = (PositCorrFactor * Usafe(1,i,j,k,eID) - U(1,i,j,k,eID))
         if (a > 0.) then ! This DOF needs a correction
           if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
-          corr1 = a / FFV_m_FDG(1,i,j,k,eID)
+          dalpha1 = a * sdt / FFV_m_FDG(1,i,j,k,eID)
 #if LOCAL_ALPHA
-          corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+          ! TODO: Use a one-sided Zalesak limiter here!!
+          dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
 #endif /*LOCAL_ALPHA*/
-          corr = max(corr,corr1)
+          dalpha = max(dalpha,dalpha1)
         end if
         
       end do       ; end do       ; end do ! i,j,k
@@ -1249,10 +1264,10 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
-      if ( corr > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+      if ( dalpha > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
@@ -1261,9 +1276,10 @@ contains
 !     Correct pressure
 !     ---------------
       
-      corr = -epsilon(1.0) ! Safe initialization
+      dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
-      corr_loc = 0.0
+      !TODO: Use a neigbor by neighbor Newton method here!!
+      dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
       
 !     Compute correction factors
@@ -1279,20 +1295,30 @@ contains
         
         ! Newton initialization:
         U_curr = U(:,i,j,k,eID)
-        corr1 = 0.0
+        dalpha1 = 0.0
         
         ! Perform Newton iterations
         NewtonLoop: do iter=1, IDPMaxIter
+          dalpha_old = dalpha1
+          
           ! Evaluate dp/d(alpha)
           call Get_dpdU(U_curr,dpdU)
-          dp_dalpha = dot_product(dpdU,FFV_m_FDG(:,i,j,k,eID))
+          dp_dalpha = dot_product(dpdU,dt*FFV_m_FDG(:,i,j,k,eID))
           if ( abs(dp_dalpha)<eps ) exit NewtonLoop ! Nothing to do here!
           
           ! Update correction
-          corr1 = corr1 + ap / dp_dalpha
+          dalpha1 = dalpha1 + ap / dp_dalpha
+          if (alpha(eID) + dalpha1 > alpha_maxIDP+eps) then
+            dalpha1 = alpha_maxIDP - alpha(eID)
+          elseif (dalpha1<0.0) then
+            dalpha1=0.0
+          else
+            ! Check relative tolerance
+            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoop
+          end if
           
           ! Get new U and pressure
-          U_curr = U (:,i,j,k,eID) + corr1 * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           call Get_Pressure(U_curr,pres)
           
           ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
@@ -1303,9 +1329,9 @@ contains
         if (iter > IDPMaxIter) notInIter =.TRUE.
         
 #if LOCAL_ALPHA
-        corr_loc(i,j,k) = max(corr_loc(i,j,k),corr1)
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
 #endif /*LOCAL_ALPHA*/
-        corr = max(corr,corr1) ! Compute the element-wise maximum correction
+        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
       
       end do       ; end do       ; enddo !i,j,k
       
@@ -1315,10 +1341,10 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
-      if ( corr > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),corr    ,alpha(eID)          , &
+      if ( dalpha > 0. ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              corr_loc,alpha_loc(:,:,:,eID), &
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                               dt,sdt,eID)
       end if
@@ -1327,11 +1353,11 @@ contains
     
   end subroutine IDP_LimitPositivity
 !===================================================================================================================================
-!> Takes corr/corr_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
+!> Takes dalpha/dalpha_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
 !===================================================================================================================================
-  pure subroutine PerformCorrection(U,Ut,corr    ,alpha    , &
+  pure subroutine PerformCorrection(U,Ut,dalpha    ,alpha    , &
 #if LOCAL_ALPHA
-                                         corr_loc,alpha_loc, &
+                                         dalpha_loc,alpha_loc, &
 #endif /*LOCAL_ALPHA*/
                                                              dt,sdt,eID)
     use MOD_PreProc   , only: PP_N
@@ -1347,11 +1373,11 @@ contains
     !-arguments--------------------------------------
     real, intent(inout) :: U (PP_nVar, 0:PP_N  , 0:PP_N  , 0:PP_N)
     real, intent(inout) :: Ut(PP_nVar, 0:PP_N  , 0:PP_N  , 0:PP_N)
-    real, intent(inout) :: corr                             ! Scaled element-wise d_alpha
+    real, intent(inout) :: dalpha                             ! Scaled element-wise d_alpha
     real, intent(inout) :: alpha                            ! Current element-wise alpha
 #if LOCAL_ALPHA
-    real, intent(inout) :: corr_loc  (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) ! Scaled local d_alpha
-    real, intent(inout) :: alpha_loc ( 0:PP_N  , 0:PP_N  , 0:PP_N) ! Current local  alpha
+    real, intent(inout) :: dalpha_loc  (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) ! Scaled local d_alpha
+    real, intent(inout) :: alpha_loc   ( 0:PP_N  , 0:PP_N  , 0:PP_N) ! Current local  alpha
 #endif /*LOCAL_ALPHA*/
     real, intent(in)    :: dt,sdt                          ! time step and inverse
     integer, intent(in) :: eID
@@ -1364,22 +1390,22 @@ contains
     
     ! Change the alpha for output
     alphacont  = alpha
-    alpha      = alpha + corr * sdt
+    alpha      = alpha + dalpha
     
     ! Change inconsistent alphas
     if (alpha > alpha_maxIDP) then
       alpha = alpha_maxIDP
-      corr  = (alpha_maxIDP - alphacont ) * dt
+      dalpha  = alpha_maxIDP - alphacont
     end if
           
 #if LOCAL_ALPHA
     ! Change the alpha for output
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       alphacont_loc    = alpha_loc(i,j,k)
-      alpha_loc(i,j,k) = alpha_loc(i,j,k) + corr_loc(i,j,k)* sdt
+      alpha_loc(i,j,k) = alpha_loc(i,j,k) + dalpha_loc(i,j,k)
       if (alpha_loc(i,j,k) > alpha_maxIDP) then
         alpha_loc(i,j,k) = alpha_maxIDP
-        corr_loc (i,j,k) = (alpha_maxIDP - alphacont_loc ) * dt
+        dalpha_loc (i,j,k) = alpha_maxIDP - alphacont_loc
       end if
     end do       ; end do       ; enddo
     
@@ -1388,47 +1414,47 @@ contains
       ! xi correction
       ! -------------
       ! left
-      my_corr=-max(corr_loc(i-1,j  ,k  ),corr_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr 
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=-max(dalpha_loc(i-1,j  ,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr 
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! eta correction
       ! --------------
       ! left
-      my_corr=-max(corr_loc(i  ,j-1,k  ),corr_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=-max(dalpha_loc(i  ,j-1,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! zeta correction
       ! ---------------
       ! left
-      my_corr=-max(corr_loc(i  ,j  ,k-1),corr_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=-max(dalpha_loc(i  ,j  ,k-1),dalpha_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(corr_loc(i  ,j  ,k  ),corr_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr * sdt
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
+      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
     end do       ; end do       ; enddo
 #else
     ! Element-wise correction!
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       ! Correct U
-      U (:,i,j,k) = U (:,i,j,k) + corr * FFV_m_FDG(:,i,j,k,eID)
+      U (:,i,j,k) = U (:,i,j,k) + dalpha * dt * FFV_m_FDG(:,i,j,k,eID)
       ! Correct Ut
-      Ut(:,i,j,k) = Ut(:,i,j,k) + (alpha-alphacont) * FFV_m_FDG(:,i,j,k,eID)
+      Ut(:,i,j,k) = Ut(:,i,j,k) + dalpha * FFV_m_FDG(:,i,j,k,eID)
     end do       ; end do       ; enddo
 #endif /*LOCAL_ALPHA*/
   end subroutine PerformCorrection
@@ -1460,6 +1486,7 @@ contains
     UR_r = RotateState(UR,nv,t1,t2)
     
     lambdamax = MAX(ABS(UL_r(2)/UL_r(1)),ABS(UR_r(2)/UR_r(1))) + SQRT(MAX(SoundSpeed2(UL_r),SoundSpeed2(UR_r)) )
+!#    lambdamax = MAX(SQRT(SoundSpeed2(UL_r)) + ABS(UL_r(2)/UL_r(1)), sqrt(SoundSpeed2(UR_r)) + ABS(UR_r(2)/UR_r(1)) )  ! Will's lambda_max
     
     call EvalOneEulerFlux1D(UL_r, FL_r)
     call EvalOneEulerFlux1D(UR_r, FR_r)
