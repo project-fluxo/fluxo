@@ -260,10 +260,14 @@ contains
     
 !   Perform limiting!
 !   -----------------
-    if (IDPDensityTVD)  call IDP_LimitDensityTVD (U,Ut,dt,sdt)
-    if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U,Ut,dt,sdt)
-    if (IDPMathEntropy) call IDP_LimitMathEntropy(U,Ut,dt,sdt)
-    if (IDPPositivity)  call IDP_LimitPositivity (U,Ut,dt,sdt)
+    do eID=1, nElems
+!     Call all user-defined limiters
+!     ------------------------------
+      if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+    end do
     
 !   Update variables for the analyze routines
 !   -----------------------------------------
@@ -503,7 +507,7 @@ contains
 !===================================================================================================================================
 !> Density TVD correction
 !===================================================================================================================================
-  subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt)
+  subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_Mesh_Vars     , only: nElems
@@ -522,10 +526,11 @@ contains
     use MOD_IDP_Vars      , only: FFV_m_FDG
     implicit none
     !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1
 #if LOCAL_ALPHA
@@ -534,13 +539,10 @@ contains
     real    :: rho_min(0:PP_N,0:PP_N,0:PP_N), rho_max(0:PP_N,0:PP_N,0:PP_N), rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qp, Qm, Pp, Pm
-    integer :: eID
     integer :: i,j,k,l
     real, parameter :: eps = 1.e-10           ! Very small value
     !--------------------------------------------------------
     
-    do eID=1, nElems
-      
       dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
       dalpha_loc = 0.0
@@ -662,9 +664,9 @@ contains
 #else
         ! Simple element-wise limiter
         !****************************
-        if ( U(1,i,j,k,eID) < rho_min(i,j,k)) then
+        if ( U(1,i,j,k) < rho_min(i,j,k)) then
           rho_safe = rho_min(i,j,k)
-        elseif (U(1,i,j,k,eID) > rho_max(i,j,k)) then
+        elseif (U(1,i,j,k) > rho_max(i,j,k)) then
           rho_safe = rho_max(i,j,k)
         else
           cycle !nothing to do here!
@@ -673,7 +675,7 @@ contains
         if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
         
         ! Density correction
-        a = (rho_safe - U(1,i,j,k,eID))
+        a = (rho_safe - U(1,i,j,k))
         dalpha1 = a*sdt / FFV_m_FDG(1,i,j,k,eID)
         dalpha = max(dalpha,dalpha1)
         
@@ -685,34 +687,33 @@ contains
 !       ---------------------------
       
       if ( dalpha > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                    dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
+                                    dt,sdt,eID)
       end if
       
 !     Check bounds in debug mode
 !     ---------------------------
 #if DEBUG
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        if (U(1,i,j,k,eID)<rho_min(i,j,k)-1.e-12) then
-          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k,eID), rho_min(i,j,k)
+        if (U(1,i,j,k)<rho_min(i,j,k)-1.e-12) then
+          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
           stop
         end if
-        if (U(1,i,j,k,eID)>rho_max(i,j,k)+1.e-12) then
-          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k,eID), rho_max(i,j,k)
+        if (U(1,i,j,k)>rho_max(i,j,k)+1.e-12) then
+          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
           stop
         end if
       end do       ; end do       ; end do ! i,j,k
 #endif /* DEBUG */
-    end do !eID
     
   end subroutine IDP_LimitDensityTVD
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
 !===================================================================================================================================
-  subroutine IDP_LimitSpecEntropy(U,Ut,dt,sdt)
+  subroutine IDP_LimitSpecEntropy(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
@@ -734,24 +735,22 @@ contains
     use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter
     implicit none
     !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
     real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: s_min(0:PP_N,0:PP_N,0:PP_N), as, U_curr(PP_nVar), dSdalpha
-    integer :: eID
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
     real, parameter :: eps = 1.e-14           ! Very small value
     !--------------------------------------------------------
-    
-    do eID=1, nElems
       
       dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
@@ -855,11 +854,11 @@ contains
         !****************************
         
         ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
-        as = (s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k,eID)))
+        as = (s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k)))
         if (as <= max(eps,abs(s_min(i,j,k))*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
 
         ! Newton initialization:
-        U_curr = U(:,i,j,k,eID)
+        U_curr = U(:,i,j,k)
         dalpha1 = 0.0
         
         ! Perform Newton iterations
@@ -883,7 +882,7 @@ contains
           end if
           
           ! Get new U
-          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
           as = s_min(i,j,k)-Get_SpecEntropy(U_curr)
@@ -913,25 +912,23 @@ contains
 !       Do the correction if needed
 !       ---------------------------
       if ( dalpha > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                    dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
+                                    dt,sdt,eID)
       end if
     
 !     Check bounds in debug mode
 !     ---------------------------
 #if DEBUG
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        if (Get_SpecEntropy(U(:,i,j,k,eID))<s_min(i,j,k)-1.e-12) then
-          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k,eID)), s_min(i,j,k)
+        if (Get_SpecEntropy(U(:,i,j,k))<s_min(i,j,k)-1.e-12) then
+          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
           stop
         end if
       end do       ; end do       ; end do ! i,j,k
 #endif /* DEBUG */
-    
-    end do !eID
     
   end subroutine IDP_LimitSpecEntropy  
 #if LOCAL_ALPHA
@@ -1023,7 +1020,7 @@ contains
 !===================================================================================================================================
 !> Mathematical entropy correction (discrete local maximum principle)
 !===================================================================================================================================
-  subroutine IDP_LimitMathEntropy(U,Ut,dt,sdt)
+  subroutine IDP_LimitMathEntropy(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
@@ -1041,24 +1038,22 @@ contains
     use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter
     implicit none
     !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
     real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
 #endif /*LOCAL_ALPHA*/
     real    :: s_max, as, U_curr(PP_nVar), dSdalpha
-    integer :: eID
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
     real, parameter :: eps = 1.e-14           ! Very small value
     !--------------------------------------------------------
-    
-    do eID=1, nElems
       
       dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
@@ -1121,11 +1116,11 @@ contains
         !****************************
         
         ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
-        as = (s_max - Get_MathEntropy(U(:,i,j,k,eID)))
+        as = (s_max - Get_MathEntropy(U(:,i,j,k)))
         if (as >= -max(eps,abs(s_max)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
       
         ! Newton initialization:
-        U_curr = U(:,i,j,k,eID)
+        U_curr = U(:,i,j,k)
         dalpha1 = 0.0
         
         ! Perform Newton iterations
@@ -1149,7 +1144,7 @@ contains
           end if
           
           ! Get new U
-          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
           as = s_max-Get_MathEntropy(U_curr)
@@ -1177,14 +1172,12 @@ contains
 !       Do the correction if needed
 !       ---------------------------
       if ( dalpha > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                    dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
+                                    dt,sdt,eID)
       end if
-    
-    end do !eID
     
   end subroutine IDP_LimitMathEntropy
 !===================================================================================================================================
@@ -1192,7 +1185,7 @@ contains
 !> * Rueda-Ramírez, A. M., & Gassner, G. J. (2021). A Subcell Finite Volume Positivity-Preserving Limiter for DGSEM Discretizations of the Euler Equations. arXiv preprint arXiv:2102.06017.
 !>    ... But with the possibility to be used locally
 !===================================================================================================================================
-  subroutine IDP_LimitPositivity(U,Ut,dt,sdt)
+  subroutine IDP_LimitPositivity(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
     use MOD_Mesh_Vars     , only: nElems, offsetElem
@@ -1205,10 +1198,11 @@ contains
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
     !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
 #if LOCAL_ALPHA
@@ -1220,19 +1214,16 @@ contains
     real    :: alphadiff
     real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
     real    :: dp_dalpha
-    integer :: eID
     integer :: i,j,k, iter
     logical :: NotInIter
     real, parameter :: eps = 1.e-14           ! Very small value
     !--------------------------------------------------------
-    
-    do eID=1, nElems
       
 !     ----------------------------------
 !     Check if it makes sense correcting
 !     ----------------------------------
       alphadiff = alpha(eID) - alpha_maxIDP
-      if ( abs(alphadiff) < eps ) cycle ! Not much to do for this element...
+      if ( abs(alphadiff) < eps ) return ! Not much to do for this element...
       
 !     ---------------
 !     Correct density
@@ -1248,7 +1239,7 @@ contains
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
         ! Density correction
-        a = (PositCorrFactor * Usafe(1,i,j,k,eID) - U(1,i,j,k,eID))
+        a = (PositCorrFactor * Usafe(1,i,j,k,eID) - U(1,i,j,k))
         if (a > 0.) then ! This DOF needs a correction
           if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
           dalpha1 = a * sdt / FFV_m_FDG(1,i,j,k,eID)
@@ -1265,11 +1256,11 @@ contains
 !       Do the correction if needed
 !       ---------------------------
       if ( dalpha > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                    dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
+                                    dt,sdt,eID)
       end if
       
 !     ---------------
@@ -1287,14 +1278,14 @@ contains
       notInIter = .FALSE.
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         ! Current pressure and goal
-        call Get_Pressure(U(:,i,j,k,eID),pres)
+        call Get_Pressure(U(:,i,j,k),pres)
         p_goal = PositCorrFactor * p_safe(i,j,k,eID)
         ap = (p_goal - pres)
         
         if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
         
         ! Newton initialization:
-        U_curr = U(:,i,j,k,eID)
+        U_curr = U(:,i,j,k)
         dalpha1 = 0.0
         
         ! Perform Newton iterations
@@ -1318,7 +1309,7 @@ contains
           end if
           
           ! Get new U and pressure
-          U_curr = U (:,i,j,k,eID) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
+          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           call Get_Pressure(U_curr,pres)
           
           ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
@@ -1342,14 +1333,12 @@ contains
 !       Do the correction if needed
 !       ---------------------------
       if ( dalpha > 0. ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                    dalpha_loc,alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
-                                                              dt,sdt,eID)
+                                    dt,sdt,eID)
       end if
-      
-    end do !eID
     
   end subroutine IDP_LimitPositivity
 !===================================================================================================================================
