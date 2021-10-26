@@ -186,7 +186,26 @@ contains
     ftilde_DG = 0.0
     gtilde_DG = 0.0
     htilde_DG = 0.0
+    
+    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
 #endif /*LOCAL_ALPHA*/
+    
+    ! Bounds containers
+    if (IDPDensityTVD .or. IDPPositivity) then
+      allocate ( rho_min     (0:PP_N,0:PP_N,0:PP_N) )
+    end if
+    if (IDPDensityTVD) then
+      allocate ( rho_max     (0:PP_N,0:PP_N,0:PP_N) )
+    end if
+    if (IDPSpecEntropy) then
+      allocate ( s_min       (0:PP_N,0:PP_N,0:PP_N) )
+    end if
+    if (IDPMathEntropy) then
+      allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N) )
+    end if
+    if (IDPPositivity) then
+      allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N) )
+    end if
     
     ! Stencil for bounds
     ! ------------------
@@ -238,6 +257,9 @@ contains
     use MOD_Mesh_Vars   , only: nElems, sJ
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity
+#if LOCAL_ALPHA
+    use MOD_IDP_Vars    , only: dalpha_loc
+#endif /*LOCAL_ALPHA*/
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -245,7 +267,7 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real :: sdt
-    real :: curr_amount_alpha
+    real :: curr_amount_alpha, dalpha
     integer :: eID, i, j, k
     !--------------------------------------------------------
 
@@ -261,12 +283,32 @@ contains
 !   Perform limiting!
 !   -----------------
     do eID=1, nElems
+#if LOCAL_ALPHA
+      dalpha_loc = 0.0
+#endif /*LOCAL_ALPHA*/
 !     Call all user-defined limiters
-!     ------------------------------
+!     (Element-wise limiting is performed directly in the routines)
+!     -------------------------------------------------------------
       if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      
+#if LOCAL_ALPHA
+!     Perform subcell-wise limiting
+!     -----------------------------
+      dalpha = maxval (dalpha_loc)
+      if (dalpha>0.0) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+                                      dalpha_loc,alpha_loc(:,:,:,eID), &
+                                      dt,sdt,eID)
+      end if
+#endif /*LOCAL_ALPHA*/
+!     Check that we are within bounds
+!     -------------------------------
+#if DEBUG || IDP_CHECKBOUNDS
+      call CheckBounds(U(:,:,:,:,eID))
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
     end do
     
 !   Update variables for the analyze routines
@@ -274,7 +316,6 @@ contains
     maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
     
     amount_alpha = amount_alpha*amount_alpha_steps
-    ! TODO: how to do the local alpha amount??... This is not working:
 #if LOCAL_ALPHA
     curr_amount_alpha = 0.0
     do eID=1, nElems
@@ -289,7 +330,64 @@ contains
     amount_alpha_steps = amount_alpha_steps+1
     amount_alpha = amount_alpha/amount_alpha_steps
     
-  end subroutine Apply_IDP  
+  end subroutine Apply_IDP
+!===================================================================================================================================
+!> Check that all bounds are met
+!===================================================================================================================================
+  subroutine CheckBounds(U)
+    use MOD_Preproc
+    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min
+    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity
+    use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
+    implicit none
+    !-arguments------------------------------------------------------------
+    real, intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    !-local-variables------------------------------------------------------
+    integer :: i,j,k
+    real    :: p
+    real, parameter :: tolerance=1.e-12
+    !----------------------------------------------------------------------
+    
+    
+    do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+      if (IDPDensityTVD .or. IDPPositivity) then
+        if (U(1,i,j,k) < rho_min(i,j,k) - tolerance) then
+          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
+          stop
+        end if
+      end if
+        
+      if (IDPDensityTVD) then
+        if (U(1,i,j,k) > rho_max(i,j,k) + tolerance) then
+          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
+          stop
+        end if
+      end if
+      
+      if (IDPSpecEntropy) then
+        if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance) then
+          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
+          stop
+        end if
+      end if
+      
+      if (IDPMathEntropy) then
+        if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance) then
+          print*, 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k)
+          stop
+        end if
+      end if
+      
+      if (IDPPositivity) then
+        call Get_Pressure(U(:,i,j,k),p)
+        if (p < p_min(i,j,k) - tolerance) then
+          print*, 'WARNING: rho below min (curr/min):', p, p_min(i,j,k)
+          stop
+        end if
+      end if
+    end do       ; end do       ; end do ! i,j,k
+  
+  end subroutine CheckBounds
 !===================================================================================================================================
 !> Get the IDP variables in the right position to perform limiting
 !> ATTENTION: 1) U_master and U_slave need to have the previous solution!
@@ -516,14 +614,14 @@ contains
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
-    use MOD_IDP_Vars      , only: Usafe
+    use MOD_IDP_Vars      , only: Usafe, dalpha_loc
 #endif /*LOCAL_ALPHA*/
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
     use MOD_IDP_Vars      , only: Usafe
 #endif /*barStates*/
-    use MOD_IDP_Vars      , only: FFV_m_FDG
+    use MOD_IDP_Vars      , only: FFV_m_FDG, rho_min, rho_max
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -533,10 +631,7 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1
-#if LOCAL_ALPHA
-    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-#endif /*LOCAL_ALPHA*/
-    real    :: rho_min(0:PP_N,0:PP_N,0:PP_N), rho_max(0:PP_N,0:PP_N,0:PP_N), rho_safe
+    real    :: rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qp, Qm, Pp, Pm
     integer :: i,j,k,l
@@ -544,9 +639,6 @@ contains
     !--------------------------------------------------------
     
       dalpha = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      dalpha_loc = 0.0
-#endif /*LOCAL_ALPHA*/
 !       Compute correction factors
 !       --------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -610,13 +702,13 @@ contains
         Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         
         ! Check the sign of Qp and Qm... !!!
-        if (Qp < 0) then
+        if (Qp < 0.0) then
           print*, 'Usafe is not within bounds: 0>Qp=', Qp, i, j, k, eID+offsetElem
           print*, 'rho_max', rho_max(i,j,k)
           print*, 'rho_saf', Usafe(1,i,j,k,eID)
           stop 
         end if
-        if (Qm > 0)  then
+        if (Qm > 0.0)  then
           print*, 'Usafe is not within bounds: 0<Qm=', Qm, i, j, k, eID+offsetElem
           print*, 'rho_min', rho_min(i,j,k)
           print*, 'rho_saf', Usafe(1,i,j,k,eID)
@@ -685,30 +777,12 @@ contains
 
 !       Do the correction if needed
 !       ---------------------------
-      
+#if !(LOCAL_ALPHA)
       if ( dalpha > 0. ) then
         call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                    dalpha_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
                                     dt,sdt,eID)
       end if
-      
-!     Check bounds in debug mode
-!     ---------------------------
-#if DEBUG
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        if (U(1,i,j,k)<rho_min(i,j,k)-1.e-12) then
-          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
-          stop
-        end if
-        if (U(1,i,j,k)>rho_max(i,j,k)+1.e-12) then
-          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
-          stop
-        end if
-      end do       ; end do       ; end do ! i,j,k
-#endif /* DEBUG */
-    
+#endif /*!(LOCAL_ALPHA)*/
   end subroutine IDP_LimitDensityTVD
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
@@ -718,7 +792,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
-    use MOD_IDP_Vars      , only: Usafe
+    use MOD_IDP_Vars      , only: Usafe, dalpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
@@ -732,7 +806,7 @@ contains
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_IDP_Vars      , only: FFV_m_FDG
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter
+    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, s_min
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -742,10 +816,7 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
-#if LOCAL_ALPHA
-    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-#endif /*LOCAL_ALPHA*/
-    real    :: s_min(0:PP_N,0:PP_N,0:PP_N), as, U_curr(PP_nVar), dSdalpha
+    real    :: as, U_curr(PP_nVar), dSdalpha
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
@@ -753,9 +824,7 @@ contains
     !--------------------------------------------------------
       
       dalpha = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      dalpha_loc = 0.0
-#endif /*LOCAL_ALPHA*/
+      
 !       Compute correction factors
 !       --------------------------
       notInIter = .FALSE.
@@ -809,7 +878,7 @@ contains
         
         ! Initialization
         notInIter = .FALSE.
-        dalpha1 = alpha_loc(i,j,k,eID)  ! Here dalpha1 is a place-holder for the actual blending coefficient
+        dalpha1 = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)  ! Here dalpha1 is a place-holder for the actual blending coefficient
         
         ! Find blending coefficient for each neighbor node:
         ! -------------------------------------------------
@@ -911,25 +980,12 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
+#if !(LOCAL_ALPHA)
       if ( dalpha > 0. ) then
         call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                    dalpha_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
                                     dt,sdt,eID)
       end if
-    
-!     Check bounds in debug mode
-!     ---------------------------
-#if DEBUG
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        if (Get_SpecEntropy(U(:,i,j,k))<s_min(i,j,k)-1.e-12) then
-          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
-          stop
-        end if
-      end do       ; end do       ; end do ! i,j,k
-#endif /* DEBUG */
-    
+#endif /*!(LOCAL_ALPHA)*/
   end subroutine IDP_LimitSpecEntropy  
 #if LOCAL_ALPHA
 !===================================================================================================================================
@@ -1025,6 +1081,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
+    use MOD_IDP_Vars      , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_MathEntropy, ConsToEntropy
@@ -1035,7 +1092,7 @@ contains
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_IDP_Vars      , only: FFV_m_FDG
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter
+    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, s_max
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -1045,10 +1102,7 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
-#if LOCAL_ALPHA
-    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-#endif /*LOCAL_ALPHA*/
-    real    :: s_max, as, U_curr(PP_nVar), dSdalpha
+    real    :: as, U_curr(PP_nVar), dSdalpha
     integer :: i,j,k, l
     integer :: iter
     logical :: notInIter
@@ -1056,9 +1110,7 @@ contains
     !--------------------------------------------------------
       
       dalpha = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      dalpha_loc = 0.0
-#endif /*LOCAL_ALPHA*/
+      
 !       Compute correction factors
 !       --------------------------
       notInIter = .FALSE.
@@ -1066,40 +1118,40 @@ contains
         
         ! Get the limit states
         !*********************
-        s_max = -huge(1.0)
+        s_max(i,j,k) = -huge(1.0)
         
 #if barStates
         ! Previous entropy of the node (ubar_ii)
-        s_max = max(s_max, Get_MathEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
         
         ! TODO: Compute for all interfaces before the loop!
         !xi+
-        s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
         !xi-
-        s_max = max(s_max, Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
         !eta+
-        s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
         !eta-
-        s_max = max(s_max, Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
         !zeta+
-        s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
         !zeta-
-        s_max = max(s_max, Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_max = max(s_max, EntPrev(1,l,j,k,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,l,j,k,eID))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_max = max(s_max, EntPrev(1,i,l,k,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,i,l,k,eID))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_max = max(s_max, EntPrev(1,i,j,l,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,i,j,l,eID))
         end do
 #endif /*barStates*/
         
@@ -1116,8 +1168,8 @@ contains
         !****************************
         
         ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
-        as = (s_max - Get_MathEntropy(U(:,i,j,k)))
-        if (as >= -max(eps,abs(s_max)*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
+        as = (s_max(i,j,k) - Get_MathEntropy(U(:,i,j,k)))
+        if (as >= -max(eps,abs(s_max(i,j,k))*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
       
         ! Newton initialization:
         U_curr = U(:,i,j,k)
@@ -1147,10 +1199,10 @@ contains
           U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
           
           ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-          as = s_max-Get_MathEntropy(U_curr)
+          as = s_max(i,j,k)-Get_MathEntropy(U_curr)
           
           ! Check absolute tolerance
-          if ( abs(as) < max(eps,abs(s_max)*NEWTON_ABSTOL) ) exit NewtonLoop  
+          if ( abs(as) < max(eps,abs(s_max(i,j,k))*NEWTON_ABSTOL) ) exit NewtonLoop  
           
         end do NewtonLoop ! iter
         
@@ -1171,13 +1223,12 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
+#if !(LOCAL_ALPHA)
       if ( dalpha > 0. ) then
         call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                    dalpha_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
                                     dt,sdt,eID)
       end if
+#endif /*!(LOCAL_ALPHA)*/
     
   end subroutine IDP_LimitMathEntropy
 !===================================================================================================================================
@@ -1191,8 +1242,9 @@ contains
     use MOD_Mesh_Vars     , only: nElems, offsetElem
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
+    use MOD_IDP_Vars      , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: Usafe, p_safe
+    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
@@ -1205,14 +1257,11 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha, dalpha1, dalpha_old
-#if LOCAL_ALPHA
-    real    :: dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)
-#endif /*LOCAL_ALPHA*/
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
     real    :: pres
     real    :: alphadiff
-    real    :: dpdU(PP_nVar), U_curr(PP_nVar), p_goal
+    real    :: dpdU(PP_nVar), U_curr(PP_nVar)
     real    :: dp_dalpha
     integer :: i,j,k, iter
     logical :: NotInIter
@@ -1230,16 +1279,14 @@ contains
 !     ---------------
       
       dalpha = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      dalpha_loc = 0.0
-#endif /*LOCAL_ALPHA*/
         
 !     Compute correction factors
 !     --------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
         ! Density correction
-        a = (PositCorrFactor * Usafe(1,i,j,k,eID) - U(1,i,j,k))
+        rho_min(i,j,k) = merge (max(rho_min(i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID)), PositCorrFactor * Usafe(1,i,j,k,eID), IDPDensityTVD) ! This writes the more restrictive bound into rho_min
+        a = (rho_min(i,j,k) - U(1,i,j,k))
         if (a > 0.) then ! This DOF needs a correction
           if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
           dalpha1 = a * sdt / FFV_m_FDG(1,i,j,k,eID)
@@ -1255,14 +1302,12 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
+#if !(LOCAL_ALPHA)
       if ( dalpha > 0. ) then
         call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                    dalpha_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
                                     dt,sdt,eID)
       end if
-      
+#endif /*!(LOCAL_ALPHA)*/
 !     ---------------
 !     Correct pressure
 !     ---------------
@@ -1270,7 +1315,7 @@ contains
       dalpha = -epsilon(1.0) ! Safe initialization
 #if LOCAL_ALPHA
       !TODO: Use a neigbor by neighbor Newton method here!!
-      dalpha_loc = 0.0
+      stop 'not implemented local alpha for pressure corr'
 #endif /*LOCAL_ALPHA*/
       
 !     Compute correction factors
@@ -1279,8 +1324,8 @@ contains
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         ! Current pressure and goal
         call Get_Pressure(U(:,i,j,k),pres)
-        p_goal = PositCorrFactor * p_safe(i,j,k,eID)
-        ap = (p_goal - pres)
+        p_min(i,j,k) = PositCorrFactor * p_safe(i,j,k,eID)
+        ap = (p_min(i,j,k) - pres)
         
         if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
         
@@ -1313,8 +1358,8 @@ contains
           call Get_Pressure(U_curr,pres)
           
           ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
-          ap = p_goal-pres
-          if ( (ap <= epsilon(p_goal)) .and. (ap > -NEWTON_ABSTOL*p_goal) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
+          ap = p_min(i,j,k)-pres
+          if ( (ap <= epsilon(p_min(i,j,k))) .and. (ap > -NEWTON_ABSTOL*p_min(i,j,k)) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
         end do NewtonLoop ! iter
         
         if (iter > IDPMaxIter) notInIter =.TRUE.
@@ -1332,14 +1377,12 @@ contains
       
 !       Do the correction if needed
 !       ---------------------------
+#if !(LOCAL_ALPHA)
       if ( dalpha > 0. ) then
         call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-#if LOCAL_ALPHA
-                                    dalpha_loc,alpha_loc(:,:,:,eID), &
-#endif /*LOCAL_ALPHA*/
                                     dt,sdt,eID)
       end if
-    
+#endif /*!(LOCAL_ALPHA)*/
   end subroutine IDP_LimitPositivity
 !===================================================================================================================================
 !> Takes dalpha/dalpha_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
@@ -1519,7 +1562,14 @@ contains
     SDEALLOCATE ( ftilde_DG )
     SDEALLOCATE ( gtilde_DG )
     SDEALLOCATE ( htilde_DG )
+    SDEALLOCATE ( dalpha_loc )
 #endif /*LOCAL_ALPHA*/
+    
+    SDEALLOCATE ( rho_min )
+    SDEALLOCATE ( rho_max )
+    SDEALLOCATE ( s_min )
+    SDEALLOCATE ( s_max )
+    SDEALLOCATE ( p_min )
     
   end subroutine Finalize_IDP
 #endif /*NFVSE_CORR*/  

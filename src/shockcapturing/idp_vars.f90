@@ -46,4 +46,15 @@ module MOD_IDP_Vars
   real,allocatable    :: Ubar_xi       (:,:,:,:,:)
   real,allocatable    :: Ubar_eta      (:,:,:,:,:)
   real,allocatable    :: Ubar_zeta     (:,:,:,:,:)
+  
+#if LOCAL_ALPHA
+  real,allocatable    :: dalpha_loc    (:,:,:)    ! Node-wise alpha correction for an element
+#endif /*LOCAL_ALPHA*/
+
+  ! Bounds
+  real,allocatable    :: rho_min    (:,:,:)
+  real,allocatable    :: rho_max    (:,:,:)
+  real,allocatable    :: s_min      (:,:,:)
+  real,allocatable    :: s_max      (:,:,:)
+  real,allocatable    :: p_min      (:,:,:)
 end module MOD_IDP_Vars
