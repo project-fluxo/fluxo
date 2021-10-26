@@ -45,6 +45,9 @@ contains
 !   ------------------
     call prms%CreateRealOption(  "PositCorrFactor",  " The correction factor for IDPPositivity=T", "0.1")
     call prms%CreateIntOption(        "IDPMaxIter",  " Maximum number of iterations for positivity limiter", "10")
+#if LOCAL_ALPHA
+    call prms%CreateRealOption(         "IDPgamma",  " Constant for the subcell limiting of convex (nonlinear) constraints (must be IDPgamma>=2*d, where d is the number of dimensions of the problem)", "6.0")
+#endif /*LOCAL_ALPHA*/
     
   end subroutine DefineParameters_IDP
 !===================================================================================================================================
@@ -86,6 +89,11 @@ contains
     if (IDPPositivity) then
       PositCorrFactor = GETREAL   ('PositCorrFactor','0.1')
     end if
+#if LOCAL_ALPHA
+    if (IDPSpecEntropy .or. IDPMathEntropy .or. IDPPositivity) then
+      IDPgamma = GETREAL   ('IDPgamma','6.0')
+    end if
+#endif /*LOCAL_ALPHA*/
     
 !   Internal definitions (all are .FALSE. by default)
 !   -------------------------------------------------
@@ -994,7 +1002,7 @@ contains
 !===================================================================================================================================
   subroutine NewtonLoopNeighbor_SpecEntropy(Usafe,Fan,smin,dt,sdt,eps,alpha,notInIter)
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
-    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
+    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter, IDPgamma
     implicit none
     !-arguments----------------------------------------
     real, intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
@@ -1006,7 +1014,6 @@ contains
     real, intent(inout) :: alpha          ! Current (nodal) blending coefficient. Gets updated here.
     logical, intent(inout) :: notInIter   ! 
     !-local-variables----------------------------------
-    real, parameter :: gamm = 6.0 ! 2*d, where d is the number of dimensions
     real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
     real :: beta_old       ! beta from last iteration
     real :: Ucurr(PP_nVar)
@@ -1020,7 +1027,7 @@ contains
     beta = (1.0 - alpha)
     
     ! Compute current directional update
-    Ucurr = Usafe + beta * dt * gamm * Fan
+    Ucurr = Usafe + beta * dt * IDPgamma * Fan
     
     ! Check entropy of this update
     as = smin - Get_SpecEntropy(Ucurr)
@@ -1031,7 +1038,7 @@ contains
       beta_old = beta
       
       ! Evaluate dS/d(alpha)
-      dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),dt*gamm*Fan)
+      dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),dt*IDPgamma*Fan)
       
       if ( abs(dSdbeta)<eps) exit NewtonLoopSpec ! Nothing to do here!
       
@@ -1049,7 +1056,7 @@ contains
       end if
       
       ! Get new U
-      Ucurr = Usafe + beta *dt * gamm * Fan
+      Ucurr = Usafe + beta *dt * IDPgamma * Fan
       
       ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
       as = smin-Get_SpecEntropy(Ucurr)
