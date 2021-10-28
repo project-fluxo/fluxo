@@ -1780,7 +1780,7 @@ REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !ad
 REAL            :: srho_L,srho_R,v2_L,v2_R
 REAL            :: p_L,p_R,p_avg
 REAL            :: v_L(3),v_R(3)
-REAL            :: rho_sp_L, rho_sp_R, rho_sp_MEAN
+REAL            :: s_rho_sp_MEAN
 REAL            :: v2_ZIP
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
@@ -1809,9 +1809,7 @@ p1Hat  = 0.5*(p_L+p_R)
 aHat   = SQRT(kappa*p1Hat/rhoHat)
 HHat   = kappa*p1Hat*skappaM1/rhoHat + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 
-rho_sp_L = rho_L / p_L
-rho_sp_R = rho_R / p_R
-rho_sp_MEAN = LN_MEAN( rho_sp_L , rho_sp_R )
+s_rho_sp_MEAN = p_L * p_R * sLN_MEAN( rho_L * p_R , rho_R * p_L )
 
 ! Entropy conserving and kinetic energy conserving flux
 
@@ -1819,7 +1817,7 @@ Fstar(1) = rhoHat*uHat
 Fstar(2) = Fstar(1)*uHat + p1Hat
 Fstar(3) = Fstar(1)*vHat
 Fstar(4) = Fstar(1)*wHat
-Fstar(5) = Fstar(1)*(v2_ZIP + 1./rho_sp_MEAN*sKappaM1)+0.5*(p_L*v_R(1) + p_R*v_L(1))
+Fstar(5) = Fstar(1)*(v2_ZIP + s_rho_sp_MEAN*sKappaM1)+0.5*(p_L*v_R(1) + p_R*v_L(1))
 
 END ASSOCIATE
 END SUBROUTINE RanochaFlux
@@ -1854,7 +1852,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 REAL                   :: vAvg(3)
 REAL                   :: rhoLN
 REAL                   :: vm_L,vm_R
-REAL                   :: rho_sp_L, rho_sp_R, rho_sp_MEAN
+REAL                   :: s_rho_sp_MEAN
 REAL                   :: p_avg,v2_ZIP
 REAL                   :: metric(3)
 !==================================================================================================================================
@@ -1873,16 +1871,14 @@ p_avg  = 0.5*(p_L+p_R)
 vm_L=SUM(v_L(:)*metric(:))
 vm_R=SUM(v_R(:)*metric(:))
 
-rho_sp_L = rho_L / p_L
-rho_sp_R = rho_R / p_R
-rho_sp_MEAN = LN_MEAN( rho_sp_L , rho_sp_R )
+s_rho_sp_MEAN = p_L * p_R * sLN_MEAN( rho_L * p_R , rho_R * p_L )
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(1) = rhoLN*0.5*(vm_L+vm_R)
 Fstar(2) = Fstar(1)*vAvg(1) + metric(1)*p_avg
 Fstar(3) = Fstar(1)*vAvg(2) + metric(2)*p_avg
 Fstar(4) = Fstar(1)*vAvg(3) + metric(3)*p_avg
-Fstar(5) = Fstar(1)*(v2_ZIP+1./rho_sp_MEAN*sKappaM1)+0.5*(p_L*vm_R+p_R*vm_L)
+Fstar(5) = Fstar(1)*(v2_ZIP+s_rho_sp_MEAN*sKappaM1)+0.5*(p_L*vm_R+p_R*vm_L)
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE RanochaFluxVec
@@ -1922,6 +1918,33 @@ LN_MEAN=MERGE((aL+aR)*52.5d0/(105.d0 + u*(35.d0 + u*(21.d0 +u*15.d0))), & !u <ep
               (aR-aL)/LOG(Xi)                                         , & !u>=eps (test false)
               (u.LT.eps)                                              )   !test
 END FUNCTION LN_MEAN
+
+
+PURE FUNCTION sLN_MEAN(aL,aR)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN) :: aL  !< left value
+REAL,INTENT(IN) :: aR  !< right value
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT / OUTPUT VARIABLES
+REAL            :: sLN_MEAN  !< result
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCaR VaLIABLES
+REAL           :: f2
+REAL,PARAMETER :: eps = 1.0e-4  ! tolerance for f^2, such that switch is smooth in double precision
+real,parameter :: f23 = 2./3.
+real,parameter :: f25 = 2./5.
+real,parameter :: f27 = 2./7.
+!==================================================================================================================================
+
+f2 = (aL * (aL - 2.0 * aR) + aR * aR) / (aL * (aL + 2.0 * aR) + aR * aR)
+
+sLN_MEAN=MERGE( (2.0 + f23 * f2 + f25 * f2**2 + f27 * f2**3)/(aL+aR), & !u <eps (test true)
+              LOG(aR/aL) / (aR-aL)                       , & !u>=eps (test false)
+              (f2.LT.eps)                                              )   !test
+END FUNCTION sLN_MEAN
 
 #undef PP_VolumeFluxAverageVec
 
