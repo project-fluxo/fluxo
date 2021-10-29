@@ -128,7 +128,9 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be us
                                            " 20: Gassner, Winters, Walch flux"//&
                                            " 21: Gassner, Winters, Walch flux + LLF diss"//&
                                            " 32: Ranocha ECKEP flux,"//&
-                                           " 33: Entropy Stable: Ranocha ECKEP + full wave diss.," &
+                                           " 33: Entropy Stable: Ranocha ECKEP + full wave diss.,"//&
+                                           " 40: Shima et al. flux (KEEP_PE)"//&
+                                           " 41: Shima et al. flux (KEEP_PE) + LLF diss" &
                                           ,"1")
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in split-form flux or Riemann:"//&
@@ -144,7 +146,8 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "  8: Kenndy & Gruber (pirozolli version)"//&
                                               "  9: Gassner Winter Walch"//&
                                               " 10: EC Ismail and Roe"//&
-                                              " 32: Ranocha entropy conservative flux with metric dealiasing" &
+                                              " 32: Ranocha entropy conservative flux with metric dealiasing"//&
+                                              " 40: Shima et al. flux (KEEP_PE)" &
                                              ,"0")
 #ifdef JESSE_MORTAR
 CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
@@ -398,6 +401,14 @@ SELECT CASE(WhichRiemannSolver)
     VolumeFluxAverage    => RanochaFlux
     SolveRiemannProblem     => RiemannSolver_EntropyStable
     RiemannVolFluxAndDissipMatrices => RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
+  CASE(40)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Shima et al. flux'
+    VolumeFluxAverage    => ShimaEtAlFlux
+    SolveRiemannProblem  => RiemannSolver_VolumeFluxAverage
+  CASE(41)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Shima et al. flux with LLF diss'
+    VolumeFluxAverage    => ShimaEtAlFlux
+    SolveRiemannProblem  => RiemannSolver_VolumeFluxAverage_LLF
   CASE DEFAULT
     CALL ABORT(__STAMP__,&
          "Riemann solver not implemented")
@@ -447,6 +458,9 @@ CASE(10)
 CASE(32)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Ranocha KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec    => RanochaFluxVec
+CASE(40)
+  SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Shima et al. with Metrics Dealiasing'
+  VolumeFluxAverageVec    => ShimaEtAlFluxVec
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -876,7 +890,7 @@ CASE(12) ! SHU VORTEX,isentropic vortex (adapted from HALO)
   ! ini-Parameter of the Example
   vel=prim(2:4)*IniFrequency ! set either =1. / 0. for  time-dependent /not time-dependent
   RT=prim(PP_nVar)/prim(1) !ideal gas
-  cent=(iniCenter+vel*tEval)!centerpoint time dependant
+  cent=(iniCenter+vel*tEval)!centerpoint time dependent
   cent=x-cent ! distance to centerpoint
   cent=cent-IniAxis*SUM(IniAxis*cent)
   cent=cent/iniHalfWidth !Halfwidth is dimension 1

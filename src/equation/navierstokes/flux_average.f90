@@ -121,6 +121,14 @@ INTERFACE RanochaFluxVec
    MODULE PROCEDURE RanochaFluxVec
 END INTERFACE
 
+INTERFACE ShimaEtAlFlux
+   MODULE PROCEDURE ShimaEtAlFlux
+END INTERFACE
+
+INTERFACE ShimaEtAlFluxVec
+   MODULE PROCEDURE ShimaEtAlFluxVec
+END INTERFACE
+
 INTERFACE LN_MEAN
    MODULE PROCEDURE LN_MEAN
 END INTERFACE
@@ -153,6 +161,8 @@ PUBLIC:: GassnerWintersWalchFlux
 PUBLIC:: GassnerWintersWalchFluxVec
 PUBLIC:: RanochaFlux
 PUBLIC:: RanochaFluxVec
+PUBLIC:: ShimaEtAlFlux
+PUBLIC:: ShimaEtAlFluxVec
 PUBLIC:: LN_MEAN
 
 !==================================================================================================================================
@@ -1882,6 +1892,130 @@ Fstar(5) = Fstar(1)*(v2_ZIP+s_rho_sp_MEAN*sKappaM1)+0.5*(p_L*vm_R+p_R*vm_L)
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE RanochaFluxVec
+
+!==================================================================================================================================
+!> Flux of Shima et al.
+!> This flux is is a modification of the original kinetic energy preserving two-point flux by
+!> - Yuichi Kuya, Kosuke Totani and Soshi Kawai (2018)
+!>   Kinetic energy and entropy preserving schemes for compressible flows by split convective forms
+!>   [DOI: 10.1016/j.jcp.2018.08.058](https://doi.org/10.1016/j.jcp.2018.08.058)
+!> The modification is in the energy flux to guarantee pressure equilibrium and was developed by
+!> - Nao Shima, Yuichi Kuya, Yoshiharu Tamaki, Soshi Kawai (JCP 2020)
+!>   Preventing spurious pressure oscillations in split convective form discretizations for compressible flows
+!>   [DOI: 10.1016/j.jcp.2020.110060](https://doi.org/10.1016/j.jcp.2020.110060)
+!==================================================================================================================================
+PURE SUBROUTINE ShimaEtAlFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL      !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR      !< right state
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !<  flux in x
+REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !additional variables for riemann
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL            :: srho_L,srho_R,v2_L,v2_R
+REAL            :: p_L,p_R
+REAL            :: v_L(3),v_R(3)
+REAL            :: v2_ZIP
+!==================================================================================================================================
+ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+           rhoV_L => UL(2:4), rhoV_R => UR(2:4), &
+              E_L =>UL(5)   ,    E_R =>UR(5)   )
+              
+
+! Get the inverse density, velocity, and pressure on left and right
+srho_L = 1./rho_L
+srho_R = 1./rho_R
+
+v_L = rhoV_L(:)*srho_L
+v_R = rhoV_R(:)*srho_R
+v2_L = SUM(v_L(:)*v_L(:))
+v2_R = SUM(v_R(:)*v_R(:))
+
+p_L    = kappaM1*(E_L - 0.5*rho_L*v2_L)
+p_R    = kappaM1*(E_R - 0.5*rho_R*v2_R)
+
+! Get the averages for the numerical flux
+rhoHat = 0.5 * (rho_L + rho_R)
+uHat   = 0.5 * ( v_L(1) +  v_R(1))
+vHat   = 0.5 * ( v_L(2) +  v_R(2))
+wHat   = 0.5 * ( v_L(3) +  v_R(3))
+p1Hat  = 0.5 * ( p_L    +  p_R )
+aHat   = SQRT(kappa*p1Hat/rhoHat)
+HHat   = kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
+
+v2_ZIP = 0.5 * (v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
+
+! Compute the flux
+Fstar(1) = rhoHat * uHat
+Fstar(2) = Fstar(1) * uHat + p1Hat
+Fstar(3) = Fstar(1) * vHat
+Fstar(4) = Fstar(1) * wHat
+Fstar(5) = Fstar(1) * v2_ZIP + p1Hat * uHat * sKappaM1 + 0.5 * (p_L * v_R(1) + p_R * v_L(1))
+
+END ASSOCIATE
+END SUBROUTINE ShimaEtAlFlux
+
+
+!==================================================================================================================================
+!> Flux of Shima et al.
+!> directly compute tranformed flux: fstar=f*metric1+g*metric2+h*metric3
+!> for curved metrics, 1/2(metric_L+metric_R) is taken!
+!==================================================================================================================================
+PURE SUBROUTINE ShimaEtAlFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:nAuxVar
+USE MOD_Equation_Vars,ONLY:sKappaM1
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL :: q_L, q_R
+REAL :: rho_avg, q_avg, vAvg(3), p_avg, v2_avg
+REAL                   :: metric(3)
+!==================================================================================================================================
+metric = 0.5*(metric_L+metric_R)
+
+ASSOCIATE(  rho_L => UL(1)  ,  rho_R => UR(1)    , &
+              v_L =>UauxL(2:4),  v_R =>UauxR(2:4), &
+              p_L =>UauxL(5),    p_R =>UauxR(5)  )  !pressure
+
+q_L = sum(v_L*metric)
+q_R = sum(v_R*metric)
+
+! Compute averages
+rho_avg = 0.5 * (rho_L + rho_R)
+vAvg    = 0.5 * (  v_L + v_R)
+q_avg   = 0.5 * (  q_L + q_R)
+p_avg   = 0.5 * (  p_L + p_R)
+v2_avg =  0.5 * sum(v_L*v_R)
+
+! Calculate fluxes
+Fstar(1) = rho_avg * q_avg
+Fstar(2) = Fstar(1) * vAvg(1) + p_avg * metric(1)
+Fstar(3) = Fstar(1) * vAvg(2) + p_avg * metric(2)
+Fstar(4) = Fstar(1) * vAvg(3) + p_avg * metric(3)
+Fstar(5) = Fstar(1) * v2_avg + p_avg * q_avg * sKappaM1 + 0.5 * (p_L * q_R + p_R * q_L)
+
+END ASSOCIATE !rho_L/R,rhov1_L/R,...
+END SUBROUTINE ShimaEtAlFluxVec
 
 !==================================================================================================================================
 !> Computes the logarithmic mean: (aR-aL)/(LOG(aR)-LOG(aL)) = (aR-aL)/LOG(aR/aL)
