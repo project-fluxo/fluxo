@@ -397,7 +397,7 @@ END SUBROUTINE SetRiemannSolver
 SUBROUTINE SetVolumeFlux(which)
 ! MODULES
 USE MOD_Globals
-USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec,useEntropyProlongToFace
 USE MOD_Flux_Average
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -408,7 +408,7 @@ INTEGER,INTENT(IN) :: which
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-
+useEntropyProlongToFace=.FALSE.
 SELECT CASE(Which)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
@@ -419,9 +419,11 @@ CASE(1)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Derigs et al. KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
+  useEntropyProlongToFace=.TRUE.
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
+  useEntropyProlongToFace=.TRUE.
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")

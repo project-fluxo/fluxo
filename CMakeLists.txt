@@ -157,7 +157,7 @@ SET(EQNSYSNAME_FOUND false ) #to be set in each equation system
 
 IF(FLUXO_EQNSYSNAME STREQUAL "navierstokes")
   SET(EQNSYSNAME_FOUND true )
-  ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes)
+  ADD_DEFINITIONS(-DPP_nVar=5 -Dnavierstokes -DPP_entropy_vars_exist -DPP_u_aux_exist)
 ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "linearscalaradvection")
@@ -173,7 +173,7 @@ ENDIF()
 
 IF(FLUXO_EQNSYSNAME STREQUAL "mhd")
   SET(EQNSYSNAME_FOUND true )
-  ADD_DEFINITIONS( -Dmhd)
+  ADD_DEFINITIONS( -Dmhd -DPP_entropy_vars_exist -DPP_u_aux_exist)
   SET(FLUXO_EQN_GLM  ON  CACHE BOOL "switch on/off divergence cleaing for mhd.")
   IF(FLUXO_EQN_GLM)
     ADD_DEFINITIONS(-DPP_GLM=T -DPP_nVar=9)

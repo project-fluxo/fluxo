@@ -332,6 +332,26 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['linadv_split_gauss_br1_jesse_mortar']={
+          'case': caseID,
+          'tags': ['linadv','split-form','gauss','br1','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                        'FLUXO_PARABOLIC'        :'ON',
+                        'FLUXO_PARABOLIC_LIFTING':'br1',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_nonconf_coll_central,
+                       **run_opt_linfunc_conf,
+                       **run_opt_linfunc_nonconf_coll,
+                       **run_opt_linfunc_nonconf_coll_central,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    #============================================================================
    #============================================================================
    #next group, MAXWELL, 200 < caseID <300
@@ -344,7 +364,7 @@ def job_definition():
    run_opt_fsp_conf={'runs/maxwell/freestream/conforming': 
                     {'tags': ['maxwell','freestream','curved','conforming'],
                      'test_opts':{ 'err_Linf':{'func': check_error ,
-                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
                                  },
                     },
                   }
@@ -365,7 +385,7 @@ def job_definition():
    run_opt_fsp_nonconf_coll={'runs/maxwell/freestream/nonconforming_collmortar': 
                     {'tags': ['maxwell','freestream','curved','nonconforming','collocation-mortar'],
                      'test_opts':{ 'err_Linf':{'func': check_error ,
-                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
                                  },
                     },
                   }
@@ -441,6 +461,22 @@ def job_definition():
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         'FLUXO_DISC_NODETYPE'    :'GAUSS-LOBATTO',
+                        'FLUXO_JESSE_MORTAR'     :'ON',
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_conf_central,
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_fsp_nonconf_coll_central,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['maxwell_split_gauss_jesse_mortar']={
+          'case': caseID,
+          'tags': ['maxwell','split-form','gauss','jesse-mortar'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_DISC_NODETYPE'    :'GAUSS',
                         'FLUXO_JESSE_MORTAR'     :'ON',
                        },
           'run_opts': {**run_opt_fsp_conf, 

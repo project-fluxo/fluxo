@@ -51,19 +51,23 @@ USE MOD_Globals
 USE MOD_PreProc
 #if (PP_NodeType==1)
 USE MOD_DG_Vars,            ONLY: L_HatMinus
-#if (PP_DiscType==2)
-use MOD_Flux_Average,       ONLY: EvalAdvFluxAverage, EvalUaux
-#if NONCONS
-use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
-#endif /*NONCONS*/
-USE MOD_DG_Vars,            only: U,U_master,U_slave,Uaux
-USE MOD_Equation_Vars,      ONLY: nAuxVar
-USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde, SurfMetrics, NormalSigns
-USE MOD_Interpolation_Vars, ONLY: wGP
-#endif /*(PP_DiscType==2)*/
 #elif (PP_NodeType==2)
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
 #endif /*PP_NodeType*/ 
+#if (PP_DiscType==2 & PP_NodeType==1)
+use MOD_flux_Average,       ONLY: EvalAdvFluxAverage 
+USE MOD_DG_Vars,            ONLY: U,U_master,U_slave
+USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde, SurfMetrics, NormalSigns
+USE MOD_DG_Vars,            ONLY: L_Minus
+#ifdef PP_u_aux_exist
+use MOD_Flux_Average,       ONLY: EvalUaux
+USE MOD_DG_Vars,            only: Uaux
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /* PP_u_aux_exist*/
+#if NONCONS
+use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
+#endif /*NONCONS*/
+#endif /*(PP_DiscType==2 & PP_NodeType==1)*/
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
 USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
@@ -83,7 +87,9 @@ REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 INTEGER                         :: l
 #if (PP_DiscType==2)
 REAL                            :: FluxB(PP_nVar,0:PP_N),FluxB_sum(PP_nVar), FluxB_cont(PP_nVar)
+#ifdef PP_u_aux_exist
 REAL                            :: UauxB(nAuxVar)
+#endif
 real, pointer                   :: metrics(:,:,:,:)
 #endif /*(PP_DiscType==2)*/
 #endif /*PP_NodeType*/ 
@@ -119,14 +125,18 @@ DO SideID=firstSideID,lastSideID
     DO q=0,PP_N; DO p=0,PP_N
 #if (PP_DiscType==2)
       ! Evaluate the auxiliar variables the boundary
+#ifdef PP_u_aux_exist
       call EvalUaux(1,U_master(:,p,q,SideID),UauxB)
+#endif
       ! Evaluate the correction term for the line
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
         ! Evaluate flux between node and boundary (symmetric contribution)
         CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
+#ifdef PP_u_aux_exist
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
+#endif
                                metrics(:,ijk(1),ijk(2),ijk(3)),SurfMetrics(:,p,q,locSide,ElemID), &
                                  FluxB(:,l)                )
         ! Project 'boundary to volume' flux to the nodes 
@@ -138,9 +148,9 @@ DO SideID=firstSideID,lastSideID
                                                        UauxB ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
                             SurfMetrics(:,p,q,locSide,ElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
                                   FluxB_cont)
-        FluxB_sum = FluxB_sum + FluxB_cont* L_hatMinus(l)*wGP(l)
+        FluxB_sum = FluxB_sum + FluxB_cont* L_Minus(l)
 #else
-        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_Minus(l)
 #endif /*NONCONS*/
         
 #if NONCONS
@@ -192,14 +202,18 @@ DO SideID=firstSideID,lastSideID
     DO q=0,PP_N; DO p=0,PP_N
 #if (PP_DiscType==2)
       ! Evaluate the auxiliar variables the boundary
+#ifdef PP_u_aux_exist
       call EvalUaux(1,U_slave(:,p,q,SideID),UauxB)
+#endif
       ! Evaluate the correction term for the line
       FluxB_sum = 0.0
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
         ! Evaluate flux between node and boundary (symmetric contribution)
         CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    U_slave(:,p,q,SideID), &
+#ifdef PP_u_aux_exist
                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    UauxB, &
+#endif
                                metrics(:,ijk(1),ijk(2),ijk(3))          ,SurfMetrics(:,p,q,nblocSide,nbElemID), &
                                  FluxB(:,l)                )
         ! Project 'boundary to volume' flux to the nodes 
@@ -211,9 +225,9 @@ DO SideID=firstSideID,lastSideID
                                                UauxB            ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
                            SurfMetrics(:,p,q,nblocSide,nbElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
                                   FluxB_cont)
-        FluxB_sum = FluxB_sum + FluxB_cont* L_hatMinus(l)*wGP(l)
+        FluxB_sum = FluxB_sum + FluxB_cont* L_Minus(l)
 #else
-        FluxB_sum = FluxB_sum + FluxB(:,l)* L_hatMinus(l)*wGP(l)
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_Minus(l)
 #endif /*NONCONS*/
         
 #if NONCONS

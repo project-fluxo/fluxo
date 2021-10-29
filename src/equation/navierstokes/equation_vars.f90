@@ -89,7 +89,10 @@ character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 
                    
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 INTEGER             :: WhichRiemannSolver       !< choose riemann solver
+#if (PP_DiscType==2)
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
+LOGICAL             :: useEntropyProlongToFace  !< set true if entropy prolongtoface interpolation is needed. Is set depending on the whichVolumeFlux
+#endif /*PP_DiscType==2*/
 PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDissipMatrices =>Null()
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux

@@ -113,6 +113,7 @@ INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
+LOGICAL             :: useEntropyProlongToFace  !< set true if entropy prolongtoface interpolation is needed. Is set depending on the whichVolumeFlux
 #endif /*PP_DiscType==2*/
 PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDissipMatrices =>Null()
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 

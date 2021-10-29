@@ -72,8 +72,10 @@ USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-USE MOD_Equation_Vars,      ONLY: nAuxVar
 use MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
+#ifdef PP_u_aux_exist
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /*PP_u_aux_exist*/
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -100,15 +102,19 @@ ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 U=0.
 Ut=0.
 #if ((PP_NodeType==1) & (PP_DiscType==2))
+call CalcESGaussSurfMetrics()
+#ifdef PP_u_aux_exist
 ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Uaux=0.
+#endif /*PP_u_aux_exist*/
+#ifdef PP_entropy_vars_exist
 ALLOCATE(V   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 V=0.
 ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
 V_master=0.
 V_slave=0.
-call CalcESGaussSurfMetrics()
+#endif /*PP_entropy_vars_exist*/
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 nDOFElem=(PP_N+1)**3
@@ -180,7 +186,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
-USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_Minus,L_Plus,L_HatMinus,L_HatMinus0,L_HatPlus
 #if PP_DiscType==2
 USE MOD_DG_Vars,            ONLY: DvolSurf,DvolSurf_T
 #endif
@@ -197,11 +203,11 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv     
-REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
 real,DIMENSION(2,0:N_in)           :: Vf
 real,DIMENSION(2,2)                :: B
 INTEGER                            :: i
 !===================================================================================================================================
+ALLOCATE(L_Minus(0:N_in), L_Plus(0:N_in))
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
@@ -235,7 +241,7 @@ Vf(1,:) = L_Minus
 Vf(2,:) = L_Plus
 B(1,:) = (/-1.0, 0.0/)
 B(2,:) = (/ 0.0, 1.0/)
-Dvolsurf  = 2.0*D - matmul(Minv,matmul(matmul(transpose(Vf),B),Vf))
+Dvolsurf  = 2.0*D - MATMUL(Minv,MATMUL(MATMUL(TRANSPOSE(Vf),B),Vf))
 Dvolsurf_T= TRANSPOSE(Dvolsurf)
 #endif /*PP_DiscType==2*/
 END SUBROUTINE InitDGbasis
@@ -288,10 +294,10 @@ use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
 USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
-#if PP_NodeType==1
+#if (PP_NodeType==1 & defined(PP_entropy_vars_exist))
 USE MOD_DG_Vars             ,ONLY: V
-USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec
-#endif /*PP_NodeType==1*/
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec,useEntropyProlongToFace
+#endif /*PP_NodeType==1 & defined(PP_entropy_vars_exist)*/
 #endif /*PP_DiscType==2*/
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
@@ -324,9 +330,9 @@ REAL,INTENT(IN)                 :: tIn                    !< Current time
 CALL VNullify(nTotalU,Ut)
 
 ! If we use ES Gauss methods, we need the entropy variables in all nodes
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-call ConsToEntropyVec(nTotal_IP,V,U)
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
+IF(useEntropyProlongToFace) call ConsToEntropyVec(nTotal_IP,V,U)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
 
 #if MPI
 ! Solution is always communicated on the U_Slave array
@@ -452,12 +458,11 @@ USE MOD_Mesh_Vars           ,ONLY: SideToElem
 USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 USE MOD_Mesh_Vars           ,ONLY: firstMPISide_YOUR, nSides, lastMPISide_MINE
 USE MOD_DG_Vars             ,ONLY: U_master, U_slave
-#if ((PP_NodeType==1) & (PP_DiscType==2))
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
 USE MOD_DG_Vars             ,ONLY: V, nTotal_face, V_master, V_slave
-USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec, EntropyToConsVec
-#else
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec, EntropyToConsVec,useEntropyProlongToFace
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
 USE MOD_DG_Vars             ,ONLY: U
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -466,35 +471,41 @@ logical, intent(in) :: doMPISides
 ! LOCAL VARIABLES
 integer :: sideID,firstSideID,lastSideID,ElemID,nbElemID
 !==================================================================================================================================
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-! Prolong the entropy variables
-CALL ProlongToFace(PP_nVar,V,V_master,V_slave,doMPISides=doMPISides)
-! Transform back to conservative variables
-IF(doMPISides)THEN
-  firstSideID = firstMPISide_YOUR
-   lastSideID = nSides
-ELSE
-  firstSideID = 1
-   lastSideID =  lastMPISide_MINE
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
+IF(useEntropyProlongToFace)THEN
+  ! Prolong the entropy variables
+  CALL ProlongToFace(PP_nVar,V,V_master,V_slave,doMPISides=doMPISides)
+  ! Transform back to conservative variables
+  IF(doMPISides)THEN
+    firstSideID = firstMPISide_YOUR
+     lastSideID = nSides
+  ELSE
+    firstSideID = 1
+     lastSideID =  lastMPISide_MINE
+  END IF
+  do sideID=firstSideID, lastSideID
+    ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+    !master sides(ElemID,locSide and flip =-1 if not existing)
+    IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
+      call EntropyToConsVec(nTotal_face,V_master(:,:,:,sideID),U_master(:,:,:,sideID))
+    END IF
+    
+    nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+    !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+    IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
+      call EntropyToConsVec(nTotal_face,V_slave(:,:,:,sideID),U_slave(:,:,:,sideID))
+    END IF
+  end do
+ELSE !useEntropyProlongToFace=False
+  CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
 END IF
-do sideID=firstSideID, lastSideID
-  ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-  !master sides(ElemID,locSide and flip =-1 if not existing)
-  IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
-    call EntropyToConsVec(nTotal_face,V_master(:,:,:,sideID),U_master(:,:,:,sideID))
-  END IF
-  
-  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
-  !slave side (nbElemID,nblocSide and flip =-1 if not existing)
-  IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
-    call EntropyToConsVec(nTotal_face,V_slave(:,:,:,sideID),U_slave(:,:,:,sideID))
-  END IF
-end do
 #else
 CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#endif /*((PP_NodeType==1) & (PP_DiscType==2)) & defined(PP_entropy_vars_exist)*/
 
 END SUBROUTINE ProlongToFace_U
+
+
 !==================================================================================================================================
 !> Finalizes global variables of the module.
 !> Deallocate allocatable arrays, nullify pointers, set *InitIsDone = .FALSE.
@@ -517,12 +528,18 @@ SDEALLOCATE(D_Hat_T)
 SDEALLOCATE(Dvolsurf)
 SDEALLOCATE(Dvolsurf_T)
 #if PP_NodeType==1
+#ifdef PP_u_aux_exist
 SDEALLOCATE(Uaux)
+#endif
+#ifdef PP_entropy_vars_exist
 SDEALLOCATE(V)
 SDEALLOCATE(V_master)
 SDEALLOCATE(V_slave)
+#endif
 #endif /*PP_NodeType==1*/
 #endif /*PP_DiscType==2*/
+SDEALLOCATE(L_Minus)
+SDEALLOCATE(L_Plus)
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(Ut)

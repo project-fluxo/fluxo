@@ -410,6 +410,7 @@ WhichVolumeFlux = GETINT('VolumeFlux','0')
 WhichVolumeFlux = PP_VolFlux
 SWRITE(UNIT_stdOut,'(A,I4)') '   ...VolumeFlux defined at compile time:',WhichVolumeFlux
 #endif
+useEntropyProlongToFace=.FALSE.
 SELECT CASE(WhichVolumeFlux)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
@@ -429,12 +430,15 @@ CASE(4)
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: EC-KEP'
   VolumeFluxAverageVec => EntropyAndEnergyConservingFluxVec
+  useEntropyProlongToFace=.TRUE.
 CASE(6)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: approx. EC-KEP'
   VolumeFluxAverageVec => EntropyAndEnergyConservingFluxVec2
+  useEntropyProlongToFace=.TRUE.
 CASE(7)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: approx. EC-KEP + press. aver.'
   VolumeFluxAverageVec => ggFluxVec
+  useEntropyProlongToFace=.TRUE.
 CASE(8)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Kenndy & Gruber (pirozolli version)'
   VolumeFluxAverageVec => KennedyAndGruberFluxVec2
@@ -444,9 +448,11 @@ CASE(9)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Two-Point EC Ismail and Roe'
   VolumeFluxAverageVec => TwoPointEntropyConservingFluxVec
+  useEntropyProlongToFace=.TRUE.
 CASE(32)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Ranocha KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec    => RanochaFluxVec
+  useEntropyProlongToFace=.TRUE.
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
