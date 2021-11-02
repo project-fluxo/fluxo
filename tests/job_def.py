@@ -371,7 +371,7 @@ def job_definition():
    run_opt_fsp_conf_central={'runs/maxwell/freestream/conforming_central': 
                     {'tags': ['maxwell','freestream','curved','conforming','centralflux'],
                      'test_opts':{ 'err_Linf':{'func': check_error ,
-                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-10} },
+                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
                                  },
                     },
                   }
@@ -394,7 +394,7 @@ def job_definition():
    run_opt_fsp_nonconf_coll_central={'runs/maxwell/freestream/nonconforming_collmortar_central': 
                     {'tags': ['maxwell','freestream','curved','nonconforming','collocation-mortar','centralflux'],
                      'test_opts':{ 'err_Linf':{'func': check_error ,
-                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-12} },
+                                               'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} },
                                  },
                     },
                   }
