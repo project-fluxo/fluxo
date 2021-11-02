@@ -193,6 +193,8 @@ PUBLIC:: LN_MEAN
 #  define PP_VolumeFluxAverageVec TwoPointEntropyConservingFluxVec
 #elif PP_VolFlux==32
 #  define PP_VolumeFluxAverageVec RanochaFluxVec
+#elif PP_VolFlux==40
+#  define PP_VolumeFluxAverageVec ShimaEtAlFluxVec
 #endif
 !==================================================================================================================================
 
@@ -482,7 +484,7 @@ REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !ad
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: z1L,z1R,z2L,z2R,z3L,z3R,z4L,z4R,z5L,z5R
-REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,z1LN,z2Mean,z5Mean
+REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,s_z1LN,z2Mean,z5Mean
 REAL                                :: kappa_p2Hat
 REAL                                :: sRho_L,sRho_R,VelU_L,VelU_R,p_L,p_R,VelV_L,VelV_R,VelW_L,VelW_R
 !==================================================================================================================================
@@ -497,7 +499,7 @@ p_R    = (kappaM1)*(UR(5) - 0.5*(UR(2)*VelU_R + UR(3)*VelV_R + UR(4)*VelW_R))
 z1L    = SQRT(UL(1)/p_L)
 z1R    = SQRT(UR(1)/p_R)
 z1Mean = 0.5*(z1L+z1R)
-z1LN  = LN_Mean(z1L,z1R)
+s_z1LN = sLN_MEAN(z1L,z1R)
 ! z2 = u*√(rho/pressure) values on left and right and arithmatic mean
 z2L    = z1L*VelU_L
 z2R    = z1R*VelU_R
@@ -523,7 +525,7 @@ uHat   = z2Mean*sz1Mean
 vHat   = z3Mean*sz1Mean
 wHat   = z4Mean*sz1Mean
 p1Hat  = z5Mean*sz1Mean
-kappa_p2Hat  = 0.5*(kappaP1*(z5LN/z1LN) + kappaM1*p1Hat)
+kappa_p2Hat  = 0.5*(kappaP1*z5LN*s_z1LN + kappaM1*p1Hat)
 aHat   = SQRT(kappa_p2Hat/rhoHat)
 HHat   = kappa_p2Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 ! Entropy conserving flux
@@ -560,7 +562,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: z1L,z1R,z2L,z2R,z3L,z3R,z4L,z4R,z5L,z5R
-REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,z1LN,z2Mean,z5Mean
+REAL                                :: sz1Mean,z1Mean,z4Mean,z5LN,z3Mean,s_z1LN,z2Mean,z5Mean
 REAL                                :: rhoHat,uHat,vHat,wHat,p1Hat
 REAL                                :: qHat
 REAL                                :: metric(3)
@@ -581,7 +583,7 @@ ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
 z1L    = SQRT(rho_L/p_L)
 z1R    = SQRT(rho_R/p_R)
 z1Mean = 0.5*(z1L+z1R)
-z1LN   = LN_Mean(z1L,z1R)
+s_z1LN = sLN_Mean(z1L,z1R)
 ! z2 = u*√(rho/pressure) values on left and right and arithmatic mean
 z2L    = z1L*VelU_L
 z2R    = z1R*VelU_R
@@ -607,7 +609,7 @@ uHat   = z2Mean*sz1Mean
 vHat   = z3Mean*sz1Mean
 wHat   = z4Mean*sz1Mean
 p1Hat  = z5Mean*sz1Mean
-!rhoHat_HHat   = 0.5*(kappaP1*sKappaM1*(z5LN/z1LN)+p1Hat + rhoHat*(uHat*uHat + vHat*vHat + wHat*wHat)) !=rhoHat*HHat
+!rhoHat_HHat   = 0.5*(kappaP1*sKappaM1*(z5LN*s_z1LN)+p1Hat + rhoHat*(uHat*uHat + vHat*vHat + wHat*wHat)) !=rhoHat*HHat
 
 qHat=uHat*metric(1)+vHat*metric(2)+wHat*metric(3)
 
@@ -617,7 +619,7 @@ Fstar(2) = Fstar(1)*uHat + metric(1)*p1Hat
 Fstar(3) = Fstar(1)*vHat + metric(2)*p1Hat
 Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat
 !Fstar(5) = rhoHat_HHat*qHat
-Fstar(5)  = 0.5*(qHat*kappaP1*sKappaM1*(z5LN/z1LN)+uHat*Fstar(2)+vHat*Fstar(3)+wHat*Fstar(4))
+Fstar(5)  = 0.5*(qHat*kappaP1*sKappaM1*z5LN*s_z1LN+uHat*Fstar(2)+vHat*Fstar(3)+wHat*Fstar(4))
 
 !! Entropy conserving flux
 !Fstar(1) = rhoHat*uHat
@@ -1196,7 +1198,7 @@ REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !ad
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: qHat
-REAL                                :: rho_MEAN,beta_MEAN,beta_Hat
+REAL                                :: rho_MEAN,beta_MEAN,s_beta_Hat
 REAL                                :: beta_R,beta_L
 REAL                                :: sRho_L,sRho_R,VelU_L,VelU_R,p_L,p_R,VelV_L,VelV_R,VelW_L,VelW_R
 REAL                                :: Vel2s2_L,Vel2s2_R,Vel2_M
@@ -1218,12 +1220,12 @@ beta_R = 0.5*UR(1)/p_R
 rho_MEAN  = 0.5*(   UL(1)+UR(1))
 rhoHat    = LN_MEAN(UL(1),UR(1))
 beta_MEAN = 0.5*(    beta_L+beta_R)
-beta_Hat  = LN_MEAN(beta_L,beta_R)
+s_beta_Hat= sLN_MEAN(beta_L,beta_R)
 uHat      = 0.5*(    VelU_L+VelU_R)
 vHat      = 0.5*(    VelV_L+VelV_R)
 wHat      = 0.5*(    VelW_L+VelW_R)
 aHat      = SQRT(Kappa*0.5*(p_L+p_R)/rhoHat)
-HHat      = Kappa/(2.*KappaM1*beta_hat) + 0.5*(velU_L*velU_R+velV_L*velV_R+velW_L*velW_R)
+HHat      = 0.5*Kappa*sKappaM1*s_beta_hat + 0.5*(velU_L*velU_R+velV_L*velV_R+velW_L*velW_R)
 p1Hat     = 0.5*rho_MEAN/beta_MEAN
 Vel2_M    = Vel2s2_L+Vel2s2_R
 
@@ -1233,7 +1235,7 @@ Fstar(1) = rhoHat*qHat
 Fstar(2) = Fstar(1)*uHat + p1Hat
 Fstar(3) = Fstar(1)*vHat
 Fstar(4) = Fstar(1)*wHat
-Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - Vel2_M)  &
+Fstar(5) = Fstar(1)*0.5*(skappaM1*s_beta_Hat - Vel2_M)  &
            + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 END SUBROUTINE EntropyAndEnergyConservingFlux
 
@@ -1263,7 +1265,7 @@ REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat
-REAL                                :: rho_MEAN,beta_MEAN,beta_Hat,qHat
+REAL                                :: rho_MEAN,beta_MEAN,s_beta_Hat,qHat
 REAL                                :: beta_R,beta_L
 REAL                                :: metric(3)
 !==================================================================================================================================
@@ -1287,7 +1289,7 @@ beta_R = 0.5*rho_R/p_R
 rho_MEAN  = 0.5*(   rho_L+rho_R)
 rhoHat    = LN_MEAN(rho_L,rho_R)
 beta_MEAN = 0.5*(    beta_L+beta_R)
-beta_Hat  = LN_MEAN(beta_L,beta_R)
+s_beta_Hat= sLN_MEAN(beta_L,beta_R)
 uHat      = 0.5*(    VelU_L+VelU_R)
 vHat      = 0.5*(    VelV_L+VelV_R)
 wHat      = 0.5*(    VelW_L+VelW_R)
@@ -1300,7 +1302,7 @@ Fstar(1) = rhoHat*qHat
 Fstar(2) = Fstar(1)*uHat + metric(1)*p1Hat
 Fstar(3) = Fstar(1)*vHat + metric(2)*p1Hat
 Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat
-Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - 0.5*(Vel2_L+Vel2_R)) &
+Fstar(5) = Fstar(1)*0.5*(skappaM1*s_beta_Hat - 0.5*(Vel2_L+Vel2_R)) &
            + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 
 !! Entropy conserving and kinetic energy conserving flux
@@ -1495,7 +1497,7 @@ REAL                   ,INTENT(OUT) :: uHat,vHat,wHat,aHat,rhoHat,HHat,p1Hat !ad
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: qHat
-REAL                                :: rho_MEAN,beta_Hat
+REAL                                :: rho_MEAN,s_beta_Hat
 REAL                                :: beta_R,beta_L
 REAL                                :: sRho_L,sRho_R,VelU_L,VelU_R,p_L,p_R,VelV_L,VelV_R,VelW_L,VelW_R
 REAL                                :: Vel2s2_L,Vel2s2_R,Vel2_M
@@ -1518,7 +1520,7 @@ HHat   = 0.
 
 rho_MEAN   = 0.5*(UL(1)+UR(1))
 rhoHat     = LN_MEAN(UL(1),UR(1))
-beta_Hat   = LN_MEAN(beta_L,beta_R)
+s_beta_Hat = sLN_MEAN(beta_L,beta_R)
 uHat       = 0.5*(VelU_L+VelU_R)
 vHat       = 0.5*(VelV_L+VelV_R)
 wHat       = 0.5*(VelW_L+VelW_R)
@@ -1531,7 +1533,7 @@ Fstar(1) = rhoHat*qHat
 Fstar(2) = Fstar(1)*uHat + p1Hat
 Fstar(3) = Fstar(1)*vHat
 Fstar(4) = Fstar(1)*wHat
-Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat - Vel2_M) &
+Fstar(5) = Fstar(1)*0.5*(skappaM1*s_beta_Hat - Vel2_M) &
            + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 END SUBROUTINE ggFlux
 
@@ -1560,8 +1562,8 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar   !< transformed flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: uHat,vHat,wHat,rhoHat,p1Hat,qHat
-REAL                                :: rho_MEAN,beta_Hat
+REAL                                :: uHat,vHat,wHat,p1Hat,qHat!,rhoHat
+REAL                                :: rho_MEAN,s_beta_Hat
 REAL                                :: beta_R,beta_L
 REAL                                :: metric(3)
 !==================================================================================================================================
@@ -1583,8 +1585,8 @@ beta_R = 0.5*rho_R/p_R
 ! Get the averages for the numerical flux
 
 rho_MEAN   = 0.5*(rho_L+rho_R)
-rhoHat     = LN_MEAN(rho_L,rho_R)
-beta_Hat   = LN_MEAN(beta_L,beta_R)
+!rhoHat     = LN_MEAN(rho_L,rho_R)
+s_beta_Hat = sLN_MEAN(beta_L,beta_R)
 uHat       = 0.5*(VelU_L+VelU_R)
 vHat       = 0.5*(VelV_L+VelV_R)
 wHat       = 0.5*(VelW_L+VelW_R)
@@ -1597,7 +1599,7 @@ Fstar(1) = rho_MEAN*qHat
 Fstar(2) = Fstar(1)*uHat + metric(1)*p1Hat
 Fstar(3) = Fstar(1)*vHat + metric(2)*p1Hat
 Fstar(4) = Fstar(1)*wHat + metric(3)*p1Hat
-Fstar(5) = Fstar(1)*0.5*(skappaM1/beta_Hat -0.5*(Vel2_L+Vel2_R))  &
+Fstar(5) = Fstar(1)*0.5*(skappaM1*s_beta_Hat -0.5*(Vel2_L+Vel2_R))  &
            + uHat*Fstar(2) + vHat*Fstar(3) + wHat*Fstar(4)
 
 !! Entropy conserving and kinetic energy conserving flux
@@ -1903,6 +1905,8 @@ END SUBROUTINE RanochaFluxVec
 !> - Nao Shima, Yuichi Kuya, Yoshiharu Tamaki, Soshi Kawai (JCP 2020)
 !>   Preventing spurious pressure oscillations in split convective form discretizations for compressible flows
 !>   [DOI: 10.1016/j.jcp.2020.110060](https://doi.org/10.1016/j.jcp.2020.110060)
+!> ATTENTION: 1) ! aHat and HHat are not used anywhere for the Shima et al. flux. Therefore, they are set to 1.0 to improve 
+!>                 performance, but should be assigned properly if they are ever needed...
 !==================================================================================================================================
 PURE SUBROUTINE ShimaEtAlFlux(Fstar,UL,UR,uHat,vHat,wHat,aHat,HHat,p1Hat,rhoHat)
 ! MODULES
@@ -1947,8 +1951,8 @@ uHat   = 0.5 * ( v_L(1) +  v_R(1))
 vHat   = 0.5 * ( v_L(2) +  v_R(2))
 wHat   = 0.5 * ( v_L(3) +  v_R(3))
 p1Hat  = 0.5 * ( p_L    +  p_R )
-aHat   = SQRT(kappa*p1Hat/rhoHat)
-HHat   = kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
+aHat   = 1.0 !SQRT(kappa*p1Hat/rhoHat)
+HHat   = 1.0 !kappa*p1Hat/(rhoHat*kappaM1) + 0.5*(uHat*uHat + vHat*vHat + wHat*wHat)
 
 v2_ZIP = 0.5 * (v_L(1)*v_R(1)+v_L(2)*v_R(2)+v_L(3)*v_R(3))
 
