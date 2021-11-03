@@ -362,11 +362,6 @@ REAL               :: Mortar_Ja(3,3,0:PP_N,0:PP_N,4)
 REAL               :: Mortar_xGP( 3,0:PP_N,0:PP_N,4)
 REAL               :: tmp(        3,0:PP_N,0:PP_N)
 REAL               :: tmp2(       3,0:PP_N,0:PP_N)
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-real               :: NormVec_tmp(3,0:PP_N,0:PP_N)  ! Temporary array to store the NormVec before storing with the master flip
-real               :: SurfElem_tmp (0:PP_N,0:PP_N)  ! Temporary array to store the SurfElem before storing with the master flip
-integer            :: nbFlip
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !==================================================================================================================================
 
 DO iLocSide=1,6
