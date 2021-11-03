@@ -67,9 +67,6 @@ END INTERFACE
 PUBLIC::CalcMetrics
 PUBLIC::CalcSurfMetrics
 PUBLIC::SurfMetricsFromJa
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-PUBLIC::CalcESGaussSurfMetrics
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !==================================================================================================================================
 
 CONTAINS
@@ -331,7 +328,7 @@ END SUBROUTINE CalcMetrics
 !> Input is JaGL_N, the 3D element metrics on Cebychev-Lobatto points.
 !> For each side the volume metrics are interpolated to the surface and rotated into the side reference frame. 
 !> ATTENTION: 1) The surface metrics (NormVec,TangVec1,TangVec2,SurfElem) are in general only stored for the master sides, but...
-!>            2) If ES Gauss collocation methods are used, we also compute NormVec and SurfElem for the MPI slave sides 
+!>            2) If ES Gauss collocation methods are used, we also compute SurfMetrics for the slave sides 
 !==================================================================================================================================
 SUBROUTINE CalcSurfMetrics(JaGL_N,XGL_N,Vdm_GLN_N,iElem)
 ! MODULES
@@ -370,18 +367,15 @@ real               :: NormVec_tmp(3,0:PP_N,0:PP_N)  ! Temporary array to store t
 real               :: SurfElem_tmp (0:PP_N,0:PP_N)  ! Temporary array to store the SurfElem before storing with the master flip
 integer            :: nbFlip
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
-logical            :: skipMPIslaves
 !==================================================================================================================================
-
-skipMPIslaves = .TRUE.
 
 DO iLocSide=1,6
   SideID=ElemToSide(E2S_SIDE_ID,iLocSide,iElem)
   flip = ElemToSide(E2S_FLIP,iLocSide,iElem)
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-  ! do not skip MPI slaves for ES Gauss collocation methods
-  skipMPIslaves = (SideID < firstMPISide_YOUR) .or. (SideID > lastMPISide_YOUR)
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#if !((PP_NodeType==1) & (PP_DiscType==2))
+  ! Skip slave sides if not doing ES Gauss collocation methods
+  IF(flip.NE.0) CYCLE ! master sides have flip=0
+#endif /*!((PP_NodeType==1) & (PP_DiscType==2))*/
 
   SELECT CASE(iLocSide)
   CASE(XI_MINUS)
@@ -429,35 +423,18 @@ DO iLocSide=1,6
   END DO ! dd
 
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-!   SurfMetrics(:,:,:,iLocSide,iElem)=Ja_Face(NormalDirs(iLocSide),:,:,:)
+  ! Rotate metrics on slave sides to match the master frame of reference
   DO q=0,PP_N; DO p=0,PP_N
     SurfMetrics(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iLocSide,iElem)=Ja_Face(NormalDirs(iLocSide),:,p,q) 
   END DO; END DO ! p,q
+  ! Skip the rest for slave sides
+  IF(flip.NE.0) CYCLE ! master sides have flip=0
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
-
-  IF((flip.NE.0) .and. skipMPIslaves) CYCLE ! master sides have flip=0
-
+  
   NormalDir=NormalDirs(iLocSide); TangDir=TangDirs(iLocSide); NormalSign=NormalSigns(iLocSide)
   CALL SurfMetricsFromJa(NormalDir,TangDir,NormalSign,Ja_Face,&
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),&
                          TangVec2(:,:,:,SideID),SurfElem(:,:,SideID))
-  
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-  ! Rotate metrics on MPI slave sides to the master frame of reference
-  if (flip.NE.0) then
-    NormVec_tmp  = NormVec(:,:,:,SideID)
-    SurfElem_tmp = SurfElem (:,:,SideID)
-    nbFlip    = SideToElem(S2E_FLIP,SideID)
-    IF(nbFlip.NE.flip) STOP 'CHECK: Flip and flip of neighbor side should be equal'
-    DO q=0,PP_N; DO p=0,PP_N
-      NormVec(:,p,q,SideID) = -NormVec_tmp(:,FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
-      SurfElem (p,q,SideID) =  SurfElem_tmp (FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
-      ! The tangential vectors are not needed, so we zero them
-      TangVec1(:,:,:,SideID) = 0.0
-      TangVec2(:,:,:,SideID) = 0.0
-    END DO ; END DO
-  end if
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
   
   !compute metrics for mortar faces, interpolate Ja_Face to small sides
   IF(MortarType(1,SideID).GT.0)THEN
@@ -509,51 +486,5 @@ DO q=0,PP_N; DO p=0,PP_N
   TangVec2(:,p,q) = CROSS(NormVec(:,p,q),TangVec1(:,p,q))
 END DO; END DO ! p,q
 END SUBROUTINE SurfMetricsFromJa
-
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-!==================================================================================================================================
-!> Computes the surface metrics that are only needed for ES-Gauss methods
-!==================================================================================================================================
-SUBROUTINE CalcESGaussSurfMetrics()
-! MODULES
-USE MOD_Preproc
-USE MOD_Mesh_Vars, ONLY: SurfMetrics, nElems, ElemToSide, NormalSigns, SurfElem, NormVec
-!----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES
-INTEGER :: iElem, locSide, sideID, p, q,flip
-REAL    :: signMetrics,nshat(3)
-LOGICAL :: wrong
-!----------------------------------------------------------------------------------------------------------------------------------
-wrong=.FALSE.
-
-!USE THIS ROUTINE NOW TO CHECK IF THE SURFMETRICS IS DONE CORRECTLY...
-
-!SDEALLOCATE(SurfMetrics)
-!ALLOCATE(SurfMetrics   (3,0:PP_N,0:PP_N,6,nElems))
-DO iElem=1, nElems
-  DO locSide = 1, 6
-    DO q=0, PP_N ; DO p=0, PP_N
-      sideID = ElemToSide(E2S_SIDE_ID,locSide,iElem)
-      flip = ElemToSide(E2S_FLIP,locSide,iElem)
-      if (flip == 0) then
-        signMetrics = 1.0
-      else
-        signMetrics =-1.0
-      end if
-!      SurfMetrics(:,p,q,locSide,iElem) = signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
-      nshat(:)=signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
-      wrong=(SQRT(SUM((SurfMetrics(:,p,q,locSide,iElem)-nshat(:))**2)).GT.1e-12)
-    END DO ; END DO
-  END DO
-END DO
-
-IF(wrong)THEN
-  STOP 'DEBUG: CHECK SURFMETRIC WENT WRONG'
-ELSE
-  WRITE(*,*)'SURFMETRIC CHECKED!'
-END IF
-
-END SUBROUTINE CalcESGaussSurfMetrics
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 END MODULE MOD_Metrics

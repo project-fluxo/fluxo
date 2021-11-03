@@ -71,12 +71,9 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
-#if ((PP_NodeType==1) & (PP_DiscType==2))
-use MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
-#ifdef PP_u_aux_exist
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_u_aux_exist))
 USE MOD_Equation_Vars,      ONLY: nAuxVar
-#endif /*PP_u_aux_exist*/
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_u_aux_exist))*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -102,7 +99,6 @@ ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 U=0.
 Ut=0.
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-call CalcESGaussSurfMetrics()
 #ifdef PP_u_aux_exist
 ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Uaux=0.
