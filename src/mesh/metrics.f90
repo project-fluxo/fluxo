@@ -341,8 +341,7 @@ USE MOD_Mappings,       ONLY:CGNS_SideToVol2
 USE MOD_ChangeBasis,    ONLY:ChangeBasis2D
 USE MOD_Mortar_Metrics, ONLY:Mortar_CalcSurfMetrics
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-USE MOD_Mesh_Vars,      ONLY:firstMPISide_YOUR, lastMPISide_YOUR, SideToElem, FS2M
-USE MOD_Mesh_Vars,      ONLY: SurfMetrics
+USE MOD_Mesh_Vars,      ONLY: FS2M, SurfMetrics
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
