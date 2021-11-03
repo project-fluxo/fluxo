@@ -330,9 +330,15 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_Metrics,            ONLY: CalcMetrics
   USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-  USE MOD_DG_Vars,            ONLY: Uaux, V, V_master, V_slave
-  USE MOD_Metrics,            ONLY: CalcESGaussSurfMetrics
+  USE MOD_Metrics,            ONLY: CalcESGaussSurfMetrics ! deprecated
+  USE MOD_Mesh_Vars,          ONLY: SurfMetrics
   USE MOD_Equation_Vars,      ONLY: nAuxVar
+#ifdef PP_u_aux_exist
+  USE MOD_DG_Vars,            ONLY: Uaux
+#endif /*PP_u_aux_exist*/
+#ifdef PP_entropy_vars_exist
+  USE MOD_DG_Vars,            ONLY: V, V_master, V_slave
+#endif /*PP_entropy_vars_exist*/
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, NGeoRef, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
@@ -623,10 +629,16 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ENDIF
     
 #if ((PP_NodeType==1) & (PP_DiscType==2))
+    SDEALLOCATE(SurfMetrics)
+    ALLOCATE(SurfMetrics(3,0:PP_N,0:PP_N,6,nElems)) !normal metric at surfaces
+#ifdef PP_u_aux_exist
     SDEALLOCATE(Uaux); ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
     Uaux=0.
+#endif /*PP_u_aux_exist*/
+#ifdef PP_entropy_vars_exist
     SDEALLOCATE(V   ); ALLOCATE(V   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
     V=0.
+#endif /*PP_entropy_vars_exist*/
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 #if PARABOLIC
     IF (ALLOCATED(gradPx))  THEN 
@@ -691,10 +703,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
     ENDIF
     DEALLOCATE(U_master)
     ALLOCATE(U_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
-#if ((PP_NodeType==1) & (PP_DiscType==2))
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
     SDEALLOCATE(V_master); ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
     V_master=0.
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
   
     DEALLOCATE(Flux_master)
     ALLOCATE(Flux_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
@@ -741,10 +753,10 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /* PARABOLIC */
     DEALLOCATE(U_SLAVE)
     ALLOCATE(U_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
-#if ((PP_NodeType==1) & (PP_DiscType==2))
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
     SDEALLOCATE(V_slave); ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
     V_slave=0.
-#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
     
     DEALLOCATE(Flux_SLAVE)
     
@@ -756,7 +768,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 ! ======================
   CALL CalcMetrics((/0/))
 #if ((PP_NodeType==1) & (PP_DiscType==2))
-  call CalcESGaussSurfMetrics()
+  call CalcESGaussSurfMetrics() ! deprecated
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 ! ================================================================================================
 ! Recover U in the elements that were coarsened (their U is currently scaled by the Jacobian: J*U)
