@@ -258,6 +258,10 @@ ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
 ALLOCATE(    Elem_inCyl(nElems))
 
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+ALLOCATE(SurfMetrics(3,0:PP_N,0:PP_N,6,nElems)) !normal metric at surfaces
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+
 ! surface data
 ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))

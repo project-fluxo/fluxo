@@ -345,6 +345,7 @@ USE MOD_ChangeBasis,    ONLY:ChangeBasis2D
 USE MOD_Mortar_Metrics, ONLY:Mortar_CalcSurfMetrics
 #if ((PP_NodeType==1) & (PP_DiscType==2))
 USE MOD_Mesh_Vars,      ONLY:firstMPISide_YOUR, lastMPISide_YOUR, SideToElem, FS2M
+USE MOD_Mesh_Vars,      ONLY: SurfMetrics
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
@@ -356,7 +357,7 @@ REAL,INTENT(IN)    :: XGL_N(     3,0:PP_N,0:PP_N,0:PP_N)  !< (IN) element geo. i
 REAL,INTENT(IN)    :: Vdm_GLN_N(   0:PP_N,0:PP_N)         !< (IN) Vandermonde matrix from Gauss-Lob on N to final nodeset on N
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER            :: p,q,pq(2),dd,iLocSide,SideID,SideID2,iMortar,nbSideIDs(4)
+INTEGER            :: p,q,pq(2),dd,iLocSide,SideID,SideID2,iMortar,nbSideIDs(4),flip
 INTEGER            :: NormalDir,TangDir
 REAL               :: NormalSign
 REAL               :: Ja_Face(  3,3,0:PP_N,0:PP_N)
@@ -376,11 +377,11 @@ skipMPIslaves = .TRUE.
 
 DO iLocSide=1,6
   SideID=ElemToSide(E2S_SIDE_ID,iLocSide,iElem)
+  flip = ElemToSide(E2S_FLIP,iLocSide,iElem)
 #if ((PP_NodeType==1) & (PP_DiscType==2))
   ! do not skip MPI slaves for ES Gauss collocation methods
   skipMPIslaves = (SideID < firstMPISide_YOUR) .or. (SideID > lastMPISide_YOUR)
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
-  IF((ElemToSide(E2S_FLIP,iLocSide,iElem).NE.0) .and. skipMPIslaves) CYCLE ! master sides have flip=0
 
   SELECT CASE(iLocSide)
   CASE(XI_MINUS)
@@ -427,6 +428,15 @@ DO iLocSide=1,6
     END DO; END DO ! p,q
   END DO ! dd
 
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+!   SurfMetrics(:,:,:,iLocSide,iElem)=Ja_Face(NormalDirs(iLocSide),:,:,:)
+  DO q=0,PP_N; DO p=0,PP_N
+    SurfMetrics(:,FS2M(1,p,q,flip),FS2M(2,p,q,flip),iLocSide,iElem)=Ja_Face(NormalDirs(iLocSide),:,p,q) 
+  END DO; END DO ! p,q
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+
+  IF((flip.NE.0) .and. skipMPIslaves) CYCLE ! master sides have flip=0
+
   NormalDir=NormalDirs(iLocSide); TangDir=TangDirs(iLocSide); NormalSign=NormalSigns(iLocSide)
   CALL SurfMetricsFromJa(NormalDir,TangDir,NormalSign,Ja_Face,&
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),&
@@ -434,10 +444,11 @@ DO iLocSide=1,6
   
 #if ((PP_NodeType==1) & (PP_DiscType==2))
   ! Rotate metrics on MPI slave sides to the master frame of reference
-  if (ElemToSide(E2S_FLIP,iLocSide,iElem).NE.0) then
+  if (flip.NE.0) then
     NormVec_tmp  = NormVec(:,:,:,SideID)
     SurfElem_tmp = SurfElem (:,:,SideID)
     nbFlip    = SideToElem(S2E_FLIP,SideID)
+    IF(nbFlip.NE.flip) STOP 'CHECK: Flip and flip of neighbor side should be equal'
     DO q=0,PP_N; DO p=0,PP_N
       NormVec(:,p,q,SideID) = -NormVec_tmp(:,FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
       SurfElem (p,q,SideID) =  SurfElem_tmp (FS2M(1,p,q,nbFlip),FS2M(2,p,q,nbFlip))
@@ -509,25 +520,38 @@ USE MOD_Preproc
 USE MOD_Mesh_Vars, ONLY: SurfMetrics, nElems, ElemToSide, NormalSigns, SurfElem, NormVec
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER :: iElem, locSide, sideID, p, q
-REAL    :: signMetrics
+INTEGER :: iElem, locSide, sideID, p, q,flip
+REAL    :: signMetrics,nshat(3)
+LOGICAL :: wrong
 !----------------------------------------------------------------------------------------------------------------------------------
+wrong=.FALSE.
 
-SDEALLOCATE(SurfMetrics)
-ALLOCATE(SurfMetrics   (3,0:PP_N,0:PP_N,6,nElems))
+!USE THIS ROUTINE NOW TO CHECK IF THE SURFMETRICS IS DONE CORRECTLY...
+
+!SDEALLOCATE(SurfMetrics)
+!ALLOCATE(SurfMetrics   (3,0:PP_N,0:PP_N,6,nElems))
 DO iElem=1, nElems
   DO locSide = 1, 6
     DO q=0, PP_N ; DO p=0, PP_N
       sideID = ElemToSide(E2S_SIDE_ID,locSide,iElem)
-      if (ElemToSide(E2S_FLIP,locSide,iElem) == 0) then
+      flip = ElemToSide(E2S_FLIP,locSide,iElem)
+      if (flip == 0) then
         signMetrics = 1.0
       else
         signMetrics =-1.0
       end if
-      SurfMetrics(:,p,q,locSide,iElem) = signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
+!      SurfMetrics(:,p,q,locSide,iElem) = signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
+      nshat(:)=signMetrics*NormalSigns(locSide)*SurfElem(p,q,SideID)*NormVec(:,p,q,SideID)
+      wrong=(SQRT(SUM((SurfMetrics(:,p,q,locSide,iElem)-nshat(:))**2)).GT.1e-12)
     END DO ; END DO
   END DO
 END DO
+
+IF(wrong)THEN
+  STOP 'DEBUG: CHECK SURFMETRIC WENT WRONG'
+ELSE
+  WRITE(*,*)'SURFMETRIC CHECKED!'
+END IF
 
 END SUBROUTINE CalcESGaussSurfMetrics
 #endif /*((PP_NodeType==1) & (PP_DiscType==2))*/

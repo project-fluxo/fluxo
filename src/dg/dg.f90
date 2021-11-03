@@ -211,7 +211,7 @@ ALLOCATE(L_Minus(0:N_in), L_Plus(0:N_in))
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
-! Compute Differentiation matrix D for given Gausspoints
+! Compute Differentiation matrix D on given interpolation points
 CALL PolynomialDerivativeMatrix(N_in,xGP,D)
 D_T=TRANSPOSE(D)
 
@@ -233,10 +233,18 @@ L_HatMinus(:) = MATMUL(Minv,L_Minus)
 L_HatMinus0 = L_HatMinus(0)
 
 #if PP_DiscType==2
-!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! W*DvolSurf^T = -W*DvolSurf
+! * (generalized) SBP property: Q + Q^T = B, Q=M*D,  boundary matrix B=B^T
+! * modified D matrix for volint_SplitForm: Dvolsurf = 2*D - Minv*B, 
+!   substracts the 'inner' flux contribution of the boundaries in the strong split-form formulation (which would use 2*D), 
+!   thus with Dvolsurf, the volint implements a weak form. 
+! * NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! M*DvolSurf^T = -M*DvolSurf
+! * For LGL (NodeType==2, SBP with diagonal norm), it can be explicitly written as:
+!     Dvolsurf=2.0*D
+!     Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
+!     Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
 ALLOCATE(Dvolsurf(0:N_in,0:N_in))
 ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
-!modified D matrix for fluxdifference volint (for a generalized SBP property)
+!modified D matrix for split-form volint, with a generalized SBP property, so Gauss-Legendre and LGL nodes
 Vf(1,:) = L_Minus
 Vf(2,:) = L_Plus
 B(1,:) = (/-1.0, 0.0/)
@@ -244,6 +252,7 @@ B(2,:) = (/ 0.0, 1.0/)
 Dvolsurf  = 2.0*D - MATMUL(Minv,MATMUL(MATMUL(TRANSPOSE(Vf),B),Vf))
 Dvolsurf_T= TRANSPOSE(Dvolsurf)
 #endif /*PP_DiscType==2*/
+
 END SUBROUTINE InitDGbasis
 
 !==================================================================================================================================
