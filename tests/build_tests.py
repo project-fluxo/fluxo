@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 from helpers import read_prm
 
@@ -70,6 +71,7 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
       cmdconfig = 'cmake ../../.'+allopt_str
       print( '  ' )
       print( '===> configure...' )
+      starttime = time.time()
       os.system(cmdconfig+' 2>std.err 1>std.out')
       with open('std.out','r') as fp:
          stdout=fp.readlines()
@@ -93,9 +95,10 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
       if (ntail > 0) :
          for line in stdout[-ntail:] :
             sys.stdout.write('%s' % line)
+      timing_sec = ( '[ %7.2f sec ] ' % (time.time()- starttime))
       if(not success) :
          print( '================================================ ' )
-         print( ' !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!! ' )
+         print( ' !!!! ERROR IN CMAKE, NOT FINISHED CORRECTLY!!!! %s ' %  timing_sec )
          print( '================================================ ' )
          print( '  ' )
          err.extend('caseID: %6d ,jobname: %s <=Cmake ' % (case,jobname))
@@ -103,7 +106,7 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
          return success #=False
       else : 
          print( '================================================ ' )
-         print( ' Cmake finished successfully.                    ' )
+         print( ' Cmake finished successfully.  %s' % timing_sec )
          print( '================================================ ' )
          print( '  ' )
       #endif (not success)
@@ -111,6 +114,7 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
       #MAKE
       print( '  ' )
       print( '===> make...' )
+      starttime = time.time()
       cmdmake = ('make -j %d VERBOSE=1' % (mpi_procs) )
       
       os.system(cmdmake+' 2>std.err 1>std.out')
@@ -136,9 +140,10 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
          for line in stdout[-ntail:] :
             sys.stdout.write('%s' % line)
       
+      timing_sec = ( '[ %7.2f sec ] ' % (time.time()- starttime))
       if (not success) :
          print( '==================================================== ' )
-         print( '!!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! ' )
+         print( '!!!! PROBLEM WITH BUILD, NOT FINISHED CORRECTLY!!!!! %s ' % timing_sec )
          err.extend(['caseID: %6d ,jobname: %s <=Make' % (case,jobname)])
          print( '==================================================== ' )
          print( '  ' )
@@ -146,7 +151,7 @@ def test_fluxo(jobname='test',  case=0, stage=0, base_opts={}, build_opts={},for
          return success #=False
       else :
          print( '==================================================== ' )
-         print( ' Build finished sucessfully.                         ' )                  
+         print( ' Build finished sucessfully. %s  ' % timing_sec )                  
          print( '==================================================== ' )
          print( '  ' )
       #endif (not success)

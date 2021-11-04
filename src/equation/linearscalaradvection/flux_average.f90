@@ -1,6 +1,6 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -43,6 +43,7 @@ END INTERFACE
 
 #if (PP_DiscType==2)
 PUBLIC:: EvalAdvFluxAverage3D
+PUBLIC:: EvalAdvFluxAverage
 #endif /*PP_DiscType==2*/
 PUBLIC::StandardDGFlux
 PUBLIC::StandardDGFluxVec
@@ -122,6 +123,35 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE EvalAdvFluxAverage3D
+
+
+!==================================================================================================================================
+!> Compute flux differences between two points appling also directly the metrics
+!==================================================================================================================================
+SUBROUTINE EvalAdvFluxAverage(UL,UR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+CALL PP_VolumeFluxAverageVec(UL,UR,metric_L,metric_R,Fstar)
+
+END SUBROUTINE EvalAdvFluxAverage
 #endif /*PP_DiscType==2*/
 
 !==================================================================================================================================

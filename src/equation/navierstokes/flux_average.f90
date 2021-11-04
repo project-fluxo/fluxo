@@ -1,7 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -136,6 +137,7 @@ END INTERFACE
 
 #if (PP_DiscType==2)
 PUBLIC:: EvalAdvFluxAverage3D
+PUBLIC:: EvalAdvFluxAverage
 PUBLIC:: EvalUaux
 #endif /*PP_DiscType==2*/
 PUBLIC:: StandardDGFlux
@@ -205,7 +207,11 @@ CONTAINS
 !==================================================================================================================================
 !> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics
 !==================================================================================================================================
-SUBROUTINE EvalAdvFluxAverage3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+SUBROUTINE EvalAdvFluxAverage3D(U_in,&
+#if (PP_NodeType==1)
+                                Uaux, &
+#endif /*(PP_NodeType==1)*/
+                                     M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 #if PP_VolFlux==-1
@@ -222,9 +228,13 @@ REAL,DIMENSION(1:3      ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< met
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
+#if (PP_NodeType==1)
+REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N)       ,INTENT(OUT) :: Uaux                 !auxiliary variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+#else
 REAL           :: Uaux(nAuxVar,  0:PP_N,0:PP_N,0:PP_N)  !auxiliary variables
+#endif /*(PP_NodeType==1)*/
 INTEGER        :: i,j,k,l
 !==================================================================================================================================
 
@@ -269,6 +279,37 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE EvalAdvFluxAverage3D
+
+!==================================================================================================================================
+!> Compute flux differences between two points appling also directly the metrics
+!==================================================================================================================================
+SUBROUTINE EvalAdvFluxAverage(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+USE MOD_Equation_Vars  ,ONLY:nAuxVar
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+CALL PP_VolumeFluxAverageVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+
+END SUBROUTINE EvalAdvFluxAverage
 
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p,|v|^2) from state U

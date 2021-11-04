@@ -1,7 +1,7 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
-! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -168,14 +168,18 @@ END SUBROUTINE VolInt_adv
 !> Computes the volume integral using flux differencing 
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: input Ut=0. and is updated with the volume flux derivatives
+!> Attention 3: If we are using ES Gauss collocation methods, we store Uaux here, since we'll need it for the surface integral
 !==================================================================================================================================
 SUBROUTINE VolInt_SplitForm(Ut)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars   ,ONLY:DvolSurf_T,U
-USE MOD_Mesh_Vars ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
-USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
+USE MOD_DG_Vars     ,ONLY:DvolSurf_T,U
+#if (PP_NodeType==1 & defined(PP_u_aux_exist))
+USE MOD_DG_Vars     ,ONLY:Uaux
+#endif /*(PP_NodeType==1 & defined(PP_u_aux_exist))*/
+USE MOD_Mesh_Vars   ,ONLY:nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
+USE MOD_Flux_Average,ONLY:EvalAdvFluxAverage3D
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -194,6 +198,9 @@ INTEGER                                           :: i,j,k,l,iElem
 DO iElem=1,nElems
   !compute Euler contribution of the fluxes, 
   CALL EvalAdvFluxAverage3D(             U(:,:,:,:,iElem), &
+#if (PP_NodeType==1 & defined(PP_u_aux_exist))
+                                      Uaux(:,:,:,:,iElem), &
+#endif /*(PP_NodeType==1 & defined(PP_u_aux_exist))*/
                             metrics_fTilde(:,:,:,:,iElem), &
                             metrics_gTilde(:,:,:,:,iElem), &
                             metrics_hTilde(:,:,:,:,iElem), &
