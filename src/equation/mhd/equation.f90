@@ -1,8 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
-! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -116,7 +116,7 @@ CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to 
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
                                               "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: Derigs er al. entropy conservative flux with metric dealiasing" //&
+                                              "10: Derigs et al. entropy conservative flux with metric dealiasing" //&
                                               "12: FloGor entropy conservative flux with metric dealiasing" &
                             ,"0")
 #ifdef JESSE_MORTAR
@@ -397,7 +397,7 @@ END SUBROUTINE SetRiemannSolver
 SUBROUTINE SetVolumeFlux(which)
 ! MODULES
 USE MOD_Globals
-USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverageVec,useEntropyProlongToFace
 USE MOD_Flux_Average
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -408,7 +408,7 @@ INTEGER,INTENT(IN) :: which
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 !==================================================================================================================================
-
+useEntropyProlongToFace=.FALSE.
 SELECT CASE(Which)
 CASE(0)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Standard DG'
@@ -419,9 +419,11 @@ CASE(1)
 CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Derigs et al. KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
+  useEntropyProlongToFace=.TRUE.
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
+  useEntropyProlongToFace=.TRUE.
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -955,7 +957,7 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
   Prim(8)=SQRT(1-Prim(7)*Prim(7))
   CALL PrimToCons(Prim,Resu)
 
-CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
+CASE(76) ! Kelvin-Helmholtz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
         ! eta=0, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=0.5 , constant field Bz=1
   Prim=0.
   Prim(8)=1.0
@@ -970,6 +972,55 @@ CASE(76) ! Kelvin-Helomhotz from Chacon CPC2004 paper, using a different periodi
   END DO
   Prim(3)=IniDisturbance*Prim(3)
   Prim(5)=0.2
+  CALL PrimToCons(Prim,Resu)
+
+CASE(7601) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(6) = 0.125
+  
+  CALL PrimToCons(Prim,Resu)
+  
+CASE(7602) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in y
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(7) = 0.125
+  
+  CALL PrimToCons(Prim,Resu)
+  
+CASE(7603) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x-y
+           ! * domain size is [-1,+1]^2
+  Omega = 15.0
+  
+  B_R = tanh(Omega * x(2) + 7.5) - tanh(Omega * x(2) - 7.5)
+  
+  prim = 0.0
+  
+  prim(1) = 0.5 + 0.75 * B_R
+  prim(2) = 0.5 * (B_R - 1.0)
+  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(5) = 1.0
+  prim(6) = 0.125
+  prim(7) = 0.125
+  
   CALL PrimToCons(Prim,Resu)
 
 CASE(80) ! 2D island coalesence domain [-1,1]^2
@@ -1287,7 +1338,7 @@ CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
     Prim(1) = -0.225*r+3.7
   elseif (r <= 33.) then ! Low-density zone
     Prim(1) = 0.1
-  else  ! Jovial ionosphere
+  else  ! Jovian ionosphere
     Prim(1) = 1.6583*r - 54.625
 !#    Prim(1) = 0.1
   end if
@@ -1426,6 +1477,10 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #if PARABOLIC
 USE MOD_Equation_Vars, ONLY:mu,Pr,eta
 #endif
+#ifdef PP_GLM
+USE MOD_Equation_Vars, ONLY:GLM_scr, GLM_ch
+use MOD_Basis        , ONLY:ALMOSTEQUAL
+#endif /*def PP_GLM*/
 USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1635,16 +1690,21 @@ CASE(111) ! Geophysics: Io interaction with its plasma torus (for shock-capturin
 
 CASE DEFAULT
   ! No source -> do nothing
+#ifdef PP_GLM
+  if (ALMOSTEQUAL(GLM_scr, 0.0)) &
+#endif /*def PP_GLM*/
   doCalcSource=.FALSE.
 END SELECT ! ExactFunction
 
-!#ifndef PP_GLM
-!CASE DEFAULT
-!  ! No source -> do nothing
-!  doCalcSource=.FALSE.
-!#endif /*PP_GLM*/
-!END SELECT ! ExactFunction
-!
+! Add the GLM damping
+#ifdef PP_GLM
+DO iElem=1,nElems
+  DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+    Ut(9,i,j,k,iElem) = Ut(9,i,j,k,iElem)-GLM_scr*GLM_ch*U(9,i,j,k,iElem)
+  END DO; END DO; END DO ! i,j,k
+END DO ! iElem
+#endif /*def PP_GLM*/
+
 END SUBROUTINE CalcSource
 
 !==================================================================================================================================

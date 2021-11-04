@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2021 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -45,12 +46,28 @@ REAL,ALLOCATABLE                      :: Dvolsurf(:,:)          !< modified D ma
                                                                 !< Dvolsurf(0,0)=2*sWGP(0)*Q(0,0)+swGP(0)=swGP(0)*(2*(-0.5)+1)=0
                                                                 !< Dvolsurf(N,N)=2*sWGP(N)*Q(N,N)-sWGP(N)=swGP(N)*(2*  0.5 -1)=0
 REAL,ALLOCATABLE                      :: Dvolsurf_T(:,:)        !< transpose of DvolSurf 
+#if (PP_NodeType==1) 
+#ifdef PP_u_aux_exist
+REAL,ALLOCATABLE,TARGET               :: Uaux(:,:,:,:,:)        !< Auxiliar variables for each node and element, 
+                                                                !< size \([1..nAuxVar,0..N,0..N,0..N,nElems]\). 
+#endif /*PP_u_aux_exist*/
+#ifdef PP_entropy_vars_exist
+REAL,ALLOCATABLE,TARGET               :: V   (:,:,:,:,:)        !< Entropy variables for each node and element, 
+                                                                !< size \([1..PP_nVar,0..N,0..N,0..N,nElems]\). 
+REAL,ALLOCATABLE                      :: V_master(:,:,:,:)      !< 2D Solution on face nodes for the master sides, 
+                                                                !< size \([1..nVar,0..N,0..N,all\_master\_sides]\) 
+
+REAL,ALLOCATABLE                      :: V_slave(:,:,:,:)       !< 2D Solution on face nodes for the slave sides, 
+#endif /*PP_entropy_vars_exist*/
+#endif /*(PP_NodeType==1) */
 #endif /*PP_DiscType==2*/
+REAL,ALLOCATABLE                      :: L_Minus(:)             !< Lagrange polynomials evaluated at \(\xi=-1\)
 REAL,ALLOCATABLE                      :: L_HatMinus(:)          !< Lagrange polynomials evaluated at \(\xi=-1\)
                                                                 !< premultiplied by mass matrix
 
 REAL                                  :: L_HatMinus0            !<  = LHat_Minus(0)
 
+REAL,ALLOCATABLE                      :: L_Plus(:)              !< Lagrange polynomials evaluated at \(\xi=+1\)
 REAL,ALLOCATABLE                      :: L_HatPlus(:)           !< Lagrange polynomials evaluated at \(\xi=+1\)
                                                                 !< premultiplied by mass matrix
 !----------------------------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 !==================================================================================================================================
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
+! Copyright (c) 2020 - 2021 Andrés Rueda
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -257,6 +259,10 @@ ALLOCATE(    DetJac_Ref(1,0:NgeoRef,0:NgeoRef,0:NgeoRef,nElems))
 
 ALLOCATE(    Elem_inCyl(nElems))
 
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+ALLOCATE(SurfMetrics(3,0:PP_N,0:PP_N,6,nElems)) !normal metric at surfaces
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
+
 ! surface data
 ALLOCATE(      Face_xGP(3,0:PP_N,0:PP_N,1:nSides))
 ALLOCATE(       NormVec(3,0:PP_N,0:PP_N,1:nSides))
@@ -321,7 +327,9 @@ SDEALLOCATE(NormVec)
 SDEALLOCATE(TangVec1)
 SDEALLOCATE(TangVec2)
 SDEALLOCATE(SurfElem)
-
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+SDEALLOCATE(SurfMetrics)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 ! mappings
 SDEALLOCATE(FS2M)

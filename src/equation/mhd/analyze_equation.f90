@@ -2,6 +2,7 @@
 ! Copyright (c) 2016 - 2017 Gregor Gassner
 ! Copyright (c) 2016 - 2017 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2021 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -99,6 +100,8 @@ END IF
 IF(MPIroot.AND.doAnalyzeToFile) THEN
   IF(doCalcDivergence)THEN
     A2F_iVar=A2F_iVar+1
+    A2F_VarNames(A2F_iVar)='"totalDivB"'
+    A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"maxDivB"'
     A2F_iVar=A2F_iVar+1
     A2F_VarNames(A2F_iVar)='"maxDivB_t"'
@@ -163,16 +166,18 @@ REAL,INTENT(IN)                 :: Time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)    :: formatStr
-REAL                 :: maxJumpB(3),maxDivB,maxDivB_t
+REAL                 :: maxJumpB(3),maxDivB,maxDivB_t,totalDivB
 REAL                 :: tmp(2),dSdU_Ut,CrossHel_t,maxAbs_vB 
 !==================================================================================================================================
 ! Calculate divergence 
 IF(doCalcDivergence)THEN
-  CALL CalcDivergence(maxDivB,maxDivB_t,maxJumpB)
+  CALL CalcDivergence(totalDivB,maxDivB,maxDivB_t,maxJumpB)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A7)')'(A31,',5,'ES16.7)'
-    WRITE(UNIT_StdOut,formatStr)'max(divB,divB_t,[B](n,t1,t2)): ',maxDivB,maxDivB_t,maxJumpB(:)
+    WRITE(formatStr,'(A5,I1,A7)')'(A,',6,'ES16.7)'
+    WRITE(UNIT_StdOut,formatStr)'totalDivB,max(divB,divB_t,[B](n,t1,t2)): ',totalDivB,maxDivB,maxDivB_t,maxJumpB(:)
     IF(doAnalyzeToFile)THEN
+      A2F_iVar=A2F_iVar+1
+      A2F_Data(A2F_iVar)=totalDivB
       A2F_iVar=A2F_iVar+1
       A2F_Data(A2F_iVar)=maxDivB
       A2F_iVar=A2F_iVar+1
@@ -257,21 +262,23 @@ END SUBROUTINE AnalyzeEquation
 
 
 !==================================================================================================================================
-!> Calculates the maximum of the discrete divergence of the magnetic field and the maximum Jumps of B*n
+!> Calculates the discrete divergence of the magnetic field and the maximum Jumps of B*n
 !==================================================================================================================================
-SUBROUTINE CalcDivergence(maxDivB,maxDivB_t,maxJumpB)
+SUBROUTINE CalcDivergence(totalDivB,maxDivB,maxDivB_t,maxJumpB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars      ,ONLY: nElems
 USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec,TangVec1,TangVec2
 USE MOD_Mesh_Vars      ,ONLY: ElemToSide,firstInnerSide,LastMPISide_MINE
+USE MOD_Analyze_Vars   ,ONLY: wGPVol
 USE MOD_DG_Vars        ,ONLY: D,U,Ut,U_master,U_slave 
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
+REAL,INTENT(OUT)                :: totalDivB
 REAL,INTENT(OUT)                :: maxDivB
 REAL,INTENT(OUT)                :: maxDivB_t
 REAL,INTENT(OUT)                :: maxJumpB(3)
@@ -303,6 +310,7 @@ REAL                            :: box(5)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
   maxDivB=-1.0e20
+  totalDivB=0.0
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
@@ -316,8 +324,12 @@ REAL                            :: box(5)
                             D(j,l)*Btilde(2,i,l,k) + &
                             D(k,l)*Btilde(3,i,j,l)
       END DO ! l
-      divB_loc = sJ(i,j,k,iElem) * divB_loc 
-      maxDivB=MAX(maxDivB,ABS(divB_loc))
+      ! Get absolute value of divergence
+      divB_loc = abs(divB_loc)
+      ! Compute contribution to total divB (divB_loc is already multiplied by the Jacobian)
+      totalDivB = totalDivB + divB_loc*wGPVol(i,j,k)
+      ! Get maximum
+      maxDivB=MAX(maxDivB,divB_loc*sJ(i,j,k,iElem))
   
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
@@ -339,12 +351,14 @@ REAL                            :: box(5)
 #if MPI
   Box=(/maxDivB,maxDivB_t,maxJumpB/)
   IF(MPIRoot)THEN
-    CALL MPI_REDUCE(MPI_IN_PLACE,box,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(MPI_IN_PLACE,box,5,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
     maxDivB   = Box(1)
     maxDivB_t = Box(2)
     maxJumpB  = Box(3:5)
+    CALL MPI_REDUCE(MPI_IN_PLACE,totalDivB,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   ELSE
-    CALL MPI_REDUCE(Box         ,0  ,4,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(Box      ,0  ,5,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+    CALL MPI_REDUCE(totalDivB,0  ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   END IF
 #endif
 
@@ -381,7 +395,7 @@ DO iElem=1,nElems
     Energy(2)  = Energy(2)+SUM(U(6:8,i,j,k,iElem)**2)*IntegrationWeight
     Energy(3)  = Energy(3)+U(5,i,j,k,iElem)*IntegrationWeight
 #ifdef PP_GLM
-    Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)*IntegrationWeight
+    Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)**2*IntegrationWeight
 #endif
   END DO; END DO; END DO !i,j,k
 END DO ! iElem
@@ -395,7 +409,7 @@ END IF
 #endif /*MPI*/
 Energy(1)=0.5*Energy(1)/vol
 Energy(2)= s2mu_0*Energy(2)/vol
-Energy(4)= 0.5*Energy(4)/vol
+Energy(4)= s2mu_0*Energy(4)/vol
 END SUBROUTINE CalcEnergy
 
 
