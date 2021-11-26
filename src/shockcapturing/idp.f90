@@ -306,7 +306,7 @@ contains
 !     Perform subcell-wise limiting
 !     -----------------------------
       dalpha = maxval (dalpha_loc)
-      if (dalpha>0.0) then
+      if (dalpha>0.0 .or. any(isnan(dalpha_loc))) then
         call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
                                       dalpha_loc,alpha_loc(:,:,:,eID), &
                                       dt,sdt,eID)
@@ -746,13 +746,13 @@ contains
         if (Pp==0.0) then
           Qp = 1.0
         else
-          Qp = Qp/Pp
+          Qp = abs(Qp/Pp)
         end if
         
         if (Pm==0.0) then
           Qm = 1.0
         else
-          Qm = Qm/Pm
+          Qm = abs(Qm/Pm)
         end if
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
@@ -886,7 +886,7 @@ contains
         
         ! Initialization
         notInIter = .FALSE.
-        dalpha1 = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)  ! Here dalpha1 is a place-holder for the actual blending coefficient
+        dalpha1 = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)  ! Here dalpha1 is a place-holder for the current blending coefficient
         
         ! Find blending coefficient for each neighbor node:
         ! -------------------------------------------------
@@ -1018,7 +1018,7 @@ contains
     real :: beta_old       ! beta from last iteration
     real :: Ucurr(PP_nVar)
     real :: dSdbeta        ! ds/d(beta)
-    real :: as
+    real :: as             ! Goal function as := smin - s (we find alpha such that as=0)
     real :: new_alpha
     integer :: iter
     !--------------------------------------------------
@@ -1031,7 +1031,7 @@ contains
     
     ! Check entropy of this update
     as = smin - Get_SpecEntropy(Ucurr)
-    if (as <= max(eps,abs(smin)*NEWTON_ABSTOL)) return ! this Neighbor contribution does NOT need entropy correction   
+    if (as <= max(eps,abs(smin)*NEWTON_ABSTOL)) return ! this Neighbor contribution does NOT need entropy correction
     
     ! Perform Newton iterations
     NewtonLoopSpec: do iter=1, IDPMaxIter
@@ -1040,7 +1040,10 @@ contains
       ! Evaluate dS/d(alpha)
       dSdbeta = -dot_product(ConsToSpecEntropy(Ucurr),dt*IDPgamma*Fan)
       
-      if ( abs(dSdbeta)<eps) exit NewtonLoopSpec ! Nothing to do here!
+      if ( abs(dSdbeta) == 0.0) then
+        beta = 0.0
+        exit NewtonLoopSpec ! Nothing to do here!
+      end if
       
       ! Update correction
       beta = beta - as / dSdbeta
@@ -1066,7 +1069,10 @@ contains
           
     end do NewtonLoopSpec ! iter
     
-    if ( (beta<0.0) .and. (beta>=-eps) ) beta = 0.0
+    if ( (beta<0.0) .and. (beta>=-eps) ) then
+      print*, '0>beta=',beta
+      beta = 0.0
+    end if
     
     new_alpha = 1.0 - beta
     if (alpha > new_alpha+eps) then
@@ -1408,6 +1414,7 @@ contains
 #else
     use MOD_IDP_Vars  , only: FFV_m_FDG
 #endif /*LOCAL_ALPHA*/
+    use MOD_NFVSE_Vars  , only: alpha_old
     implicit none
     !-arguments--------------------------------------
     real, intent(inout) :: U (PP_nVar, 0:PP_N  , 0:PP_N  , 0:PP_N)
@@ -1442,9 +1449,9 @@ contains
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       alphacont_loc    = alpha_loc(i,j,k)
       alpha_loc(i,j,k) = alpha_loc(i,j,k) + dalpha_loc(i,j,k)
-      if (alpha_loc(i,j,k) > alpha_maxIDP) then
+      if (alpha_loc(i,j,k) > alpha_maxIDP .or. isnan(alpha_loc(i,j,k))) then
         alpha_loc(i,j,k) = alpha_maxIDP
-        dalpha_loc (i,j,k) = alpha_maxIDP - alphacont_loc
+        dalpha_loc (i,j,k) = alpha_maxIDP - alpha_old(eID)
       end if
     end do       ; end do       ; enddo
     
@@ -1485,7 +1492,6 @@ contains
       my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
-      
     end do       ; end do       ; enddo
 #else
     ! Element-wise correction!
