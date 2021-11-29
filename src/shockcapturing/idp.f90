@@ -46,7 +46,7 @@ contains
     call prms%CreateRealOption(  "PositCorrFactor",  " The correction factor for IDPPositivity=T", "0.1")
     call prms%CreateIntOption(        "IDPMaxIter",  " Maximum number of iterations for positivity limiter", "10")
     
-    call prms%CreateLogicalOption( "IDPForce2D"   ,  " Force a 2D solution??", "F")
+    call prms%CreateLogicalOption( "IDPForce2D"   ,  " Force a 2D solution x-y / xi-eta??", "F")
 #if LOCAL_ALPHA
     call prms%CreateRealOption(         "IDPgamma",  " Constant for the subcell limiting of convex (nonlinear) constraints (must be IDPgamma>=2*d, where d is the number of dimensions of the problem)", "6.0")
 #endif /*LOCAL_ALPHA*/
@@ -677,7 +677,6 @@ contains
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qp, Qm, Pp, Pm
     integer :: i,j,k,l
-    real, parameter :: eps = 1.e-10           ! Very small value
     !--------------------------------------------------------
     
 !       Compute correction factors
@@ -855,7 +854,6 @@ contains
     !-local-variables----------------------------------------
     integer :: i,j,k, l
     logical :: notInIter
-    real, parameter :: eps = 1.e-14           ! Very small value
     type(IDPparam_t) :: param ! Parameters for Newton's method
     real             :: new_alpha
     !--------------------------------------------------------
@@ -936,7 +934,7 @@ contains
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
       end if
 
   contains
@@ -1092,12 +1090,12 @@ contains
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
       end if
       
   contains
 !===================================================================================================================================
-!>  Goal function for the specific entropy Newton's method
+!>  Goal function for the mathematical entropy Newton's method
 !===================================================================================================================================
     function MathEntropy_Goal(param,Ucurr) result(goal)
       use MOD_Equation_Vars , only: Get_MathEntropy
@@ -1111,7 +1109,7 @@ contains
       
     end function MathEntropy_Goal
 !===================================================================================================================================
-!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
+!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the mathematical entropy Newton's method
 !===================================================================================================================================
     function MathEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
       use MOD_Equation_Vars , only: ConsToEntropy
@@ -1125,7 +1123,7 @@ contains
       
     end function MathEntropy_dGoal_dbeta
 !===================================================================================================================================
-!>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
+!>  InitialCheck for the mathematical entropy Newton's method: Is the current state admissible?
 !===================================================================================================================================
     function MathEntropy_InitialCheck(param,goalFunction) result(check)
       use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
@@ -1157,8 +1155,7 @@ contains
     use MOD_Mesh_Vars     , only: sJ, offsetElem
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPForce2D
-    use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL, NEWTON_RELTOL
+    use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t, IDPMaxIter
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
     !-arguments----------------------------------------------
@@ -1171,9 +1168,6 @@ contains
     real    :: dalpha1
     real    :: a      ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qm, Pm ! Zalesak's limiter's variables
-    real    :: alphadiff
-    real    :: dpdU(PP_nVar), U_curr(PP_nVar)
-    real    :: dp_dalpha
     integer :: i,j,k, iter
     logical :: NotInIter
     type(IDPparam_t) :: param ! Parameters for Newton's method
@@ -1290,12 +1284,12 @@ contains
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
-        write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
+        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
       end if
       
   contains
 !===================================================================================================================================
-!>  Goal function for the specific entropy Newton's method
+!>  Goal function for the pressure Newton's method
 !===================================================================================================================================
     function Pressure_Goal(param,Ucurr) result(goal)
       use MOD_Equation_Vars , only: Get_Pressure
@@ -1313,7 +1307,7 @@ contains
       
     end function Pressure_Goal
 !===================================================================================================================================
-!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
+!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the pressure Newton's method
 !===================================================================================================================================
     function Pressure_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
       use MOD_Equation_Vars , only: Get_dpdU
@@ -1331,10 +1325,10 @@ contains
       
     end function Pressure_dGoal_dbeta
 !===================================================================================================================================
-!>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
+!>  InitialCheck for the pressure Newton's method: Is the current state admissible?
 !===================================================================================================================================
     function Pressure_InitialCheck(param,goalFunction) result(check)
-      use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
+      use MOD_IDP_Vars, only: IDPparam_t
       implicit none
       type(IDPparam_t), intent(in) :: param
       real            , intent(in) :: goalFunction ! Current solution
@@ -1530,7 +1524,7 @@ contains
     alpha      = alpha + dalpha
     
     ! Change inconsistent alphas
-    if (alpha > alpha_maxIDP) then
+    if (alpha > alpha_maxIDP .or. isnan(alpha)) then
       alpha = alpha_maxIDP
       dalpha  = alpha_maxIDP - alphacont
     end if
