@@ -10,6 +10,7 @@ module MOD_IDP_Vars
   logical           :: IDPDensityTVD  = .FALSE.
   
   ! Additional options
+  logical           :: IDPForce2D
   integer           :: IDPMaxIter
   
   ! Internal definitions:

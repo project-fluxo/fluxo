@@ -45,6 +45,8 @@ contains
 !   ------------------
     call prms%CreateRealOption(  "PositCorrFactor",  " The correction factor for IDPPositivity=T", "0.1")
     call prms%CreateIntOption(        "IDPMaxIter",  " Maximum number of iterations for positivity limiter", "10")
+    
+    call prms%CreateLogicalOption( "IDPForce2D"   ,  " Force a 2D solution??", "F")
 #if LOCAL_ALPHA
     call prms%CreateRealOption(         "IDPgamma",  " Constant for the subcell limiting of convex (nonlinear) constraints (must be IDPgamma>=2*d, where d is the number of dimensions of the problem)", "6.0")
 #endif /*LOCAL_ALPHA*/
@@ -85,6 +87,7 @@ contains
     end if
     
     ! Additional options
+    IDPForce2D      = GETLOGICAL('IDPForce2D','F')
     IDPMaxIter      = GETINT    ('IDPMaxIter','10')
     if (IDPPositivity) then
       PositCorrFactor = GETREAL   ('PositCorrFactor','0.1')
@@ -267,6 +270,7 @@ contains
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity
 #if LOCAL_ALPHA
     use MOD_IDP_Vars    , only: dalpha_loc
+    use MOD_IDP_Vars    , only: IDPForce2D, rho_min, rho_max, s_min
 #endif /*LOCAL_ALPHA*/
     implicit none
     !-arguments----------------------------------------------
@@ -303,6 +307,17 @@ contains
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       
 #if LOCAL_ALPHA
+      if (IDPForce2D) then
+        do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          U (:,i,j,k,eID) = U (:,i,j,0,eID)
+          Ut(:,i,j,k,eID) = Ut(:,i,j,0,eID)
+          dalpha_loc(i,j,k) = dalpha_loc(i,j,0)
+          alpha_loc(i,j,k,eID) = alpha_loc(i,j,0,eID)
+          rho_min(i,j,k) = rho_min(i,j,0)
+          rho_max(i,j,k) = rho_max(i,j,0)
+          s_min(i,j,k) = s_min(i,j,0)
+        end do       ; end do ; end do
+      end if
 !     Perform subcell-wise limiting
 !     -----------------------------
       dalpha = maxval (dalpha_loc)
@@ -361,28 +376,32 @@ contains
       if (IDPDensityTVD .or. IDPPositivity) then
         if (U(1,i,j,k) < rho_min(i,j,k) - tolerance) then
           print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
-          stop
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
         end if
       end if
         
       if (IDPDensityTVD) then
         if (U(1,i,j,k) > rho_max(i,j,k) + tolerance) then
           print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
-          stop
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
         end if
       end if
       
       if (IDPSpecEntropy) then
         if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance) then
           print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
-          stop
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
         end if
       end if
       
       if (IDPMathEntropy) then
         if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance) then
           print*, 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k)
-          stop
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
         end if
       end if
       
@@ -390,7 +409,8 @@ contains
         call Get_Pressure(U(:,i,j,k),p)
         if (p < p_min(i,j,k) - tolerance) then
           print*, 'WARNING: rho below min (curr/min):', p, p_min(i,j,k)
-          stop
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
         end if
       end if
     end do       ; end do       ; end do ! i,j,k
@@ -623,6 +643,7 @@ contains
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
+    use MOD_IDP_Vars, only: IDPForce2D
 #endif /*LOCAL_ALPHA*/
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
@@ -671,11 +692,13 @@ contains
           rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
           rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
         end do
+        if (.not. IDPForce2D) then
         !zeta
         do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
           rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
           rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
         end do
+        end if
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
@@ -729,8 +752,10 @@ contains
         Pp = Pp + max(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
         Pp = Pp + max(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
         Pp = Pp + max(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        if (.not. IDPForce2D) then
         Pp = Pp + max(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
         Pp = Pp + max(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        end if
         Pp = Pp*sJ(i,j,k,eID)
         
         ! Negative contributions
@@ -739,8 +764,10 @@ contains
         Pm = Pm + min(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
         Pm = Pm + min(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
         Pm = Pm + min(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        if (.not. IDPForce2D) then
         Pm = Pm + min(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
         Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        end if
         Pm = Pm*sJ(i,j,k,eID)
         
         if (Pp==0.0) then
@@ -804,6 +831,7 @@ contains
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
+    use MOD_IDP_Vars, only: IDPForce2D
 #endif /*LOCAL_ALPHA*/
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
@@ -856,10 +884,12 @@ contains
         s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
         !eta-
         s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+        if (.not. IDPForce2D) then
         !zeta+
         s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
         !zeta-
         s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+        end if
 #else
         ! check stencil in xi
 !#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
@@ -911,6 +941,7 @@ contains
                                             -sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in eta+
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              dalpha1,notInIter)  ! in/out quantities
+        if (.not. IDPForce2D) then
         ! zeta-
         call NewtonLoopNeighbor_SpecEntropy( Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                              sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)), & ! Anti-difussive flux in zeta-
@@ -921,7 +952,7 @@ contains
                                             -sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)), & ! Anti-difussive flux in zeta+
                                              s_min(i,j,k),dt,sdt,eps, & ! some constants
                                              dalpha1,notInIter)  ! in/out quantities
-        
+        end if
         ! Update dalpha_loc and dalpha
         dalpha_loc(i,j,k) = dalpha1 - alpha_loc(i,j,k,eID)
         dalpha = max(dalpha,dalpha1) 
