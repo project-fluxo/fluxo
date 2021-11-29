@@ -932,21 +932,17 @@ contains
         param % bound = s_min(i,j,k)
         
         ! xi-
-        param % F_antidiff = sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
+        param % F_antidiff =  sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
         
         call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                   param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         
-!#        call NewtonLoopNeighbor_SpecEntropy( 
-                                             
-!#                                             s_min(i,j,k),dt,sdt,eps, & ! some constants
-!#                                             dalpha1,notInIter)  ! in/out quantities
         ! xi+
         param % F_antidiff = -sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
         call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                   param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         ! eta-
-        param % F_antidiff = sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
+        param % F_antidiff =  sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
         call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                                   param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         
@@ -967,8 +963,8 @@ contains
                                   param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         end if
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = dalpha1 - alpha_loc(i,j,k,eID)
-        dalpha = max(dalpha,dalpha1) 
+        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha = max(dalpha,new_alpha) 
         
 #else
         ! Simple element-wise limiter
