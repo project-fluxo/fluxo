@@ -59,4 +59,28 @@ module MOD_IDP_Vars
   real,allocatable    :: s_min      (:,:,:)
   real,allocatable    :: s_max      (:,:,:)
   real,allocatable    :: p_min      (:,:,:)
+  
+  ! Type to store parameters for newton iterations
+  type IDPparam_t
+    real :: bound               ! Specific bound
+    real :: F_antidiff(PP_nVar) ! Mass-matrix-scaled antidiffusive flux with the right sign. Fan := ± sWGP*sJ*(F_DG - F_FV) ... (± must be consistent with the equation update)
+    real :: dt                  ! current time-step size
+  end type IDPparam_t
+  
+  abstract interface 
+    ! Interface for Newton's method goal function (and its derivative)
+    function i_sub_Goal(param,Ucurr) result(goal)
+      import IDPparam_t
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: goal
+    end function i_sub_Goal
+    ! Interface for Newton's method initial check
+    function i_sub_InitialCheck(param,goalFunction) result(check)
+      import IDPparam_t
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: goalFunction ! Current solution
+      logical                      :: check
+    end function i_sub_InitialCheck
+  end interface
 end module MOD_IDP_Vars
