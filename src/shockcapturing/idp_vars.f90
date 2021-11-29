@@ -49,6 +49,7 @@ module MOD_IDP_Vars
   real,allocatable    :: Ubar_eta      (:,:,:,:,:)
   real,allocatable    :: Ubar_zeta     (:,:,:,:,:)
   
+  real                :: dalpha
 #if LOCAL_ALPHA
   real,allocatable    :: dalpha_loc    (:,:,:)    ! Node-wise alpha correction for an element
 #endif /*LOCAL_ALPHA*/
@@ -63,7 +64,7 @@ module MOD_IDP_Vars
   ! Type to store parameters for newton iterations
   type IDPparam_t
     real :: bound               ! Specific bound
-    real :: F_antidiff(PP_nVar) ! Mass-matrix-scaled antidiffusive flux with the right sign. Fan := ± sWGP*sJ*(F_DG - F_FV) ... (± must be consistent with the equation update)
+    real :: F_antidiff(PP_nVar) ! IDPGamma- (if needed) and mass-matrix-scaled antidiffusive flux with the right sign. Fan := ± sWGP*sJ*(F_DG - F_FV) ... (± must be consistent with the equation update)
     real :: dt                  ! current time-step size
   end type IDPparam_t
   

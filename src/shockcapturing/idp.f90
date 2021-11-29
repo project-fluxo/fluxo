@@ -119,6 +119,7 @@ contains
     
     if (IDPMathEntropy) then
       IDPneedsUprev     = .TRUE.
+      IDPneedsUsafe     = .TRUE.
 #if barStates
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
@@ -127,13 +128,11 @@ contains
     
     if (IDPSpecEntropy) then
       IDPneedsUprev     = .TRUE.
+      IDPneedsUsafe     = .TRUE.
 #if barStates
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
 #endif /*barStates*/
-#if LOCAL_ALPHA
-      IDPneedsUsafe = .TRUE.
-#endif /*LOCAL_ALPHA*/
     end if
     
 !   Allocate storage
@@ -267,7 +266,7 @@ contains
     use MOD_Analyze_Vars, only: wGPVol
     use MOD_Mesh_Vars   , only: nElems, sJ
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity, dalpha
 #if LOCAL_ALPHA
     use MOD_IDP_Vars    , only: dalpha_loc
     use MOD_IDP_Vars    , only: IDPForce2D, rho_min, rho_max, s_min
@@ -279,7 +278,7 @@ contains
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
     !-local-variables----------------------------------------
     real :: sdt
-    real :: curr_amount_alpha, dalpha
+    real :: curr_amount_alpha
     integer :: eID, i, j, k
     !--------------------------------------------------------
 
@@ -295,12 +294,14 @@ contains
 !   Perform limiting!
 !   -----------------
     do eID=1, nElems
+!     Initialize dalpha
+!     -----------------
+      dalpha = 0.0
 #if LOCAL_ALPHA
       dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
-!     Call all user-defined limiters
-!     (Element-wise limiting is performed directly in the routines)
-!     -------------------------------------------------------------
+!     Call all user-defined limiters to obtain dalpha
+!     -----------------------------------------------
       if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
@@ -313,20 +314,23 @@ contains
           Ut(:,i,j,k,eID) = Ut(:,i,j,0,eID)
           dalpha_loc(i,j,k) = dalpha_loc(i,j,0)
           alpha_loc(i,j,k,eID) = alpha_loc(i,j,0,eID)
-          rho_min(i,j,k) = rho_min(i,j,0)
-          rho_max(i,j,k) = rho_max(i,j,0)
-          s_min(i,j,k) = s_min(i,j,0)
         end do       ; end do ; end do
       end if
-!     Perform subcell-wise limiting
-!     -----------------------------
-      dalpha = maxval (dalpha_loc)
-      if (dalpha>0.0 .or. any(isnan(dalpha_loc))) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
-                                      dalpha_loc,alpha_loc(:,:,:,eID), &
-                                      dt,sdt,eID)
-      end if
+#endif /*LOCAL_ALPHA*/      
+!     Perform limiting
+!     ----------------
+      if ( dalpha>0.0 .or. isnan(dalpha) &
+#if LOCAL_ALPHA
+           .or. any(isnan(dalpha_loc))   &
 #endif /*LOCAL_ALPHA*/
+                       ) then
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+#if LOCAL_ALPHA
+                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+#endif /*LOCAL_ALPHA*/
+                                                                         dt,sdt,eID)
+      end if
+
 !     Check that we are within bounds
 !     -------------------------------
 #if DEBUG || IDP_CHECKBOUNDS
@@ -361,7 +365,7 @@ contains
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min
-    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity
+    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     implicit none
     !-arguments------------------------------------------------------------
@@ -375,6 +379,7 @@ contains
     
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       if (IDPDensityTVD .or. IDPPositivity) then
+        if (IDPForce2D) rho_min(i,j,k) = rho_min(i,j,0)
         if (U(1,i,j,k) < rho_min(i,j,k) - tolerance) then
           print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
           CALL abort(__STAMP__,&
@@ -383,6 +388,7 @@ contains
       end if
         
       if (IDPDensityTVD) then
+        if (IDPForce2D) rho_max(i,j,k) = rho_max(i,j,0)  
         if (U(1,i,j,k) > rho_max(i,j,k) + tolerance) then
           print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
           CALL abort(__STAMP__,&
@@ -391,6 +397,7 @@ contains
       end if
       
       if (IDPSpecEntropy) then
+        if (IDPForce2D) s_min(i,j,k) = s_min(i,j,0)
         if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance) then
           print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
           CALL abort(__STAMP__,&
@@ -399,6 +406,7 @@ contains
       end if
       
       if (IDPMathEntropy) then
+        if (IDPForce2D) s_max(i,j,k) = s_max(i,j,0)
         if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance) then
           print*, 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k)
           CALL abort(__STAMP__,&
@@ -407,6 +415,7 @@ contains
       end if
       
       if (IDPPositivity) then
+        if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
         if (p < p_min(i,j,k) - tolerance) then
           print*, 'WARNING: rho below min (curr/min):', p, p_min(i,j,k)
@@ -637,6 +646,7 @@ contains
   subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
+    use MOD_IDP_Vars      , only: dalpha
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
@@ -644,12 +654,14 @@ contains
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
-    use MOD_IDP_Vars, only: IDPForce2D
 #endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars      , only: IDPForce2D
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
+#if !(LOCAL_ALPHA)
     use MOD_IDP_Vars      , only: Usafe
+#endif /*!(LOCAL_ALPHA)*/
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG, rho_min, rho_max
     implicit none
@@ -660,7 +672,7 @@ contains
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
-    real    :: dalpha, dalpha1
+    real    :: dalpha1
     real    :: rho_safe
     real    :: a   ! a  = PositCorrFactor * rho_safe - rho
     real    :: Qp, Qm, Pp, Pm
@@ -668,7 +680,6 @@ contains
     real, parameter :: eps = 1.e-10           ! Very small value
     !--------------------------------------------------------
     
-      dalpha = -epsilon(1.0) ! Safe initialization
 !       Compute correction factors
 !       --------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -810,15 +821,7 @@ contains
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
-
-!       Do the correction if needed
-!       ---------------------------
-#if !(LOCAL_ALPHA)
-      if ( dalpha > 0. ) then
-        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-                                    dt,sdt,eID)
-      end if
-#endif /*!(LOCAL_ALPHA)*/
+      
   end subroutine IDP_LimitDensityTVD
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
@@ -826,15 +829,13 @@ contains
   subroutine IDP_LimitSpecEntropy(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
+    use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
-    use MOD_IDP_Vars      , only: Usafe, dalpha_loc
-    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
-    use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ
-    use MOD_IDP_Vars, only: IDPForce2D
-    use MOD_IDP_Vars      , only: IDPparam_t
+    use MOD_IDP_Vars      , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars      , only: Usafe, IDPForce2D
+    use MOD_IDP_Vars      , only: IDPparam_t
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
 #if barStates
@@ -842,9 +843,8 @@ contains
 #else
     use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
-    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_IDP_Vars      , only: FFV_m_FDG
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, s_min
+    use MOD_IDP_Vars      , only: IDPMaxIter, s_min
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -853,22 +853,15 @@ contains
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
-    real    :: dalpha, dalpha1, dalpha_old
-    real    :: as, U_curr(PP_nVar), dSdalpha
     integer :: i,j,k, l
-    integer :: iter
     logical :: notInIter
     real, parameter :: eps = 1.e-14           ! Very small value
-#if LOCAL_ALPHA
     type(IDPparam_t) :: param ! Parameters for Newton's method
     real             :: new_alpha
-#endif /*LOCAL_ALPHA*/
     !--------------------------------------------------------
       
-      dalpha = -epsilon(1.0) ! Safe initialization
-      
-!       Compute correction factors
-!       --------------------------
+!     Compute correction factors
+!     --------------------------
       notInIter = .FALSE.
       
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
@@ -914,110 +907,30 @@ contains
         end do
 #endif /*barStates*/
         
-#if LOCAL_ALPHA
-        ! Subcell-wise limiter
-        ! ATTENTION: 1) We need to find the minimum alpha for each interface
-        !            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
-        !***************************************************************************************************************
+        ! Compute the needed blending coefficient with a Newton's method
+        !***************************************************************
         
         ! Initialization
-        notInIter = .FALSE.
-        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)  ! Here new_alpha is a place-holder for the current blending coefficient
-        
-        ! Find blending coefficient for each neighbor node:
-        ! -------------------------------------------------
-        
-        ! Initialize parameters
         param % dt    = dt
         param % bound = s_min(i,j,k)
         
-        ! xi-
-        param % F_antidiff =  sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
-        
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        
-        ! xi+
-        param % F_antidiff = -sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        ! eta-
-        param % F_antidiff =  sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        
-        ! eta+
-        param % F_antidiff = -sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        
-        if (.not. IDPForce2D) then
-        ! zeta-
-        param % F_antidiff = sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)) ! Anti-difussive flux in zeta-
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        
-        ! zeta+
-        param % F_antidiff = -sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
-        call NewtonLoopNeighbor(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                                  param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
-        end if
+#if LOCAL_ALPHA
+        ! Get the current alpha
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         ! Update dalpha_loc and dalpha
         dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
-        dalpha = max(dalpha,new_alpha) 
-        
+        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
 #else
-        ! Simple element-wise limiter
-        !****************************
-        
-        ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
-        as = (s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k)))
-        if (as <= max(eps,abs(s_min(i,j,k))*NEWTON_ABSTOL)) cycle ! this DOF does NOT need entropy correction   
-
-        ! Newton initialization:
-        U_curr = U(:,i,j,k)
-        dalpha1 = 0.0
-        
-        ! Perform Newton iterations
-        NewtonLoopSpec: do iter=1, IDPMaxIter
-          dalpha_old = dalpha1
-          
-          ! Evaluate dS/d(alpha)
-          dSdalpha = dot_product(ConsToSpecEntropy(U_curr),dt*FFV_m_FDG(:,i,j,k,eID))
-          
-          if ( abs(dSdalpha)<eps) exit NewtonLoopSpec ! Nothing to do here!
-          
-          ! Update correction
-          dalpha1 = dalpha1 + as / dSdalpha
-          if (alpha(eID) + dalpha1 > alpha_maxIDP+eps) then
-            dalpha1 = alpha_maxIDP - alpha(eID)
-          elseif (dalpha1<0.0) then
-            dalpha1=0.0
-          else
-            ! Check relative tolerance
-            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoopSpec
-          end if
-          
-          ! Get new U
-          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
-          
-          ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-          as = s_min(i,j,k)-Get_SpecEntropy(U_curr)
-          
-          ! Check absolute tolerance
-          if ( abs(as) < max(eps,abs(s_min(i,j,k))*NEWTON_ABSTOL) ) exit NewtonLoopSpec  
-          
-        end do NewtonLoopSpec ! iter
-        
-        as = alpha(eID) + dalpha1 ! using as for new alpha
-        if ( (as > alpha_maxIDP) .and. (as <= alpha_maxIDP+eps)) then
-          dalpha1 = alpha_maxIDP - alpha(eID)
-        end if
-        
-        if (iter > IDPMaxIter) notInIter =.TRUE.
-        
-        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
-        
+        ! Get the current alpha
+        new_alpha = alpha(eID) + dalpha
+        ! Specify the antidiffusive flux
+        param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
+        ! Perform Newton's method to find the new alpha
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
+        ! Update dalpha
+        dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; enddo !i,j,k
@@ -1025,156 +938,62 @@ contains
       if (notInIter) then
         write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
       end if
+
+  contains
+!===================================================================================================================================
+!>  Goal function for the specific entropy Newton's method
+!===================================================================================================================================
+    function SpecEntropy_Goal(param,Ucurr) result(goal)
+      use MOD_Equation_Vars , only: Get_SpecEntropy
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: goal
       
-!       Do the correction if needed
-!       ---------------------------
-#if !(LOCAL_ALPHA)
-      if ( dalpha > 0. ) then
-        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-                                    dt,sdt,eID)
-      end if
-#endif /*!(LOCAL_ALPHA)*/
+      goal = param % bound - Get_SpecEntropy(Ucurr)
+      
+    end function SpecEntropy_Goal
+!===================================================================================================================================
+!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
+!===================================================================================================================================
+    function SpecEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+      use MOD_Equation_Vars , only: ConsToSpecEntropy
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: dGoal_dbeta
+      
+      dGoal_dbeta = -dot_product(ConsToSpecEntropy(Ucurr),param % dt * param % F_antidiff)
+      
+    end function SpecEntropy_dGoal_dbeta
+!===================================================================================================================================
+!>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
+!===================================================================================================================================
+    function SpecEntropy_InitialCheck(param,goalFunction) result(check)
+      use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: goalFunction ! Current solution
+      logical                      :: check
+      
+      check = (goalFunction <= max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL))
+      
+    end function SpecEntropy_InitialCheck
   end subroutine IDP_LimitSpecEntropy  
-#if LOCAL_ALPHA
-  
-  ! Goal function
-  function SpecEntropy_Goal(param,Ucurr) result(goal)
-    use MOD_Equation_Vars , only: Get_SpecEntropy
-    use MOD_IDP_Vars      , only: IDPparam_t
-    implicit none
-    type(IDPparam_t), intent(in) :: param
-    real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
-    real                         :: goal
-    
-    goal = param % bound - Get_SpecEntropy(Ucurr)
-    
-  end function SpecEntropy_Goal
-  ! Derivative of goal function with respect to (FCT) blending coefficient beta:=1-alpha
-  function SpecEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
-    use MOD_Equation_Vars , only: ConsToSpecEntropy
-    use MOD_IDP_Vars      , only: IDPgamma, IDPparam_t
-    implicit none
-    type(IDPparam_t), intent(in) :: param
-    real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
-    real                         :: dGoal_dbeta
-    
-    dGoal_dbeta = -dot_product(ConsToSpecEntropy(Ucurr),param % dt * IDPgamma * param % F_antidiff)
-    
-  end function SpecEntropy_dGoal_dbeta
-  
-  ! Is the current state admissible?
-  function SpecEntropy_InitialCheck(param,goalFunction) result(check)
-    use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
-    implicit none
-    type(IDPparam_t), intent(in) :: param
-    real            , intent(in) :: goalFunction ! Current solution
-    logical                      :: check
-    
-    check = (goalFunction <= max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL))
-    
-  end function SpecEntropy_InitialCheck
-  
-  
-  
-!===================================================================================================================================
-!> Newton loop for each neighbor node's contribution
-!> ATTENTION: 1) We solve for beta:=1-alpha (to match FCT literature) and then return fluxo's alpha
-!===================================================================================================================================
-  subroutine NewtonLoopNeighbor(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
-    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter, IDPgamma
-    use MOD_IDP_Vars      , only: i_sub_Goal, i_sub_InitialCheck, IDPparam_t
-    implicit none
-    !-arguments----------------------------------------
-    real            , intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
-    type(IDPparam_t), intent(in)    :: param          ! IDP parameters 
-    real            , intent(inout) :: alpha          ! Current (nodal) blending coefficient. Gets updated here.
-    logical         , intent(inout) :: notInIter      ! 
-    procedure(i_sub_Goal)           :: Goal
-    procedure(i_sub_Goal)           :: dGoal_dbeta
-    procedure(i_sub_InitialCheck)   :: InitialCheck
-    !-local-variables----------------------------------
-    real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
-    real :: beta_old       ! beta from last iteration
-    real :: Ucurr(PP_nVar)
-    real :: dSdbeta        ! ds/d(beta)
-    real :: as             ! Goal function as := smin - s (we find alpha such that as=0)
-    real :: new_alpha
-    integer :: iter
-    !--------------------------------------------------
-    
-    ! Compute current FCT blending coef
-    beta = (1.0 - alpha)
-    
-    ! Compute current directional update
-    Ucurr = Usafe + beta * param % dt * IDPgamma * param % F_antidiff
-    
-    ! Check entropy of this update
-    as = Goal(param,Ucurr)
-    if (InitialCheck(param,as)) return ! this Neighbor contribution does NOT need entropy correction
-    
-    ! Perform Newton iterations
-    NewtonLoop: do iter=1, IDPMaxIter
-      beta_old = beta
-      
-      ! Evaluate dS/d(alpha)
-      dSdbeta = dGoal_dbeta(param,Ucurr)
-      
-      if ( abs(dSdbeta) == 0.0) then
-        beta = 0.0
-        exit NewtonLoop ! Nothing to do here!
-      end if
-      
-      ! Update correction
-      beta = beta - as / dSdbeta
-      
-      ! Check bounds
-      if ( (1.0 - beta) < alpha) then
-        beta = (1.0 - alpha)
-      elseif (beta < -NEWTON_ABSTOL) then
-        beta = 0.0
-      else
-        ! Check relative tolerance
-        if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit NewtonLoop
-      end if
-      
-      ! Get new U
-      Ucurr = Usafe + beta * param % dt * IDPgamma * param % F_antidiff
-      
-      ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-      as = Goal(param,Ucurr)
-      
-      ! Check absolute tolerance
-      if ( abs(as) < max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL) ) exit NewtonLoop  
-          
-    end do NewtonLoop ! iter
-    
-    if ( (beta<0.0) .and. (beta>=-NEWTON_ABSTOL) ) then
-      print*, '0>beta=',beta
-      beta = 0.0
-    end if
-    
-    new_alpha = 1.0 - beta
-    if (alpha > new_alpha+NEWTON_ABSTOL) then
-      print*, 'WTF... alpha is getting smaller (old/new)', alpha, new_alpha
-      stop
-    else
-      alpha = new_alpha
-    end if
-    
-    if (iter > IDPMaxIter) notInIter = .TRUE.
-    
-  end subroutine NewtonLoopNeighbor
-#endif /*LOCAL_ALPHA*/
 !===================================================================================================================================
 !> Mathematical entropy correction (discrete local maximum principle)
 !===================================================================================================================================
   subroutine IDP_LimitMathEntropy(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
+    use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars      , only: IDPparam_t, Usafe
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_Equation_Vars , only: Get_MathEntropy, ConsToEntropy
 #if barStates
@@ -1182,9 +1001,8 @@ contains
 #else
     use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
-    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_IDP_Vars      , only: FFV_m_FDG
-    use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, s_max
+    use MOD_IDP_Vars      , only: IDPMaxIter, s_max
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -1193,18 +1011,16 @@ contains
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
-    real    :: dalpha, dalpha1, dalpha_old
-    real    :: as, U_curr(PP_nVar), dSdalpha
+    real    :: dalpha1
     integer :: i,j,k, l
-    integer :: iter
     logical :: notInIter
-    real, parameter :: eps = 1.e-14           ! Very small value
+    type(IDPparam_t) :: param ! Parameters for Newton's method
+    real             :: new_alpha
     !--------------------------------------------------------
       
-      dalpha = -epsilon(1.0) ! Safe initialization
       
-!       Compute correction factors
-!       --------------------------
+!     Compute correction factors
+!     --------------------------
       notInIter = .FALSE.
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
@@ -1247,81 +1063,81 @@ contains
         end do
 #endif /*barStates*/
         
-#if LOCAL_ALPHA
-        ! Subcell-wise limiter
-        ! ATTENTION: 1) We need to find the minimum alpha for each interface
-        !            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
-        !***************************************************************************************************************
-        stop 'subcell limiter not yet implemented for mathematical entropy!!'
-        !TODO!!
+        ! Compute the needed blending coefficient with a Newton's method
+        !***************************************************************
         
+        ! Initialization
+        param % dt    = dt
+        param % bound = s_max(i,j,k)
+        
+#if LOCAL_ALPHA
+        ! Get the current alpha
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck)
+        ! Update dalpha_loc and dalpha
+        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
 #else
-        ! Simple element-wise limiter
-        !****************************
-        
-        ! Difference between goal entropy and current entropy (works as cycling criterion ONLY for element-wise limiting)
-        as = (s_max(i,j,k) - Get_MathEntropy(U(:,i,j,k)))
-        if (as >= -max(eps,abs(s_max(i,j,k))*NEWTON_ABSTOL)) cycle ! this DOF does NOT need pressure correction   
-      
-        ! Newton initialization:
-        U_curr = U(:,i,j,k)
-        dalpha1 = 0.0
-        
-        ! Perform Newton iterations
-        NewtonLoop: do iter=1, IDPMaxIter
-          dalpha_old = dalpha1
-          
-          ! Evaluate dS/d(alpha)
-          dSdalpha = dot_product(ConsToEntropy(U_curr),dt*FFV_m_FDG(:,i,j,k,eID))
-          
-          if ( abs(dSdalpha)<eps ) exit NewtonLoop ! Nothing to do here!
-          
-          ! Update correction
-          dalpha1 = dalpha1 + as / dSdalpha
-          if (alpha(eID) + dalpha1 > alpha_maxIDP) then
-            dalpha1 = alpha_maxIDP - alpha(eID)
-          elseif (dalpha1<0) then
-            dalpha1=0.0
-          else
-            ! Check relative tolerance
-            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoop
-          end if
-          
-          ! Get new U
-          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
-          
-          ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-          as = s_max(i,j,k)-Get_MathEntropy(U_curr)
-          
-          ! Check absolute tolerance
-          if ( abs(as) < max(eps,abs(s_max(i,j,k))*NEWTON_ABSTOL) ) exit NewtonLoop  
-          
-        end do NewtonLoop ! iter
-        
-        if (iter > IDPMaxIter) notInIter =.TRUE.
-        
-#if LOCAL_ALPHA
-        ! Not the right way to do local alpha
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
+        ! Get the current alpha
+        new_alpha = alpha(eID) + dalpha
+        ! Specify the antidiffusive flux
+        param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
+        ! Perform Newton's method to find the new alpha
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck)
+        ! Update dalpha
+        dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
-        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
         
-#endif /*LOCAL_ALPHA*/
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
         write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
       end if
       
-!       Do the correction if needed
-!       ---------------------------
-#if !(LOCAL_ALPHA)
-      if ( dalpha > 0. ) then
-        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-                                    dt,sdt,eID)
-      end if
-#endif /*!(LOCAL_ALPHA)*/
-    
+  contains
+!===================================================================================================================================
+!>  Goal function for the specific entropy Newton's method
+!===================================================================================================================================
+    function MathEntropy_Goal(param,Ucurr) result(goal)
+      use MOD_Equation_Vars , only: Get_MathEntropy
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: goal
+      
+      goal = param % bound - Get_MathEntropy(Ucurr)
+      
+    end function MathEntropy_Goal
+!===================================================================================================================================
+!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
+!===================================================================================================================================
+    function MathEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+      use MOD_Equation_Vars , only: ConsToEntropy
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: dGoal_dbeta
+      
+      dGoal_dbeta = -dot_product(ConsToEntropy(Ucurr),param % dt * param % F_antidiff)
+      
+    end function MathEntropy_dGoal_dbeta
+!===================================================================================================================================
+!>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
+!===================================================================================================================================
+    function MathEntropy_InitialCheck(param,goalFunction) result(check)
+      use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: goalFunction ! Current solution
+      logical                      :: check
+      
+      check = (goalFunction >= -max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL))
+      
+    end function MathEntropy_InitialCheck
+
   end subroutine IDP_LimitMathEntropy
 !===================================================================================================================================
 !> Density and pressure positivity limiter. As explained in:
@@ -1332,12 +1148,16 @@ contains
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
     use MOD_Mesh_Vars     , only: nElems, offsetElem
+    use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ, offsetElem
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD
-    use MOD_IDP_Vars      , only: FFV_m_FDG
+    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPForce2D
+    use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t
     use MOD_IDP_Vars      , only: alpha_maxIDP, IDPMaxIter, NEWTON_ABSTOL, NEWTON_RELTOL
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
@@ -1348,134 +1168,326 @@ contains
     real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
-    real    :: dalpha, dalpha1, dalpha_old
-    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
-    real    :: ap  ! ap = (PositCorrFactor * p_safe   - p) / (kappa-1)
-    real    :: pres
+    real    :: dalpha1
+    real    :: a      ! a  = PositCorrFactor * rho_safe - rho
+    real    :: Qm, Pm ! Zalesak's limiter's variables
     real    :: alphadiff
     real    :: dpdU(PP_nVar), U_curr(PP_nVar)
     real    :: dp_dalpha
     integer :: i,j,k, iter
     logical :: NotInIter
-    real, parameter :: eps = 1.e-14           ! Very small value
+    type(IDPparam_t) :: param ! Parameters for Newton's method
+    real             :: new_alpha
     !--------------------------------------------------------
-      
-!     ----------------------------------
-!     Check if it makes sense correcting
-!     ----------------------------------
-      alphadiff = alpha(eID) - alpha_maxIDP
-      if ( abs(alphadiff) < eps ) return ! Not much to do for this element...
       
 !     ---------------
 !     Correct density
 !     ---------------
-      
-      dalpha = -epsilon(1.0) ! Safe initialization
         
 !     Compute correction factors
 !     --------------------------
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
-        ! Density correction
+        ! Compute density bound
+        !**********************
         rho_min(i,j,k) = merge (max(rho_min(i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID)), PositCorrFactor * Usafe(1,i,j,k,eID), IDPDensityTVD) ! This writes the more restrictive bound into rho_min
-        a = (rho_min(i,j,k) - U(1,i,j,k))
-        if (a > 0.) then ! This DOF needs a correction
-          if (abs(FFV_m_FDG(1,i,j,k,eID)) < eps) cycle
-          dalpha1 = a * sdt / FFV_m_FDG(1,i,j,k,eID)
+        
 #if LOCAL_ALPHA
-          ! TODO: Use a one-sided Zalesak limiter here!!
-          dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
-#endif /*LOCAL_ALPHA*/
-          dalpha = max(dalpha,dalpha1)
+        ! Real one-sided Zalesak-type limiter
+        ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
+        ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
+        ! ATTENTION: 1) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
+        !               for each interface, not each node
+        !****************************************************************************************************************
+        
+        ! Upper/lower bounds for admissible increments
+        Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
+        
+        ! Check the sign of Qm... !!!
+        if (Qm > 0.0)  then
+          print*, 'Usafe is not within bounds: 0<Qm=', Qm, i, j, k, eID+offsetElem
+          print*, 'rho_min', rho_min(i,j,k)
+          print*, 'rho_saf', Usafe(1,i,j,k,eID)
+          stop
         end if
         
-      end do       ; end do       ; end do ! i,j,k
+        ! Negative contributions
+        Pm = 0.0
+        Pm = Pm + min(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
+        Pm = Pm + min(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        if (.not. IDPForce2D) then
+        Pm = Pm + min(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
+        Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        end if
+        Pm = Pm*sJ(i,j,k,eID)
         
+        if (Pm==0.0) then
+          Qm = 1.0
+        else
+          Qm = abs(Qm/Pm)
+        end if
+        
+        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
+        dalpha1 = 1.0 - min(1.0,Qm) - alpha_loc(i,j,k,eID)
+        
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
+        dalpha = max(dalpha,dalpha1)
+        
+#else
+        a = (rho_min(i,j,k) - U(1,i,j,k)) * sdt
+        if (a > 0.) then ! This DOF needs a correction
+          if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
+          dalpha1 = a / FFV_m_FDG(1,i,j,k,eID)
+          dalpha = max(dalpha,dalpha1)
+        end if
+
+#endif /*LOCAL_ALPHA*/
+        
+      end do       ; end do       ; end do ! i,j,k
       
-!       Do the correction if needed
-!       ---------------------------
-#if !(LOCAL_ALPHA)
-      if ( dalpha > 0. ) then
-        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-                                    dt,sdt,eID)
-      end if
-#endif /*!(LOCAL_ALPHA)*/
 !     ---------------
 !     Correct pressure
 !     ---------------
-      
-      dalpha = -epsilon(1.0) ! Safe initialization
-#if LOCAL_ALPHA
-      !TODO: Use a neigbor by neighbor Newton method here!!
-      stop 'not implemented local alpha for pressure corr'
-#endif /*LOCAL_ALPHA*/
       
 !     Compute correction factors
 !     --------------------------
       notInIter = .FALSE.
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        ! Current pressure and goal
-        call Get_Pressure(U(:,i,j,k),pres)
+        
+        ! Compute bound
+        ! *************
         p_min(i,j,k) = PositCorrFactor * p_safe(i,j,k,eID)
-        ap = (p_min(i,j,k) - pres)
         
-        if (ap <= 0.) cycle ! this DOF does NOT need pressure correction
+        ! Compute the needed blending coefficient with a Newton's method
+        ! TODO: Check if an asymmetric tolerance is really needed
+        !***************************************************************
         
-        ! Newton initialization:
-        U_curr = U(:,i,j,k)
-        dalpha1 = 0.0
-        
-        ! Perform Newton iterations
-        NewtonLoop: do iter=1, IDPMaxIter
-          dalpha_old = dalpha1
-          
-          ! Evaluate dp/d(alpha)
-          call Get_dpdU(U_curr,dpdU)
-          dp_dalpha = dot_product(dpdU,dt*FFV_m_FDG(:,i,j,k,eID))
-          if ( abs(dp_dalpha)<eps ) exit NewtonLoop ! Nothing to do here!
-          
-          ! Update correction
-          dalpha1 = dalpha1 + ap / dp_dalpha
-          if (alpha(eID) + dalpha1 > alpha_maxIDP+eps) then
-            dalpha1 = alpha_maxIDP - alpha(eID)
-          elseif (dalpha1<0.0) then
-            dalpha1=0.0
-          else
-            ! Check relative tolerance
-            if ( abs(dalpha_old-dalpha1)<= NEWTON_RELTOL ) exit NewtonLoop
-          end if
-          
-          ! Get new U and pressure
-          U_curr = U (:,i,j,k) + dalpha1 * dt * FFV_m_FDG(:,i,j,k,eID)
-          call Get_Pressure(U_curr,pres)
-          
-          ! Evaluate if goal pressure was achieved (and exit the Newton loop if that's the case)
-          ap = p_min(i,j,k)-pres
-          if ( (ap <= epsilon(p_min(i,j,k))) .and. (ap > -NEWTON_ABSTOL*p_min(i,j,k)) ) exit NewtonLoop  ! Note that we use an asymmetric tolerance!
-        end do NewtonLoop ! iter
-        
-        if (iter > IDPMaxIter) notInIter =.TRUE.
+        ! Initialization
+        param % dt    = dt
+        param % bound = p_min(i,j,k)
         
 #if LOCAL_ALPHA
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
+        ! Get the current alpha
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck)
+        ! Update dalpha_loc and dalpha
+        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
+#else
+        ! Get the current alpha
+        new_alpha = alpha(eID) + dalpha
+        ! Specify the antidiffusive flux
+        param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
+        ! Perform Newton's method to find the new alpha
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck)
+        ! Update dalpha
+        dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
-        dalpha = max(dalpha,dalpha1) ! Compute the element-wise maximum correction
-      
+        
       end do       ; end do       ; enddo !i,j,k
       
       if (notInIter) then
         write(*,'(A,I0,A,I0)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem
       end if
       
-!       Do the correction if needed
-!       ---------------------------
-#if !(LOCAL_ALPHA)
-      if ( dalpha > 0. ) then
-        call PerformCorrection(U,Ut,dalpha    ,alpha(eID)          , &
-                                    dt,sdt,eID)
-      end if
-#endif /*!(LOCAL_ALPHA)*/
+  contains
+!===================================================================================================================================
+!>  Goal function for the specific entropy Newton's method
+!===================================================================================================================================
+    function Pressure_Goal(param,Ucurr) result(goal)
+      use MOD_Equation_Vars , only: Get_Pressure
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: goal
+      !-local-variables--------------------------
+      real :: p
+      !------------------------------------------
+      
+      call Get_Pressure(Ucurr,p)
+      goal = param % bound - p
+      
+    end function Pressure_Goal
+!===================================================================================================================================
+!>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
+!===================================================================================================================================
+    function Pressure_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+      use MOD_Equation_Vars , only: Get_dpdU
+      use MOD_IDP_Vars      , only: IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
+      real                         :: dGoal_dbeta
+      !-local-variables--------------------------
+      real :: dpdu(PP_nVar)
+      !------------------------------------------
+      
+      call Get_dpdU(Ucurr,dpdu)
+      dGoal_dbeta = -dot_product(dpdu,param % dt * param % F_antidiff)
+      
+    end function Pressure_dGoal_dbeta
+!===================================================================================================================================
+!>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
+!===================================================================================================================================
+    function Pressure_InitialCheck(param,goalFunction) result(check)
+      use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: goalFunction ! Current solution
+      logical                      :: check
+      
+      check = (goalFunction <= 0.0)
+      
+    end function Pressure_InitialCheck
   end subroutine IDP_LimitPositivity
+#if LOCAL_ALPHA
+!===================================================================================================================================
+!> Run all Newton loops for a particular subcell
+!> ATTENTION: 1) We need to find the minimum alpha for each interface using the correspoinding antidiffusive flux
+!>            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
+!===================================================================================================================================
+  subroutine NewtonLoops_LocalAlpha(param,i,j,k,eID,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ
+    use MOD_IDP_Vars      , only: IDPForce2D, Usafe, IDPparam_t, i_sub_Goal, i_sub_InitialCheck, IDPgamma
+    implicit none
+    !-arguments--------------------------------------
+    type(IDPparam_t), intent(inout) :: param
+    integer         , intent(in)    :: i,j,k      ! local coordinate index
+    integer         , intent(in)    :: eID        ! Element index
+    real            , intent(inout) :: alpha      ! 
+    logical         , intent(inout) :: notInIter  ! 
+    procedure(i_sub_Goal)           :: Goal
+    procedure(i_sub_Goal)           :: dGoal_dbeta
+    procedure(i_sub_InitialCheck)   :: InitialCheck
+    !------------------------------------------------
+    
+    ! xi-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    
+    ! xi+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    ! eta-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    
+    ! eta+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    
+    if (.not. IDPForce2D) then
+    ! zeta-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)) ! Anti-difussive flux in zeta-
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    
+    ! zeta+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
+    call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    end if
+  
+  end subroutine NewtonLoops_LocalAlpha
+#endif /*LOCAL_ALPHA*/
+!===================================================================================================================================
+!> General Newton loop (can be used for the element-wise or subcell-wise limiters
+!> ATTENTION: 1) We solve for beta:=1-alpha (to match FCT literature) and then return fluxo's alpha
+!===================================================================================================================================
+  subroutine NewtonLoop(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+    use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
+    use MOD_IDP_Vars      , only: i_sub_Goal, i_sub_InitialCheck, IDPparam_t
+    implicit none
+    !-arguments----------------------------------------
+    real            , intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
+    type(IDPparam_t), intent(in)    :: param          ! IDP parameters 
+    real            , intent(inout) :: alpha          ! Current (nodal) blending coefficient. Gets updated here.
+    logical         , intent(inout) :: notInIter      ! 
+    procedure(i_sub_Goal)           :: Goal
+    procedure(i_sub_Goal)           :: dGoal_dbeta
+    procedure(i_sub_InitialCheck)   :: InitialCheck
+    !-local-variables----------------------------------
+    real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
+    real :: beta_old       ! beta from last iteration
+    real :: Ucurr(PP_nVar)
+    real :: dSdbeta        ! ds/d(beta)
+    real :: as             ! Goal function as := smin - s (we find alpha such that as=0)
+    real :: new_alpha
+    integer :: iter
+    !--------------------------------------------------
+    
+    ! Compute current FCT blending coef
+    beta = (1.0 - alpha)
+    
+    ! Compute current directional update
+    Ucurr = Usafe + beta * param % dt * param % F_antidiff
+    
+    ! Check entropy of this update
+    as = Goal(param,Ucurr)
+    if (InitialCheck(param,as)) return ! this Neighbor contribution does NOT need entropy correction
+    
+    ! Perform Newton iterations
+    TheNewtonLoop: do iter=1, IDPMaxIter
+      beta_old = beta
+      
+      ! Evaluate dS/d(alpha)
+      dSdbeta = dGoal_dbeta(param,Ucurr)
+      
+      if ( abs(dSdbeta) == 0.0) then
+        beta = 0.0
+        exit TheNewtonLoop ! Nothing to do here!
+      end if
+      
+      ! Update correction
+      beta = beta - as / dSdbeta
+      
+      ! Check bounds
+      if ( (1.0 - beta) < alpha) then
+        beta = (1.0 - alpha)
+      elseif (beta < -NEWTON_ABSTOL) then
+        beta = 0.0
+      else
+        ! Check relative tolerance
+        if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit TheNewtonLoop
+      end if
+      
+      ! Get new U
+      Ucurr = Usafe + beta * param % dt * param % F_antidiff
+      
+      ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
+      as = Goal(param,Ucurr)
+      
+      ! Check absolute tolerance
+      if ( abs(as) < max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL) ) exit TheNewtonLoop  
+          
+    end do TheNewtonLoop ! iter
+    
+    if ( (beta<0.0) .and. (beta>=-NEWTON_ABSTOL) ) then
+      print*, '0>beta=',beta
+      beta = 0.0
+    end if
+    
+    new_alpha = 1.0 - beta
+    if (alpha > new_alpha+NEWTON_ABSTOL) then
+      print*, 'WTF... alpha is getting smaller (old/new)', alpha, new_alpha
+      stop
+    else
+      alpha = new_alpha
+    end if
+    
+    if (iter > IDPMaxIter) notInIter = .TRUE.
+    
+  end subroutine NewtonLoop
 !===================================================================================================================================
 !> Takes dalpha/dalpha_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
 !===================================================================================================================================
