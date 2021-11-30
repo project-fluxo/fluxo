@@ -212,10 +212,10 @@ Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
 Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
 Dvolsurf_T= TRANSPOSE(Dvolsurf)
 
-! For the secret DG flux (debug)
-ALLOCATE(Qp(    0:N_in,0:N_in) )
-Q = matmul(M,D)
-Qp = 1./Q
+! For the secret DG flux (debug) TODO: remove
+!ALLOCATE(Qp(    0:N_in,0:N_in) )
+!Q = matmul(M,D)
+!Qp = 1./Q
 !-------------
 #endif /*PP_DiscType==2*/
 
@@ -295,14 +295,28 @@ USE MOD_MPI_Vars
 USE MOD_MPI                 ,ONLY: StartReceiveMPIData,StartSendMPIData,FinishExchangeMPIData
 USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide 
 #endif /*MPI*/
+#if NFVSE_CORR
+USE MOD_Mesh_Vars           ,ONLY: nElems
+USE MOD_IDP_Vars            ,ONLY: IDPForce2D
+#endif /*NFVSE_CORR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
 REAL,INTENT(IN)                 :: tIn                    !< Current time
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+#if NFVSE_CORR
+integer :: i,j,k,eID
 !==================================================================================================================================
 
+if (IDPForce2D) then
+  do eID=1, nElems
+    do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+      U (:,i,j,k,eID) = U (:,i,j,0,eID)
+    end do       ; end do       ; end do
+  end do
+end if
+#endif /*NFVSE_CORR*/
 
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)

@@ -60,14 +60,14 @@ contains
     use MOD_IDP_Vars
     use MOD_Globals    , only: MPIRoot, UNIT_stdOut
     use MOD_PreProc    , only: PP_N
-    use MOD_Mesh_Vars  , only: nElems
+    use MOD_Mesh_Vars  , only: nElems, sJ
 #if !(barStates)
     use MOD_Mesh_Vars  , only: firstSlaveSide, LastSlaveSide, nSides
 #endif /*!(barStates)*/
     use MOD_ReadInTools, only: GETINT, GETREAL, GETLOGICAL
     implicit none
     !-local-variables----------------------------------------
-    integer :: i
+    integer :: i,j,k,eID
     !--------------------------------------------------------
     SWRITE(UNIT_StdOut,'(132("-"))')
     SWRITE(UNIT_stdOut,'(A)') ' IDP Methods: '
@@ -244,6 +244,15 @@ contains
     amount_alpha  = 0.0
     amount_alpha_steps = 0
     
+!   Finally enforce 2D condition
+  if (IDPForce2D) then
+    do eID=1, nElems
+      do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        sJ(i,j,k,eID) = sJ(i,j,0,eID)
+      end do       ; end do       ; end do
+    end do
+  end if
+  
 !   All done
 !   --------
 #if barStates
@@ -265,12 +274,11 @@ contains
     use MOD_NFVSE_Vars  , only: alpha_loc
     use MOD_Analyze_Vars, only: wGPVol
     use MOD_Mesh_Vars   , only: nElems, sJ
+    use MOD_IDP_Vars    , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity, dalpha
-#if LOCAL_ALPHA
-    use MOD_IDP_Vars    , only: dalpha_loc
-    use MOD_IDP_Vars    , only: IDPForce2D, rho_min, rho_max, s_min
-#endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG
+    use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -300,23 +308,34 @@ contains
 #if LOCAL_ALPHA
       dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
+!     Enforce 2D condition
+!     --------------------
+      if (IDPForce2D) then
+        do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          FFV_m_FDG(:,i,j,k,eID) = FFV_m_FDG(:,i,j,0,eID)
+        end do       ; end do       ; end do
+#if LOCAL_ALPHA
+        do k=1, PP_N ; do j=0, PP_N ; do i=-1, PP_N
+          ftilde_FV(:,i,j,k,eID) = ftilde_FV(:,i,j,0,eID)
+          ftilde_DG(:,i,j,k,eID) = ftilde_DG(:,i,j,0,eID)
+        end do       ; end do       ; end do
+        do k=1, PP_N ; do j=-1, PP_N ; do i=0, PP_N
+          gtilde_FV(:, i,j,k,eID) = gtilde_FV(:, i,j,0,eID)
+          gtilde_DG(:, i,j,k,eID) = gtilde_DG(:, i,j,0,eID)
+        end do       ; end do       ; end do
+        do k=-1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          htilde_FV(:, i,j,k,eID) = 0.0
+          htilde_DG(:, i,j,k,eID) = 0.0
+        end do       ; end do       ; end do
+#endif /*LOCAL_ALPHA*/  
+      end if
 !     Call all user-defined limiters to obtain dalpha
 !     -----------------------------------------------
       if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-      
-#if LOCAL_ALPHA
-      if (IDPForce2D) then
-        do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          U (:,i,j,k,eID) = U (:,i,j,0,eID)
-          Ut(:,i,j,k,eID) = Ut(:,i,j,0,eID)
-          dalpha_loc(i,j,k) = dalpha_loc(i,j,0)
-          alpha_loc(i,j,k,eID) = alpha_loc(i,j,0,eID)
-        end do       ; end do ; end do
-      end if
-#endif /*LOCAL_ALPHA*/      
+          
 !     Perform limiting
 !     ----------------
       if ( dalpha>0.0 .or. isnan(dalpha) &
@@ -941,7 +960,7 @@ contains
 !===================================================================================================================================
 !>  Goal function for the specific entropy Newton's method
 !===================================================================================================================================
-    function SpecEntropy_Goal(param,Ucurr) result(goal)
+    pure function SpecEntropy_Goal(param,Ucurr) result(goal)
       use MOD_Equation_Vars , only: Get_SpecEntropy
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -955,7 +974,7 @@ contains
 !===================================================================================================================================
 !>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the specific entropy Newton's method
 !===================================================================================================================================
-    function SpecEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+    pure function SpecEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
       use MOD_Equation_Vars , only: ConsToSpecEntropy
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -969,7 +988,7 @@ contains
 !===================================================================================================================================
 !>  InitialCheck for the specific entropy Newton's method: Is the current state admissible?
 !===================================================================================================================================
-    function SpecEntropy_InitialCheck(param,goalFunction) result(check)
+    pure function SpecEntropy_InitialCheck(param,goalFunction) result(check)
       use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
       implicit none
       type(IDPparam_t), intent(in) :: param
@@ -1097,7 +1116,7 @@ contains
 !===================================================================================================================================
 !>  Goal function for the mathematical entropy Newton's method
 !===================================================================================================================================
-    function MathEntropy_Goal(param,Ucurr) result(goal)
+    pure function MathEntropy_Goal(param,Ucurr) result(goal)
       use MOD_Equation_Vars , only: Get_MathEntropy
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -1111,7 +1130,7 @@ contains
 !===================================================================================================================================
 !>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the mathematical entropy Newton's method
 !===================================================================================================================================
-    function MathEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+    pure function MathEntropy_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
       use MOD_Equation_Vars , only: ConsToEntropy
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -1125,7 +1144,7 @@ contains
 !===================================================================================================================================
 !>  InitialCheck for the mathematical entropy Newton's method: Is the current state admissible?
 !===================================================================================================================================
-    function MathEntropy_InitialCheck(param,goalFunction) result(check)
+    pure function MathEntropy_InitialCheck(param,goalFunction) result(check)
       use MOD_IDP_Vars, only: NEWTON_ABSTOL, IDPparam_t
       implicit none
       type(IDPparam_t), intent(in) :: param
@@ -1291,7 +1310,7 @@ contains
 !===================================================================================================================================
 !>  Goal function for the pressure Newton's method
 !===================================================================================================================================
-    function Pressure_Goal(param,Ucurr) result(goal)
+    pure function Pressure_Goal(param,Ucurr) result(goal)
       use MOD_Equation_Vars , only: Get_Pressure
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -1309,7 +1328,7 @@ contains
 !===================================================================================================================================
 !>  Derivative of goal function with respect to (FCT) blending coefficient (beta:=1-alpha) for the pressure Newton's method
 !===================================================================================================================================
-    function Pressure_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
+    pure function Pressure_dGoal_dbeta(param,Ucurr) result(dGoal_dbeta)
       use MOD_Equation_Vars , only: Get_dpdU
       use MOD_IDP_Vars      , only: IDPparam_t
       implicit none
@@ -1327,7 +1346,7 @@ contains
 !===================================================================================================================================
 !>  InitialCheck for the pressure Newton's method: Is the current state admissible?
 !===================================================================================================================================
-    function Pressure_InitialCheck(param,goalFunction) result(check)
+    pure function Pressure_InitialCheck(param,goalFunction) result(check)
       use MOD_IDP_Vars, only: IDPparam_t
       implicit none
       type(IDPparam_t), intent(in) :: param

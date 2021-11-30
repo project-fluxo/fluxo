@@ -70,14 +70,14 @@ module MOD_IDP_Vars
   
   abstract interface 
     ! Interface for Newton's method goal function (and its derivative)
-    function i_sub_Goal(param,Ucurr) result(goal)
+    pure function i_sub_Goal(param,Ucurr) result(goal)
       import IDPparam_t
       type(IDPparam_t), intent(in) :: param
       real            , intent(in) :: Ucurr(PP_nVar) ! Current solution
       real                         :: goal
     end function i_sub_Goal
     ! Interface for Newton's method initial check
-    function i_sub_InitialCheck(param,goalFunction) result(check)
+    pure function i_sub_InitialCheck(param,goalFunction) result(check)
       import IDPparam_t
       type(IDPparam_t), intent(in) :: param
       real            , intent(in) :: goalFunction ! Current solution
