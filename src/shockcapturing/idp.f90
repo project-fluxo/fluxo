@@ -184,15 +184,9 @@ contains
     ! Variables for local alpha
 #if LOCAL_ALPHA
     allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,1:nElems) )
-    allocate ( ftilde_FV(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
-    allocate ( gtilde_FV(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
-    allocate ( htilde_FV(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
     allocate ( ftilde_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
     allocate ( gtilde_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
     allocate ( htilde_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
-    ftilde_FV = 0.0
-    gtilde_FV = 0.0
-    htilde_FV = 0.0
     ftilde_DG = 0.0
     gtilde_DG = 0.0
     htilde_DG = 0.0
@@ -275,10 +269,10 @@ contains
     use MOD_Analyze_Vars, only: wGPVol
     use MOD_Mesh_Vars   , only: nElems, sJ
     use MOD_IDP_Vars    , only: dalpha_loc
+    use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity, dalpha
     use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG
-    use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -316,16 +310,10 @@ contains
         end do       ; end do       ; end do
 #if LOCAL_ALPHA
         do k=1, PP_N ; do j=0, PP_N ; do i=-1, PP_N
-          ftilde_FV(:,i,j,k,eID) = ftilde_FV(:,i,j,0,eID)
           ftilde_DG(:,i,j,k,eID) = ftilde_DG(:,i,j,0,eID)
         end do       ; end do       ; end do
         do k=1, PP_N ; do j=-1, PP_N ; do i=0, PP_N
-          gtilde_FV(:, i,j,k,eID) = gtilde_FV(:, i,j,0,eID)
           gtilde_DG(:, i,j,k,eID) = gtilde_DG(:, i,j,0,eID)
-        end do       ; end do       ; end do
-        do k=-1, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          htilde_FV(:, i,j,k,eID) = 0.0
-          htilde_DG(:, i,j,k,eID) = 0.0
         end do       ; end do       ; end do
 #endif /*LOCAL_ALPHA*/  
       end if
@@ -335,7 +323,19 @@ contains
       if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-          
+      
+!     Enforce 2D condition
+!     --------------------
+      if (IDPForce2D) then
+        
+#if LOCAL_ALPHA
+        do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          U(:,i,j,k,eID) = U(:,i,j,0,eID)
+          Ut(:,i,j,k,eID) = Ut(:,i,j,0,eID)
+          dalpha_loc(i,j,k) = maxval(dalpha_loc(i,j,:))
+        end do       ; end do       ; end do
+#endif /*LOCAL_ALPHA*/  
+      end if
 !     Perform limiting
 !     ----------------
       if ( dalpha>0.0 .or. isnan(dalpha) &
@@ -353,7 +353,7 @@ contains
 !     Check that we are within bounds
 !     -------------------------------
 #if DEBUG || IDP_CHECKBOUNDS
-      call CheckBounds(U(:,:,:,:,eID))
+      call CheckBounds(U(:,:,:,:,eID),eID)
 #endif /*DEBUG || IDP_CHECKBOUNDS*/
     end do
     
@@ -380,15 +380,20 @@ contains
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
-  subroutine CheckBounds(U)
+  subroutine CheckBounds(U,eID)
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min
     use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
+    use MOD_NFVSE_Vars    , only: alpha
+#if LOCAL_ALPHA
+    use MOD_NFVSE_Vars    , only: alpha_loc
+#endif /*LOCAL_ALPHA*/
     implicit none
     !-arguments------------------------------------------------------------
-    real, intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    real   , intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
+    integer, intent(in) :: eID
     !-local-variables------------------------------------------------------
     integer :: i,j,k
     real    :: p
@@ -400,7 +405,12 @@ contains
       if (IDPDensityTVD .or. IDPPositivity) then
         if (IDPForce2D) rho_min(i,j,k) = rho_min(i,j,0)
         if (U(1,i,j,k) < rho_min(i,j,k) - tolerance) then
-          print*, 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k)
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
           CALL abort(__STAMP__,&
                   'Solution is not within bounds')
         end if
@@ -409,7 +419,12 @@ contains
       if (IDPDensityTVD) then
         if (IDPForce2D) rho_max(i,j,k) = rho_max(i,j,0)  
         if (U(1,i,j,k) > rho_max(i,j,k) + tolerance) then
-          print*, 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k)
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
           CALL abort(__STAMP__,&
                   'Solution is not within bounds')
         end if
@@ -418,7 +433,12 @@ contains
       if (IDPSpecEntropy) then
         if (IDPForce2D) s_min(i,j,k) = s_min(i,j,0)
         if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance) then
-          print*, 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k)
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
           CALL abort(__STAMP__,&
                   'Solution is not within bounds')
         end if
@@ -427,7 +447,12 @@ contains
       if (IDPMathEntropy) then
         if (IDPForce2D) s_max(i,j,k) = s_max(i,j,0)
         if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance) then
-          print*, 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k)
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
           CALL abort(__STAMP__,&
                   'Solution is not within bounds')
         end if
@@ -437,7 +462,12 @@ contains
         if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
         if (p < p_min(i,j,k) - tolerance) then
-          print*, 'WARNING: rho below min (curr/min):', p, p_min(i,j,k)
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho below min (curr/min):', p, p_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
           CALL abort(__STAMP__,&
                   'Solution is not within bounds')
         end if
@@ -669,7 +699,7 @@ contains
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
-    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
@@ -762,41 +792,27 @@ contains
         Qp = max(0.0,(rho_max(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         
-        ! Check the sign of Qp and Qm... !!!
-        if (Qp < 0.0) then
-          print*, 'Usafe is not within bounds: 0>Qp=', Qp, i, j, k, eID+offsetElem
-          print*, 'rho_max', rho_max(i,j,k)
-          print*, 'rho_saf', Usafe(1,i,j,k,eID)
-          stop 
-        end if
-        if (Qm > 0.0)  then
-          print*, 'Usafe is not within bounds: 0<Qm=', Qm, i, j, k, eID+offsetElem
-          print*, 'rho_min', rho_min(i,j,k)
-          print*, 'rho_saf', Usafe(1,i,j,k,eID)
-          stop
-        end if
-        
         ! Positive contributions
         Pp = 0.0
-        Pp = Pp + max(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
-        Pp = Pp + max(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
-        Pp = Pp + max(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
-        Pp = Pp + max(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pp = Pp + max(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
         if (.not. IDPForce2D) then
-        Pp = Pp + max(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
-        Pp = Pp + max(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pp = Pp + max(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+        Pp = Pp + max(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
         end if
         Pp = Pp*sJ(i,j,k,eID)
         
         ! Negative contributions
         Pm = 0.0
-        Pm = Pm + min(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
-        Pm = Pm + min(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
-        Pm = Pm + min(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
-        Pm = Pm + min(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
         if (.not. IDPForce2D) then
-        Pm = Pm + min(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
-        Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+        Pm = Pm + min(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
@@ -937,7 +953,7 @@ contains
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
 #else
         ! Get the current alpha
@@ -1093,7 +1109,7 @@ contains
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
 #else
         ! Get the current alpha
@@ -1169,7 +1185,7 @@ contains
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
-    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
 #endif /*LOCAL_ALPHA*/
@@ -1216,34 +1232,26 @@ contains
         ! Upper/lower bounds for admissible increments
         Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         
-        ! Check the sign of Qm... !!!
-        if (Qm > 0.0)  then
-          print*, 'Usafe is not within bounds: 0<Qm=', Qm, i, j, k, eID+offsetElem
-          print*, 'rho_min', rho_min(i,j,k)
-          print*, 'rho_saf', Usafe(1,i,j,k,eID)
-          stop
-        end if
-        
         ! Negative contributions
         Pm = 0.0
-        Pm = Pm + min(0.0, sWGP(i) * (ftilde_DG(1,i-1,j  ,k  ,eID) - ftilde_FV(1,i-1,j  ,k  ,eID)) )
-        Pm = Pm + min(0.0,-sWGP(i) * (ftilde_DG(1,i  ,j  ,k  ,eID) - ftilde_FV(1,i  ,j  ,k  ,eID)) )
-        Pm = Pm + min(0.0, sWGP(j) * (gtilde_DG(1,i  ,j-1,k  ,eID) - gtilde_FV(1,i  ,j-1,k  ,eID)) )
-        Pm = Pm + min(0.0,-sWGP(j) * (gtilde_DG(1,i  ,j  ,k  ,eID) - gtilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0,  sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
+        Pm = Pm + min(0.0, -sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,  sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+        Pm = Pm + min(0.0, -sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
         if (.not. IDPForce2D) then
-        Pm = Pm + min(0.0, sWGP(k) * (htilde_DG(1,i  ,j  ,k-1,eID) - htilde_FV(1,i  ,j  ,k-1,eID)) )
-        Pm = Pm + min(0.0,-sWGP(k) * (htilde_DG(1,i  ,j  ,k  ,eID) - htilde_FV(1,i  ,j  ,k  ,eID)) )
+        Pm = Pm + min(0.0,  sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+        Pm = Pm + min(0.0, -sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
-        if (Pm==0.0) then
-          Qm = 1.0
+        if (Pm<0.0) then
+          Qm = min(1.0,Qm/Pm)
         else
-          Qm = abs(Qm/Pm)
+          Qm = 1.0
         end if
         
-        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
-        dalpha1 = 1.0 - min(1.0,Qm) - alpha_loc(i,j,k,eID)
+        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - Qm) - alpha_loc(i,j,k,eID)
+        dalpha1 = (1.0 - Qm) - alpha_loc(i,j,k,eID)
         
         dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
         dalpha = max(dalpha,dalpha1)
@@ -1287,7 +1295,7 @@ contains
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = new_alpha - alpha_loc(i,j,k,eID)
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
 #else
         ! Get the current alpha
@@ -1364,7 +1372,7 @@ contains
 !>            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
 !===================================================================================================================================
   subroutine NewtonLoops_LocalAlpha(param,i,j,k,eID,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
-    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: IDPForce2D, Usafe, IDPparam_t, i_sub_Goal, i_sub_InitialCheck, IDPgamma
@@ -1381,32 +1389,32 @@ contains
     !------------------------------------------------
     
     ! xi-
-    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID) - ftilde_FV(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     
     ! xi+
-    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID) - ftilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     ! eta-
-    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID) - gtilde_FV(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     
     ! eta+
-    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID) - gtilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     
     if (.not. IDPForce2D) then
     ! zeta-
-    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID) - htilde_FV(:,i  ,j  ,k-1,eID)) ! Anti-difussive flux in zeta-
+    param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID)) ! Anti-difussive flux in zeta-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     
     ! zeta+
-    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID) - htilde_FV(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
     end if
@@ -1512,7 +1520,7 @@ contains
     use MOD_PreProc   , only: PP_N
     use MOD_IDP_Vars  , only: alpha_maxIDP
 #if LOCAL_ALPHA
-    use MOD_NFVSE_Vars, only: ftilde_DG, gtilde_DG, htilde_DG, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars, only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars, only: sWGP
     use MOD_Mesh_Vars , only: sJ
 #else
@@ -1543,7 +1551,7 @@ contains
     alpha      = alpha + dalpha
     
     ! Change inconsistent alphas
-    if (alpha > alpha_maxIDP .or. isnan(alpha)) then
+    if ( (alpha > alpha_maxIDP) .or. isnan(dalpha)) then
       alpha = alpha_maxIDP
       dalpha  = alpha_maxIDP - alphacont
     end if
@@ -1553,9 +1561,9 @@ contains
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       alphacont_loc    = alpha_loc(i,j,k)
       alpha_loc(i,j,k) = alpha_loc(i,j,k) + dalpha_loc(i,j,k)
-      if (alpha_loc(i,j,k) > alpha_maxIDP .or. isnan(alpha_loc(i,j,k))) then
+      if ( (alpha_loc(i,j,k) > alpha_maxIDP) .or. isnan(dalpha_loc(i,j,k))) then
         alpha_loc(i,j,k) = alpha_maxIDP
-        dalpha_loc (i,j,k) = alpha_maxIDP - alpha_old(eID)
+        dalpha_loc (i,j,k) = alpha_maxIDP - alphacont_loc
       end if
     end do       ; end do       ; enddo
     
@@ -1564,36 +1572,36 @@ contains
       ! xi correction
       ! -------------
       ! left
-      my_corr=-max(dalpha_loc(i-1,j  ,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID) - ftilde_FV(:,i-1,j,k,eID))*sJ(i,j,k,eID)
+      my_corr=-max(dalpha_loc(i-1,j  ,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i-1,j,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID) - ftilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! eta correction
       ! --------------
       ! left
-      my_corr=-max(dalpha_loc(i  ,j-1,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID) - gtilde_FV(:,i,j-1,k,eID))*sJ(i,j,k,eID)
+      my_corr=-max(dalpha_loc(i  ,j-1,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(j) * (gtilde_DG(:,i,j-1,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID) - gtilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! zeta correction
       ! ---------------
       ! left
-      my_corr=-max(dalpha_loc(i  ,j  ,k-1),dalpha_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID) - htilde_FV(:,i,j,k-1,eID))*sJ(i,j,k,eID)
+      my_corr=-max(dalpha_loc(i  ,j  ,k-1),dalpha_loc(i  ,j  ,k  )) * sWGP(k) * (htilde_DG(:,i,j,k-1,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID) - htilde_FV(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
     end do       ; end do       ; enddo
@@ -1673,9 +1681,6 @@ contains
     
 #if LOCAL_ALPHA
     SDEALLOCATE ( alpha_loc )
-    SDEALLOCATE ( ftilde_FV )
-    SDEALLOCATE ( gtilde_FV )
-    SDEALLOCATE ( htilde_FV )
     SDEALLOCATE ( ftilde_DG )
     SDEALLOCATE ( gtilde_DG )
     SDEALLOCATE ( htilde_DG )

@@ -30,7 +30,7 @@ module MOD_NFVSE_Vars
   public :: maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
-  public :: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV, ftilde_DG, gtilde_DG, htilde_DG
+  public :: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
@@ -73,9 +73,6 @@ module MOD_NFVSE_Vars
   integer                             :: ComputeAlpha     !< Method to compute alpha
 #if LOCAL_ALPHA
   real, target          , allocatable :: alpha_loc(:,:,:,:) !< subcell-wise blending function
-  real                  , allocatable :: ftilde_FV(:,:,:,:,:)
-  real                  , allocatable :: gtilde_FV(:,:,:,:,:)
-  real                  , allocatable :: htilde_FV(:,:,:,:,:)
   real                  , allocatable :: ftilde_DG(:,:,:,:,:)
   real                  , allocatable :: gtilde_DG(:,:,:,:,:)
   real                  , allocatable :: htilde_DG(:,:,:,:,:)

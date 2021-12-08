@@ -478,7 +478,7 @@ contains
 #if NFVSE_CORR
     use MOD_IDP_Vars           , only: FFV_m_FDG
 #if LOCAL_ALPHA
-    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_FV, gtilde_FV, htilde_FV
+    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
@@ -549,9 +549,9 @@ contains
 #endif /*NONCONS*/
                                                SubCellMetrics(iElem), iElem )
 #if LOCAL_ALPHA
-      ftilde_FV(:,:,:,:,iElem) = ftilde
-      gtilde_FV(:,:,:,:,iElem) = gtilde
-      htilde_FV(:,:,:,:,iElem) = htilde
+      ftilde_DG(:,:,:,:,iElem) = ftilde_DG(:,:,:,:,iElem) - ftilde
+      gtilde_DG(:,:,:,:,iElem) = gtilde_DG(:,:,:,:,iElem) - gtilde
+      htilde_DG(:,:,:,:,iElem) = htilde_DG(:,:,:,:,iElem) - htilde
 #endif /*LOCAL_ALPHA*/
 !     Update Ut
 !     ---------
