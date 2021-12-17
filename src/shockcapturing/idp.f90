@@ -1216,7 +1216,7 @@ contains
         ! Get the current alpha
         new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
-        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha_loc and dalpha
         dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
@@ -1226,7 +1226,7 @@ contains
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
-        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck)
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha
         dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
@@ -1372,7 +1372,7 @@ contains
         ! Get the current alpha
         new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
-        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha_loc and dalpha
         dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
@@ -1382,7 +1382,7 @@ contains
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
-        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck)
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha
         dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
@@ -1558,7 +1558,7 @@ contains
         ! Get the current alpha
         new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
-        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck)
+        call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck,Pressure_FinalCheck)
         ! Update dalpha_loc and dalpha
         dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
         dalpha = max(dalpha,dalpha_loc(i,j,k)) 
@@ -1568,7 +1568,7 @@ contains
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
-        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck)
+        call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck,Pressure_FinalCheck)
         ! Update dalpha
         dalpha = max(dalpha,new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
@@ -1629,6 +1629,19 @@ contains
       check = (goalFunction <= 0.0)
       
     end function Pressure_InitialCheck
+!===================================================================================================================================
+!>  FinalCheck for the pressure Newton's method: Is the current state admissible? (asymmetric condition)
+!===================================================================================================================================
+    pure function Pressure_FinalCheck(param,goalFunction) result(check)
+      use MOD_IDP_Vars, only: IDPparam_t, NEWTON_ABSTOL
+      implicit none
+      type(IDPparam_t), intent(in) :: param
+      real            , intent(in) :: goalFunction ! Current solution
+      logical                      :: check
+      
+      check = ( goalFunction <= epsilon(1.0) ) .and. (goalFunction > -max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL))
+      
+    end function Pressure_FinalCheck
   end subroutine IDP_LimitPositivity
 #if LOCAL_ALPHA
 !===================================================================================================================================
@@ -1636,7 +1649,7 @@ contains
 !> ATTENTION: 1) We need to find the minimum alpha for each interface using the correspoinding antidiffusive flux
 !>            2) Even if the current state is valid, some limiting might be needed for one/some of the interfaces
 !===================================================================================================================================
-  subroutine NewtonLoops_LocalAlpha(param,i,j,k,eID,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+  subroutine NewtonLoops_LocalAlpha(param,i,j,k,eID,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
@@ -1651,37 +1664,38 @@ contains
     procedure(i_sub_Goal)           :: Goal
     procedure(i_sub_Goal)           :: dGoal_dbeta
     procedure(i_sub_InitialCheck)   :: InitialCheck
+    procedure(i_sub_InitialCheck)   :: FinalCheck
     !------------------------------------------------
     
     ! xi-
     param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i-1,j  ,k  ,eID)) ! Anti-difussive flux in xi-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! xi+
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     ! eta-
     param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j-1,k  ,eID)) ! Anti-difussive flux in eta-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! eta+
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     if (.not. IDPForce2D) then
     ! zeta-
     param % F_antidiff =  IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k-1,eID)) ! Anti-difussive flux in zeta-
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! zeta+
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
-                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+                              param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     end if
   
   end subroutine NewtonLoops_LocalAlpha
@@ -1690,7 +1704,7 @@ contains
 !> General Newton loop (can be used for the element-wise or subcell-wise limiters
 !> ATTENTION: 1) We solve for beta:=1-alpha (to match FCT literature) and then return fluxo's alpha
 !===================================================================================================================================
-  subroutine NewtonLoop(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck)
+  subroutine NewtonLoop(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
     use MOD_IDP_Vars      , only: i_sub_Goal, i_sub_InitialCheck, IDPparam_t
     implicit none
@@ -1702,6 +1716,7 @@ contains
     procedure(i_sub_Goal)           :: Goal
     procedure(i_sub_Goal)           :: dGoal_dbeta
     procedure(i_sub_InitialCheck)   :: InitialCheck
+    procedure(i_sub_InitialCheck)   :: FinalCheck
     !-local-variables----------------------------------
     real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
     real :: beta_old       ! beta from last iteration
@@ -1754,7 +1769,7 @@ contains
       as = Goal(param,Ucurr)
       
       ! Check absolute tolerance
-      if ( abs(as) < max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL) ) exit TheNewtonLoop  
+      if ( FinalCheck(param,as) ) exit TheNewtonLoop  
           
     end do TheNewtonLoop ! iter
     
@@ -1774,6 +1789,19 @@ contains
     if (iter > IDPMaxIter) notInIter = .TRUE.
     
   end subroutine NewtonLoop
+!===================================================================================================================================
+!>  standard FinalCheck for the Newton's method: Is the current state admissible?
+!===================================================================================================================================
+  pure function Standard_FinalCheck(param,goalFunction) result(check)
+    use MOD_IDP_Vars, only: IDPparam_t, NEWTON_ABSTOL
+    implicit none
+    type(IDPparam_t), intent(in) :: param
+    real            , intent(in) :: goalFunction ! Current solution
+    logical                      :: check
+    
+    check = (abs(goalFunction) < max(NEWTON_ABSTOL,abs(param % bound)*NEWTON_ABSTOL))
+    
+  end function Standard_FinalCheck
 !===================================================================================================================================
 !> Takes dalpha/dalpha_loc U and Ut, and outputs the corrected U and Ut, and alpha/alpha_loc for visualization
 !===================================================================================================================================
