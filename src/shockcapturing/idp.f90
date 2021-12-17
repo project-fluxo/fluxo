@@ -39,6 +39,7 @@ contains
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
     call prms%CreateLogicalOption( "IDPDensityTVD",  " IDP(TVD) correction on density? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
+    call prms%CreateLogicalOption("IDPPressureTVD",  " IDP(TVD) correction on pressure? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
 !   Additional options
@@ -78,6 +79,7 @@ contains
     ! IDP limiters
     IDPPositivity  = GETLOGICAL('IDPPositivity' ,'F')
     IDPDensityTVD  = GETLOGICAL('IDPDensityTVD' ,'F')
+    IDPPressureTVD = GETLOGICAL('IDPPressureTVD' ,'F')
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
     
@@ -104,13 +106,26 @@ contains
       IDPneedsUsafe     = .TRUE.
     end if
     
-    if (IDPDensityTVD ) then
+    if (IDPDensityTVD) then
 #if barStates
 #if LOCAL_ALPHA
       IDPneedsUsafe = .TRUE.
 #endif /*LOCAL_ALPHA*/
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev     = .TRUE.
+      IDPneedsUprev_ext = .TRUE.
+#else
+      IDPneedsUsafe = .TRUE.
+#endif /*barStates*/
+    end if
+    
+    if (IDPPressureTVD) then
+      IDPneedsUprev     = .TRUE.
+#if barStates
+#if LOCAL_ALPHA
+      IDPneedsUsafe = .TRUE.
+#endif /*LOCAL_ALPHA*/
+      IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
 #else
       IDPneedsUsafe = .TRUE.
@@ -181,7 +196,7 @@ contains
       allocate( EntPrev_slave (     1, 0:PP_N  , 0:PP_N            ,firstSlaveSide:LastSlaveSide) )
       allocate( EntPrev_ext   (     1, 0:PP_N  , 0:PP_N          ,6,nElems) )
     end if
-    if (IDPDensityTVD) then
+    if (IDPDensityTVD .or. IDPPressureTVD) then
       allocate( Usafe_ext    (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
     end if
 #endif /*barStates*/
@@ -212,10 +227,12 @@ contains
     if (IDPMathEntropy) then
       allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N) )
     end if
-    if (IDPPositivity) then
+    if (IDPPositivity .or. IDPPressureTVD) then
       allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N) )
     end if
-    
+    if (IDPPressureTVD) then
+      allocate ( p_max       (0:PP_N,0:PP_N,0:PP_N) )
+    end if
     ! Stencil for bounds
     ! ------------------
 !#    allocate ( idx_p1(0:PP_N) )
@@ -276,7 +293,7 @@ contains
     use MOD_IDP_Vars    , only: dalpha_loc
     use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPositivity, dalpha
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPressureTVD, IDPPositivity, dalpha
     use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG
     implicit none
     !-arguments----------------------------------------------
@@ -325,6 +342,7 @@ contains
 !     Call all user-defined limiters to obtain dalpha
 !     -----------------------------------------------
       if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
@@ -388,8 +406,8 @@ contains
   subroutine CheckBounds(U,eID)
     use MOD_Preproc
     use MOD_Globals
-    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min
-    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
+    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max
+    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
@@ -402,14 +420,16 @@ contains
     !-local-variables------------------------------------------------------
     integer :: i,j,k
     real    :: p
-    real, parameter :: tolerance=1.e-12
+    real, parameter :: tolerance_rho=1.e-12
+    real, parameter :: tolerance_ent=1.e-10
+    real, parameter :: tolerance_p=1.e-12
     !----------------------------------------------------------------------
     
     
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       if (IDPDensityTVD .or. IDPPositivity) then
         if (IDPForce2D) rho_min(i,j,k) = rho_min(i,j,0)
-        if (U(1,i,j,k) < rho_min(i,j,k) - tolerance) then
+        if (U(1,i,j,k) < rho_min(i,j,k) - tolerance_rho) then
           WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
 #if LOCAL_ALPHA
                                                                                                                                       alpha_loc(i,j,k,eID)
@@ -423,7 +443,7 @@ contains
         
       if (IDPDensityTVD) then
         if (IDPForce2D) rho_max(i,j,k) = rho_max(i,j,0)  
-        if (U(1,i,j,k) > rho_max(i,j,k) + tolerance) then
+        if (U(1,i,j,k) > rho_max(i,j,k) + tolerance_rho) then
           WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
 #if LOCAL_ALPHA
                                                                                                                                       alpha_loc(i,j,k,eID)
@@ -437,7 +457,7 @@ contains
       
       if (IDPSpecEntropy) then
         if (IDPForce2D) s_min(i,j,k) = s_min(i,j,0)
-        if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance) then
+        if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance_ent) then
           WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
 #if LOCAL_ALPHA
                                                                                                                                       alpha_loc(i,j,k,eID)
@@ -451,7 +471,7 @@ contains
       
       if (IDPMathEntropy) then
         if (IDPForce2D) s_max(i,j,k) = s_max(i,j,0)
-        if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance) then
+        if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance_ent) then
           WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
 #if LOCAL_ALPHA
                                                                                                                                       alpha_loc(i,j,k,eID)
@@ -463,11 +483,26 @@ contains
         end if
       end if
       
-      if (IDPPositivity) then
+      if (IDPPositivity .or. IDPPressureTVD) then
         if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
-        if (p < p_min(i,j,k) - tolerance) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho below min (curr/min):', p, p_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+        if (p < p_min(i,j,k) - tolerance_p) then
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: Pressure below min (curr/min):', p, p_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
+#if LOCAL_ALPHA
+                                                                                                                                      alpha_loc(i,j,k,eID)
+#else
+                                                                                                                                      alpha(eID)
+#endif /*LOCAL_ALPHA*/
+          CALL abort(__STAMP__,&
+                  'Solution is not within bounds')
+        end if
+      end if
+
+      if (IDPPressureTVD) then
+        if (IDPForce2D) p_max(i,j,k) = p_max(i,j,0)
+        call Get_Pressure(U(:,i,j,k),p)
+        if (p > p_max(i,j,k) + tolerance_p) then
+          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: Pressure above max (curr/max):', p, p_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
 #if LOCAL_ALPHA
                                                                                                                                       alpha_loc(i,j,k,eID)
 #else
@@ -501,7 +536,7 @@ contains
     use MOD_ProlongToFace , only: ProlongToFace
     use MOD_IDP_Vars      , only: Usafe_ext
     use MOD_Mesh_Vars     , only: nSides, firstSlaveSide, lastSlaveSide
-    use MOD_IDP_Vars      , only: EntPrev, EntPrev_master, EntPrev_slave, EntPrev_ext, IDPDensityTVD, IDPMathEntropy, IDPSpecEntropy
+    use MOD_IDP_Vars      , only: EntPrev, EntPrev_master, EntPrev_slave, EntPrev_ext, IDPDensityTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
 #if MPI
     use MOD_MPI_Vars      , only: MPIRequest_U, DataSizeSide, nNbProcs
     use MOD_NFVSE_Vars    , only: MPIRequest_Umaster
@@ -667,7 +702,7 @@ contains
     end if
     
 #if !(barStates)
-    if (IDPDensityTVD) then
+    if (IDPDensityTVD .or. IDPPressureTVD) then
 !     Get the safe (FV) solution in place (if not using bar states)
 !     * This overwrites U_master and U_slave
 !     * The MPI communication here is blocking!!
@@ -716,7 +751,7 @@ contains
         Usafe(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
         Usafe(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
       end do !eID
-    end if !IDPDensityTVD
+    end if !IDPDensityTVD .or. IDPPressureTVD
 #endif /*!(barStates)*/
     
   end subroutine Get_IDP_Variables
@@ -888,6 +923,205 @@ contains
       end do       ; end do       ; end do ! i,j,k
       
   end subroutine IDP_LimitDensityTVD
+!===================================================================================================================================
+!> Pressure TVD correction
+!===================================================================================================================================
+  subroutine IDP_LimitPressureTVD(U,Ut,dt,sdt,eID)
+    use MOD_PreProc       , only: PP_N
+    use MOD_NFVSE_Vars    , only: alpha
+    use MOD_IDP_Vars      , only: dalpha
+    use MOD_Mesh_Vars     , only: nElems
+    use MOD_Equation_Vars , only: Get_Pressure, KappaM1
+#if LOCAL_ALPHA
+    use MOD_NFVSE_Vars    , only: alpha_loc
+    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ, offsetElem
+    use MOD_IDP_Vars      , only: Usafe, dalpha_loc
+#endif /*LOCAL_ALPHA*/
+    use MOD_IDP_Vars      , only: IDPForce2D
+#if barStates
+    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
+#else
+#if !(LOCAL_ALPHA)
+    use MOD_IDP_Vars      , only: Usafe
+#endif /*!(LOCAL_ALPHA)*/
+#endif /*barStates*/
+    use MOD_IDP_Vars      , only: FFV_m_FDG, p_min, p_max, p_safe
+    use MOD_IDP_Vars      , only: Uprev
+    implicit none
+    !-arguments----------------------------------------------
+    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
+    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
+    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
+    real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
+    integer,intent(in) :: eID
+    !-local-variables----------------------------------------
+    real    :: dalpha1
+    real    :: p_goal, p
+    real    :: a   ! a  = PositCorrFactor * p_safe - p
+    real    :: Qp, Qm, Pp, Pm
+    real    :: fp_xi_plus
+    real    :: fp_xi_minus
+    real    :: fp_eta_plus
+    real    :: fp_eta_minus
+    real    :: fp_zeta_plus
+    real    :: fp_zeta_minus
+    real    :: vel(3), v2s2
+    real    :: FFV_m_FDG_p
+    integer :: i,j,k,l
+    !--------------------------------------------------------
+    
+!       Compute correction factors
+!       --------------------------
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          
+        ! Get the limit states
+        !*********************
+        p_min(i,j,k) =  huge(1.0)
+        p_max(i,j,k) = -huge(1.0)
+        
+#if barStates
+        ! Previous sol
+        call Get_Pressure(Uprev  (:,i  ,j  ,k  ,eID),p)
+        p_min(i,j,k) = min(p_min(i,j,k), p)
+        p_max(i,j,k) = max(p_max(i,j,k), p)
+        
+        !xi
+        do l=i-1, i !min(i-1,0), max(i,PP_N-1)
+          call Get_Pressure(Ubar_xi  (:,l  ,j  ,k  ,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+        !eta
+        do l=j-1, j !l=max(j-1,0), min(j,PP_N-1)
+          call Get_Pressure(Ubar_eta (:,i  ,l  ,k  ,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+        if (.not. IDPForce2D) then
+        !zeta
+        do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
+          call Get_Pressure(Ubar_zeta(:,i  ,j  ,l  ,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+        end if
+#else
+        ! check stencil in xi
+!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
+        do l = i-1, i+1
+          call Get_Pressure(Usafe(:,l,j,k,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+        ! check stencil in eta
+!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
+        do l = j-1, j+1
+          call Get_Pressure(Usafe(:,i,l,k,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+        ! check stencil in zeta
+!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
+        do l = k-1, k+1
+          call Get_Pressure(Usafe(:,i,j,l,eID),p)
+          p_min(i,j,k) = min(p_min(i,j,k), p)
+          p_max(i,j,k) = max(p_max(i,j,k), p)
+        end do
+#endif /*barStates*/
+        
+#if LOCAL_ALPHA
+        ! Real Zalesak type limiter
+        ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
+        ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
+        ! ATTENTION: 1) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
+        !               for each interface, not each node
+        !****************************************************************************************************************
+        
+        ! Upper/lower bounds for admissible increments
+        Qp = max(0.0,(p_max(i,j,k)-p_safe(i,j,k,eID)*sdt))
+        Qm = min(0.0,(p_min(i,j,k)-p_safe(i,j,k,eID)*sdt))
+        
+        ! Compute pressure antidiffusive fluxes
+        vel = Uprev(2:4,i,j,k,eID)/Uprev(1,i,j,k,eID)
+        v2s2 = 0.5 * sum(vel**2)
+        fp_xi_minus  = KappaM1 * (ftilde_DG(5,i-1,j  ,k  ,eID) + v2s2 * ftilde_DG(1,i-1,j  ,k  ,eID) - sum(vel*ftilde_DG(2:4,i-1,j  ,k  ,eID)) )
+        fp_xi_plus   = KappaM1 * (ftilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * ftilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*ftilde_DG(2:4,i  ,j  ,k  ,eID)) )
+        fp_eta_minus = KappaM1 * (gtilde_DG(5,i  ,j-1,k  ,eID) + v2s2 * gtilde_DG(1,i  ,j-1,k  ,eID) - sum(vel*gtilde_DG(2:4,i  ,j-1,k  ,eID)) )
+        fp_eta_plus  = KappaM1 * (gtilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * gtilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*gtilde_DG(2:4,i  ,j  ,k  ,eID)) )
+        fp_zeta_minus= KappaM1 * (htilde_DG(5,i  ,j  ,k-1,eID) + v2s2 * htilde_DG(1,i  ,j  ,k-1,eID) - sum(vel*htilde_DG(2:4,i  ,j  ,k-1,eID)) )
+        fp_zeta_plus = KappaM1 * (htilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * htilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*htilde_DG(2:4,i  ,j  ,k  ,eID)) )
+        ! Positive contributions
+        Pp = 0.0
+        Pp = Pp + max(0.0, sWGP(i) * fp_xi_minus  )
+        Pp = Pp + max(0.0,-sWGP(i) * fp_xi_plus   )
+        Pp = Pp + max(0.0, sWGP(j) * fp_eta_minus )
+        Pp = Pp + max(0.0,-sWGP(j) * fp_eta_plus  )
+        if (.not. IDPForce2D) then   
+        Pp = Pp + max(0.0, sWGP(k) * fp_zeta_minus)
+        Pp = Pp + max(0.0,-sWGP(k) * fp_zeta_plus )
+        end if
+        Pp = Pp*sJ(i,j,k,eID)
+        
+        ! Negative contributions
+        Pm = 0.0
+        Pm = Pm + min(0.0, sWGP(i) * fp_xi_minus  )
+        Pm = Pm + min(0.0,-sWGP(i) * fp_xi_plus   )
+        Pm = Pm + min(0.0, sWGP(j) * fp_eta_minus )
+        Pm = Pm + min(0.0,-sWGP(j) * fp_eta_plus  )
+        if (.not. IDPForce2D) then   
+        Pm = Pm + min(0.0, sWGP(k) * fp_zeta_minus)
+        Pm = Pm + min(0.0,-sWGP(k) * fp_zeta_plus )
+        end if
+        Pm = Pm*sJ(i,j,k,eID)
+        
+        if (Pp==0.0) then
+          Qp = 1.0
+        else
+          Qp = Qp/Pp
+        end if
+        
+        if (Pm==0.0) then
+          Qm = 1.0
+        else
+          Qm = Qm/Pm
+        end if
+        
+        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
+        dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
+        
+        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
+        dalpha = max(dalpha,dalpha1)
+        
+#else
+        call Get_Pressure(U(:,i,j,k),p)
+        ! Simple element-wise limiter
+        !****************************
+        if ( p < p_min(i,j,k)) then
+          p_goal = p_min(i,j,k)
+        elseif (p > p_max(i,j,k)) then
+          p_goal = p_max(i,j,k)
+        else
+          cycle !nothing to do here!
+        end if
+        
+        ! Get pressure correcting flux 
+        vel = Uprev(2:4,i,j,k,eID)/Uprev(1,i,j,k,eID)
+        v2s2 = 0.5 * sum(vel**2)
+        FFV_m_FDG_p = KappaM1 * (FFV_m_FDG(5,i,j,k,eID) + v2s2 * FFV_m_FDG(1,i,j,k,eID) - sum(vel*FFV_m_FDG(2:4,i,j,k,eID)) )
+        if ( abs(FFV_m_FDG_p) == 0.0) cycle !nothing to do here!
+        
+        ! Density correction
+        a = (p_goal - p)
+        dalpha1 = a*sdt / FFV_m_FDG_p
+        dalpha = max(dalpha,dalpha1)
+        
+#endif /*LOCAL_ALPHA*/
+        
+      end do       ; end do       ; end do ! i,j,k
+      
+  end subroutine IDP_LimitPressureTVD
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
 !===================================================================================================================================
@@ -1220,7 +1454,7 @@ contains
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ, offsetElem
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPForce2D
+    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPPressureTVD, IDPForce2D
     use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t, IDPMaxIter
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
@@ -1251,7 +1485,6 @@ contains
         ! Compute density bound
         !**********************
         rho_min(i,j,k) = merge (max(rho_min(i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID)), PositCorrFactor * Usafe(1,i,j,k,eID), IDPDensityTVD) ! This writes the more restrictive bound into rho_min
-        
 #if LOCAL_ALPHA
         ! Real one-sided Zalesak-type limiter
         ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
@@ -1311,6 +1544,7 @@ contains
         ! Compute bound
         ! *************
         p_min(i,j,k) = PositCorrFactor * p_safe(i,j,k,eID)
+        p_min(i,j,k) = merge (max(p_min(i,j,k), PositCorrFactor * p_safe(i,j,k,eID)), PositCorrFactor * p_safe(i,j,k,eID), IDPPressureTVD) ! This writes the more restrictive bound into p_min
         
         ! Compute the needed blending coefficient with a Newton's method
         ! TODO: Check if an asymmetric tolerance is really needed

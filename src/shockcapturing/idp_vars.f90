@@ -8,6 +8,7 @@ module MOD_IDP_Vars
   logical           :: IDPSpecEntropy = .FALSE.
   logical           :: IDPPositivity  = .FALSE.
   logical           :: IDPDensityTVD  = .FALSE.
+  logical           :: IDPPressureTVD = .FALSE.
   
   ! Additional options
   logical           :: IDPForce2D
@@ -62,6 +63,7 @@ module MOD_IDP_Vars
   real,allocatable    :: s_min      (:,:,:)
   real,allocatable    :: s_max      (:,:,:)
   real,allocatable    :: p_min      (:,:,:)
+  real,allocatable    :: p_max      (:,:,:)
   
   ! Type to store parameters for newton iterations
   type IDPparam_t
