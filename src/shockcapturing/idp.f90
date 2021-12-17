@@ -1701,8 +1701,10 @@ contains
   end subroutine NewtonLoops_LocalAlpha
 #endif /*LOCAL_ALPHA*/
 !===================================================================================================================================
-!> General Newton loop (can be used for the element-wise or subcell-wise limiters
+!> General Newton loop (can be used for the element-wise or subcell-wise limiters)
 !> ATTENTION: 1) We solve for beta:=1-alpha (to match FCT literature) and then return fluxo's alpha
+!>            2) This is a Newton-bisection algorithm. We specify lower and upper bounds for beta and solve with Newton's method,
+!>               but we switch to a bisection step if our Newton's method goes out of bounds or d(goal)/d(beta) = 0.
 !===================================================================================================================================
   subroutine NewtonLoop(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
@@ -1712,71 +1714,77 @@ contains
     real            , intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
     type(IDPparam_t), intent(in)    :: param          ! IDP parameters 
     real            , intent(inout) :: alpha          ! Current (nodal) blending coefficient. Gets updated here.
-    logical         , intent(inout) :: notInIter      ! 
-    procedure(i_sub_Goal)           :: Goal
-    procedure(i_sub_Goal)           :: dGoal_dbeta
-    procedure(i_sub_InitialCheck)   :: InitialCheck
-    procedure(i_sub_InitialCheck)   :: FinalCheck
+    logical         , intent(inout) :: notInIter      ! Didn't Newton's method converge?
+    procedure(i_sub_Goal)           :: Goal           ! Goal function (that we want to bring to <= or >= 0)
+    procedure(i_sub_Goal)           :: dGoal_dbeta    ! Derivative of goal function with respect to beta
+    procedure(i_sub_InitialCheck)   :: InitialCheck   ! Function to check if goal is fulfilled
+    procedure(i_sub_InitialCheck)   :: FinalCheck     ! Function to exit the Newton loop (strict check of goal function)
     !-local-variables----------------------------------
     real :: beta           ! FCT blending coefficient (beta:=1-alpha). u^{n+1} = uFV^{n+1} + (beta*dt) \sum_i Fan_i
     real :: beta_old       ! beta from last iteration
     real :: Ucurr(PP_nVar)
-    real :: dSdbeta        ! ds/d(beta)
-    real :: as             ! Goal function as := smin - s (we find alpha such that as=0)
+    real :: dSdbeta        ! d(goal)/d(beta)
+    real :: as             ! Goal function. For example: as = smin - s (we find alpha such that as=0)
     real :: new_alpha
+    real :: beta_L, beta_R ! Left and right bounds for beta
     integer :: iter
     !--------------------------------------------------
     
     ! Compute current FCT blending coef
     beta = (1.0 - alpha)
     
+    ! Get initial lower and upper bounds
+    beta_L = 0.0   ! (alpha=1)
+    beta_R = beta  ! We do not allow a higher beta (lower alpha) than the current one
+    
     ! Compute current directional update
     Ucurr = Usafe + beta * param % dt * param % F_antidiff
     
-    ! Check entropy of this update
+    ! Perform initial check
     as = Goal(param,Ucurr)
-    if (InitialCheck(param,as)) return ! this Neighbor contribution does NOT need entropy correction
+    if (InitialCheck(param,as)) return ! this node does NOT need a correction
     
     ! Perform Newton iterations
     TheNewtonLoop: do iter=1, IDPMaxIter
       beta_old = beta
       
-      ! Evaluate dS/d(alpha)
+      ! Evaluate d(goal)/d(beta)
       dSdbeta = dGoal_dbeta(param,Ucurr)
       
-      if ( abs(dSdbeta) == 0.0) then
-        beta = 0.0
-        exit TheNewtonLoop ! Nothing to do here!
+      if (dSdbeta /= 0.0) then
+        ! Update beta with Newton's method
+        beta = beta - as / dSdbeta
       end if
-      
-      ! Update correction
-      beta = beta - as / dSdbeta
       
       ! Check bounds
-      if ( (1.0 - beta) < alpha) then
-        beta = (1.0 - alpha)
-      elseif (beta < -NEWTON_ABSTOL) then
-        beta = 0.0
+      if ( (beta < beta_L) .or. (beta > beta_R) .or. (dSdbeta == 0.0) ) then
+        ! Out of bounds, do a bisection step
+        beta = 0.5 * (beta_L + beta_R)
+        ! Get new U
+        Ucurr = Usafe + beta * param % dt * param % F_antidiff
+        ! Check if new beta fulfills the condition and update bounds
+        as = Goal(param,Ucurr)
+        if (InitialCheck(param,as)) then
+          ! New beta fulfills condition
+          beta_L = beta
+        else
+          ! New beta does not fulfill condition
+          beta_R = beta
+        end if
       else
-        ! Check relative tolerance
-        if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit TheNewtonLoop
+        ! Get new U
+        Ucurr = Usafe + beta * param % dt * param % F_antidiff
+        ! Evaluate goal function
+        as = Goal(param,Ucurr)
       end if
-      
-      ! Get new U
-      Ucurr = Usafe + beta * param % dt * param % F_antidiff
-      
-      ! Evaluate if goal entropy was achieved (and exit the Newton loop if that's the case)
-      as = Goal(param,Ucurr)
+
+      ! Check relative tolerance
+      if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit TheNewtonLoop
       
       ! Check absolute tolerance
       if ( FinalCheck(param,as) ) exit TheNewtonLoop  
           
     end do TheNewtonLoop ! iter
-    
-    if ( (beta<0.0) .and. (beta>=-NEWTON_ABSTOL) ) then
-      print*, '0>beta=',beta
-      beta = 0.0
-    end if
     
     new_alpha = 1.0 - beta
     if (alpha > new_alpha+NEWTON_ABSTOL) then
