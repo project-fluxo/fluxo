@@ -113,6 +113,7 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT TIMEDISC...'
 TEnd     = GETREAL('TEnd')
 ! Read the normalized CFL number
 CFLScale = GETREAL('CFLScale')
+CFLScale_usr = CFLScale
 #if PARABOLIC
 ! Read the normalized DFL number
 DFLScale = GETREAL('DFLScale')

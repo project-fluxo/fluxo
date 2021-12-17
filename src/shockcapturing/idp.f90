@@ -134,6 +134,11 @@ contains
       IDPneedsUprev_ext = .TRUE.
 #endif /*barStates*/
     end if
+   
+! TODO: Add c-preprocessor definition for strict time-step restriction 
+    IDPneedsUbar = .TRUE.
+    IDPneedsUprev     = .TRUE.
+    IDPneedsUprev_ext = .TRUE.
     
 !   Allocate storage
 !   ----------------
@@ -507,6 +512,11 @@ contains
     use MOD_Mesh_Vars     , only: nElems, offsetElem
     use MOD_NFVSE_MPI     , only: Get_externalU
     use MOD_Equation_Vars , only: Get_MathEntropy, Get_SpecEntropy, Get_Pressure
+    ! For time step
+    use MOD_Globals
+    use MOD_IDP_Vars, only: maxdt_IDP
+    use MOD_NFVSE_Vars    , only: sWGP
+    use MOD_Mesh_Vars     , only: sJ
     implicit none
     !-arguments------------------------------------------------------------
     real, intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
@@ -514,6 +524,10 @@ contains
     !-local-variables------------------------------------------------------
     integer :: i,j,k
     integer :: eID, sideID
+    real :: lambdamax_xi  (-1:PP_N, 0:PP_N, 0:PP_N)
+    real :: lambdamax_eta ( 0:PP_N,-1:PP_N, 0:PP_N)
+    real :: lambdamax_zeta( 0:PP_N, 0:PP_N,-1:PP_N)
+    real :: inv_dt
     !----------------------------------------------------------------------
     
 !   Get the previous solution in place if needed!
@@ -536,20 +550,37 @@ contains
 !   *****************************
 #if barStates
     if (IDPneedsUbar) then
+      maxdt_IDP = huge(1.0)
       do eID=1, nElems
         associate (SCM => SubCellMetrics(eID))
         do i=-1, PP_N ! i goes through the interfaces
           do k=0, PP_N  ; do j=0, PP_N ! j and k go through DOFs
             !xi
-            Ubar_xi  (:,i,j,k,eID) = GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i+1,j,k,eID),SCM % xi   % nv (:,j,k,i),SCM % xi   % t1 (:,j,k,i),SCM % xi   % t2 (:,j,k,i))
+            call GetBarStates(Uprev(:,i,j,k,eID),Uprev(:,i+1,j,k,eID),SCM % xi   % nv (:,j,k,i),SCM % xi   % t1 (:,j,k,i),SCM % xi   % t2 (:,j,k,i), Ubar_xi  (:,i,j,k,eID), lambdamax_xi  (i,j,k))
             !eta
-            Ubar_eta (:,j,i,k,eID) = GetBarStates(Uprev(:,j,i,k,eID),Uprev(:,j,i+1,k,eID),SCM % eta  % nv (:,j,k,i),SCM % eta  % t1 (:,j,k,i),SCM % eta  % t2 (:,j,k,i))
+            call GetBarStates(Uprev(:,j,i,k,eID),Uprev(:,j,i+1,k,eID),SCM % eta  % nv (:,j,k,i),SCM % eta  % t1 (:,j,k,i),SCM % eta  % t2 (:,j,k,i), Ubar_eta (:,j,i,k,eID), lambdamax_eta (j,i,k))
             !zeta
-            Ubar_zeta(:,j,k,i,eID) = GetBarStates(Uprev(:,j,k,i,eID),Uprev(:,j,k,i+1,eID),SCM % zeta % nv (:,j,k,i),SCM % zeta % t1 (:,j,k,i),SCM % zeta % t2 (:,j,k,i))
+            call GetBarStates(Uprev(:,j,k,i,eID),Uprev(:,j,k,i+1,eID),SCM % zeta % nv (:,j,k,i),SCM % zeta % t1 (:,j,k,i),SCM % zeta % t2 (:,j,k,i), Ubar_zeta(:,j,k,i,eID), lambdamax_zeta(j,k,i))
           end do        ; end do  ! j,k
         end do
+        
+        ! Compute maximum time step
+        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+          inv_dt = ( sWGP(i) * (lambdamax_xi  (i-1,j  ,k  ) * SCM % xi   % norm(j,k,i-1) + lambdamax_xi  (i,j,k) * SCM % xi   % norm(j,k,i)) + &
+                     sWGP(j) * (lambdamax_eta (i  ,j-1,k  ) * SCM % eta  % norm(i,k,j-1) + lambdamax_eta (i,j,k) * SCM % eta  % norm(i,k,j)) + &
+                     sWGP(k) * (lambdamax_zeta(i  ,j  ,k-1) * SCM % zeta % norm(i,j,k-1) + lambdamax_zeta(i,j,k) * SCM % zeta % norm(i,j,k)) ) * sJ(i,j,k,eID)
+          maxdt_IDP = min (maxdt_IDP, 1./inv_dt)
+        end do       ; end do       ; end do
         end associate
       end do !eID
+      
+#if MPI
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE,maxdt_IDP,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
+#endif /*MPI*/
+!#      SWRITE(*,*) maxdt_IDP
+      if (dt > maxdt_IDP) then
+        SWRITE(*,'(A,2ES21.12)') "MAYDAY, we have a problem with the time step. Consider reducing CFLScale (dt, maxdt_IDP): ", dt, maxdt_IDP
+      end if
     end if
 #else
 !   Otherwise get the previous entropy if needed
@@ -1619,7 +1650,7 @@ contains
 !> Function to get the bar states! (LLF)
 !===================================================================================================================================
 #if barStates
-  pure function GetBarStates(UL,UR,nv,t1,t2) result(Ubar)
+  pure subroutine GetBarStates(UL,UR,nv,t1,t2,Ubar,lambdamax)
     use MOD_Riemann       , only: RotateState, RotateFluxBack
     use MOD_Equation_Vars , only: SoundSpeed2
     USE MOD_Flux          , only: EvalOneEulerFlux1D
@@ -1630,13 +1661,13 @@ contains
     real, intent(in) :: nv  (3)
     real, intent(in) :: t1  (3)
     real, intent(in) :: t2  (3)
-    real             :: Ubar(PP_nVar)
+    real, intent(out):: Ubar(PP_nVar)
+    real, intent(out):: lambdamax
     !-local-variables----------------------------------
     real :: UL_r(PP_nVar) ! Rotated left state
     real :: UR_r(PP_nVar) ! Rotated right state
     real :: FL_r(PP_nVar) ! Rotated left flux
-    real :: FR_r(PP_nVar) ! Rotated right flux
-    real :: lambdamax
+    real :: FR_r(PP_nVar) ! Rotated right flux 
     !--------------------------------------------------
     
     UL_r = RotateState(UL,nv,t1,t2)
@@ -1651,7 +1682,7 @@ contains
     Ubar = 0.5*( UL_r + UR_r ) - (0.5/(lambdamax)) * (FR_r-FL_r)
     
     call RotateFluxBack(Ubar,nv,t1,t2)
-  end function GetBarStates
+  end subroutine GetBarStates
 #endif /*barStates*/
 !===================================================================================================================================
 !> Finalizes the IDP module

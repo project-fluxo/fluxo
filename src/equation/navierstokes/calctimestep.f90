@@ -43,9 +43,12 @@ USE MOD_PreProc
 USE MOD_DG_Vars            ,ONLY:U
 USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
-USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,ViscousTimeStep,dtElem, FVTimeStep
+USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,CFLScale_usr,ViscousTimeStep,dtElem, FVTimeStep
 #if SHOCK_NFVSE
 USE MOD_NFVSE_Vars         ,ONLY:sWGP
+#if NFVSE_CORR
+USE MOD_IDP_Vars           ,ONLY: maxdt_IDP
+#endif /*NFVSE_CORR*/
 #endif /*SHOCK_NFVSE*/
 #if PARABOLIC
 USE MOD_Equation_Vars      ,ONLY:KappasPr
@@ -161,7 +164,7 @@ DO iElem=1,nElems
     errType=3
   END IF
 #if SHOCK_NFVSE
-  TimeStepFVElem=0.5/TimeStepFVElem
+  TimeStepFVElem=CFLScale_usr*0.5/TimeStepFVElem
   TimeStepFV=MIN(TimeStepFV,TimeStepFVElem)
   dtElem(iElem)=MIN(dtElem(iElem),TimeStepFVElem)
   IF(IEEE_IS_NAN(TimeStepFV))THEN
@@ -196,6 +199,11 @@ TimeStepVisc=buf(2)
 TimeStepFV  =buf(3)
 errType=NINT(-buf(4))
 #endif /*MPI*/
+! Correct FVTimeStep with the one computed from IDP LLF method
+#if NFVSE_CORR
+TimeStepFV = min(TimeStepFV,CFLScale_usr*maxdt_IDP)
+#endif /*NFVSE_CORR*/
+
 ViscousTimeStep= (TimeStepVisc .LT. TimeStepConv) .and. (TimeStepVisc .LT. TimeStepFV)
 FVTimeStep     = (TimeStepFV .LT. TimeStepConv) .and. (TimeStepFV .LT. TimeStepVisc)
 

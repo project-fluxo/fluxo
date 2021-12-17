@@ -49,6 +49,8 @@ module MOD_IDP_Vars
   real,allocatable    :: Ubar_eta      (:,:,:,:,:)
   real,allocatable    :: Ubar_zeta     (:,:,:,:,:)
   
+  real                :: maxdt_IDP = huge(1.0)
+  
   real                :: dalpha
 #if LOCAL_ALPHA
   real,allocatable    :: dalpha_loc    (:,:,:)    ! Node-wise alpha correction for an element

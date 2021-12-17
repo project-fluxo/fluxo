@@ -41,7 +41,8 @@ REAL             :: t=0.                      !< current physical time
 REAL             :: dt                        !< current timestep
 REAL             :: TEnd                      !< End time of simulation
 REAL             :: TAnalyze                  !< Analyze time intervall
-REAL             :: CFLScale                  !< Convective CFL number
+REAL             :: CFLScale                  !< Convective CFL number (gets scaled with the explicit method's parameters)
+REAL             :: CFLScale_usr              !< Convective CFL number (as provided by the user)
 REAL             :: DFLScale                  !< Viscous CFL number (only if PARABOLIC)
 REAL             :: PID                       !< performance index (wallclocktime*nRanks/timesteps/DOFS)
 REAL,ALLOCATABLE :: dtElem(:)                 !< Timestep for each element
