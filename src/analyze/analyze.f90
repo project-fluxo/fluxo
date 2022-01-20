@@ -96,6 +96,11 @@ USE MOD_Mesh_Vars,          ONLY: BoundaryType,BoundaryName
 USE MOD_Equation_Vars,      ONLY: StrVarNames
 USE MOD_AnalyzeEquation,    ONLY: InitAnalyzeEquation
 USE MOD_Testcase_Analyze,   ONLY: InitAnalyzeTestcase
+#if NFVSE_CORR
+#if DEBUG || IDP_CHECKBOUNDS
+USE MOD_IDP_Vars,           ONLY: idp_bounds_num,idp_bounds_names
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
+#endif /*NFVSE_CORR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
@@ -180,9 +185,14 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
   A2F_VarNames(A2F_iVar) = 'alpha_max'
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar) = 'alpha_amount'
+#if DEBUG || IDP_CHECKBOUNDS
+  A2F_VarNames(A2F_iVar+1:A2F_iVar+idp_bounds_num) = idp_bounds_names(1:idp_bounds_num)
+  A2F_iVar=A2F_iVar+idp_bounds_num
+#endif /*DEBUG || IDP_CHECKBOUNDS*/  
 #endif /*NFVSE_CORR*/
+
 #if SHOCK_NFVSE
-  ! If we are doing NFVSE_CORR, record the maximum alpha since the last analyze
+  ! If we are doing shock capturing, record the alpha statistics in this snapshot
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar) = 'alpha_globmin'
   A2F_iVar=A2F_iVar+1
@@ -316,6 +326,9 @@ use MOD_NFVSE_Vars,         ONLY: alpha
 #if NFVSE_CORR
 use MOD_NFVSE_Vars,         ONLY: maximum_alpha, amount_alpha, amount_alpha_steps
 USE MOD_Mesh_Vars,          ONLY: nElems
+#if DEBUG || IDP_CHECKBOUNDS
+USE MOD_IDP_Vars,           ONLY: idp_bounds_num,idp_bounds_names,idp_bounds_delta
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*NFVSE_CORR*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -328,7 +341,7 @@ INTEGER(KIND=8),INTENT(IN)      :: iter
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 CHARACTER(LEN=40)               :: formatStr
-INTEGER                         :: iBC
+INTEGER                         :: iBC, i
 REAL                            :: CalcTime
 REAL,DIMENSION(PP_nVar)         :: L_Inf_Error,L_2_Error,L_2_colloc,maxabs_Ut,bulk,bulk_t
 REAL                            :: MeanFlux(PP_nVar,nBCs)
@@ -425,15 +438,34 @@ IF(MPIroot) THEN
   WRITE(UNIT_StdOut,'(A)')  ' IDP LIMITERS:'
   WRITE(UNIT_StdOut,formatStr)' max(d_alpha): ', maximum_alpha
   WRITE(UNIT_StdOut,formatStr)' avg(sum(d_alpha)/nElems): ' , amount_alpha
+  ! now the bounds
+#if DEBUG || IDP_CHECKBOUNDS
+  CALL MPI_REDUCE(MPI_IN_PLACE,idp_bounds_delta,idp_bounds_num,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+  IF(doAnalyzeToFile)THEN
+    A2F_Data(A2F_iVar+1:A2F_iVar+idp_bounds_num) = idp_bounds_delta(1:idp_bounds_num)
+    A2F_iVar=A2F_iVar+idp_bounds_num
+  END IF
+  WRITE(UNIT_StdOut,'(A)') ' Maximum deviation from bounds:' 
+  WRITE(formatStr,'(A,I0,A)')'(A9,',idp_bounds_num,'A21,A)'
+  WRITE(UNIT_StdOut,formatStr)'       | ', (trim(idp_bounds_names(i)), i=1, idp_bounds_num), ' | '
+  WRITE(formatStr,'(A,I0,A)')'(A9,',idp_bounds_num,'ES21.12,A)'
+  WRITE(UNIT_StdOut,formatStr)'       | ',  idp_bounds_delta(1:idp_bounds_num), ' | '
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #if MPI
 ELSE
   CALL MPI_REDUCE(maximum_alpha,0        ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(amount_alpha ,0        ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+#if DEBUG || IDP_CHECKBOUNDS
+  CALL MPI_REDUCE(idp_bounds_delta,0     ,idp_bounds_num,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*MPI*/
 END IF
 maximum_alpha=0.0
 amount_alpha =0.0
 amount_alpha_steps=0
+#if DEBUG || IDP_CHECKBOUNDS
+idp_bounds_delta = 0.0
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*NFVSE_CORR*/
 #if SHOCK_NFVSE
 alpha_globmin=MINVAL(alpha)

@@ -260,6 +260,42 @@ contains
     amount_alpha  = 0.0
     amount_alpha_steps = 0
     
+    ! Now the analyze bounds
+#if DEBUG || IDP_CHECKBOUNDS
+    idp_bounds_num = 0
+    
+    if (IDPDensityTVD .or. IDPPositivity) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'rho_min'
+    end if
+    
+    if (IDPDensityTVD) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'rho_max'
+    end if
+    
+    if (IDPSpecEntropy) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'ent_min'
+    end if
+    
+    if (IDPMathEntropy) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'ent_max'
+    end if
+    
+    if (IDPPositivity .or. IDPPressureTVD) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'p_min'
+    end if
+    
+    if (IDPPressureTVD) then
+      idp_bounds_num = idp_bounds_num + 1
+      idp_bounds_names(idp_bounds_num) = 'p_max'
+    end if
+    idp_bounds_delta = 0.0
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
+    
 !   Finally enforce 2D condition
   if (IDPForce2D) then
     do eID=1, nElems
@@ -403,10 +439,11 @@ contains
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
+#if DEBUG || IDP_CHECKBOUNDS
   subroutine CheckBounds(U,eID)
     use MOD_Preproc
     use MOD_Globals
-    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max
+    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max, idp_bounds_delta
     use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     use MOD_NFVSE_Vars    , only: alpha
@@ -418,103 +455,53 @@ contains
     real   , intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
     integer, intent(in) :: eID
     !-local-variables------------------------------------------------------
-    integer :: i,j,k
+    integer :: i,j,k,counter
     real    :: p
-    real, parameter :: tolerance_rho=1.e-12
-    real, parameter :: tolerance_ent=1.e-10
-    real, parameter :: tolerance_p=1.e-12
     !----------------------------------------------------------------------
     
-    
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+      counter=0
       if (IDPDensityTVD .or. IDPPositivity) then
+        counter=counter+1
         if (IDPForce2D) rho_min(i,j,k) = rho_min(i,j,0)
-        if (U(1,i,j,k) < rho_min(i,j,k) - tolerance_rho) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho below min (curr/min):', U(1,i,j,k), rho_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter), rho_min(i,j,k) - U(1,i,j,k))
       end if
         
       if (IDPDensityTVD) then
+        counter=counter+1
         if (IDPForce2D) rho_max(i,j,k) = rho_max(i,j,0)  
-        if (U(1,i,j,k) > rho_max(i,j,k) + tolerance_rho) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: rho above max (curr/max):', U(1,i,j,k), rho_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter), U(1,i,j,k) - rho_max(i,j,k))
       end if
       
       if (IDPSpecEntropy) then
+        counter=counter+1
         if (IDPForce2D) s_min(i,j,k) = s_min(i,j,0)
-        if (Get_SpecEntropy(U(:,i,j,k)) < s_min(i,j,k) - tolerance_ent) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: specific entropy below min (curr/min):', Get_SpecEntropy(U(:,i,j,k)), s_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k)))
       end if
       
       if (IDPMathEntropy) then
+        counter=counter+1
         if (IDPForce2D) s_max(i,j,k) = s_max(i,j,0)
-        if (Get_MathEntropy(U(:,i,j,k)) > s_max(i,j,k) + tolerance_ent) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: mathematical entropy above max (curr/max):', Get_MathEntropy(U(:,i,j,k)), s_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),Get_MathEntropy(U(:,i,j,k)) - s_max(i,j,k))
       end if
       
       if (IDPPositivity .or. IDPPressureTVD) then
+        counter=counter+1
         if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
-        if (p < p_min(i,j,k) - tolerance_p) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: Pressure below min (curr/min):', p, p_min(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p_min(i,j,k) - p)
       end if
 
       if (IDPPressureTVD) then
+        counter=counter+1
         if (IDPForce2D) p_max(i,j,k) = p_max(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
-        if (p > p_max(i,j,k) + tolerance_p) then
-          WRITE(*,'(A,2ES21.12,A,2ES21.12)') 'WARNING: Pressure above max (curr/max):', p, p_max(i,j,k), '. alpha(elem,loc):', alpha(eID), &
-#if LOCAL_ALPHA
-                                                                                                                                      alpha_loc(i,j,k,eID)
-#else
-                                                                                                                                      alpha(eID)
-#endif /*LOCAL_ALPHA*/
-          CALL abort(__STAMP__,&
-                  'Solution is not within bounds')
-        end if
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p - p_max(i,j,k))
       end if
     end do       ; end do       ; end do ! i,j,k
   
   end subroutine CheckBounds
+#endif /*DEBUG || IDP_CHECKBOUNDS*/
 !===================================================================================================================================
 !> Get the IDP variables in the right position to perform limiting
 !> ATTENTION: 1) U_master and U_slave need to have the previous solution!
@@ -612,7 +599,6 @@ contains
 #if MPI
       CALL MPI_ALLREDUCE(MPI_IN_PLACE,maxdt_IDP,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
-!#      SWRITE(*,*) maxdt_IDP
       if (dt > maxdt_IDP) then
         SWRITE(*,'(A,2ES21.12)') "MAYDAY, we have a problem with the time step. Consider reducing CFLScale (dt, maxdt_IDP): ", dt, maxdt_IDP
       end if
@@ -767,7 +753,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ, offsetElem
+    use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: IDPForce2D
@@ -941,7 +927,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ, offsetElem
+    use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: IDPForce2D
@@ -1146,7 +1132,7 @@ contains
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: Usafe, IDPForce2D
     use MOD_IDP_Vars      , only: IDPparam_t
-    use MOD_Mesh_Vars     , only: nElems, offsetElem
+    use MOD_Mesh_Vars     , only: nElems
     use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
@@ -1244,9 +1230,9 @@ contains
         
       end do       ; end do       ; enddo !i,j,k
       
-      if (notInIter) then
-        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
-      end if
+!~      if (notInIter) then
+!~        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
+!~      end if
 
   contains
 !===================================================================================================================================
@@ -1303,7 +1289,7 @@ contains
     use MOD_IDP_Vars      , only: dalpha_loc
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: IDPparam_t, Usafe
-    use MOD_Mesh_Vars     , only: nElems, offsetElem
+    use MOD_Mesh_Vars     , only: nElems
     use MOD_Equation_Vars , only: Get_MathEntropy, ConsToEntropy
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
@@ -1400,9 +1386,9 @@ contains
         
       end do       ; end do       ; enddo !i,j,k
       
-      if (notInIter) then
-        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
-      end if
+!~      if (notInIter) then
+!~        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
+!~      end if
       
   contains
 !===================================================================================================================================
@@ -1456,14 +1442,14 @@ contains
   subroutine IDP_LimitPositivity(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
-    use MOD_Mesh_Vars     , only: nElems, offsetElem
+    use MOD_Mesh_Vars     , only: nElems
     use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
     use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ, offsetElem
+    use MOD_Mesh_Vars     , only: sJ
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPPressureTVD, IDPForce2D
     use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t, IDPMaxIter
@@ -1586,9 +1572,9 @@ contains
         
       end do       ; end do       ; enddo !i,j,k
       
-      if (notInIter) then
-        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
-      end if
+!~      if (notInIter) then
+!~        write(*,'(A,I0,A,I0,A,ES21.12)') 'WARNING: Not able to perform NFVSE correction within ', IDPMaxIter, ' Newton iterations. Elem: ', eID + offsetElem, '. alpha = ', alpha(eID)+dalpha
+!~      end if
       
   contains
 !===================================================================================================================================
