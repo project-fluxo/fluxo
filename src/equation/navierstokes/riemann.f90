@@ -21,6 +21,7 @@
 !==================================================================================================================================
 MODULE MOD_Riemann
 ! MODULES
+USE MOD_Equation_Vars, ONLY: i_MaxEigenvalRiemann
 IMPLICIT NONE
 PRIVATE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -52,6 +53,14 @@ INTERFACE RiemannSolverByHLLC
   MODULE PROCEDURE RiemannSolverByHLLC
 END INTERFACE
 
+INTERFACE RiemannSolverByHLLCNoCarbuncle
+  MODULE PROCEDURE RiemannSolverByHLLCNoCarbuncle
+END INTERFACE
+
+INTERFACE RiemannSolverByHLLC_LM
+  MODULE PROCEDURE RiemannSolverByHLLC_LM
+END INTERFACE
+
 INTERFACE RiemannSolverByRoe
   MODULE PROCEDURE RiemannSolverByRoe
 END INTERFACE
@@ -76,6 +85,11 @@ INTERFACE RiemannSolver_ECKEP_LLF
   MODULE PROCEDURE RiemannSolver_ECKEP_LLF
 END INTERFACE
 
+PROCEDURE(i_MaxEigenvalRiemann), POINTER :: MaxEigenvalRiemann => MaxEigenvalRiemann_std
+
+PUBLIC:: MaxEigenvalRiemann
+PUBLIC:: MaxEigenvalRiemann_std
+PUBLIC:: MaxEigenvalRiemann_GuermondPopov
 PUBLIC:: Riemann, AdvRiemann
 PUBLIC:: RiemannSolverCentral
 PUBLIC:: RiemannSolverByRusanov
@@ -83,6 +97,8 @@ PUBLIC:: RiemannSolverByHLL
 PUBLIC:: RiemannSolverByHLLE
 PUBLIC:: RiemannSolverByHLLEM
 PUBLIC:: RiemannSolverByHLLC
+PUBLIC:: RiemannSolverByHLLCNoCarbuncle
+PUBLIC:: RiemannSolverByHLLC_LM
 PUBLIC:: RiemannSolverByRoe
 PUBLIC:: RiemannSolver_EntropyStable
 PUBLIC:: RiemannSolver_EntropyStable_VolFluxAndDissipMatrices
@@ -279,7 +295,6 @@ END SUBROUTINE RiemannSolverCentral
 pure SUBROUTINE RiemannSolverByRusanov(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:SoundSpeed2
 USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
@@ -297,8 +312,7 @@ REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
 REAL    :: LambdaMax(0:PP_N,0:PP_N)
 !==================================================================================================================================
 DO j=0,PP_N;  DO i=0,PP_N
-  LambdaMax(i,j)=MAX(ABS(U_LL(2,i,j)/U_LL(1,i,j)),ABS(U_RR(2,i,j)/U_RR(1,i,j))) &
-                 +SQRT(MAX(SoundSpeed2(U_LL(:,i,j)),SoundSpeed2(U_RR(:,i,j))) )
+  LambdaMax(i,j)=MaxEigenvalRiemann(U_LL(:,i,j),U_RR(:,i,j))
 END DO; END DO
 
 ! Euler Fluxes
@@ -312,7 +326,50 @@ DO iVar=1,PP_nVar
 END DO
 END SUBROUTINE RiemannSolverByRusanov
 
+!==================================================================================================================================
+!> Get maximum eigenvalue for a 1D Riemann problem
+!==================================================================================================================================
+PURE FUNCTION MaxEigenvalRiemann_std(U_LL, U_RR) RESULT(lambdamax)
+USE MOD_Equation_Vars,ONLY:SoundSpeed2
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: U_LL(PP_nVar) !< state on the left
+REAL,INTENT(IN)     :: U_RR(PP_nVar) !< state on the left
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: lambdamax     !< Maximum eigenvalue
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+!==================================================================================================================================
+  lambdamax = MAX(ABS(U_LL(2)/U_LL(1)),ABS(U_RR(2)/U_RR(1))) &
+                 +SQRT(MAX(SoundSpeed2(U_LL),SoundSpeed2(U_RR)) )
+END FUNCTION MaxEigenvalRiemann_std
 
+!==================================================================================================================================
+!> Get maximum eigenvalue for a 1D Riemann problem
+!==================================================================================================================================
+PURE FUNCTION MaxEigenvalRiemann_GuermondPopov(U_LL, U_RR) RESULT(lambdamax)
+USE MOD_MaxLambda    ,only: lambda
+USE MOD_Equation_Vars,ONLY: ConsToPrim
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: U_LL(PP_nVar) !< state on the left
+REAL,INTENT(IN)     :: U_RR(PP_nVar) !< state on the left
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: lambdamax     !< Maximum eigenvalue
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+REAL, PARAMETER     :: tolerance = 1.e-10
+REAL                :: primL(PP_nVar), primR(PP_nVar),pstar
+INTEGER             :: k
+!==================================================================================================================================
+  call ConsToPrim(primL,U_LL)
+  call ConsToPrim(primR,U_RR)
+  call lambda(tolerance,primL(1),primL(2),primL(5),primR(1),primR(2),primR(5),lambdamax,pstar,k)
+END FUNCTION MaxEigenvalRiemann_GuermondPopov
 
 !==================================================================================================================================
 !> HLL Riemann solver
@@ -662,8 +719,8 @@ DO j=0,PP_N
 !~     a_L   =SQRT(kappa*p_L*sRho_L)
 !~     a_R   =SQRT(kappa*p_R*sRho_R)
 !~     !(1)
-!~     Ssl = Vel_L(1) - a_L
-!~     Ssr = Vel_R(1) + a_R
+!~!     Ssl = Vel_L(1) - a_L
+!~!     Ssr = Vel_R(1) + a_R
 !~     !(2)
 !~     Ssl = min( Vel_L(1) - a_L, Vel_R(1) - a_R )
 !~     Ssr = max( Vel_L(1) + a_L, Vel_R(1) + a_R )
@@ -739,6 +796,101 @@ DO j=0,PP_N
   END DO ! i 
 END DO ! j
 END SUBROUTINE RiemannSolverByHLLCnoCarbuncle
+
+!==================================================================================================================================
+!> HLLC Riemann solver with low Mach correction in transverse direction (HLLC-LM) 
+!> By: Fleischmann, Adami, Adams (2020). "A shock-stable modification of the HLLC Riemann solver with reduced numerical dissipation"
+!==================================================================================================================================
+pure SUBROUTINE RiemannSolverByHLLC_LM(F,U_LL,U_RR)
+!MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars,ONLY:kappa,kappaM1
+USE MOD_Flux         ,ONLY:EvalEulerFlux1D   ! we use the Euler fluxes in normal direction to approximate the numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_LL  !< rotated conservative state left
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(IN)    :: U_RR  !< rotated conservative state right
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N),INTENT(INOUT) :: F    !< numerical flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES                                                                                                               !
+INTEGER :: i,j
+REAL    :: ssl,ssr,SStar,sMu_L,sMu_R,U_Star_L(1:5),U_Star_R(1:5)
+REAL    :: sRho_L,sRho_R,Vel_L(3),Vel_R(3),p_L,p_R
+REAL    :: H_L, H_R, RoeVel(3), RoeH, absVel, Roec, SqrtRho_L, SqrtRho_R, sSqrtRho, phi, c_L, c_R
+REAL, parameter :: sMa_limit = 10.0
+REAL,DIMENSION(1:5,0:PP_N,0:PP_N) :: F_L,F_R
+!==================================================================================================================================
+CALL EvalEulerFlux1D(U_LL,F_L)
+CALL EvalEulerFlux1D(U_RR,F_R)
+DO j=0,PP_N
+  DO i=0,PP_N
+    sRho_L=1./U_LL(1,i,j)
+    sRho_R=1./U_RR(1,i,j)
+    Vel_L =U_LL(2:4,i,j)*sRho_L
+    Vel_R =U_RR(2:4,i,j)*sRho_R
+    p_L   =KappaM1*(U_LL(5,i,j)-0.5*SUM(U_LL(2:4,i,j)*Vel_L(1:3)))
+    p_R   =KappaM1*(U_RR(5,i,j)-0.5*SUM(U_RR(2:4,i,j)*Vel_R(1:3)))
+    c_L   = SQRT(kappa*p_L*sRho_L)
+    c_R   = SQRT(kappa*p_R*sRho_R)
+    ! Signaling speeds
+    ! ----------------
+    
+    ! enthalpy
+    H_L = (U_LL(5,i,j) + p_L)*sRho_L
+    H_R = (U_RR(5,i,j) + p_R)*sRho_R
+    ! Root of densities
+    SqrtRho_L = SQRT(U_LL(1,i,j))
+    SqrtRho_R = SQRT(U_RR(1,i,j))
+    sSqrtRho  = 1./(SqrtRho_L+SqrtRho_R)
+    ! Roe mean values
+    RoeVel    = (SqrtRho_R*Vel_R + SqrtRho_L*Vel_L) * sSqrtRho
+    RoeH      = (SqrtRho_R*H_R   + SqrtRho_L*H_L  ) * sSqrtRho
+    absVel    = DOT_PRODUCT(RoeVel,RoeVel)
+    Roec      = SQRT(kappaM1*(RoeH-0.5*absVel))
+    
+    ! Signaling speeds 
+    SsL=MIN(RoeVel(1)-Roec,Vel_L(1) - c_L)
+    SsR=MAX(RoeVel(1)+Roec,Vel_R(1) + c_R)
+    
+    ! positive supersonic speed
+    IF(Ssl .GE. 0.)THEN
+      F(:,i,j)=F_L(:,i,j)
+    ! negative supersonic speed
+    ELSEIF(Ssr .LE. 0.)THEN
+      F(:,i,j)=F_R(:,i,j)
+    ! subsonic case
+    ELSE
+      sMu_L = Ssl - Vel_L(1)
+      sMu_R = Ssr - Vel_R(1)
+      SStar = (p_R - p_L +                    &
+               U_LL(2,i,j)*sMu_L - U_RR(2,i,j)*sMu_R) / &
+              (U_LL(1,i,j)*sMu_L - U_RR(1,i,j)*sMu_R)
+      
+      phi = sin (0.5 * PP_PI * min(1.0, sMa_limit * max(abs(Vel_L(1)/c_L),abs(Vel_R(1)/c_R)) ))
+      
+      
+      U_Star_L(:) = U_LL(1,i,j) * sMu_L/(Ssl-SStar)*                  &
+        (/ 1., SStar, U_LL(3:4,i,j)*sRho_L,                         &
+           U_LL(PP_nVar,i,j)*sRho_L + (SStar-Vel_L(1))*             &
+          (SStar + p_L*sRho_L/sMu_L)                              /)
+      
+      U_Star_R(:) = U_RR(1,i,j) * sMu_R/(Ssr-SStar)*                  &
+        (/ 1., SStar, U_RR(3:4,i,j)*sRho_R,                         &
+           U_RR(PP_nVar,i,j)*sRho_R + (SStar-Vel_R(1))*             &
+          (SStar + p_R*sRho_R/sMu_R)                              /)
+      
+      
+      F(:,i,j)=0.5 * (F_L(:,i,j) + F_R(:,i,j)) + 0.5 * ( phi*Ssl *(U_Star_L(:)-U_LL(:,i,j)) + phi*Ssr*(U_Star_R(:)-U_RR(:,i,j)) + abs(SStar) * (U_Star_L - U_Star_R) )
+      
+    END IF ! subsonic case
+  END DO ! i 
+END DO ! j
+END SUBROUTINE RiemannSolverByHLLC_LM
 
 !==================================================================================================================================
 !> Roe riemann solver, depending on "whichvolumeflux" global parameter, consistent dissipation is added

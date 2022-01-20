@@ -761,7 +761,7 @@ contains
   subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
-    use MOD_IDP_Vars      , only: dalpha
+    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
@@ -885,13 +885,13 @@ contains
         if (Pp==0.0) then
           Qp = 1.0
         else
-          Qp = abs(Qp/Pp)
+          Qp = Qp/Pp
         end if
         
         if (Pm==0.0) then
           Qm = 1.0
         else
-          Qm = abs(Qm/Pm)
+          Qm = Qm/Pm
         end if
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
@@ -916,8 +916,13 @@ contains
         ! Density correction
         a = (rho_safe - U(1,i,j,k))
         dalpha1 = a*sdt / FFV_m_FDG(1,i,j,k,eID)
-        dalpha = max(dalpha,dalpha1)
         
+        ! Change inconsistent alphas
+        if ( (alpha(eID)+dalpha1 > alpha_maxIDP) .or. isnan(dalpha1)) then
+          dalpha  = alpha_maxIDP - alpha(eID)
+        else
+          dalpha = max(dalpha,dalpha1)
+        end if
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
@@ -929,7 +934,7 @@ contains
   subroutine IDP_LimitPressureTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc       , only: PP_N
     use MOD_NFVSE_Vars    , only: alpha
-    use MOD_IDP_Vars      , only: dalpha
+    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
     use MOD_Mesh_Vars     , only: nElems
     use MOD_Equation_Vars , only: Get_Pressure, KappaM1
 #if LOCAL_ALPHA
@@ -1115,7 +1120,13 @@ contains
         ! Density correction
         a = (p_goal - p)
         dalpha1 = a*sdt / FFV_m_FDG_p
-        dalpha = max(dalpha,dalpha1)
+        
+        ! Change inconsistent alphas
+        if ( (alpha(eID)+dalpha1 > alpha_maxIDP) .or. isnan(dalpha1)) then
+          dalpha  = alpha_maxIDP - alpha(eID)
+        else
+          dalpha = max(dalpha,dalpha1)
+        end if
         
 #endif /*LOCAL_ALPHA*/
         
@@ -1757,7 +1768,7 @@ contains
       end if
       
       ! Check bounds
-      if ( (beta < beta_L) .or. (beta > beta_R) .or. (dSdbeta == 0.0) ) then
+      if ( (beta < beta_L) .or. (beta > beta_R) .or. (dSdbeta == 0.0) .or. isnan(beta) ) then
         ! Out of bounds, do a bisection step
         beta = 0.5 * (beta_L + beta_R)
         ! Get new U
@@ -1921,7 +1932,7 @@ contains
 !===================================================================================================================================
 #if barStates
   pure subroutine GetBarStates(UL,UR,nv,t1,t2,Ubar,lambdamax)
-    use MOD_Riemann       , only: RotateState, RotateFluxBack
+    use MOD_Riemann       , only: RotateState, RotateFluxBack, MaxEigenvalRiemann
     use MOD_Equation_Vars , only: SoundSpeed2
     USE MOD_Flux          , only: EvalOneEulerFlux1D
     implicit none
@@ -1943,8 +1954,7 @@ contains
     UL_r = RotateState(UL,nv,t1,t2)
     UR_r = RotateState(UR,nv,t1,t2)
     
-    lambdamax = MAX(ABS(UL_r(2)/UL_r(1)),ABS(UR_r(2)/UR_r(1))) + SQRT(MAX(SoundSpeed2(UL_r),SoundSpeed2(UR_r)) )
-!#    lambdamax = MAX(SQRT(SoundSpeed2(UL_r)) + ABS(UL_r(2)/UL_r(1)), sqrt(SoundSpeed2(UR_r)) + ABS(UR_r(2)/UR_r(1)) )  ! Will's lambda_max
+    lambdamax = MaxEigenvalRiemann(UL_r,UR_r)
     
     call EvalOneEulerFlux1D(UL_r, FL_r)
     call EvalOneEulerFlux1D(UR_r, FR_r)

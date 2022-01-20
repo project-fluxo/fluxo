@@ -140,6 +140,12 @@ ABSTRACT INTERFACE
     real, intent(in)  :: U(PP_nVar)
     real, intent(out) :: ind
   end subroutine i_indicatorFunction
+  
+  PURE FUNCTION i_MaxEigenvalRiemann(U_LL, U_RR) RESULT(lambdamax)
+    REAL,INTENT(IN)     :: U_LL(PP_nVar) !< state on the left
+    REAL,INTENT(IN)     :: U_RR(PP_nVar) !< state on the left
+    REAL                :: lambdamax     !< Maximum eigenvalue
+  END FUNCTION i_MaxEigenvalRiemann
 END INTERFACE
 
 INTERFACE ConsToPrim_aux

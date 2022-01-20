@@ -102,11 +102,14 @@ CALL prms%CreateLogicalOption(  'doCalcSource', "Apply source terms.", '.TRUE.')
 
 CALL prms%CreateIntOption(     "Riemann",  " Specifies the riemann flux to be used:"//&
                                            "  0: Central"//&
-                                           "  1: Local Lax-Friedrichs"//&
+                                           "  1: Local Lax-Friedrichs (standard lambdamax)"//&
+                                           "101: Local Lax-Friedrichs (Guermond&Popov's lambdamax)"//&
                                            " 22: HLL"//&
                                            " 23: HLLE"//&
                                            " 24: HLLEM"//&
                                            "  2: HLLC"//&
+                                           " 25: HLLC carbuncle fix"//&
+                                           " 26: HLLC (low Mach)"//&
                                            "  3: Roe"//&
                                            "  4: Entropy Stable: EC Ismail and Roe + full wave diss."//&
                                            " 44: Entropy Stable: ECKEP + full wave diss."//&
@@ -169,6 +172,7 @@ USE MOD_Mesh_Vars         ,ONLY:MeshInitIsDone,nBCSides,BC,BoundaryType
 USE MOD_Equation_Vars
 USE MOD_Riemann
 USE MOD_Flux_Average
+USE MOD_MaxLambda         ,ONLY:MaxLambdaInit
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -222,6 +226,9 @@ sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
 R=GETREAL('R','287.058')
+
+CALL MaxLambdaInit()
+
 #if PARABOLIC
 Pr       =GETREAL('Pr','0.72')
 KappasPr =Kappa/Pr
@@ -294,11 +301,21 @@ SELECT CASE(WhichRiemannSolver)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: average standard DG flux'
     SolveRiemannProblem     => RiemannSolverCentral
   CASE(1)
-    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Local Lax-Friedrichs'
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Local Lax-Friedrichs (standard lambdamax)'
+    SolveRiemannProblem     => RiemannSolverByRusanov
+  CASE(101)
+    SWRITE(UNIT_stdOut,'(A)') " Riemann solver: Local Lax-Friedrichs (Guermond&Popov's lambdamax)"
+    MaxEigenvalRiemann      => MaxEigenvalRiemann_GuermondPopov
     SolveRiemannProblem     => RiemannSolverByRusanov
   CASE(2)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC'
     SolveRiemannProblem     => RiemannSolverByHLLC
+  CASE(25)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC with carbuncle fix'
+    SolveRiemannProblem     => RiemannSolverByHLLCnoCarbuncle
+  CASE(26)
+    SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC (low Mach)'
+    SolveRiemannProblem     => RiemannSolverByHLLC_LM
   CASE(22)
     SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
     SolveRiemannProblem     => RiemannSolverByHLL
@@ -967,6 +984,34 @@ CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplit
   a=EXP(5.*(r_len-IniHalfwidth)/IniAmplitude)
   a=a/(a+1.)
   Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  CALL PrimToCons(Prim,Resu)
+  
+case(2000) ! Mach~2000 jet
+  
+  prim(1)   = 0.5
+  prim(2:4) = 0
+  prim(5)   = 0.4127
+  
+  ! add inflow for t>0 at x=-0.5
+  ! domain size is [-0.5,+0.5]^2
+  if ( (x(1) <= -0.5 + epsilon(1.0)) .and. (abs(x(2)) < 0.05) ) then ! (t > 0)
+    prim(1) = 5
+    prim(2) = 800 ! about Mach number Ma = 2000
+  end if
+  CALL PrimToCons(Prim,Resu)
+  
+case(2001) ! Mach~2000 jet with a slightly bigger width
+  
+  prim(1)   = 0.5
+  prim(2:4) = 0
+  prim(5)   = 0.4127
+  
+  ! add inflow for t>0 at x=-0.5
+  ! domain size is [-0.5,+0.5]^2
+  if ( (x(1) <= -0.5 + epsilon(1.0)) .and. (x(1) >= -0.5 - epsilon(1.0)) .and. (abs(x(2)) <= 0.05078125 + epsilon(1.0)) ) then ! (t > 0)
+    prim(1) = 5
+    prim(2) = 800 ! about Mach number Ma = 2000
+  end if
   CALL PrimToCons(Prim,Resu)
 
 END SELECT ! ExactFunction
