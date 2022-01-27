@@ -338,11 +338,10 @@ DO i=1,dim2
 END DO!i
 END SUBROUTINE PrimToConsVec
 
-
 !==================================================================================================================================
 !> calculate soundspeed^2 ,c^2 = kappa*p/rho 
 !==================================================================================================================================
-pure FUNCTION SoundSpeed2(Cons) RESULT(cs2)
+PURE FUNCTION SoundSpeed2(Cons) RESULT(cs2)
 ! MODULES
 IMPLICIT NONE 
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -910,16 +909,21 @@ end subroutine Get_DensityTimesPressure
     REAL                                :: entropy !< vector of entropy variables
     !----------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES
-    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+    REAL                                :: srho,u,v,w,v2s2 !,rho_sp
     !==================================================================================================================================
     srho   = 1./cons(1)
     u      = cons(2)*srho
     v      = cons(3)*srho
     w      = cons(4)*srho
     v2s2   = 0.5*(u*u+v*v+w*w)
-    rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2))
-    !s      = LOG(p) - kappa*LOG(cons(1))
-    Entropy = - LOG(rho_sp*(cons(1)**kappaM1))
+    
+    ! Modified specific entropy from Guermond et al. (2019)
+    Entropy = (cons(5)-cons(1)*v2s2) * srho**Kappa
+    
+!~    ! Our specific entropy
+!~    rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2))
+!~    !s      = LOG(p) - kappa*LOG(cons(1))
+!~    Entropy = - LOG(rho_sp*(cons(1)**kappaM1))
     
   END FUNCTION Get_SpecEntropy
   
@@ -938,22 +942,31 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: srho,u,v,w,v2s2,sp,s
+REAL                                :: srho,u,v,w,v2s2,srho_KappaP1 !, sp
 !==================================================================================================================================
 srho   = 1./cons(1)
 u      = cons(2)*srho
 v      = cons(3)*srho
 w      = cons(4)*srho
 v2s2   = 0.5*(u*u+v*v+w*w)
-sp     = 1.0/(KappaM1*(cons(5)-cons(1)*v2s2))
-!s      = LOG(p) - kappa*LOG(cons(1))
-s      = - LOG(cons(1)*sp*(cons(1)**kappaM1))
+srho_KappaP1 = srho**KappaP1
 
-! Convert to entropy variables
-entropy(1)   =  KappaM1*v2s2*sp-kappa*srho
-entropy(2)   =  - KappaM1*u*sp
-entropy(3)   =  - KappaM1*v*sp
-entropy(4)   =  - KappaM1*w*sp
-entropy(5)   = KappaM1*sp    !-2*beta
+! The derivative vector for the modified specific entropy of Guermond et al.
+entropy(1)   =  srho_KappaP1 * (v2s2*KappaP1*cons(1) - Kappa * cons(5))
+entropy(2)   =  - cons(2) * srho_KappaP1
+entropy(3)   =  - cons(3) * srho_KappaP1
+entropy(4)   =  - cons(4) * srho_KappaP1
+entropy(5)   =  srho**Kappa
+
+
+!~sp     = 1.0/(KappaM1*(cons(5)-cons(1)*v2s2))
+
+!~! The derivative vector for our specific entropy
+!~entropy(1)   =  KappaM1*v2s2*sp-kappa*srho
+!~entropy(2)   =  - KappaM1*u*sp
+!~entropy(3)   =  - KappaM1*v*sp
+!~entropy(4)   =  - KappaM1*w*sp
+!~entropy(5)   = KappaM1*sp    !-2*beta
+
 END FUNCTION ConsToSpecEntropy
 END MODULE MOD_Equation_Vars
