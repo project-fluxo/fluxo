@@ -198,7 +198,7 @@ USE MOD_Flux_Average   ,ONLY:EvalAdvFluxAverage3D
 use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG, sWGP
 use MOD_Interpolation_Vars , only: wGP
 USE MOD_DG_Vars   ,ONLY:D
-use MOD_Equation_Vars      , only: ConsToEntropy, GetEntropyPot
+use MOD_Equation_Vars      , only: ConsToEntropy
 #endif /*LOCAL_ALPHA*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
