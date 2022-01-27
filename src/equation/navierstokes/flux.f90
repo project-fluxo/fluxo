@@ -58,7 +58,7 @@ END INTERFACE
 PUBLIC::EvalAdvFluxTilde3D
 PUBLIC::EvalFluxTilde3D
 PUBLIC::EvalEulerFlux1D
-PUBLIC::EvalOneEulerFlux1D
+PUBLIC::EvalAdvectionFlux1D
 #if PARABOLIC
 PUBLIC::EvalDiffFlux1D_Outflow
 PUBLIC::EvalDiffFlux3D
@@ -332,7 +332,7 @@ END SUBROUTINE EvalEulerFlux1D
 !==================================================================================================================================
 !> Computes the first cartesian Euler flux (F_x) using the conservative variables for one left/right combination
 !==================================================================================================================================
-pure SUBROUTINE EvalOneEulerFlux1D(U_Face,F_Face)
+pure SUBROUTINE EvalAdvectionFlux1D(U_Face,F_Face)
 ! MODULES
 USE MOD_Equation_Vars,ONLY:KappaM1
 IMPLICIT NONE
@@ -361,7 +361,7 @@ REAL                :: v1,v2,v3,p              ! auxiliary variables
     F_Face(4)= U_Face(2)*v3       ! rho*u*w
     F_Face(5)=(U_Face(5) + p)*v1 ! (rho*e+p)*u    
 
-END SUBROUTINE EvalOneEulerFlux1D
+END SUBROUTINE EvalAdvectionFlux1D
 
 #if PARABOLIC
 !==================================================================================================================================

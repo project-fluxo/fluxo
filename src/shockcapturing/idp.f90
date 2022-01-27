@@ -1921,8 +1921,7 @@ contains
 #if barStates
   pure subroutine GetBarStates(UL,UR,nv,t1,t2,Ubar,lambdamax)
     use MOD_Riemann       , only: RotateState, RotateFluxBack, MaxEigenvalRiemann
-    use MOD_Equation_Vars , only: SoundSpeed2
-    USE MOD_Flux          , only: EvalOneEulerFlux1D
+    USE MOD_Flux          , only: EvalAdvectionFlux1D
     implicit none
     !-arguments----------------------------------------
     real, intent(in) :: UL  (PP_nVar)
@@ -1944,8 +1943,8 @@ contains
     
     lambdamax = MaxEigenvalRiemann(UL_r,UR_r)
     
-    call EvalOneEulerFlux1D(UL_r, FL_r)
-    call EvalOneEulerFlux1D(UR_r, FR_r)
+    call EvalAdvectionFlux1D(UL_r, FL_r)
+    call EvalAdvectionFlux1D(UR_r, FR_r)
     
     Ubar = 0.5*( UL_r + UR_r ) - (0.5/(lambdamax)) * (FR_r-FL_r)
     

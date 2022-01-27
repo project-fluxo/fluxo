@@ -55,6 +55,7 @@ INTERFACE EntropyStableByLLF
   MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
 
+PUBLIC :: MaxEigenvalRiemann
 PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
@@ -273,8 +274,6 @@ END SUBROUTINE AddNonConsFlux
 pure SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: FastestWave1D
-USE MOD_Equation_vars, ONLY: ConsToPrim
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -288,25 +287,46 @@ REAL,INTENT(OUT) :: Flux(1:PP_nVar) !<numerical flux
 ! LOCAL VARIABLES                                                                                                               !
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL             :: FluxL(1:PP_nVar), FluxR(1:PP_nVar)
-REAL             :: PrimL(1:PP_nVar), PrimR(1:PP_nVar) !< left/right primitive state
 REAL             :: LambdaMax
-REAL             :: cf_L
-REAL             :: cf_R
 !==================================================================================================================================
 
 CALL EvalAdvectionFlux1D(ConsL(1:PP_nVar),FluxL(1:PP_nVar))
 CALL EvalAdvectionFlux1D(ConsR(1:PP_nVar),FluxR(1:PP_nVar))
-CALL ConsToPrim(PrimL(:),ConsL(:))
-CALL ConsToPrim(PrimR(:),ConsR(:))
+
+LambdaMax=MaxEigenvalRiemann(ConsL,ConsR)
+
+Flux = 0.5*((FluxL + FluxR) - LambdaMax*(ConsR - ConsL))
+
+END SUBROUTINE RiemannSolverByRusanov
+!==================================================================================================================================
+!> Get maximum eigenvalue for a 1D Riemann problem
+!==================================================================================================================================
+PURE FUNCTION MaxEigenvalRiemann(U_LL, U_RR) RESULT(lambdamax)
+USE MOD_Equation_vars, ONLY: FastestWave1D
+USE MOD_Equation_vars, ONLY: ConsToPrim
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,INTENT(IN)     :: U_LL(PP_nVar) !< state on the left
+REAL,INTENT(IN)     :: U_RR(PP_nVar) !< state on the left
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL                :: lambdamax     !< Maximum eigenvalue
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+REAL             :: PrimL(1:PP_nVar), PrimR(1:PP_nVar) !< left/right primitive state
+REAL             :: cf_L
+REAL             :: cf_R
+!==================================================================================================================================
+
+CALL ConsToPrim(PrimL(:),U_LL(:))
+CALL ConsToPrim(PrimR(:),U_RR(:))
 CALL FastestWave1D(PrimL(1:PP_nVar),cf_L)
 CALL FastestWave1D(PrimR(1:PP_nVar),cf_R)
 
 LambdaMax = MAX(ABS(PrimL(2))+cf_L,ABS(PrimR(2))+cf_R)
 
-Flux = 0.5*((FluxL + FluxR) - LambdaMax*(ConsR - ConsL))
-
-END SUBROUTINE RiemannSolverByRusanov
-
+END FUNCTION MaxEigenvalRiemann
 
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"

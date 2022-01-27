@@ -42,6 +42,7 @@ END INTERFACE
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
+PUBLIC::GetOuterState
 #if PARABOLIC
 PUBLIC::Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
@@ -411,6 +412,36 @@ DO SideID=1,nBCSides
 END DO! SideID
 END SUBROUTINE GetBoundaryFlux
 
+!==================================================================================================================================
+!> Get outer state for boundary conditions that are defined with an outer state! (100-200)
+!==================================================================================================================================
+FUNCTION GetOuterState(U_master,tIn,x,BCType,BCState,nv,t1,t2) RESULT(U_slave)
+
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL   ,INTENT(IN) :: U_master(PP_nVar)    !< Inner state
+REAL   ,INTENT(IN) :: tIn                  !< Current time
+REAL   ,INTENT(IN) :: x(3)                 !< Coordinates of boundary point
+INTEGER,INTENT(IN) :: BCType               !< BC type
+INTEGER,INTENT(IN) :: BCState              !< BC state
+REAL   ,INTENT(IN) :: nv(3)                !< Normal vector
+REAL   ,INTENT(IN) :: t1(3)                !< Tangent vector 1
+REAL   ,INTENT(IN) :: t2(3)                !< Tangent vector 2
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL               :: U_slave(PP_nVar)    !< Outer state
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+SELECT CASE(BCType)
+
+CASE DEFAULT
+  U_slave = U_master  
+END SELECT
+
+END FUNCTION GetOuterState
 
 #if PARABOLIC
 !==================================================================================================================================

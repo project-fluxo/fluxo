@@ -889,5 +889,69 @@ end subroutine Get_DensityTimesPressure
     Entropy = -cons(1)*s*sKappaM1
     
   END FUNCTION Get_MathEntropy
+!==================================================================================================================================
+!> Transformation from conservative variables specific entropy
+!> ATTENTION: This is a dummy routine and does not work (yet) for MHD
+!==================================================================================================================================
+  PURE FUNCTION Get_SpecEntropy(cons) RESULT(Entropy)
+    ! MODULES
+    ! IMPLICIT VARIABLE HANDLING
+    IMPLICIT NONE
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! INPUT VARIABLES
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! OUTPUT VARIABLES
+    REAL                                :: entropy !< vector of entropy variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! LOCAL VARIABLES
+    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+    !==================================================================================================================================
+    srho   = 1./cons(1)
+    u      = cons(2)*srho
+    v      = cons(3)*srho
+    w      = cons(4)*srho
+    v2s2   = 0.5*(u*u+v*v+w*w)
+    
+    ! Other specific entropy
+    Entropy = -1. !(cons(5)-cons(1)*v2s2) * srho**Kappa
+!~    stop 'Get_SpecEntropy not specified for MHD yet!'
+    
+  END FUNCTION Get_SpecEntropy
+  
+!==================================================================================================================================
+!> Transformation from conservative variables U to specific entropy vector, dS/dU, 
+!> ATTENTION: This is a dummy routine and does not work (yet) for MHD
+!==================================================================================================================================
+PURE FUNCTION ConsToSpecEntropy(cons) RESULT(Entropy)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL                                :: srho,u,v,w,v2s2,srho_KappaP1
+!==================================================================================================================================
+srho   = 1./cons(1)
+u      = cons(2)*srho
+v      = cons(3)*srho
+w      = cons(4)*srho
+v2s2   = 0.5*(u*u+v*v+w*w)
+srho_KappaP1 = srho**KappaP1
+
+! Convert to entropy variables
+entropy = -1.0!
+!~entropy(1)   =  srho_KappaP1 * (v2s2*KappaP1*cons(1) - Kappa * cons(5))
+!~entropy(2)   =  - cons(2) * srho_KappaP1
+!~entropy(3)   =  - cons(3) * srho_KappaP1
+!~entropy(4)   =  - cons(4) * srho_KappaP1
+!~entropy(5)   =  srho**Kappa
+!~stop 'Get_SpecEntropy not specified for MHD yet!'
+END FUNCTION ConsToSpecEntropy
   
 END MODULE MOD_Equation_Vars
