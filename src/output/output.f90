@@ -102,6 +102,9 @@ CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None
                                           "2: ParaView vtu files per proc+pvtu link file,"//&
                                           "3: 2D (zeta=-1 of each element) ParaView, single vtu file,"//&
                                           "4: 2D (zeta=-1 of each element) ParaView, vtu files per proc+pvtu link file", '1')
+CALL prms%CreateIntOption('OutputNodes',"Node type to use for visualization:\n"//&
+                                          "1: Equidistant nodes,"//&
+                                          "2: Gauss/LGL nodes", '1')
 CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: 0: CSV, 1: Tecplot." , '0')
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
 CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
@@ -129,7 +132,7 @@ IMPLICIT NONE
 ! INPUT/OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-INTEGER                        :: iBox,OpenStat, nVars
+INTEGER                        :: iBox,OpenStat, nVars, OutputNodes
 CHARACTER(LEN=8)               :: StrDate
 CHARACTER(LEN=10)              :: StrTime
 !==================================================================================================================================
@@ -144,7 +147,11 @@ NVisu=GETINT('NVisu',INTTOSTR(PP_N))
 
 ! Gauss/Gl -> Visu : computation -> visualization
 ALLOCATE(Vdm_GaussN_NVisu(0:NVisu,0:PP_N))
-CALL GetVandermonde(PP_N,NodeType,NVisu,NodeTypeVISU,Vdm_GaussN_NVisu)
+OutputNodes=GETINT('OutputNodes','1')
+select case(OutputNodes)
+  case(1) ; CALL GetVandermonde(PP_N,NodeType,NVisu,NodeTypeVISU,Vdm_GaussN_NVisu)
+  case(2) ; CALL GetVandermonde(PP_N,NodeType,NVisu,NodeType,Vdm_GaussN_NVisu)
+end select
 
 ! Name for all output files
 ProjectName=GETSTR('ProjectName')
