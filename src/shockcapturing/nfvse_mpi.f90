@@ -243,10 +243,13 @@ contains
 !> ATTENTION 1: Must be called after FinishExchangeMPIData
 !> ATTENTION 2: Mortar faces are not considered (TODO?)
 !===================================================================================================================================
-  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave,fluxSign)
+  subroutine Get_externalU(nVar,U_ext,U,U_master,U_slave,tIn,fluxSign)
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: TanDirs1, TanDirs2
-    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide
+    use MOD_Mesh_Vars , only: nBCSides, SideToElem, S2V, firstInnerSide, lastMPISide_YOUR, nElems, nSides, firstSlaveSide, LastSlaveSide, Elem_xGP, BC, BoundaryType, NormVec, TangVec1, TangVec2
+    USE MOD_Equation_Vars, ONLY: IniExactFunc
+    USE MOD_Equation,      ONLY: ExactFunc
+    USE MOD_GetBoundaryFlux, ONLY: GetOuterState
     implicit none
     !-arguments-----------------------------------------------
     integer, intent(in) :: nVar
@@ -254,9 +257,10 @@ contains
     real, intent(in)  :: U       (nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
     real, intent(in)  :: U_master(nVar,0:PP_N,0:PP_N,nSides)
     real, intent(in)  :: U_slave (nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    real, intent(in)  :: tIn
     logical, optional :: fluxSign
     !-local-variables-----------------------------------------
-    integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip
+    integer :: SideID, ElemID, locSide, p, q, ijk(3), flip, nbElemID, nblocSide, nbFlip, BCType, BCState
     integer :: ax1, ax2
     integer :: signIdx
     integer, parameter :: signo(2) = [1, -1]
@@ -272,20 +276,55 @@ contains
       signIdx=1
     end if
     
-    ! First assign the inner value on boundaries (we don't use an "external state")
-    do SideID=1, nBCSides
-      ElemID  = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
-      locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
-      flip    = 0 ! flip is 0 in master faces!
-      
-      ax1 = TanDirs1(locSide)
-      ax2 = TanDirs2(locSide)
-      DO q=0,PP_N; DO p=0,PP_N
-        ijk(:)=S2V(:,0,p,q,flip,locSide)
-        U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID)=U(:,ijk(1),ijk(2),ijk(3),ElemID)
-      END DO; END DO !p,q=0,PP_N
-    end do !SideID=1, nBCSides
-    
+    ! First assign the inner value on boundaries
+    if (nVar == PP_nVar) then 
+      ! For state variables check the BCs
+      do SideID=1, nBCSides
+        ElemID  = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+        locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+        flip    = 0 ! flip is 0 in master faces!
+        
+        ax1 = TanDirs1(locSide)
+        ax2 = TanDirs2(locSide)
+        
+        BCType = BoundaryType(BC(SideID),BC_TYPE)
+        select case (BCType)
+        
+        case(2) ! Dirichlet boundary
+          DO q=0,PP_N; DO p=0,PP_N
+            ijk(:)=S2V(:,0,p,q,flip,locSide)
+            call ExactFunc(IniExactFunc,0.0,Elem_xGP(:,ijk(1),ijk(2),ijk(3),ElemID),U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID))
+          END DO; END DO !p,q=0,PP_N
+        
+        case(100:200) ! Boundaries with outer state
+          BCState = BoundaryType(BC(SideID),BC_STATE)
+          DO q=0,PP_N; DO p=0,PP_N
+            ijk(:)=S2V(:,0,p,q,flip,locSide)
+            U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID) = GetOuterState(U_Master(:,p,q,SideID),tIn,Elem_xGP(:,ijk(1),ijk(2),ijk(3),ElemID),BCType,BCState,NormVec(:,p,q,SideID),TangVec1(:,p,q,SideID),TangVec2(:,p,q,SideID))
+          END DO; END DO !p,q=0,PP_N
+          
+        case default ! just use the internal solution
+          DO q=0,PP_N; DO p=0,PP_N
+            ijk(:)=S2V(:,0,p,q,flip,locSide)
+            U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID) = U(:,ijk(1),ijk(2),ijk(3),ElemID)
+          END DO; END DO !p,q=0,PP_N
+        end select
+      end do !SideID=1, nBCSides
+    else
+      ! For other variables just use the inner solution
+      do SideID=1, nBCSides
+        ElemID  = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+        locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+        flip    = 0 ! flip is 0 in master faces!
+        
+        ax1 = TanDirs1(locSide)
+        ax2 = TanDirs2(locSide)
+        DO q=0,PP_N; DO p=0,PP_N
+            ijk(:)=S2V(:,0,p,q,flip,locSide)
+            U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID) = U(:,ijk(1),ijk(2),ijk(3),ElemID)
+        END DO; END DO !p,q=0,PP_N
+      end do !SideID=1, nBCSides
+    end if
     ! TODO: Include routines for mortar faces here....
     
     ! Now do the rest

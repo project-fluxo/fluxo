@@ -271,6 +271,9 @@ DO iSide=1,nBCSides
   IF((locType.EQ.10).AND.(locState.LT.1))&
     CALL abort(__STAMP__,&
                'No pressure (refstate) defined for BC_TYPE',locType)
+  IF((locType.EQ.110).AND.(locState.LT.1))&
+    CALL abort(__STAMP__,&
+               'No pressure (refstate) defined for BC_TYPE',locType)
 END DO
 #if MPI
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,MaxBCState,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,iError)

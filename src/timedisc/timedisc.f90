@@ -385,9 +385,11 @@ CALL MakeSolutionPositive(U)
       END IF
     END IF
     
-    ! Call DG operator to fill face data, fluxes, gradients for analyze
+    ! Call DG operator to fill face data, fluxes, gradients for analyze (not if we are using IDP)
+#if !(NFVSE_CORR)
     CALL DGTimeDerivative(t)
-
+#endif /*!(NFVSE_CORR)*/
+    
     CalcTimeEnd=FLUXOTIME()
 
     IF(MPIroot)THEN
@@ -458,7 +460,7 @@ CALL DGTimeDerivative(tStage)
 CALL VCopy(nTotalU,Ut_temp,Ut)               !Ut_temp = Ut
 CALL VAXPBY(nTotalU,U,Ut,ConstIn=b_dt(1))    !U       = U + Ut*b_dt(1)
 #if NFVSE_CORR
-call Apply_IDP(U,Ut,b_dt(1))
+call Apply_IDP(U,Ut,b_dt(1),tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
 CALL MakeSolutionPositive(U)
@@ -472,7 +474,7 @@ DO iStage=2,nRKStages
   CALL VAXPBY(nTotalU,Ut_temp,Ut,ConstOut=-RKA(iStage)) !Ut_temp = Ut - Ut_temp*RKA(iStage)
   CALL VAXPBY(nTotalU,U,Ut_temp,ConstIn =b_dt(iStage))  !U       = U + Ut_temp*b_dt(iStage)
 #if NFVSE_CORR
-  call Apply_IDP(U,Ut,b_dt(iStage))
+  call Apply_IDP(U,Ut,b_dt(iStage),tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -584,7 +586,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   CALL DGTimeDerivative(tStage) ! Computes Ut
   U = U + Ut*b_dt(1)
 #if NFVSE_CORR
-  call Apply_IDP(U,Ut,b_dt(1))
+  call Apply_IDP(U,Ut,b_dt(1),tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -598,7 +600,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
     U = U*RKd(iStage) + r0*RKa(iStage) + Ut*b_dt(iStage)
     
 #if NFVSE_CORR
-    call Apply_IDP(U,Ut,b_dt(iStage))
+    call Apply_IDP(U,Ut,b_dt(iStage),tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -620,7 +622,7 @@ USE MOD_Positivitypreservation, ONLY: MakeSolutionPositive
   U = U*RKd(nRKStages) + r0*RKa(nRKStages) + Ut*b_dt(nRKStages) + r1
   
 #if NFVSE_CORR
-  call Apply_IDP(U,Ut,b_dt(nRKStages))
+  call Apply_IDP(U,Ut,b_dt(nRKStages),tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -685,7 +687,7 @@ subroutine TimeStepByShuSSPRK(t)
     
   ! Correct the solution if needed
 #if NFVSE_CORR
-  call Apply_IDP(U,Ut,dt)
+  call Apply_IDP(U,Ut,dt,tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
   CALL MakeSolutionPositive(U)
@@ -705,7 +707,7 @@ subroutine TimeStepByShuSSPRK(t)
     
     ! Correct the solution if needed
 #if NFVSE_CORR
-    call Apply_IDP(U,Ut,dt)
+    call Apply_IDP(U,Ut,dt,tStage)
 #endif /*NFVSE_CORR*/
 #if POSITIVITYPRES
     CALL MakeSolutionPositive(U)

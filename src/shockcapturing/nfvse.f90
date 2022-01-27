@@ -118,7 +118,7 @@ contains
     use MOD_IDP_Vars           , only: IDPneedsUprev, IDPDensityTVD
 #endif /*MPI*/
 #if NFVSE_CORR
-    use MOD_IDP, only: Init_IDP, Apply_IDP
+    use MOD_IDP, only: Init_IDP
 #endif /*NFVSE_CORR*/
     implicit none
     !-local-variables---------------------------------------------------------------------------------------------------------------
@@ -469,7 +469,7 @@ contains
 !> Attention 1: 1/J(i,j,k) is not yet accounted for
 !> Attention 2: This routine has to be called after VolInt_adv_SplitForm, since here Ut is updated with the finite volume contribution
 !===================================================================================================================================
-  subroutine VolInt_NFVSE(Ut)
+  subroutine VolInt_NFVSE(Ut,tIn)
     use MOD_PreProc
     use MOD_DG_Vars            , only: U, U_master, U_slave
     use MOD_Mesh_Vars          , only: nElems, sJ
@@ -492,6 +492,7 @@ contains
     implicit none
     !-arguments---------------------------------------------------------------------------------------------------------------------
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
+    real,intent(in)                                 :: tIn
     !-local-variables---------------------------------------------------------------------------------------------------------------
     real,dimension(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) :: ftilde   ! transformed inter-subcell flux in xi (with ghost cells)
     real,dimension(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) :: gtilde   ! transformed inter-subcell flux in eta (with ghost cells)
@@ -511,7 +512,7 @@ contains
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
-      if (ReconsBoundaries >= RECONS_NEIGHBOR) call Get_externalU(PP_nVar,U_ext,U,U_master,U_slave)
+      if (ReconsBoundaries >= RECONS_NEIGHBOR) call Get_externalU(PP_nVar,U_ext,U,U_master,U_slave,tIn)
     end if
     
     if (SpacePropSweeps > 0) then

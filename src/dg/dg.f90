@@ -361,7 +361,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_
 
 ! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
 #if SHOCK_NFVSE
-call VolInt_NFVSE(Ut)
+call VolInt_NFVSE(Ut,tIn)
 #endif /*SHOCK_NFVSE*/
 
 #if PARABOLIC

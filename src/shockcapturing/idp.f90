@@ -318,7 +318,7 @@ contains
 !> Applies all the activated IDP limiters.
 !> This subroutine has to be called after after every SSP-RK stage
 !===================================================================================================================================
-  subroutine Apply_IDP(U,Ut,dt)
+  subroutine Apply_IDP(U,Ut,dt,tIn)
     use MOD_PreProc     , only: PP_N
     use MOD_Mesh_Vars   , only: nElems
     use MOD_NFVSE_Vars  , only: alpha, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
@@ -336,6 +336,7 @@ contains
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
     real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current Ut (in RK stage)
     real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
+    real,intent(in)    :: tIn                                       !< Current RK time (at the beginning of RK stage)
     !-local-variables----------------------------------------
     real :: sdt
     real :: curr_amount_alpha
@@ -349,7 +350,7 @@ contains
     
 !   Get the variables for limiting in the right position
 !   ----------------------------------------------------
-    call Get_IDP_Variables(U,dt)
+    call Get_IDP_Variables(U,dt,tIn)
     
 !   Perform limiting!
 !   -----------------
@@ -508,7 +509,7 @@ contains
 !>            2) If the bar states are *deactivated* and IDPDensityTVD, U_master and U_slave contain the safe solution when this 
 !>               subroutine returns
 !===================================================================================================================================
-  subroutine Get_IDP_Variables(U,dt)
+  subroutine Get_IDP_Variables(U,dt,tIn)
     use MOD_NFVSE_Vars, only: alpha
     use MOD_PreProc       , only: PP_N
     use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe
@@ -543,6 +544,7 @@ contains
     !-arguments------------------------------------------------------------
     real, intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
     real, intent(in) :: dt
+    real, intent(in) :: tIn
     !-local-variables------------------------------------------------------
     integer :: i,j,k
     integer :: eID, sideID
@@ -556,7 +558,7 @@ contains
 !   *********************************************
     if (IDPneedsUprev_ext) then
       ! Gather the external Uprev in the right location
-      call Get_externalU(PP_nVar,Uprev_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
+      call Get_externalU(PP_nVar,Uprev_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,tIn)
       ! FIll Uprev with info
       do eID=1, nElems
         Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,5,eID)
@@ -647,7 +649,7 @@ contains
       ! *****************
     
       ! Gather the external math entropy in the right location
-      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave)
+      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,tIn)
       ! FIll EntPrev with info
       do eID=1, nElems
         EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
@@ -727,7 +729,7 @@ contains
       
 #endif /* MPI */
       ! Gather the external Usafe in the right location
-      call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave)
+      call Get_externalU(PP_nVar,Usafe_ext,Usafe(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,tIn)
       ! FIll Usafe with info
       do eID=1, nElems
         Usafe(:,    -1,0:PP_N,0:PP_N,eID) = Usafe_ext(:,0:PP_N,0:PP_N,5,eID)

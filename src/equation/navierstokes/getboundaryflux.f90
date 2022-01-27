@@ -44,6 +44,7 @@ END INTERFACE
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
+PUBLIC::GetOuterState
 #if PARABOLIC
 PUBLIC::Lifting_GetBoundaryFlux
 #endif /*PARABOLIC*/
@@ -500,6 +501,25 @@ DO iBC=1,nBCs
         END DO ! p
       END DO ! q
     END DO !iSide=1,nBCLoc
+    
+  CASE(100:200) ! Boundary conditions 100-200 are defined with an outer state and outer gradients
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
+      DO q=0,PP_N
+        DO p=0,PP_N
+          ! Get outer state
+          U_Face_loc(:,p,q) = GetOuterState(U_Master(:,p,q,SideID),tIn,Face_xGP(:,p,q,SideID),BCType,BCState,NormVec(:,p,q,SideID),TangVec1(:,p,q,SideID),TangVec2(:,p,q,SideID))
+          ! TODO: Get outer gradients
+        END DO ! p
+      END DO ! q
+      CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc(:,:,:), &
+#if PARABOLIC
+                   gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                   gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                   gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                   NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+    END DO !iSide=1,nBCLoc
   CASE DEFAULT !  check for BCtypes in Testcase
     CALL TestcaseGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
@@ -514,6 +534,122 @@ DO SideID=1,nBCSides
 END DO! SideID
 END SUBROUTINE GetBoundaryFlux
 
+!==================================================================================================================================
+!> Get outer state for boundary conditions that are defined with an outer state! (100-200)
+!==================================================================================================================================
+FUNCTION GetOuterState(U_master,tIn,x,BCType,BCState,nv,t1,t2) RESULT(U_slave)
+USE MOD_Equation_Vars, ONLY: KappaM1, Kappa, RefStatePrim, RefStateCons, PrimToCons, IniExactFunc, Get_Pressure
+USE MOD_Equation     , ONLY: ExactFunc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL   ,INTENT(IN) :: U_master(PP_nVar)    !< Inner state
+REAL   ,INTENT(IN) :: tIn                  !< Current time
+REAL   ,INTENT(IN) :: x(3)                 !< Coordinates of boundary point
+INTEGER,INTENT(IN) :: BCType               !< BC type
+INTEGER,INTENT(IN) :: BCState              !< BC state
+REAL   ,INTENT(IN) :: nv(3)                !< Normal vector
+REAL   ,INTENT(IN) :: t1(3)                !< Tangent vector 1
+REAL   ,INTENT(IN) :: t2(3)                !< Tangent vector 2
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL               :: U_slave(PP_nVar)    !< Outer state
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL               :: vn, pres, srho, a, normalMachNo, prim(PP_nVar), rhou(3), cons(PP_nVar)
+!==================================================================================================================================
+
+SELECT CASE(BCType)
+
+CASE(109) ! (Simple) reflecting Euler wall
+  U_slave(1) = U_Master(1)
+  U_slave(5) = U_Master(5)
+  ! rotate momentum in normal direction
+  rhou(1) = SUM(U_Master(2:4)*nv)
+  rhou(2) = SUM(U_Master(2:4)*t1)
+  rhou(3) = SUM(U_Master(2:4)*t2)
+  ! Reflect
+  U_slave(2:4) = U_Master(2:4) - 2.0 * rhou
+
+CASE(110) ! characteristic inflow/outflow (only Euler so far)
+  ! Copy inner state
+  srho = 1. / U_master(1)
+  
+  ! Get normal velocity
+  vn= SUM(U_master(2:4)*nv)*srho
+  
+  ! get pressure and Mach from state
+  pres = KappaM1*( U_master(5) - 0.5 *sum(U_master(2:4)**2)*srho )
+  a    = sqrt(Kappa*pres*srho)
+  normalMachNo = ABS(vn/a)
+  
+  if (vn < 0) then ! inflow
+    if (normalMachNo<=1.0) then 
+      ! subsonic inflow: All variables from outside but pressure
+      prim(1:4) = RefStatePrim(BCState,1:4)
+      prim(5) = pres
+      CALL PrimToCons(Prim,U_slave)
+     else 
+      ! supersonic inflow: All variables from outside
+      U_slave = RefStateCons(BCState,:)
+    end if
+  else ! outflow
+    if (normalMachNo<=1.0) then
+      ! subsonic outflow: All variables from inside but pressure
+      prim(1:4) = U_Master(1:4)
+      prim(2:4) = prim(2:4)*srho
+      Prim(5) = RefStatePrim(BCState,5)
+      ! U_loc contains now the state with pressure from outside (refstate)
+      CALL PrimToCons(prim,U_slave)
+     else
+      ! supersonic outflow: All variables from inside
+      U_slave = U_Master
+    end if
+  end if
+  
+CASE(111) ! inner-state dependent inflow/outflow (only Euler so far)... But for an ExactFunc
+  ! Get inverse of density
+  srho = 1. / U_master(1)
+  
+  ! Get normal velocity
+  vn= SUM(U_master(2:4)*nv)*srho
+  
+  ! get pressure and Mach from state
+  pres = KappaM1*( U_master(5) - 0.5 *sum(U_master(2:4)**2)*srho )
+  a    = sqrt(Kappa*pres*srho)
+  normalMachNo = ABS(vn/a)
+  
+  if (vn < 0) then ! inflow
+    if (normalMachNo<1.0) then 
+      ! subsonic inflow: All variables from outside but pressure
+      call ExactFunc(IniExactFunc,tIn,x,cons)
+      prim(1) = cons(1)
+      prim(2:4) = cons(2:4)/cons(1)
+      prim(5) = pres
+      CALL PrimToCons(Prim,U_slave)
+     else 
+      ! supersonic inflow: All variables from outside
+      call ExactFunc(IniExactFunc,tIn,x,U_slave)
+    end if
+  else ! outflow
+    if (normalMachNo<1.0) then
+      ! subsonic outflow: All variables from inside but pressure
+      call ExactFunc(IniExactFunc,tIn,x,cons)
+      
+      prim(1:4) = U_Master(1:4)
+      prim(2:4) = prim(2:4)*srho
+      call Get_Pressure(cons,Prim(5))
+      
+      ! U_loc contains now the state with pressure from outside (refstate)
+      CALL PrimToCons(prim,U_slave)
+     else
+      ! supersonic outflow: All variables from inside
+      U_slave = U_Master
+    end if
+  end if
+END SELECT
+
+END FUNCTION GetOuterState
 
 #if PARABOLIC
 !==================================================================================================================================
