@@ -291,7 +291,7 @@ END SUBROUTINE WriteDataToVTK3D
 !> If in the variable name list, 3 consecutive entries have the same name with only the ending being X,Y (vecdim=2) or X,Y,Z(vecdim=3), they are described in paraview as a vector.
 !!
 !===================================================================================================================================
-SUBROUTINE WriteDataToVTK(dim1,vecDim,NPlot,nElems,nVal,VarNames,Coord,Values,FileString_in,MPI_SingleFile)
+SUBROUTINE WriteDataToVTK(dim1,vecDim,NPlot,nElems,nVal,VarNames,Coord,Values,vtuPath,FileString_in,MPI_SingleFile)
 ! MODULES
 USE MOD_Globals
 ! IMPLICIT VARIABLE HANDLING
@@ -306,6 +306,7 @@ INTEGER,INTENT(IN)            :: nVal                    !! Number of nodal outp
 CHARACTER(LEN=*),INTENT(IN)   :: VarNames(nVal)          !! Names of all variables that will be written out
 REAL   ,INTENT(IN)            :: Coord(vecdim,1:PRODUCT(Nplot+1),nElems)      ! CoordinatesVector 
 REAL   ,INTENT(IN)            :: Values(nVal,1:PRODUCT(Nplot+1),nElems)   !! Statevector 
+CHARACTER(LEN=*),INTENT(IN)   :: vtuPath                 !! Path for vtu files
 CHARACTER(LEN=*),INTENT(IN)   :: FileString_in           !! Output file name (without .vtu!!)
 LOGICAL,INTENT(IN),OPTIONAL   :: MPI_singleFile          !! for MPI, TRUE: gather data of all procs and write single file, FALSE: write one file per proc and an additional link file. default=TRUE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -344,12 +345,12 @@ ELSE
 END IF
 IF(nProcessors.EQ.1) singleFile=.TRUE. !overwrite input if only 1 proc is used!
 IF(SingleFile)THEN
-  SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO SINGLE XML BINARY (VTU) FILE "'//TRIM(FileString_in)//'.vtu" ...'
+  SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO SINGLE XML BINARY (VTU) FILE "'//vtuPath//'/'//TRIM(FileString_in)//'.vtu" ...'
 ELSE
-  SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO MULTIPLE XML BINARY (VTU) FILES "'//TRIM(FileString_in)//'_Proc*_.vtu" ...'
+  SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO MULTIPLE XML BINARY (VTU) FILES "'//vtuPath//'/'//TRIM(FileString_in)//'_Proc*_.vtu" ...'
 END IF
 #else
-SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO SINGLE XML BINARY (VTU) FILE "'//TRIM(FileString_in)//'.vtu" ...'
+SWRITE(UNIT_stdOut,'(A)',ADVANCE='NO')'  WRITE DATA TO SINGLE XML BINARY (VTU) FILE "'//vtuPath//'/'//TRIM(FileString_in)//'.vtu" ...'
 #endif
 
 NPlot_p1  =(Nplot(:)+1)
@@ -379,18 +380,18 @@ IF(singleFile)THEN
     nElemsMax=MAXVAL(nElems_glob)
     ALLOCATE(buf2(vecdim,1:ProdNplot_p1,nElemsMax))
     nGlobalElems_loc=SUM(nElems_glob)
-    FileString=TRIM(FileString_in)//'.vtu'
+    FileString=vtuPath//'/'//TRIM(FileString_in)//'.vtu'
   END IF ! mpiroot
 ELSE
-  !every processor writes his own file
+  !every processor writes its own file
   writeToFile=(nElems.GT.0)
-  FileString=TRIM(INTSTAMP(TRIM(FileString_in),myRank))//'_.vtu'
+  FileString=vtuPath//'/'//TRIM(INTSTAMP(TRIM(FileString_in),myRank))//'_.vtu'
   nElems_glob(0) = nElems
   nGlobalElems_loc=nElems
 END IF !singlefile
 #else 
 writeToFile=(nElems.GT.0)
-FileString=TRIM(FileString_in)//'.vtu'
+FileString=vtuPath//'/'//TRIM(FileString_in)//'.vtu'
 nElems_glob(0) = nElems
 nGlobalElems_loc=nElems
 #endif
@@ -670,7 +671,7 @@ IF((.NOT.SingleFile).AND.(MPIroot))THEN
   ! Link files
   DO iProc=0,nProcessors-1
     IF(nElems_glob(iProc).EQ.0) CYCLE      
-    FileString=TRIM(INTSTAMP(TRIM(FileString_in),iProc))//'_.vtu'
+    FileString=vtuPath//'/'//TRIM(INTSTAMP(TRIM(FileString_in),iProc))//'_.vtu'
     Buffer='    <Piece Source="'//TRIM(FileString)//'"/>'//lf;WRITE(ivtk) TRIM(Buffer)
   END DO
   ! Write footer

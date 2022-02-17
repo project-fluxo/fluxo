@@ -31,6 +31,7 @@ REAL,ALLOCATABLE                :: Vdm_GaussN_NVisu(:,:) !< Vandermonde for dire
 REAL,PARAMETER                  :: FileVersion=0.1       !< version written into output file
 CHARACTER(LEN=255),PARAMETER    :: ProgramName='Fluxo'   !< name of program written into output file
 CHARACTER(LEN=255)              :: ProjectName           !< Name of the current simulation (mandatory).
+CHARACTER(LEN=255)              :: vtuPath               !< Path for vtu files
 INTEGER                         :: outputFormat=0        !< File format for visualization. <=0: no visualization, 1: Tecplot binary,
                                                       !< 2: Tecplot ASCII, 3: Paraview binary. Note: Tecplot output is currently
                                                       !< unavailable due to licensing issues.

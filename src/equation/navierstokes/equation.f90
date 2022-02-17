@@ -1016,6 +1016,28 @@ case(2001) ! Mach~2000 jet with a slightly bigger width
     prim(2) = 800 ! about Mach number Ma = 2000
   end if
   CALL PrimToCons(Prim,Resu)
+  
+case(3000) ! Colliding flow test from Trixi (https://github.com/trixi-framework/Trixi.jl/blob/main/examples/tree_2d_dgsem/elixir_euler_colliding_flow.jl)
+           !  * Features a Mach=70 inflow from both sides, with relative low temperature, such that pressure keeps relatively small
+           !  * To be computed with Kappa=1.001, to simulate isothermal gas
+           !  * domain size is [-64,+64]^2
+  ! Parameters
+  a = 0.2
+  velx0 = 13.907432274789372 
+  slope = 1.0
+  
+  ! State
+  prim(1) = 0.0247
+  prim(2) = -velx0*tanh(slope * x(1))
+  prim(3:4) = 0.0
+  prim(5) =  a**2 / Kappa * prim(1)
+  
+  ! Add small initial disturbance to the field, but only close to the interface
+  if (abs(x(1)) < 10.0) then
+    prim(2) = prim(2) * (1.0 + 0.01 * sin(PP_Pi * x(2)))
+  end if
+   
+  CALL PrimToCons(Prim,Resu)
 
 END SELECT ! ExactFunction
 

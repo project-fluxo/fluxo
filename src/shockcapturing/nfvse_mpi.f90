@@ -302,6 +302,13 @@ contains
             ijk(:)=S2V(:,0,p,q,flip,locSide)
             U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID) = GetOuterState(U_Master(:,p,q,SideID),tIn,Elem_xGP(:,ijk(1),ijk(2),ijk(3),ElemID),BCType,BCState,NormVec(:,p,q,SideID),TangVec1(:,p,q,SideID),TangVec2(:,p,q,SideID))
           END DO; END DO !p,q=0,PP_N
+        
+        case(9) ! ES Euler wall:  use reflected state for bar states
+          BCState = BoundaryType(BC(SideID),BC_STATE)
+          DO q=0,PP_N; DO p=0,PP_N
+            ijk(:)=S2V(:,0,p,q,flip,locSide)
+            U_ext(:,ijk(ax1),ijk(ax2),locSide,ElemID) = GetOuterState(U_Master(:,p,q,SideID),tIn,Elem_xGP(:,ijk(1),ijk(2),ijk(3),ElemID),109,BCState,NormVec(:,p,q,SideID),TangVec1(:,p,q,SideID),TangVec2(:,p,q,SideID))
+          END DO; END DO !p,q=0,PP_N
           
         case default ! just use the internal solution
           DO q=0,PP_N; DO p=0,PP_N

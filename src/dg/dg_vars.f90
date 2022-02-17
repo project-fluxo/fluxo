@@ -57,7 +57,8 @@ REAL,ALLOCATABLE                      :: L_HatPlus(:)           !< Lagrange poly
 ! DG solution (JU or U) vectors)
 REAL,ALLOCATABLE,TARGET               :: U(:,:,:,:,:)           !< Solution variable for each equation, node and element, 
                                                                 !< size \([1..nVar,0..N,0..N,0..N,nElems]\). 
-
+REAL,ALLOCATABLE,TARGET               :: Source(:,:,:,:,:)      !< Source for each equation, node and element, 
+                                                                !< size \([1..nVar,0..N,0..N,0..N,nElems]\). 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! DG time derivative or Residual U_t
 REAL,ALLOCATABLE                      :: Ut(:,:,:,:,:)          !< Residual/time derivative, size \([1..nVar,0..N,0..N,0..N,nElems]\). 

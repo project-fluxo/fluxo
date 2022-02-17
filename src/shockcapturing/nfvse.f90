@@ -412,7 +412,12 @@ contains
       SDEALLOCATE(FFV_m_FDG)
       SDEALLOCATE(alpha_old)
       allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
+#if LOCAL_ALPHA
+      allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,nElems) )
+      allocate ( alpha_old(0:PP_N,0:PP_N,0:PP_N,nElems) )
+#else
       allocate ( alpha_old(nElems) )
+#endif /*LOCAL_ALPHA*/
       FFV_m_FDG = 0.
       alpha_old = 0.
 #endif /*NFVSE_CORR*/

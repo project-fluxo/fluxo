@@ -16,6 +16,7 @@
 !==================================================================================================================================
 #include "defines.h"
 #define barStates 1
+#define cumulativeAlphaOld 1
 module MOD_IDP
 #if NFVSE_CORR
   implicit none
@@ -158,7 +159,11 @@ contains
 !   Allocate storage
 !   ----------------
     ! Alpha before limiting
+#if LOCAL_ALPHA
+    allocate ( alpha_old(0:PP_N,0:PP_N,0:PP_N,nElems) )
+#else
     allocate ( alpha_old(nElems) )
+#endif /*LOCAL_ALPHA*/
     alpha_old = 0.
     
     ! Udot_FV-Udot_DG
@@ -341,11 +346,21 @@ contains
     real :: sdt
     real :: curr_amount_alpha
     integer :: eID, i, j, k
+#if LOCAL_ALPHA
+    real :: alphaold (0:PP_N,0:PP_N,0:PP_N,nElems)  ! TODO: allocate beforehand!!
+#else
+    real :: alphaold(nElems)
+#endif /*LOCAL_ALPHA*/
     !--------------------------------------------------------
 
 !   Initialize
 !   ----------
-    alpha_old = alpha
+#if LOCAL_ALPHA
+    alphaold = alpha_loc
+#else
+    alphaold = alpha
+#endif /*LOCAL_ALPHA*/
+    
     sdt = 1./dt
     
 !   Get the variables for limiting in the right position
@@ -419,22 +434,40 @@ contains
     
 !   Update variables for the analyze routines
 !   -----------------------------------------
-    maximum_alpha = max(maximum_alpha,maxval(alpha-alpha_old))
+#if LOCAL_ALPHA
+    maximum_alpha = max(maximum_alpha,maxval(alpha_loc-alphaold))
+#else
+    maximum_alpha = max(maximum_alpha,maxval(alpha-alphaold))
+#endif /*LOCAL_ALPHA*/
     
     amount_alpha = amount_alpha*amount_alpha_steps
 #if LOCAL_ALPHA
     curr_amount_alpha = 0.0
     do eID=1, nElems
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-        curr_amount_alpha = curr_amount_alpha + (alpha_loc(i,j,k,eID)-alpha_old(eID))*wGPVol(i,j,k)/sJ(i,j,k,eID)
+        curr_amount_alpha = curr_amount_alpha + (alpha_loc(i,j,k,eID)-alphaold(i,j,k,eID))*wGPVol(i,j,k)/sJ(i,j,k,eID)
       end do       ; end do       ; end do
     end do
     amount_alpha = amount_alpha + curr_amount_alpha
 #else
-    amount_alpha = amount_alpha + sum(alpha-alpha_old)
+    amount_alpha = amount_alpha + sum(alpha-alphaold)
 #endif /*LOCAL_ALPHA*/
     amount_alpha_steps = amount_alpha_steps+1
     amount_alpha = amount_alpha/amount_alpha_steps
+    
+#if cumulativeAlphaOld
+    do eID=1, nElems
+#if LOCAL_ALPHA
+      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
+        alpha_old(i,j,k,eID) = max(alpha_old(i,j,k,eID),alpha_loc(i,j,k,eID))
+      end do       ; end do       ; end do
+#else
+      alpha_old(eID) = max(alpha_old(eID),alpha(eID))
+#endif /*LOCAL_ALPHA*/
+    end do
+#else
+    alpha_old = alphaold
+#endif /*cumulativeAlphaOld*/
     
   end subroutine Apply_IDP
 !===================================================================================================================================
@@ -767,6 +800,7 @@ contains
 #endif /*!(LOCAL_ALPHA)*/
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG, rho_min, rho_max
+    use MOD_DG_Vars       , only: Source
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -795,6 +829,10 @@ contains
         ! Previous sol
         rho_min(i,j,k) = min(rho_min(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
         rho_max(i,j,k) = max(rho_max(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
+        
+        ! Source term
+        rho_min(i,j,k) = min(rho_min(i,j,k), Uprev  (1,i  ,j  ,k  ,eID) + 2.0 * dt * Source(1, i, j, k, eID))
+        rho_max(i,j,k) = max(rho_max(i,j,k), Uprev  (1,i  ,j  ,k  ,eID) + 2.0 * dt * Source(1, i, j, k, eID))
         
         !xi
         do l=i-1, i !min(i-1,0), max(i,PP_N-1)
@@ -1143,6 +1181,7 @@ contains
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: IDPMaxIter, s_min
+    use MOD_DG_Vars       , only: Source
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -1170,6 +1209,9 @@ contains
 #if barStates
         ! Previous entropy of the node (ubar_ii)
         s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        
+        ! Source term
+        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)) )
         
         ! TODO: Compute them for all interfaces before...
         !xi+

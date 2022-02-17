@@ -101,7 +101,11 @@ module MOD_NFVSE_Vars
 ! For the positivity limiter
 ! --------------------------
 #if NFVSE_CORR
+#if LOCAL_ALPHA
+  real, allocatable :: alpha_old(:,:,:,:)                   !< Element-wise blending function (before correction)
+#else
   real, allocatable :: alpha_old(:)                         !< Element-wise blending function (before correction)
+#endif /*LOCAL_ALPHA*/
   real              :: PositCorrFactor  ! Limiting factor for NFVSE correction
   real              :: maximum_alpha     ! Maximum alpha for the analyze routines
   real              :: amount_alpha

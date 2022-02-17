@@ -14,7 +14,7 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
-
+#define cumulativeAlphaOld 1
 !==================================================================================================================================
 !> Basic routines performing an analysis of the solution valid for all equation systems and testcases. 
 !==================================================================================================================================
@@ -328,6 +328,9 @@ use MOD_NFVSE_Vars,         ONLY: alpha
 #if NFVSE_CORR
 use MOD_NFVSE_Vars,         ONLY: maximum_alpha, amount_alpha, amount_alpha_steps
 USE MOD_Mesh_Vars,          ONLY: nElems
+#if cumulativeAlphaOld
+use MOD_NFVSE_Vars  , only: alpha_old
+#endif /*cumulativeAlphaOld*/
 #if DEBUG || IDP_CHECKBOUNDS
 USE MOD_IDP_Vars,           ONLY: idp_bounds_num,idp_bounds_names,idp_bounds_delta
 #endif /*DEBUG || IDP_CHECKBOUNDS*/
@@ -467,6 +470,9 @@ END IF
 maximum_alpha=0.0
 amount_alpha =0.0
 amount_alpha_steps=0
+#if cumulativeAlphaOld
+alpha_old = 0.0
+#endif /*cumulativeAlphaOld*/
 #if DEBUG || IDP_CHECKBOUNDS
 idp_bounds_delta = 0.0
 #endif /*DEBUG || IDP_CHECKBOUNDS*/

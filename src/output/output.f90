@@ -102,6 +102,7 @@ CALL prms%CreateIntOption('OutputFormat',"File format for visualization: 0: None
                                           "2: ParaView vtu files per proc+pvtu link file,"//&
                                           "3: 2D (zeta=-1 of each element) ParaView, single vtu file,"//&
                                           "4: 2D (zeta=-1 of each element) ParaView, vtu files per proc+pvtu link file", '1')
+CALL prms%CreateStringOption('vtuPath',     "(Relative) path to store *.vtu files", '.')
 CALL prms%CreateIntOption('OutputNodes',"Node type to use for visualization:\n"//&
                                           "1: Equidistant nodes,"//&
                                           "2: Gauss/LGL nodes", '1')
@@ -158,7 +159,7 @@ ProjectName=GETSTR('ProjectName')
 Logging    =GETLOGICAL('Logging')
 ErrorFiles =GETLOGICAL('ErrorFiles')
 PrimVisuDefault=GETLOGICAL('PrimVisuDefault')
-
+vtuPath = GETSTR('vtuPath','.')
 doPrintStatusLine=GETLOGICAL("doPrintStatusLine",".FALSE.")
 
 WRITE(ErrorFileName,'(A,A8,I6.6,A4)')TRIM(ProjectName),'_ERRORS_',myRank,'.out'
@@ -397,7 +398,12 @@ DO iElem=1,nElems
   U_NVisu(nVars,:,:,:,iElem) = alpha(iElem)
 #if NFVSE_CORR
   nVars = nVars+1
+#if LOCAL_ALPHA
+  alpha_local(1,:,:,:) = alpha_old(:,:,:,iElem)
+  CALL ChangeBasis3D(1,PP_N,NVisu,Vdm_GaussN_NVisu,alpha_local,U_NVisu(nVars:nVars,:,:,:,iElem))
+#else
   U_NVisu(nVars ,:,:,:,iElem) = alpha_old(iElem)
+#endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
   nVars = nVars+1
@@ -418,7 +424,7 @@ SUBROUTINE VisualizeAny(OutputTime,nOutVars,NIn,On_xGP,CoordsIn,Uin,FileTypeStrI
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
-USE MOD_Output_Vars,ONLY:Projectname,OutputFormat
+USE MOD_Output_Vars,ONLY:Projectname,OutputFormat, vtuPath
 USE MOD_Output_Vars,ONLY:nBoundingBoxes,VisuBoundingBox
 USE MOD_Mesh_Vars  ,ONLY:nElems
 USE MOD_Output_Vars,ONLY:NVisu,Vdm_GaussN_NVisu
@@ -506,19 +512,19 @@ CASE(OUTPUTFORMAT_PARAVIEW_3D_SINGLE)
   !                            U_NVisu,TRIM(FileString))
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime)) !without .vtu
   CALL WriteDataToVTK(3,3,(/NVisu,Nvisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
-                              U_Nvisu(:,:,:,:,:),TRIM(FileString),MPI_SingleFile=.TRUE.)
+                              U_Nvisu(:,:,:,:,:),TRIM(vtuPath),TRIM(FileString),MPI_SingleFile=.TRUE.)
 CASE(OUTPUTFORMAT_PARAVIEW_3D_MULTI)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn),OutputTime)) !without .vtu
   CALL WriteDataToVTK(3,3,(/NVisu,Nvisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,:,:), &
-                              U_Nvisu(:,:,:,:,:),TRIM(FileString),MPI_SingleFile=.FALSE.)
+                              U_Nvisu(:,:,:,:,:),TRIM(vtuPath),TRIM(FileString),MPI_SingleFile=.FALSE.)
 CASE(OUTPUTFORMAT_PARAVIEW_2D_SINGLE)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn)//'2D',OutputTime)) !without .vtu
   CALL WriteDataToVTK(2,3,(/NVisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,0,:), &
-                              U_Nvisu(:,:,:,0,:),TRIM(FileString),MPI_SingleFile=.TRUE.)
+                              U_Nvisu(:,:,:,0,:),TRIM(vtuPath),TRIM(FileString),MPI_SingleFile=.TRUE.)
 CASE(OUTPUTFORMAT_PARAVIEW_2D_MULTI)
   FileString=TRIM(TIMESTAMP(TRIM(ProjectName)//'_'//TRIM(FileTypeStrIn)//'2D',OutputTime)) !without .vtu
   CALL WriteDataToVTK(2,3,(/NVisu,Nvisu/),nVisuElems,nOutVars,VarNamesIn,Coords_NVisu(1:3,:,:,0,:), &
-                              U_Nvisu(:,:,:,0,:),TRIM(FileString),MPI_SingleFile=.FALSE.)
+                              U_Nvisu(:,:,:,0,:),TRIM(vtuPath),TRIM(FileString),MPI_SingleFile=.FALSE.)
 END SELECT
 
 DEALLOCATE(VisuElem)

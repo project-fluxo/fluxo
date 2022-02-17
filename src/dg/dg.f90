@@ -95,6 +95,9 @@ ALLOCATE(U(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 U=0.
 Ut=0.
+! the Source
+ALLOCATE(Source(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+Source = 0.0
 
 nDOFElem=(PP_N+1)**3
 nTotal_face=(PP_N+1)*(PP_N+1)
@@ -261,7 +264,7 @@ SUBROUTINE DGTimeDerivative_weakForm(tIn)
 USE MOD_Globals
 USE MOD_Preproc
 USE MOD_Vector              ,ONLY: VNullify,V2D_M_V1D
-USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave
+USE MOD_DG_Vars             ,ONLY: Ut,U,U_slave,U_master,Flux_master,Flux_slave, Source
 USE MOD_FillMortar          ,ONLY: U_Mortar_Eqn,Flux_Mortar
 #ifdef JESSE_MORTAR
 USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
@@ -428,8 +431,10 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)
 
 !  Compute source terms and sponge (in physical space, conversion to reference space inside routines)
-IF(doCalcSource) CALL CalcSource(Ut,tIn)
-IF(doTCSource)   CALL TestcaseSource(Ut,tIn)
+Source = 0.0
+IF(doCalcSource) CALL CalcSource(Source,tIn)
+IF(doTCSource)   CALL TestcaseSource(Source,tIn)
+Ut = Ut + Source
 
 END SUBROUTINE DGTimeDerivative_weakForm
 
@@ -462,6 +467,7 @@ SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(Ut)
 SDEALLOCATE(U)
+SDEALLOCATE(Source)
 SDEALLOCATE(U_master)
 SDEALLOCATE(U_slave)
 SDEALLOCATE(Flux_master)
