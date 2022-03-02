@@ -39,6 +39,7 @@ END INTERFACE
 
 PUBLIC::InitBC
 PUBLIC::GetBoundaryFlux
+PUBLIC::GetOuterState
 PUBLIC::FinalizeBC
 !==================================================================================================================================
 
@@ -251,6 +252,24 @@ DO iBC=1,nBCs
                    NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
   
     END DO !iSide=1,nBCloc
+  CASE(100:200) ! Boundary conditions 100-200 are defined with an outer state and outer gradients
+    DO iSide=1,nBCLoc
+      SideID=BCSideID(iBC,iSide)
+      DO q=0,PP_N
+        DO p=0,PP_N
+          ! Get outer state
+          U_Face_loc(:,p,q) = GetOuterState(U_Master(:,p,q,SideID),tIn,Face_xGP(:,p,q,SideID),BCType,BCState,NormVec(:,p,q,SideID),TangVec1(:,p,q,SideID),TangVec2(:,p,q,SideID))
+          ! TODO: Get outer gradients
+        END DO ! p
+      END DO ! q
+      CALL Riemann(Flux(:,:,:,SideID),U_Master(:,:,:,SideID),U_Face_loc(:,:,:), &
+#if PARABOLIC
+                   gradPx_Master(:,:,:,SideID),gradPx_Master(:,:,:,SideID), &
+                   gradPy_Master(:,:,:,SideID),gradPy_Master(:,:,:,SideID), &
+                   gradPz_Master(:,:,:,SideID),gradPz_Master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                   NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+    END DO !iSide=1,nBCLoc
   CASE DEFAULT !  check for BCtypes in Testcase
     CALL TestcaseGetBoundaryFlux(iBC,tIn,Flux)
   END SELECT ! BCType
@@ -265,6 +284,34 @@ DO SideID=1,nBCSides
 END DO! SideID
 END SUBROUTINE GetBoundaryFlux
 
+!==================================================================================================================================
+!> Get outer state for boundary conditions that are defined with an outer state! (100-200)
+!==================================================================================================================================
+FUNCTION GetOuterState(U_master,tIn,x,BCType,BCState,nv,t1,t2) RESULT(U_slave)
+USE MOD_Equation     , ONLY: ExactFunc
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL   ,INTENT(IN) :: U_master(PP_nVar)    !< Inner state
+REAL   ,INTENT(IN) :: tIn                  !< Current time
+REAL   ,INTENT(IN) :: x(3)                 !< Coordinates of boundary point
+INTEGER,INTENT(IN) :: BCType               !< BC type
+INTEGER,INTENT(IN) :: BCState              !< BC state
+REAL   ,INTENT(IN) :: nv(3)                !< Normal vector
+REAL   ,INTENT(IN) :: t1(3)                !< Tangent vector 1
+REAL   ,INTENT(IN) :: t2(3)                !< Tangent vector 2
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL               :: U_slave(PP_nVar)    !< Outer state
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+SELECT CASE(BCType)
+CASE DEFaULT
+END SELECT
+
+END FUNCTION GetOuterState
 
 !==================================================================================================================================
 !> Finalize boundary conditions
