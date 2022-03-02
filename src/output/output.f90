@@ -39,6 +39,7 @@ INTEGER,PARAMETER :: OUTPUTFORMAT_PARAVIEW_2D_MULTI      = 4
 ! Output format for ASCII data files
 INTEGER,PARAMETER :: ASCIIOUTPUTFORMAT_CSV     = 0
 INTEGER,PARAMETER :: ASCIIOUTPUTFORMAT_TECPLOT = 1
+INTEGER,PARAMETER :: ASCIIOUTPUTFORMAT_DAT     = 2
 
 INTERFACE DefineParametersOutput
   MODULE PROCEDURE DefineParametersOutput
@@ -106,7 +107,7 @@ CALL prms%CreateStringOption('vtuPath',     "(Relative) path to store *.vtu file
 CALL prms%CreateIntOption('OutputNodes',"Node type to use for visualization:\n"//&
                                           "1: Equidistant nodes,"//&
                                           "2: Gauss/LGL nodes", '1')
-CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files, e.g. body forces: 0: CSV, 1: Tecplot." , '0')
+CALL prms%CreateIntOption('ASCIIOutputFormat',"File format for ASCII files: 0: CSV, 1: Tecplot, 2: DAT files (geometry and variables - only serial)." , '0')
 CALL prms%CreateLogicalOption(      'doPrintStatusLine','Print: percentage of time, ...', '.FALSE.')
 CALL prms%CreateLogicalOption(      'ColoredOutput','Colorize stdout', '.FALSE.')
 CALL prms%CreateRealArrayOption('VisuBoundingBox'    , "Bounding box to reduce visualization output (multiple are possible!)"//&
@@ -413,10 +414,74 @@ DO iElem=1,nElems
 #endif /*SHOCK_NFVSE*/
 END DO !iElem
 CALL VisualizeAny(OutputTime,nOutvars,Nvisu,.FALSE.,Coords_Nvisu,U_Nvisu,FileTypeStr,strvarnames_tmp)
+call exportToASCII(nOutvars,Nvisu,U_Nvisu,Coords_Nvisu,OutputTime,strvarnames_tmp)
 DEALLOCATE(U_NVisu)
 DEALLOCATE(Coords_NVisu) 
 END SUBROUTINE Visualize
-
+!==================================================================================================================================
+!> Export ASCII file with node coordinates and variables (only forks in serial)
+!==================================================================================================================================
+subroutine exportToASCII(nOutvars,Nvisu,U,Elem_xGP,OutputTime,strvarnames_tmp)
+  use MOD_Mesh_Vars    , only: nElems
+  use MOD_Output_Vars  , only: ProjectName, OutputFormat, ASCIIOutputFormat
+  USE MOD_Globals
+  implicit none
+  !-arguments---------------------------
+  integer         , intent(in) :: nOutvars,Nvisu
+  real            , intent(in) :: U(1:nOutVars,0:NVisu,0:NVisu,0:NVisu,1:nElems)
+  real            , intent(in) :: Elem_xGP(1:3,0:NVisu,0:NVisu,0:NVisu,1:nElems)
+  real            , intent(in) :: OutputTime
+  character(len=*), intent(in) :: strvarnames_tmp(nOutvars)
+  !-local-variables---------------------
+  integer :: i,j,k,eID,fd
+  real :: prim(PP_nVar)
+  character(len=255) :: formatStr
+  !-------------------------------------
+  
+  ! Return if we don't have to store ASCII file
+  ! *******************************************
+  if (ASCIIOutputFormat /= ASCIIOUTPUTFORMAT_DAT) return
+  
+  ! Format and file header
+  ! **********************
+  
+  open(newunit=fd, file=trim(TIMESTAMP(TRIM(ProjectName)//'_ASCII',OutputTime))//'.dat')
+  
+  write(fd,*) NVisu, nElems
+  
+  ! Variable names
+  write(formatStr,'(A,I1,A8)')'(',nOutVars,'A)'
+  write(fd,formatStr) ('"'//trim(strvarnames_tmp(i))//'" ', i=1, nOutVars)
+  
+  ! Variables
+  write(formatStr,'(A,I1,A8)')'(',nOutVars,'ES21.12)'
+  
+  ! Output ASCII file (use the same output format as for vtu file...)
+  ! *****************************************************************
+  SELECT CASE(OutputFormat)
+  CASE(OUTPUTFORMAT_PARAVIEW_2D_SINGLE,OUTPUTFORMAT_PARAVIEW_2D_MULTI)
+    do eID=1, nElems
+      do j=0, NVisu ; do i=0, NVisu
+        ! Export node coordinates
+        write(fd,'(2ES21.12)') Elem_xGP(1:2,i,j,0,eID)
+        ! Export soluion
+        write(fd,formatStr) U(:,i,j,0,eID)
+      end do       ; end do
+    end do
+  CASE(OUTPUTFORMAT_PARAVIEW_3D_SINGLE,OUTPUTFORMAT_PARAVIEW_3D_MULTI)
+    do eID=1, nElems
+      do k=0, NVisu ; do j=0, NVisu ; do i=0, NVisu
+        ! Export node coordinates
+        write(fd,'(3ES21.12)') Elem_xGP(:,i,j,k,eID)
+        ! Export soluion
+        write(fd,formatStr) U(:,i,j,k,eID)
+      end do       ; end do       ; end do
+    end do
+  END SELECT
+  
+  close(fd)
+  
+end subroutine exportToASCII
 !==================================================================================================================================
 !> Use any input to write to paraview
 !==================================================================================================================================
