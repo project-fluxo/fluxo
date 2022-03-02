@@ -739,6 +739,23 @@ case(17) ! KHI
   
   CALL PrimToCons(prim,resu)
   
+case(18) ! KHI with asymmetric perturbation
+  ! parameters
+  dens0 = 0.5
+  dens1 = 1.5
+  pres0 = 1.0
+  velx0 = 0.5
+  vely0 = 0.1
+  slope = 15
+  
+  Prim(1) = dens0 + dens1 * 0.5*(1+(tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1)))
+  Prim(2) = velx0 * (tanh(slope*(x(2)+0.5)) - (tanh(slope*(x(2)-0.5)) + 1))
+  Prim(3) = vely0 * sin(2*PP_Pi*x(1)) *  (1.0 + 0.01 * sin(PP_Pi*x(1)) * sin(PP_Pi*x(2))) !*(exp(-100*(coords(:,:,2)+0.5)**2) - exp(-100*(coords(:,:,2)-0.5)**2))
+  Prim(4) = 0.
+  Prim(5) = pres0
+  
+  CALL PrimToCons(prim,resu)
+  
 CASE(41) ! exact function, in 2D, rho=2+g(x,y) , rho v_1/2 =2+g(x,y) , rhoE =(2+g(x,y) )^2 = 4+4*g(x,y) + g(x,y)^2
          ! g(x,y) = A*sin(omega(x+y-1))
   Omega=PP_Pi*IniFrequency
@@ -972,6 +989,28 @@ case(15) ! Sedov blast from Markert et al. (2021), "A Sub-element Adaptive Shock
   CALL PrimToCons(prim,resu)
 
   resu(5) = resu(5) + blast_ener_normalized * exp(-0.5*(r2/blast_sigma)**2)
+  
+CASE(16) ! Medium Sedov-Taylor Circular Blast Wave
+  dim_ = 2
+  prim(1)   = 1.     ! ambient density
+  prim(2:4) = 0.     ! gas at rest initially
+  prim(5)   = 1.e-3  ! ambient pressure
+  newx = (x - IniCenter)
+  
+  r2 = SQRT(SUM(newx(1:dim_)*newx(1:dim_)))! the radius
+  IF ( (r2.LE.0.5) ) THEN ! 
+    prim(1) = 1.1691
+    if (r2/=0.0) then
+      prim(2) = 0.1882 * newx(1) / r2
+      prim(3) = 0.1882 * newx(2) / r2
+      if (dim_ == 3) then
+        prim(4) = 0.1882 * newx(3) / r2
+      end if
+    end if
+    prim(5) = 1.245
+  END IF
+  CALL PrimToCons(prim,resu)
+  
 CASE(140) ! Kelvin Helmhots instability
   prim(1) = 1. + 0.5 * 1.0 * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05))     !  density
   prim(2) = 1. * (tanh((x(2) - 0.5)/0.05) - tanh((x(2) - 1.5)/0.05) - 1.)     !  density
