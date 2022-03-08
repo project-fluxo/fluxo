@@ -328,7 +328,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   USE MOD_P4est,              ONLY: free_data_memory, RefineCoarse, GetData, p4estSetMPIData, GetnNBProcs, SetEtSandStE
   USE MOD_P4est,              ONLY: FillElemsChanges, GetNElems
   USE MOD_Metrics,            ONLY: CalcMetrics
-  USE MOD_DG_Vars,            ONLY: U,Ut,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
+  USE MOD_DG_Vars,            ONLY: U,Ut,Source,nTotalU, nTotal_vol, nTotal_IP, nTotal_face, nDOFElem, U_master, U_SLAVE, Flux_master, Flux_slave
   USE MOD_Mesh_Vars,          ONLY: AnalyzeSide, MortarInfo, MortarType, NGeo, DetJac_Ref, BC
   USE MOD_TimeDisc_Vars,      ONLY:   dtElem
   USE MOD_Mesh_Vars,          ONLY: LastSlaveSide, firstSlaveSide, nSides, nElems, firstMortarInnerSide !, lastMortarInnerSide
@@ -600,6 +600,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   IF (nElemsOld .NE. nElems) THEN
     SDEALLOCATE(Ut); ALLOCATE(Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
     Ut = 0.0
+    SDEALLOCATE(Source); ALLOCATE(Source(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+    Source = 0.0
     SDEALLOCATE(Metrics_fTilde); ALLOCATE(Metrics_fTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
 
     SDEALLOCATE(Metrics_gTilde); ALLOCATE(Metrics_gTilde(3,0:PP_N,0:PP_N,0:PP_N,nElems))
