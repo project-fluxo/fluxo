@@ -330,12 +330,18 @@ IF (FLUXO_SHOCKCAPTURE)
     IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
       MESSAGE(SEND_ERROR " The NFVSE shock capturing is only available for Gauss-Lobatto nodes!")
     ENDIF()
-    
+    # Add definition
     ADD_DEFINITIONS(-DSHOCK_NFVSE=1)
-    OPTION(FLUXO_SHOCK_NFVSE_CORR "Blending Correction" OFF)
+    # Option to use FV time-step size
+    OPTION(FLUXO_FV_TIMESTEP "Use FV time-step condition? (if active, the time-step size is also computed with a CFL condition on the FV subcells)" OFF)
+    IF(FLUXO_FV_TIMESTEP)
+      ADD_DEFINITIONS(-DFV_TIMESTEP=1)
+    ENDIF()
+    # Option for IDP methods
+    OPTION(FLUXO_SHOCK_NFVSE_CORR "Use IDP methods? (positivity,density/entropy correction,etc.)" OFF)
     IF(FLUXO_SHOCK_NFVSE_CORR)
       ADD_DEFINITIONS(-DNFVSE_CORR=1)
-      OPTION(NFVSE_LOCAL_ALPHA "Local alpha??" OFF)
+      OPTION(NFVSE_LOCAL_ALPHA "Use a node-local alpha? (subcell-wise blending)" OFF)
       IF(NFVSE_LOCAL_ALPHA)
         ADD_DEFINITIONS(-DLOCAL_ALPHA=1)
       ENDIF()

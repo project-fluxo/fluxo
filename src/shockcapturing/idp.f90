@@ -621,6 +621,7 @@ contains
           end do        ; end do  ! j,k
         end do
         
+#if FV_TIMESTEP
         ! Compute maximum time step
         do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           inv_dt = ( sWGP(i) * (lambdamax_xi  (i-1,j  ,k  ) * SCM % xi   % norm(j,k,i-1) + lambdamax_xi  (i,j,k) * SCM % xi   % norm(j,k,i)) + &
@@ -628,15 +629,18 @@ contains
                      sWGP(k) * (lambdamax_zeta(i  ,j  ,k-1) * SCM % zeta % norm(i,j,k-1) + lambdamax_zeta(i,j,k) * SCM % zeta % norm(i,j,k)) ) * sJ(i,j,k,eID)
           maxdt_IDP = min (maxdt_IDP, 1./inv_dt)
         end do       ; end do       ; end do
+#endif /*FV_TIMESTEP*/
         end associate
       end do !eID
       
+#if FV_TIMESTEP
 #if MPI
       CALL MPI_ALLREDUCE(MPI_IN_PLACE,maxdt_IDP,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
       if (dt > maxdt_IDP) then
         SWRITE(*,'(A,2ES21.12)') "MAYDAY, we have a problem with the time step. Consider reducing CFLScale (dt, maxdt_IDP): ", dt, maxdt_IDP
       end if
+#endif /*FV_TIMESTEP*/
     end if
 #else
 !   Otherwise get the previous entropy if needed

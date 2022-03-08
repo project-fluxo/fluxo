@@ -44,12 +44,12 @@ USE MOD_DG_Vars            ,ONLY:U
 USE MOD_Mesh_Vars          ,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
 USE MOD_Equation_Vars      ,ONLY:kappa,kappaM1
 USE MOD_TimeDisc_Vars      ,ONLY:CFLScale,CFLScale_usr,ViscousTimeStep,dtElem, FVTimeStep
-#if SHOCK_NFVSE
+#if FV_TIMESTEP
 USE MOD_NFVSE_Vars         ,ONLY:sWGP
 #if NFVSE_CORR
 USE MOD_IDP_Vars           ,ONLY: maxdt_IDP
 #endif /*NFVSE_CORR*/
-#endif /*SHOCK_NFVSE*/
+#endif /*FV_TIMESTEP*/
 #if PARABOLIC
 USE MOD_Equation_Vars      ,ONLY:KappasPr
 USE MOD_TimeDisc_Vars      ,ONLY:DFLScale
@@ -79,9 +79,9 @@ REAL                         :: sRho,v(3),p,c
 REAL                         :: TimeStepConv, TimeStepFV, TimeStepVisc,TimeStepViscElem
 REAL                         :: maxLambda1,maxLambda2,maxLambda3
 REAL                         :: Lambda1,Lambda2,Lambda3
-#if SHOCK_NFVSE
+#if FV_TIMESTEP
 REAL                         :: TimeStepFVElem
-#endif /*SHOCK_NFVSE*/
+#endif /*FV_TIMESTEP*/
 #if PARABOLIC
 REAL                         :: maxLambda_v1,maxLambda_v2,maxLambda_v3
 REAL                         :: muX,KappasPr_max
@@ -102,9 +102,9 @@ DO iElem=1,nElems
   maxLambda1=1.0E-12
   maxLambda2=1.0E-12
   maxLambda3=1.0E-12
-#if SHOCK_NFVSE
+#if FV_TIMESTEP
   TimeStepFVElem =-HUGE(1.) ! Initialize inverse of time-step size
-#endif /*SHOCK_NFVSE*/
+#endif /*FV_TIMESTEP*/
 #if PARABOLIC
   MaxLambda_v1=1.0E-12  ! Viscous
   MaxLambda_v2=1.0E-12  ! Viscous
@@ -135,10 +135,10 @@ DO iElem=1,nElems
         Lambda3 = sJ(i,j,k,iElem)*(ABS(SUM(Metrics_hTilde(:,i,j,k,iElem)*v)) + &
                         c*SQRT(SUM(Metrics_hTilde(:,i,j,k,iElem)*Metrics_hTilde(:,i,j,k,iElem))))
         MaxLambda3=MAX(MaxLambda3,Lambda3)
-#if SHOCK_NFVSE
+#if FV_TIMESTEP
         ! first compute the inverse of the time-step
         TimeStepFVElem = max (TimeStepFVElem,Lambda1 * sWGP(i),Lambda2 * sWGP(j),Lambda3 * sWGP(k)) ! Subcell-local approximation of low-order CFL condition
-#endif /*SHOCK_NFVSE*/
+#endif /*FV_TIMESTEP*/
 #if PARABOLIC
         ! Viscous Eigenvalues
 #if   PP_VISC == 0
@@ -163,7 +163,7 @@ DO iElem=1,nElems
     ERRWRITE(*,*)'dt_conv=',TimeStepConv,' dt_visc=',TimeStepVisc
     errType=3
   END IF
-#if SHOCK_NFVSE
+#if FV_TIMESTEP
   TimeStepFVElem=CFLScale_usr*0.5/TimeStepFVElem
   TimeStepFV=MIN(TimeStepFV,TimeStepFVElem)
   dtElem(iElem)=MIN(dtElem(iElem),TimeStepFVElem)
@@ -173,7 +173,7 @@ DO iElem=1,nElems
     ERRWRITE(*,*)'dt_FV=',TimeStepFV,' dt_conv=',TimeStepConv,'dt_visc=',TimeStepVisc
     errType=5
   END IF
-#endif /*SHOCK_NFVSE*/
+#endif /*FV_TIMESTEP*/
 #if PARABOLIC
   TimeStepViscElem= DFLScale*4./(maxLambda_v1+maxLambda_v2+maxLambda_v3)
   TimeStepVisc= MIN(TimeStepVisc, TimeStepViscElem)
@@ -200,9 +200,9 @@ TimeStepFV  =buf(3)
 errType=NINT(-buf(4))
 #endif /*MPI*/
 ! Correct FVTimeStep with the one computed from IDP LLF method
-#if NFVSE_CORR
+#if NFVSE_CORR && FV_TIMESTEP
 TimeStepFV = min(TimeStepFV,CFLScale_usr*maxdt_IDP)
-#endif /*NFVSE_CORR*/
+#endif /*NFVSE_CORR && FV_TIMESTEP*/
 
 ViscousTimeStep= (TimeStepVisc .LT. TimeStepConv) .and. (TimeStepVisc .LT. TimeStepFV)
 FVTimeStep     = (TimeStepFV .LT. TimeStepConv) .and. (TimeStepFV .LT. TimeStepVisc)
