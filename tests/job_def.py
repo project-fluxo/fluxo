@@ -850,7 +850,7 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.268171508112E+00,   2.529031585736E-01,   5.028438739631E-01,   2.549900782136E-01,   1.440403457802E-01,   3.082511618170E-02,   3.556170413214E-02,   4.359916266328E-02,   6.607466075726E-02],
+                                                    'to_be': [1.261761744974E+00,   2.526794751686E-01,   4.997058936099E-01,   2.538598040961E-01,   1.334587620025E-01,   3.300824659568E-02,   3.606116713989E-02,   5.261862613468E-02,   5.334768630614E-02],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -861,7 +861,8 @@ def job_definition():
           'restartfile': '../p4est_SC/MHD_ENTROPYCONS_State_0000000.400000000.h5',
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.268171508112E+00,   2.529031585736E-01,   5.028438739631E-01,   2.549900782136E-01,   1.440403457802E-01,   3.082511618170E-02,   3.556170413214E-02,   4.359916266328E-02,   6.607466075726E-02],
+                                                    'to_be': [1.261761744974E+00,   2.526794751686E-01,   4.997058936099E-01,   2.538598040961E-01,   1.334587620025E-01,   3.300824659568E-02,   3.606116713989E-02,   5.261862613468E-02,   5.334768630614E-02],
+
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -899,7 +900,7 @@ def job_definition():
          {'tags': ['mhd','blast','nonconforming','p4est','amr','SC','br1'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [1.268166068777E+00,   2.529019998270E-01,   5.028417680171E-01,   2.549888904619E-01,   1.440399670477E-01,   3.082510293043E-02,   3.556163805161E-02,   4.359899586136E-02,   6.607457215589E-02],
+                                                    'to_be': [1.261756394089E+00,   2.526782825771E-01,   4.997038296246E-01,   2.538586067527E-01,   1.334584918103E-01,   3.300829302005E-02,   3.606115177897E-02,   5.261867832852E-02,   5.334763579369E-02],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
@@ -1384,7 +1385,7 @@ def job_definition():
          {'tags': ['navierstokes','blast','curved','nonconforming','projection-mortar','br2','SC'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
-                                                    'to_be': [5.945733279674E-01,   2.065021688008E-01,   2.003471214530E-01,   2.207659793181E-01,   2.168558046793E+00],
+                                                    'to_be': [5.945798911280E-01,   2.065011304993E-01,   2.003460892178E-01,   2.207665371548E-01,   2.168581765236E+00],
                                                   'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
                       },
          },
