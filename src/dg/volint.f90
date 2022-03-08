@@ -212,10 +212,6 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-#if LOCAL_ALPHA
-real :: entVar(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-real :: entPot(3      ,0:PP_N,0:PP_N,0:PP_N)
-#endif /*LOCAL_ALPHA*/
 INTEGER                                           :: i,j,k,l,m,iElem
 !==================================================================================================================================
 #if LOCAL_ALPHA

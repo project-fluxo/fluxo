@@ -200,8 +200,6 @@ USE MOD_PreProc
 USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
 #endif
 USE MOD_Equation_Vars  ,ONLY:nAuxVar
-!#if IDP? TODO: Check if must be removed...
-use MOD_DG_Vars        ,only: Qp
 !
 use MOD_DG_Vars        ,only: nTotal_vol
 ! IMPLICIT VARIABLE HANDLING
@@ -231,10 +229,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                  Uaux(:,i,j,k),Uaux(:,l,j,k), &
                                   M_f(:,i,j,k), M_f(:,l,j,k), &
                              ftilde(:,l,i,j,k)                )
-!#    CALL SecretDGFluxVec(U_in(:,i,j,k),U_in(:,l,j,k), &
-!#                                 Uaux(:,i,j,k),Uaux(:,l,j,k), &
-!#                                  M_f(:,i,j,k), M_f(:,l,j,k), &
-!#                             Qp(i,l),ftilde(:,l,i,j,k)                )
     ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
   END DO!l=i+1,N
 END DO; END DO; END DO ! i,j,k
@@ -247,10 +241,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                  Uaux(:,i,j,k),Uaux(:,i,l,k), &
                                   M_g(:,i,j,k), M_g(:,i,l,k), &
                              gtilde(:,l,i,j,k)                )
-!#    CALL SecretDGFluxVec(U_in(:,i,j,k),U_in(:,i,l,k), &
-!#                                 Uaux(:,i,j,k),Uaux(:,i,l,k), &
-!#                                  M_g(:,i,j,k), M_g(:,i,l,k), &
-!#                             Qp(j,l),gtilde(:,l,i,j,k)                )
     gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
   END DO!l=j+1,N
 END DO; END DO; END DO ! i,j,k
@@ -263,10 +253,6 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
                                  Uaux(:,i,j,k),Uaux(:,i,j,l), &
                                   M_h(:,i,j,k), M_h(:,i,j,l), &
                              htilde(:,l,i,j,k)                )
-!#    CALL SecretDGFluxVec(U_in(:,i,j,k),U_in(:,i,j,l), &
-!#                                 Uaux(:,i,j,k),Uaux(:,i,j,l), &
-!#                                  M_h(:,i,j,k), M_h(:,i,j,l), &
-!#                             Qp(k,l),htilde(:,l,i,j,k)                )
     htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
   END DO!l=k+1,N
 END DO; END DO; END DO ! i,j,k
@@ -411,111 +397,6 @@ Fstar(5) = 0.5*((rhoE_L + p_L)*q_L    + (rhoE_R + p_R)*q_R )
 
 END ASSOCIATE !rho_L/R,rhov1_L/R,...
 END SUBROUTINE StandardDGFluxVec
-
-pure subroutine SecretDGFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Qp,Fstar)
-  ! MODULES
-  USE MOD_PreProc
-  USE MOD_Equation_Vars,ONLY:nAuxVar, ConsToEntropy, KappaM1, Kappa
-  IMPLICIT NONE
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! INPUT VARIABLES
-  REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
-  REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
-  REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
-  REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
-  REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
-  REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
-  REAL,INTENT(IN)                     :: Qp             !< 
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! OUTPUT VARIABLES
-  REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
-  !----------------------------------------------------------------------------------------------------------------------------------
-  ! LOCAL VARIABLES
-  real :: WL(PP_nVar), WR(PP_nVar)  ! Entropy vars
-  real :: W_jump(PP_nVar)           ! Jump in rntropy vars
-  real :: PsiL, PsiR                ! Entropy potential
-  real :: FsL, FsR                  ! Entropy flux
-  real :: FL(PP_nVar), FR(PP_nVar)  ! Flux on both points
-  real :: q_L,q_R
-  real :: entropy_production
-  real :: entropy_diss_production
-  real :: entropy_diss(PP_nVar)
-  REAL :: alpha          !< 
-  logical :: RemoveAntiDiff
-  !==================================================================================================================================
-  RemoveAntiDiff = .TRUE.
-  ! Get standard average
-  ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
-             rhoU_L =>   UL(2), rhoU_R =>   UR(2), &
-             rhoV_L =>   UL(3), rhoV_R =>   UR(3), &
-             rhoW_L =>   UL(4), rhoW_R =>   UR(4), &
-             rhoE_L =>   UL(5), rhoE_R =>   UR(5), &
-            !srho_L =>UauxL(1), srho_R =>UauxR(1), &
-             VelU_L =>UauxL(2), VelU_R =>UauxR(2), &
-             VelV_L =>UauxL(3), VelV_R =>UauxR(3), &
-             VelW_L =>UauxL(4), VelW_R =>UauxR(4), &
-                p_L =>UauxL(5),    p_R =>UauxR(5)  )
-
-
-  !curved, without metric dealiasing (=standard DG weak form on curved meshes)
-  q_L   = VelU_L*metric_L(1) + VelV_L*metric_L(2) + VelW_L*metric_L(3)
-  q_R   = VelU_R*metric_R(1) + VelV_R*metric_R(2) + VelW_R*metric_R(3)
-  
-  FL(1) = rho_L*q_L
-  FL(2) = rhoU_L*q_L + metric_L(1)*p_L
-  FL(3) = rhoV_L*q_L + metric_L(2)*p_L
-  FL(4) = rhoW_L*q_L + metric_L(3)*p_L
-  FL(5) = (rhoE_L + p_L)*q_L
-  
-  FR(1) = rho_R*q_R
-  FR(2) = rhoU_R*q_R + metric_R(1)*p_R
-  FR(3) = rhoV_R*q_R + metric_R(2)*p_R
-  FR(4) = rhoW_R*q_R + metric_R(3)*p_R
-  FR(5) = (rhoE_R + p_R)*q_R
-  
-  Fstar = 0.5*(FL + FR)
-  
-  ! Get entropy variables
-  WL = ConsToEntropy(UL)
-  WR = ConsToEntropy(UR)
-  W_jump = WR - WL
-  
-  ! Get entropy flux
-  FsL = - q_L * rho_L * (log(p_L) - Kappa*log(rho_L) ) / KappaM1
-  FsR = - q_R * rho_R * (log(p_R) - Kappa*log(rho_R) ) / KappaM1
-  
-  ! Get entropy potential
-  PsiL = dot_product(WL, FL) - FsL
-  PsiR = dot_product(WR, FR) - FsR
-  
-  ! Get entropy dissipation term
-  entropy_diss = Qp * W_jump
-  
-  ! Get entropy production
-  ! (of the central flux):
-  entropy_production = dot_product(W_jump, Fstar) - (PsiR - PsiL)
-  ! (of the dissipation term):
-  entropy_diss_production = dot_product(W_jump, entropy_diss)
-  
-  END ASSOCIATE !rho_L/R,rhov1_L/R,...
-  
-  ! Get alpha
-  if (abs(entropy_diss_production) < 1.e-13) then
-    alpha = 0.
-    return
-  end if
-  
-  alpha =  entropy_production / entropy_diss_production
-    
-  if (RemoveAntiDiff .and. alpha < 0.) then
-    alpha = 0.
-    return
-  end if
-  
-  Fstar = Fstar - alpha * entropy_diss
-  
-end subroutine SecretDGFluxVec
-
 
 !==================================================================================================================================
 !> Computes the standard DG euler flux with dealiased metrics (fstar=f*metric1+g*metric2+h*metric3 )

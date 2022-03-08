@@ -31,7 +31,6 @@ SAVE
 ! DG basis, contains the differentiation and interpolation operators
 REAL,ALLOCATABLE                      :: D(:,:)                 !< Differentiation matrix of size \([0..N,0..N]\), contains the 
                                                                 !< first derivative of each Lagrange polynomial at each node. 
-REAL,ALLOCATABLE                      :: Qp(:,:)
 REAL,ALLOCATABLE                      :: D_T(:,:)               !< Transpose of differentiation matrix, size \([0..N,0..N]\). 
 
 REAL,ALLOCATABLE                      :: D_Hat(:,:)             !< Differentiation matrix premultiplied by
