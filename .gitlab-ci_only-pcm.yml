@@ -1,0 +1,295 @@
+---
+# =================================================================================================================================
+# Stages to be executed, each stage is a collection of jobs pointing to the stage
+# =================================================================================================================================
+
+stages:
+  - startup
+  - build
+  - runs
+  - cleanup
+
+# =================================================================================================================================
+# GLOBALS
+# =================================================================================================================================
+
+variables:
+  GIT_STRATEGY: none
+  GLOBAL_CACHE_PATH: "/home/gitlab-runner/globalcache/${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}"
+
+# =================================================================================================================================
+# SHORT SYNTAX EXPLANATIONS FOR THE JOB, FOR DETAILS VISIT:    ===> https://docs.gitlab.com/ce/ci/yaml/   <===
+# "stage:"         makes the job part of a stage defined above
+# "tags:"          selects the runner
+# "only:"          restricts the execution of the job to a git branch or tag
+# "before_script:" shell commands to be executed before the main script.
+# "script:"        shell commands for the test. If a shell command exits with >0, the job is marked as "failed", else as "passed".
+#                  commands after a failing one are not executed anymore!
+# "after_script:"  shell commands after passed OR failed script. Careful, the current directory is always the root of the repo!
+# "artifacts:"     keep data from the job which is uploaded to gitlab.com. You really should set a duration to expiration.
+#                  "when:" can be either on_failure, on_success or always
+# =================================================================================================================================
+
+# =================================================================================================================================
+# TEMPLATE DEFINITIONS
+# =================================================================================================================================
+# NOTE: _pcm is the runner fluxo@gitlab.mi.uni-koeln.de with tag: PCM_linux_fluxo
+
+.job_PCM_setup_gnu: &PCM_setup_gnu
+  variables:
+    RUNNERNAME: PCM
+    CURR_CMP: gnu
+  tags:
+    - pcm_linux_fluxo
+  before_script:
+    - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Debug"
+    - pwd
+
+.job_PCM_setup_gnu_build: &PCM_setup_gnu_build
+  variables:
+    RUNNERNAME: PCM
+    CURR_CMP: gnu
+    GIT_STRATEGY: clone
+  tags:
+    - pcm_linux_fluxo
+  before_script:
+    - export MPIRUNCOMMAND="mpirun -np"
+    - export NIGHTLYBUILDMODE="Debug"
+    - pwd
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "startup"
+# =================================================================================================================================
+
+.job_script_startup: &script_startup
+  stage: startup
+  script:
+    - echo ${RUNNERNAME} "RUNNER WARM-UP"
+    - echo "create" ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+    - mkdir -p ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "build"
+# =================================================================================================================================
+
+.job_common_arts:
+  artifacts: &common_arts
+    name: "${CI_PIPELINE_ID}_${CI_COMMIT_REF_NAME}_${CI_JOB_NAME}"
+    expire_in: 2 days
+    when: on_failure
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_build_linadv: &script_build_linadv
+  stage: build
+  script:
+    - cd tests; pwd
+    - rm -rf dirx_1* log_1*.txt
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 100-199
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 101,102 ;  fi
+    - mv dirx_1* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
+  artifacts:
+    <<: *common_arts
+    paths:
+    - tests/log_1*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_build_maxwell: &script_build_maxwell
+  stage: build
+  script:
+    - cd tests; pwd
+    - rm -rf dirx_2* log_2*
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 200-299
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 201,202 ;  fi
+    - mv dirx_2* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
+  artifacts:
+    <<: *common_arts
+    paths:
+    - tests/log_2*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_build_mhd: &script_build_mhd
+  stage: build
+  script:
+    - cd tests; pwd
+    - rm -rf dirx_3* log_3*
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 300-399
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 301,302,316 ;  fi
+    - mv dirx_3* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
+  artifacts:
+    <<: *common_arts
+    paths:
+    - tests/log_3*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_build_nav-st: &script_build_nav-st
+  stage: build
+  script:
+    - cd tests; pwd
+    - rm -rf dirx_4* log_4*
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build ${NIGHTLYBUILDMODE} -case 400-499
+    - else python3 build_tests.py -p 10 -stage 0 -buildhdf5 0 -build Release -case 401,402,413,414,416 ;  fi
+    - mv dirx_4* ${GLOBAL_CACHE_PATH}_${CURR_CMP}/.
+  artifacts:
+    <<: *common_arts
+    paths:
+    - tests/log_4*.txt
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "runs"
+# =================================================================================================================================
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_runs_linadv: &script_runs_linadv
+  stage: runs
+  script:
+    - cd tests; pwd
+    - rm -f runs/linadv/*/*/log_1*.txt
+    - rm -rf dirx_1* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_1* .
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 2 -build ${NIGHTLYBUILDMODE} -case 100-199
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 101,102 ;  fi
+  artifacts:
+    <<: *common_arts
+    paths:
+    - tests/runs/linadv/*/*/log_1*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_runs_maxwell: &script_runs_maxwell
+  stage: runs
+  script:
+    - cd tests; pwd
+    - rm -f runs/maxwell/*/*/log_2*.txt
+    - rm -rf dirx_2*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_2* .
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 2 -build ${NIGHTLYBUILDMODE} -case 200-299
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 201,202 ;  fi
+  artifacts:
+    <<: *common_arts
+    paths: 
+    - tests/runs/maxwell/*/*/log_2*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_runs_mhd: &script_runs_mhd
+  stage: runs
+  script:
+    - cd tests; pwd
+    - rm -f runs/mhd/*/*/log_3*.txt
+    - rm -rf dirx_3*; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_3* .
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 2 -build ${NIGHTLYBUILDMODE} -case 300-399
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 301,302,316 ;  fi
+  artifacts:
+    <<: *common_arts
+    paths: 
+    - tests/runs/mhd/*/*/log_3*.txt
+
+# -------------------------------------------------------------------------------------------------------------------------------
+.job_script_runs_nav-st: &script_runs_nav-st
+  stage: runs
+  script:
+    - cd tests; pwd
+    - rm -f runs/navst/*/*/log_4*.txt
+    - rm -rf dirx_4* ; mv ${GLOBAL_CACHE_PATH}_${CURR_CMP}/dirx_4* .
+    - if [ -n "${NIGHTLY_RUNNER}" ]; then python3 build_tests.py -p 10 -stage 2 -build ${NIGHTLYBUILDMODE} -case 400-499
+    - else python3 build_tests.py -p 10 -stage 2 -build Release -case 401,402,413,414,416 ;  fi
+  artifacts:
+    <<: *common_arts
+    paths: 
+    - tests/runs/navst/*/*/log_4*.txt
+
+# =================================================================================================================================
+# TEMPLATES FOR STAGE "cleanup"
+# =================================================================================================================================
+
+.job_script_cleanup: &script_cleanup
+  stage: cleanup
+  when: always
+  script:
+    - pwd
+    - echo "on" ${RUNNERNAME} "RUNNER"
+    - echo "remove:" ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+    - rm -rf ${GLOBAL_CACHE_PATH}_${CURR_CMP}
+
+
+# #################################################################################################################################
+# JOB DEFINITIONS
+# HERE, the "needs:" command is used to generate a dependency for each job.
+#                    - the startup job does nothing except checking if the gitlab runner is listening.
+#                    - this way, all the remainingjobs can be executed only in their dependency order,
+#                      and thus before the whole stage is ready (even jump over stages)
+# #################################################################################################################################
+
+# =================================================================================================================================
+# Stage "startup"
+# =================================================================================================================================
+
+PCM_gnu_startup:
+  <<: *PCM_setup_gnu
+  <<: *script_startup
+
+# =================================================================================================================================
+# Stage "build"
+# =================================================================================================================================
+
+PCM_gnu_mhd_build:
+  needs: ["PCM_gnu_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *script_build_mhd
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_linadv_build:
+  needs: ["PCM_gnu_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *script_build_linadv
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_maxwell_build:
+  needs: ["PCM_gnu_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *script_build_maxwell
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_nav-st_build:
+  needs: ["PCM_gnu_startup"]
+  <<: *PCM_setup_gnu_build
+  <<: *script_build_nav-st
+
+# =================================================================================================================================
+# Stage "runs"
+# =================================================================================================================================
+
+PCM_gnu_mhd_runs:
+  needs: ["PCM_gnu_mhd_build"]
+  <<: *PCM_setup_gnu
+  <<: *script_runs_mhd
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_linadv_runs:
+  needs: ["PCM_gnu_linadv_build"]
+  <<: *PCM_setup_gnu
+  <<: *script_runs_linadv
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_maxwell_runs:
+  needs: ["PCM_gnu_maxwell_build"]
+  <<: *PCM_setup_gnu
+  <<: *script_runs_maxwell
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+PCM_gnu_nav-st_runs:
+  needs: ["PCM_gnu_nav-st_build"]
+  <<: *PCM_setup_gnu
+  <<: *script_runs_nav-st
+
+# =================================================================================================================================
+# Stage "cleanup"
+# =================================================================================================================================
+
+PCM_gnu_cleanup_cache:
+  needs: ["PCM_gnu_linadv_runs", "PCM_gnu_maxwell_runs", "PCM_gnu_mhd_runs", "PCM_gnu_nav-st_runs"]
+  <<: *PCM_setup_gnu
+  <<: *script_cleanup
