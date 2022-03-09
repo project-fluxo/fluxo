@@ -12,10 +12,12 @@
 !==================================================================================================================================
 !
 ! This module includes IDP correction routines that rely on the native LGL subcell FV discretization
-!
+! * If FV_TIMESTEP is active and the bar states are computed, the allowable time-step is updated with the very restrictive
+!   LLF CFL condition... Eq (40) of Pazner (2020) "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting".
 !==================================================================================================================================
 #include "defines.h"
 #define barStates 1
+! A switch to define if the output variable alpha_old contains a cumulative alpha (1), or the instant alpha before limiting (0). Must be changed in src/analyze/analyze.f90 as well!
 #define cumulativeAlphaOld 1
 module MOD_IDP
 #if NFVSE_CORR
@@ -62,14 +64,18 @@ contains
     use MOD_IDP_Vars
     use MOD_Globals    , only: MPIRoot, UNIT_stdOut
     use MOD_PreProc    , only: PP_N
-    use MOD_Mesh_Vars  , only: nElems, sJ
+    use MOD_Mesh_Vars  , only: nElems, sJ, MeshIsNonConforming
 #if !(barStates)
     use MOD_Mesh_Vars  , only: firstSlaveSide, LastSlaveSide, nSides
 #endif /*!(barStates)*/
+#if USE_AMR
+    use MOD_AMR_Vars           , only: UseAMR
+#endif /*USE_AMR*/
     use MOD_ReadInTools, only: GETINT, GETREAL, GETLOGICAL
     implicit none
     !-local-variables----------------------------------------
     integer :: i,j,k,eID
+    logical :: MeshNonConforming
     !--------------------------------------------------------
     SWRITE(UNIT_StdOut,'(132("-"))')
     SWRITE(UNIT_stdOut,'(A)') ' IDP Methods: '
@@ -100,6 +106,20 @@ contains
       IDPgamma = GETREAL   ('IDPgamma','6.0')
     end if
 #endif /*LOCAL_ALPHA*/
+    
+!   Some IDP methods are not implemented -yet- for nonconforming meshes
+!   -------------------------------------------------------------------
+    
+    ! Check if the mesh can be non-conforming
+    MeshNonConforming = MeshIsNonConforming
+#if USE_AMR
+    MeshNonConforming = UseAMR .or. MeshNonConforming
+#endif /*USE_AMR*/
+    
+    if ( MeshNonConforming .and. (IDPDensityTVD .or. IDPPressureTVD .or. IDPMathEntropy .or. IDPSpecEntropy) ) then
+      CALL abort(__STAMP__,'IDPDensityTVD/IDPPressureTVD/IDPMathEntropy/IDPSpecEntropy cannot be used with nonconforming meshes!',999,999.)
+      RETURN
+    end if
     
 !   Internal definitions (all are .FALSE. by default)
 !   -------------------------------------------------
@@ -150,12 +170,7 @@ contains
       IDPneedsUprev_ext = .TRUE.
 #endif /*barStates*/
     end if
-   
-! TODO: Add c-preprocessor definition for strict time-step restriction 
-    IDPneedsUbar = .TRUE.
-    IDPneedsUprev     = .TRUE.
-    IDPneedsUprev_ext = .TRUE.
-    
+       
 !   Allocate storage
 !   ----------------
     ! Alpha before limiting

@@ -14,6 +14,7 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
+! A switch to define if the output variable alpha_old contains a cumulative alpha (1), or the instant alpha before limiting (0). Must be changed in src/shockcapturing/idp.f90 as well!
 #define cumulativeAlphaOld 1
 !==================================================================================================================================
 !> Basic routines performing an analysis of the solution valid for all equation systems and testcases. 
