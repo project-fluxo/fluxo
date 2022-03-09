@@ -62,8 +62,8 @@ contains
   subroutine Init_IDP
     use MOD_NFVSE_Vars
     use MOD_IDP_Vars
-    use MOD_Globals    , only: MPIRoot, UNIT_stdOut
-    use MOD_PreProc    , only: PP_N
+    use MOD_Globals
+    use MOD_PreProc
     use MOD_Mesh_Vars  , only: nElems, sJ, MeshIsNonConforming
 #if !(barStates)
     use MOD_Mesh_Vars  , only: firstSlaveSide, LastSlaveSide, nSides
@@ -339,7 +339,7 @@ contains
 !> This subroutine has to be called after after every SSP-RK stage
 !===================================================================================================================================
   subroutine Apply_IDP(U,Ut,dt,tIn)
-    use MOD_PreProc     , only: PP_N
+    use MOD_PreProc
     use MOD_Mesh_Vars   , only: nElems
     use MOD_NFVSE_Vars  , only: alpha, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
 #if LOCAL_ALPHA
@@ -559,7 +559,7 @@ contains
 !===================================================================================================================================
   subroutine Get_IDP_Variables(U,dt,tIn)
     use MOD_NFVSE_Vars, only: alpha
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: Uprev_ext,Uprev
@@ -799,7 +799,7 @@ contains
 !> Density TVD correction
 !===================================================================================================================================
   subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt,eID)
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
     use MOD_Mesh_Vars     , only: nElems
@@ -977,7 +977,7 @@ contains
 !> Pressure TVD correction
 !===================================================================================================================================
   subroutine IDP_LimitPressureTVD(U,Ut,dt,sdt,eID)
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
     use MOD_Mesh_Vars     , only: nElems
@@ -1182,7 +1182,7 @@ contains
 !> Specific entropy correction (discrete local minimum principle)
 !===================================================================================================================================
   subroutine IDP_LimitSpecEntropy(U,Ut,dt,sdt,eID)
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
@@ -1344,7 +1344,7 @@ contains
 !> Mathematical entropy correction (discrete local maximum principle)
 !===================================================================================================================================
   subroutine IDP_LimitMathEntropy(U,Ut,dt,sdt,eID)
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha
 #if LOCAL_ALPHA
@@ -1503,7 +1503,7 @@ contains
 !>    ... But with the possibility to be used locally
 !===================================================================================================================================
   subroutine IDP_LimitPositivity(U,Ut,dt,sdt,eID)
-    use MOD_PreProc       , only: PP_N
+    use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
     use MOD_Mesh_Vars     , only: nElems
     use MOD_IDP_Vars      , only: dalpha
@@ -1878,7 +1878,7 @@ contains
                                          dalpha_loc,alpha_loc, &
 #endif /*LOCAL_ALPHA*/
                                                              dt,sdt,eID)
-    use MOD_PreProc   , only: PP_N
+    use MOD_PreProc
     use MOD_IDP_Vars  , only: alpha_maxIDP
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars, only: ftilde_DG, gtilde_DG, htilde_DG
