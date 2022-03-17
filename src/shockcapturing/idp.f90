@@ -422,6 +422,8 @@ contains
 #if LOCAL_ALPHA
         alpha_loc(:,:,:,eID) = 0.0
         alphaold (:,:,:,eID) = 0.0
+#else
+        alphaold(eID) = 0.0
 #endif /*LOCAL_ALPHA*/  
       else
         doIDP = .FALSE.
@@ -512,34 +514,34 @@ contains
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max, idp_bounds_delta
-!~    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
     implicit none
     !-arguments------------------------------------------------------------
     !----------------------------------------------------------------------
     
-!~    if (IDPDensityTVD .or. IDPPositivity) then
+    if (IDPDensityTVD .or. IDPPositivity) then
       rho_min =-huge(1.0)
-!~    end if
+    end if
       
-!~    if (IDPDensityTVD) then
+    if (IDPDensityTVD) then
       rho_max = huge(1.0)
-!~    end if
+    end if
     
-!~    if (IDPSpecEntropy) then
+    if (IDPSpecEntropy) then
       s_min =-huge(1.0)
-!~    end if
+    end if
     
-!~    if (IDPMathEntropy) then
+    if (IDPMathEntropy) then
       s_max = huge(1.0)
-!~    end if
+    end if
     
-!~    if (IDPPositivity .or. IDPPressureTVD) then
+    if (IDPPositivity .or. IDPPressureTVD) then
       p_min =-huge(1.0)
-!~    end if
+    end if
 
-!~    if (IDPPressureTVD) then
+    if (IDPPressureTVD) then
       p_max = huge(1.0)
-!~    end if
+    end if
   
   end subroutine ResetBounds
 !===================================================================================================================================
@@ -1054,6 +1056,7 @@ contains
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG, p_min, p_max, p_safe
     use MOD_IDP_Vars      , only: Uprev
+    use MOD_DG_Vars       , only: Source
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -1089,6 +1092,11 @@ contains
 #if barStates
         ! Previous sol
         call Get_Pressure(Uprev  (:,i  ,j  ,k  ,eID),p)
+        p_min(i,j,k) = min(p_min(i,j,k), p)
+        p_max(i,j,k) = max(p_max(i,j,k), p)
+        
+        ! Source term
+        call Get_Pressure(Uprev  (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID),p)
         p_min(i,j,k) = min(p_min(i,j,k), p)
         p_max(i,j,k) = max(p_max(i,j,k), p)
         
@@ -1416,6 +1424,7 @@ contains
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: IDPMaxIter, s_max
+    use MOD_DG_Vars       , only: Source
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
@@ -1443,7 +1452,10 @@ contains
         
 #if barStates
         ! Previous entropy of the node (ubar_ii)
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID)))
+        
+        ! Source term
+        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)))
         
         ! TODO: Compute for all interfaces before the loop!
         !xi+
@@ -2106,6 +2118,7 @@ contains
     SDEALLOCATE ( s_min )
     SDEALLOCATE ( s_max )
     SDEALLOCATE ( p_min )
+    SDEALLOCATE ( p_max )
     
   end subroutine Finalize_IDP
 #endif /*NFVSE_CORR*/  
