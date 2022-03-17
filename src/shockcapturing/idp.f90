@@ -47,6 +47,8 @@ contains
     
 !   Additional options
 !   ------------------
+    call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator fires (and the indicator's alpha is neglected)", "F")
+    
     call prms%CreateRealOption(  "PositCorrFactor",  " The correction factor for IDPPositivity=T", "0.1")
     call prms%CreateIntOption(        "IDPMaxIter",  " Maximum number of iterations for positivity limiter", "10")
     
@@ -89,6 +91,8 @@ contains
     IDPPressureTVD = GETLOGICAL('IDPPressureTVD' ,'F')
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
+    
+    IDPafterIndicator = GETLOGICAL('IDPafterIndicator','F')
     
     ! Consistency check
     if (IDPMathEntropy .and. IDPSpecEntropy) then
@@ -341,7 +345,7 @@ contains
   subroutine Apply_IDP(U,Ut,dt,tIn)
     use MOD_PreProc
     use MOD_Mesh_Vars   , only: nElems
-    use MOD_NFVSE_Vars  , only: alpha, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps
+    use MOD_NFVSE_Vars  , only: alpha, alpha_old, maximum_alpha, amount_alpha, amount_alpha_steps, alpha_min
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars  , only: alpha_loc
     use MOD_Analyze_Vars, only: wGPVol
@@ -350,7 +354,7 @@ contains
     use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPressureTVD, IDPPositivity, dalpha
-    use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG
+    use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -366,8 +370,8 @@ contains
 #else
     real :: alphaold(nElems)
 #endif /*LOCAL_ALPHA*/
+    logical :: doIDP
     !--------------------------------------------------------
-
 !   Initialize
 !   ----------
 #if LOCAL_ALPHA
@@ -377,6 +381,7 @@ contains
 #endif /*LOCAL_ALPHA*/
     
     sdt = 1./dt
+    doIDP = .not. IDPafterIndicator
     
 !   Get the variables for limiting in the right position
 !   ----------------------------------------------------
@@ -391,6 +396,7 @@ contains
 #if LOCAL_ALPHA
       dalpha_loc = 0.0
 #endif /*LOCAL_ALPHA*/
+      call ResetBounds()
 !     Enforce 2D condition
 !     --------------------
       if (IDPForce2D) then
@@ -406,12 +412,30 @@ contains
         end do       ; end do       ; end do
 #endif /*LOCAL_ALPHA*/  
       end if
+!     Apply IDP limiters only where indicator fires?
+!     ----------------------------------------------
+      if (IDPafterIndicator .and. (alpha(eID) > alpha_min )) then
+        doIDP = .TRUE.
+        ! Reverse blending
+        U (:,:,:,:,eID) = U (:,:,:,:,eID) - alpha(eID) * FFV_m_FDG(:,:,:,:,eID) * dt
+        Ut(:,:,:,:,eID) = Ut(:,:,:,:,eID) - alpha(eID) * FFV_m_FDG(:,:,:,:,eID)
+        ! Zero alpha
+        alpha(eID) = 0.0
+#if LOCAL_ALPHA
+        alpha_loc(:,:,:,eID) = 0.0
+        alphaold (:,:,:,eID) = 0.0
+#endif /*LOCAL_ALPHA*/  
+      else
+        doIDP = .FALSE.
+      end if
 !     Call all user-defined limiters to obtain dalpha
 !     -----------------------------------------------
-      if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-      if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-      if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-      if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      if (doIDP) then
+        if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+        if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+        if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+        if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+      end if
       if (IDPPositivity)  call IDP_LimitPositivity (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       
 !     Enforce 2D condition
@@ -485,10 +509,48 @@ contains
 #endif /*cumulativeAlphaOld*/
     
   end subroutine Apply_IDP
+
+#if DEBUG || IDP_CHECKBOUNDS
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
-#if DEBUG || IDP_CHECKBOUNDS
+  subroutine ResetBounds
+    use MOD_Preproc
+    use MOD_Globals
+    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max, idp_bounds_delta
+!~    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    implicit none
+    !-arguments------------------------------------------------------------
+    !----------------------------------------------------------------------
+    
+!~    if (IDPDensityTVD .or. IDPPositivity) then
+      rho_min =-huge(1.0)
+!~    end if
+      
+!~    if (IDPDensityTVD) then
+      rho_max = huge(1.0)
+!~    end if
+    
+!~    if (IDPSpecEntropy) then
+      s_min =-huge(1.0)
+!~    end if
+    
+!~    if (IDPMathEntropy) then
+      s_max = huge(1.0)
+!~    end if
+    
+!~    if (IDPPositivity .or. IDPPressureTVD) then
+      p_min =-huge(1.0)
+!~    end if
+
+!~    if (IDPPressureTVD) then
+      p_max = huge(1.0)
+!~    end if
+  
+  end subroutine ResetBounds
+!===================================================================================================================================
+!> Check that all bounds are met
+!===================================================================================================================================
   subroutine CheckBounds(U,eID)
     use MOD_Preproc
     use MOD_Globals

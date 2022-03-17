@@ -481,7 +481,7 @@ contains
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
     use MOD_IDP_Vars           , only: IDPneedsUprev, Uprev
 #if NFVSE_CORR
-    use MOD_IDP_Vars           , only: FFV_m_FDG
+    use MOD_IDP_Vars           , only: FFV_m_FDG, IDPafterIndicator, IDPPositivity
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
@@ -543,7 +543,10 @@ contains
 #endif /*NFVSE_CORR*/
     
     do iElem=1,nElems
-#if !defined(NFVSE_CORR)
+      
+#if NFVSE_CORR
+      if ( IDPafterIndicator .and. (.not. IDPPositivity) .and. ALMOSTEQUAL(alpha(iElem),0.0) ) cycle
+#else
       if ( ALMOSTEQUAL(alpha(iElem),0.0) ) cycle
 #endif /*NFVSE_CORR*/
       

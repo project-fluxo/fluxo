@@ -20,6 +20,8 @@ module MOD_IDP_Vars
   logical :: IDPneedsUsafe     = .FALSE.
   logical :: IDPneedsUprev     = .FALSE.
   
+  logical :: IDPafterIndicator = .FALSE.
+  
   ! Variables to modify the local stencil where the bounds are computed
   integer, allocatable :: idx_p1(:)
   integer, allocatable :: idx_m1(:)
