@@ -98,9 +98,7 @@ USE MOD_Equation_Vars,      ONLY: StrVarNames
 USE MOD_AnalyzeEquation,    ONLY: InitAnalyzeEquation
 USE MOD_Testcase_Analyze,   ONLY: InitAnalyzeTestcase
 #if NFVSE_CORR
-#if DEBUG || IDP_CHECKBOUNDS
 USE MOD_IDP_Vars,           ONLY: idp_bounds_num,idp_bounds_names
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*NFVSE_CORR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -186,12 +184,10 @@ IF(MPIroot.AND.doAnalyzeToFile)THEN
   A2F_VarNames(A2F_iVar) = 'alpha_max'
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar) = 'alpha_amount'
-#if DEBUG || IDP_CHECKBOUNDS
   if (idp_bounds_num > 0) then
     A2F_VarNames(A2F_iVar+1:A2F_iVar+idp_bounds_num) = idp_bounds_names(1:idp_bounds_num)
     A2F_iVar=A2F_iVar+idp_bounds_num
   end if
-#endif /*DEBUG || IDP_CHECKBOUNDS*/  
 #endif /*NFVSE_CORR*/
 
 #if SHOCK_NFVSE
@@ -332,9 +328,7 @@ USE MOD_Mesh_Vars,          ONLY: nElems
 #if cumulativeAlphaOld
 use MOD_NFVSE_Vars  , only: alpha_old
 #endif /*cumulativeAlphaOld*/
-#if DEBUG || IDP_CHECKBOUNDS
 USE MOD_IDP_Vars,           ONLY: idp_bounds_num,idp_bounds_names,idp_bounds_delta
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*NFVSE_CORR*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
@@ -445,7 +439,6 @@ IF(MPIroot) THEN
   WRITE(UNIT_StdOut,formatStr)' max(d_alpha): ', maximum_alpha
   WRITE(UNIT_StdOut,formatStr)' avg(sum(d_alpha)/nElems): ' , amount_alpha
   ! now the bounds
-#if DEBUG || IDP_CHECKBOUNDS
   if (idp_bounds_num > 0) then
     CALL MPI_REDUCE(MPI_IN_PLACE,idp_bounds_delta,idp_bounds_num,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
     IF(doAnalyzeToFile)THEN
@@ -458,14 +451,11 @@ IF(MPIroot) THEN
     WRITE(formatStr,'(A,I0,A)')'(A9,',idp_bounds_num,'ES21.12,A)'
     WRITE(UNIT_StdOut,formatStr)'       | ',  idp_bounds_delta(1:idp_bounds_num), ' | '
   end if
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #if MPI
 ELSE
   CALL MPI_REDUCE(maximum_alpha,0        ,1,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
   CALL MPI_REDUCE(amount_alpha ,0        ,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
-#if DEBUG || IDP_CHECKBOUNDS
   if (idp_bounds_num > 0) CALL MPI_REDUCE(idp_bounds_delta,0     ,idp_bounds_num,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*MPI*/
 END IF
 maximum_alpha=0.0
@@ -474,9 +464,7 @@ amount_alpha_steps=0
 #if cumulativeAlphaOld
 alpha_old = 0.0
 #endif /*cumulativeAlphaOld*/
-#if DEBUG || IDP_CHECKBOUNDS
 idp_bounds_delta = 0.0
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 #endif /*NFVSE_CORR*/
 #if SHOCK_NFVSE
 alpha_globmin=MINVAL(alpha)

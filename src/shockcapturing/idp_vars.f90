@@ -33,11 +33,9 @@ module MOD_IDP_Vars
   real            :: IDPgamma               ! User-defined: Constant for the subcell limiting of convex (nonlinear) constraints (must be IDPgamma>=2*d, where d is the number of dimensions of the problem)
   
   ! Variables for analyze bounds
-#if DEBUG || IDP_CHECKBOUNDS
   integer             :: idp_bounds_num
   character(len=255)  :: idp_bounds_names(6)
   real                :: idp_bounds_delta(6)
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 
   ! Containers
   real,allocatable    :: FFV_m_FDG(:,:,:,:,:)

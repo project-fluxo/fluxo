@@ -285,7 +285,6 @@ contains
     amount_alpha_steps = 0
     
     ! Now the analyze bounds
-#if DEBUG || IDP_CHECKBOUNDS
     idp_bounds_num = 0
     
     if (IDPDensityTVD .or. IDPPositivity) then
@@ -318,7 +317,6 @@ contains
       idp_bounds_names(idp_bounds_num) = 'p_max'
     end if
     idp_bounds_delta = 0.0
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
     
 !   Finally enforce 2D condition
   if (IDPForce2D) then
@@ -466,9 +464,7 @@ contains
 
 !     Check that we are within bounds
 !     -------------------------------
-#if DEBUG || IDP_CHECKBOUNDS
       call CheckBounds(U(:,:,:,:,eID),eID)
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
     end do
     
 !   Update variables for the analyze routines
@@ -509,8 +505,6 @@ contains
 #endif /*cumulativeAlphaOld*/
     
   end subroutine Apply_IDP
-
-#if DEBUG || IDP_CHECKBOUNDS
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
@@ -612,7 +606,6 @@ contains
     end do       ; end do       ; end do ! i,j,k
   
   end subroutine CheckBounds
-#endif /*DEBUG || IDP_CHECKBOUNDS*/
 !===================================================================================================================================
 !> Get the IDP variables in the right position to perform limiting
 !> ATTENTION: 1) U_master and U_slave need to have the previous solution!
