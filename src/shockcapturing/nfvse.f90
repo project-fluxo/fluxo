@@ -11,6 +11,8 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
+!TODO: define  barstates in another manner!!!
+#define barStates 1
 module MOD_NFVSE
 #if SHOCK_NFVSE
   use MOD_NFVSE_Vars
@@ -51,7 +53,7 @@ module MOD_NFVSE
   private
   public :: VolInt_NFVSE, InitNFVSE, FinalizeNFVSE
   public :: DefineParametersNFVSE
-  public :: InitNFVSEAfterAdaptation
+  public :: InitNFVSEAfterAdaptation1, InitNFVSEAfterAdaptation2
   public :: CalcBlendingCoefficient
   
 contains
@@ -368,15 +370,45 @@ contains
   end subroutine ComputeSubcellMetrics
 !===================================================================================================================================
 !> Reinitializes all variables that need reinitialization after the h-adaptation
+!> Transfers the blending coefficient to the new mesh after adaptation (but before load balancing!)
+!===================================================================================================================================  
+  subroutine InitNFVSEAfterAdaptation1(nElems,ChangeElem)
+    use MOD_NFVSE_Vars         , only: alpha
+    implicit none
+    !-arguments-----------------------------------
+    integer, intent(in) :: nElems
+    integer, intent(in) :: ChangeElem(8,nElems)
+    !-local-variables-----------------------------
+    integer          :: eID
+    real,allocatable,target :: alphaNew(:)
+    !---------------------------------------------
+    allocate ( alphaNew(nElems) )
+    ! Set with old values
+    do eID=1, nElems
+      if (ChangeElem(1,eID) < 0) then
+        ! refinement
+        alphaNew(eID) = alpha(-ChangeElem(1,eID))
+      elseif (ChangeElem(2,eID) > 0) then
+        ! coarsening
+        alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
+      else
+        ! simple reasignment
+        alphaNew(eID) = alpha(ChangeElem(1,eID))
+      endif
+    end do
+    call move_alloc(alphaNew,alpha)
+  end subroutine InitNFVSEAfterAdaptation1
+!===================================================================================================================================
+!> Reinitializes all variables that need reinitialization after the h-adaptation
 !> ATTENTION: The subcell metrics are always recomputed, as the metrics of the high-order DG elements
 !===================================================================================================================================
-  subroutine InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
+  subroutine InitNFVSEAfterAdaptation2(nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
     USE MOD_Globals
     use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: alpha_old
-    use MOD_IDP_Vars           , only: FFV_m_FDG
+    use MOD_IDP_Vars
 #endif /*NFVSE_CORR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
@@ -385,7 +417,6 @@ contains
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
-    integer, intent(in) :: ChangeElem(8,nElems)
     integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld
     !-local-variables-----------------------------
     integer          :: eID
@@ -413,13 +444,84 @@ contains
       SDEALLOCATE(alpha_old)
       allocate ( FFV_m_FDG(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) )
 #if LOCAL_ALPHA
+      SDEALLOCATE(alpha_loc)
       allocate ( alpha_loc(0:PP_N,0:PP_N,0:PP_N,nElems) )
+      do eID=1, nElems
+        alpha_loc(:,:,:,eID) = alpha(eID)
+      end do
+      
+      
       allocate ( alpha_old(0:PP_N,0:PP_N,0:PP_N,nElems) )
 #else
       allocate ( alpha_old(nElems) )
 #endif /*LOCAL_ALPHA*/
       FFV_m_FDG = 0.
       alpha_old = 0.
+      
+      ! Usafe = U_FV (with external DOFs)
+    if (IDPneedsUsafe) then
+      SDEALLOCATE(Usafe)
+      SDEALLOCATE(p_safe)
+      allocate ( Usafe      (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+      allocate ( p_safe             ( 0:PP_N  , 0:PP_N  , 0:PP_N  ,nElems) )
+    end if
+    
+    ! Solution in the previous step (with external DOFs)
+    if (IDPneedsUprev) then
+      SDEALLOCATE(Uprev)
+      allocate ( Uprev      (PP_nVar,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+    end if
+    
+    ! Container for external Uprev
+    if (IDPneedsUprev_ext) then
+      SDEALLOCATE(Uprev_ext)
+      allocate( Uprev_ext    (PP_nVar, 0:PP_N, 0:PP_N, 6,nElems) )
+    end if
+    
+    ! Allocate bar states if needed
+#if barStates
+    if (IDPneedsUbar) then
+      SDEALLOCATE(Ubar_xi  )
+      SDEALLOCATE(Ubar_eta )
+      SDEALLOCATE(Ubar_zeta)
+      allocate( Ubar_xi      (PP_nVar,-1:PP_N  , 0:PP_N  , 0:PP_N  ,nElems) )
+      allocate( Ubar_eta     (PP_nVar, 0:PP_N  ,-1:PP_N  , 0:PP_N  ,nElems) )
+      allocate( Ubar_zeta    (PP_nVar, 0:PP_N  , 0:PP_N  ,-1:PP_N  ,nElems) )
+    end if
+#else
+    ! Containers for previous entropy (with external DOFs)
+    if (IDPMathEntropy .or. IDPSpecEntropy) then
+      SDEALLOCATE(EntPrev)
+      SDEALLOCATE(EntPrev_master)
+      SDEALLOCATE(EntPrev_slave)
+      SDEALLOCATE(EntPrev_ext)
+      allocate( EntPrev       (     1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
+      allocate( EntPrev_master(     1, 0:PP_N  , 0:PP_N            ,nSides) )
+      allocate( EntPrev_slave (     1, 0:PP_N  , 0:PP_N            ,firstSlaveSide:LastSlaveSide) )
+      allocate( EntPrev_ext   (     1, 0:PP_N  , 0:PP_N          ,6,nElems) )
+    end if
+    if (IDPDensityTVD .or. IDPPressureTVD) then
+      SDEALLOCATE(Usafe_ext)
+      allocate( Usafe_ext    (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
+    end if
+#endif /*barStates*/
+    
+    ! Variables for local alpha
+#if LOCAL_ALPHA
+    SDEALLOCATE(ftilde_DG)
+    SDEALLOCATE(gtilde_DG)
+    SDEALLOCATE(htilde_DG)
+    allocate ( ftilde_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
+    allocate ( gtilde_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
+    allocate ( htilde_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
+    ftilde_DG = 0.0
+    gtilde_DG = 0.0
+    htilde_DG = 0.0
+    
+    SDEALLOCATE(dalpha_loc)
+    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
+#endif /*LOCAL_ALPHA*/
+      
 #endif /*NFVSE_CORR*/
     end if
     
@@ -427,31 +529,6 @@ contains
 !   -----------------
     alpha_Master = 0.0
     alpha_Slave  = 0.0
-    
-    ! Check if we need the alpha from the previous mesh and assign it if we do!
-    if ( (ComputeAlpha==20 .and. ShockBlendCoef<-1.0) .or. (TimeRelFactor > alpha_min/alpha_max) ) then
-      allocate ( alphaNew(nElems) )
-      ! Set with old values
-      do eID=1, nElems
-        if (ChangeElem(1,eID) < 0) then
-          ! refinement
-          alphaNew(eID) = alpha(-ChangeElem(1,eID))
-        elseif (ChangeElem(2,eID) > 0) then
-          ! coarsening
-          alphaNew(eID) = maxval(alpha(ChangeElem(1:8,eID)))
-        else
-          ! simple reasignment
-          alphaNew(eID) = alpha(ChangeElem(1,eID))
-        endif
-      end do
-      call move_alloc(alphaNew,alpha)
-    else ! The time relaxation has no effect, alpha can be set to 0
-      if (nElems /= nElemsOld) then
-        SDEALLOCATE(alpha)
-        allocate(alpha(nElems))
-      end if
-      alpha = 0.0
-    end if
     
 !   Compute Subcell Metrics
 !   -----------------------
@@ -468,7 +545,7 @@ contains
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
-  end subroutine InitNFVSEAfterAdaptation
+  end subroutine InitNFVSEAfterAdaptation2
 !===================================================================================================================================
 !> Computes the "volume integral": Spatial contribution to Ut by the subcell finite volumes
 !> Attention 1: 1/J(i,j,k) is not yet accounted for

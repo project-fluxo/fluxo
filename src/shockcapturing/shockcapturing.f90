@@ -37,7 +37,7 @@ END INTERFACE
 PUBLIC :: DefineParametersShockCapturing
 PUBLIC :: InitShockCapturing
 PUBLIC :: FinalizeShockCapturing
-public :: InitShockCapturingAfterAdapt
+public :: InitShockCapturingAfterAdapt1, InitShockCapturingAfterAdapt2
 !===================================================================================================================================
 CONTAINS
 
@@ -126,22 +126,35 @@ ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitShockCapturing
+
+SUBROUTINE InitShockCapturingAfterAdapt1(nElems,ChangeElem)
+  use MOD_NFVSE    , only: InitNFVSEAfterAdaptation1
+  implicit none
+  !-arguments-----------------------------------
+  integer, intent(in) :: nElems
+  integer, intent(in) :: ChangeElem(8,nElems)
+  !---------------------------------------------
+  
+#if SHOCK_NFVSE
+  call InitNFVSEAfterAdaptation1(nElems,ChangeElem)
+#endif /*SHOCK_NFVSE*/
+
+END SUBROUTINE InitShockCapturingAfterAdapt1
 !===================================================================================================================================
 !> Reinitializes all variables that need reinitialization after the h-adaptation
 !===================================================================================================================================
-SUBROUTINE InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
-  use MOD_NFVSE    , only: InitNFVSEAfterAdaptation
+SUBROUTINE InitShockCapturingAfterAdapt2(nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
+  use MOD_NFVSE    , only: InitNFVSEAfterAdaptation2
   use MOD_Mesh_Vars, only: nElems
   implicit none
   !-arguments-----------------------------------
-  integer, intent(in) :: ChangeElem(8,nElems)
   integer, intent(in) :: nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld
   !---------------------------------------------
   
 #if SHOCK_NFVSE
-  call InitNFVSEAfterAdaptation(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
+  call InitNFVSEAfterAdaptation2(nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCK_NFVSE*/
-END SUBROUTINE InitShockCapturingAfterAdapt
+END SUBROUTINE InitShockCapturingAfterAdapt2
   
 SUBROUTINE FinalizeShockCapturing()
 !============================================================================================================================

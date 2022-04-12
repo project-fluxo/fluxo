@@ -350,7 +350,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
 #endif /*MPI*/
 #endif /* PARABOLIC */
 #if SHOCKCAPTURE
-  use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt
+  use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt1, InitShockCapturingAfterAdapt2
 #endif /*SHOCKCAPTURE*/
   use MOD_Equation,           only: InitEquationAfterAdapt
   USE, INTRINSIC :: ISO_C_BINDING
@@ -445,6 +445,14 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   END DO
   CALL MOVE_ALLOC(Elem_xGP_New, Elem_xGP)
   CALL MOVE_ALLOC(U_New, U)
+! =====================================================================================================
+! Transfer the additional variables to the new mesh
+! ATTENTION!!: All variables that are load-balanced must be transferred!
+! =====================================================================================================
+#if SHOCKCAPTURE
+  call InitShockCapturingAfterAdapt1(FortranData%nElems,ChangeElem)
+#endif /*SHOCKCAPTURE*/
+
   
 ! =============================================
 ! Perform load balancing and display statistics
@@ -757,7 +765,7 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   call FinalizeMortarArrays()
   call InitMortarArrays()
 #if SHOCKCAPTURE
-  call InitShockCapturingAfterAdapt(ChangeElem,nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
+  call InitShockCapturingAfterAdapt2(nElemsOld,nSidesOld,firstSlaveSideOld,LastSlaveSideOld,firstMortarInnerSideOld)
 #endif /*SHOCKCAPTURE*/
 #if POSITIVITYPRES
   call FinalizePositivityPreservation()
