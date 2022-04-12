@@ -235,7 +235,7 @@ END FUNCTION INTTOSTR
 !> Converts real to string
 !==================================================================================================================================
 PURE FUNCTION REALTOSTR(value) 
-INTEGER,INTENT(IN)  :: value
+REAL,INTENT(IN)     :: value
 CHARACTER(LEN=255)  :: REALTOSTR
 WRITE(REALTOSTR,*) value
 REALTOSTR = trim(REALTOSTR)
