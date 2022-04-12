@@ -21,6 +21,7 @@ module MOD_IDP_Vars
   logical :: IDPneedsUprev     = .FALSE.
   
   logical :: IDPafterIndicator = .FALSE.
+  real    :: IDPalpha_min                 ! Minimum alpha to use IDP methods
   
   ! Variables to modify the local stencil where the bounds are computed
   integer, allocatable :: idx_p1(:)

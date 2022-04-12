@@ -47,7 +47,8 @@ contains
     
 !   Additional options
 !   ------------------
-    call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator fires (and the indicator's alpha is neglected)", "F")
+    call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator alpha>IDPalpha_min (and the indicator's alpha is neglected)", "F")
+    call prms%CreateRealOption(  "IDPalpha_min"   ,  " Parameter for IDPafterIndicator=T (Default: alpha_min)")
     
     call prms%CreateRealOption(  "PositCorrFactor",  " The correction factor for IDPPositivity=T", "0.1")
     call prms%CreateIntOption(        "IDPMaxIter",  " Maximum number of iterations for positivity limiter", "10")
@@ -74,6 +75,7 @@ contains
     use MOD_AMR_Vars           , only: UseAMR
 #endif /*USE_AMR*/
     use MOD_ReadInTools, only: GETINT, GETREAL, GETLOGICAL
+    use MOD_StringTools, only: REALTOSTR
     implicit none
     !-local-variables----------------------------------------
     integer :: i,j,k,eID
@@ -93,6 +95,7 @@ contains
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
     
     IDPafterIndicator = GETLOGICAL('IDPafterIndicator','F')
+    IDPalpha_min      = GETREAL   ('IDPalpha_min',REALTOSTR(alpha_min))
     
     ! Consistency check
     if (IDPMathEntropy .and. IDPSpecEntropy) then
@@ -352,7 +355,7 @@ contains
     use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPressureTVD, IDPPositivity, dalpha
-    use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator
+    use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator, IDPalpha_min
     implicit none
     !-arguments----------------------------------------------
     real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< Current solution (in RK stage)
@@ -412,8 +415,12 @@ contains
       end if
 !     Apply IDP limiters only where indicator fires?
 !     ----------------------------------------------
-      if (IDPafterIndicator .and. (alpha(eID) > alpha_min )) then
-        doIDP = .TRUE.
+      if (IDPafterIndicator) then
+        if (alpha(eID) >= IDPalpha_min) then
+          doIDP = .TRUE.
+        else
+          doIDP = .FALSE.
+        end if
         ! Reverse blending
         U (:,:,:,:,eID) = U (:,:,:,:,eID) - alpha(eID) * FFV_m_FDG(:,:,:,:,eID) * dt
         Ut(:,:,:,:,eID) = Ut(:,:,:,:,eID) - alpha(eID) * FFV_m_FDG(:,:,:,:,eID)
@@ -425,11 +432,10 @@ contains
 #else
         alphaold(eID) = 0.0
 #endif /*LOCAL_ALPHA*/  
-      else
-        doIDP = .FALSE.
       end if
-!     Call all user-defined limiters to obtain dalpha
-!     -----------------------------------------------
+      
+!     Call all user-defined limiters to obtain dalpha and set bounds
+!     --------------------------------------------------------------
       if (doIDP) then
         if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
@@ -520,7 +526,7 @@ contains
     !----------------------------------------------------------------------
     
     if (IDPDensityTVD .or. IDPPositivity) then
-      rho_min =-huge(1.0)
+      rho_min =0.0
     end if
       
     if (IDPDensityTVD) then
@@ -536,7 +542,7 @@ contains
     end if
     
     if (IDPPositivity .or. IDPPressureTVD) then
-      p_min =-huge(1.0)
+      p_min =0.0
     end if
 
     if (IDPPressureTVD) then
@@ -617,7 +623,7 @@ contains
   subroutine Get_IDP_Variables(U,dt,tIn)
     use MOD_NFVSE_Vars, only: alpha
     use MOD_PreProc
-    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe
+    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe, IDPalpha_min
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: Uprev_ext,Uprev
     use MOD_IDP_Vars      , only: Usafe, p_safe
@@ -681,6 +687,7 @@ contains
     if (IDPneedsUbar) then
       maxdt_IDP = huge(1.0)
       do eID=1, nElems
+        if (alpha(eID) < IDPalpha_min ) cycle
         associate (SCM => SubCellMetrics(eID))
         do i=-1, PP_N ! i goes through the interfaces
           do k=0, PP_N  ; do j=0, PP_N ! j and k go through DOFs
