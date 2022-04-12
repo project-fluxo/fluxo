@@ -85,6 +85,10 @@ INTERFACE INTTOSTR
   MODULE PROCEDURE INTTOSTR
 END INTERFACE
 
+INTERFACE REALTOSTR
+  MODULE PROCEDURE REALTOSTR
+END INTERFACE
+
 INTERFACE ISINT
   MODULE PROCEDURE ISINT
 END INTERFACE
@@ -101,6 +105,7 @@ PUBLIC :: LowCase
 PUBLIC :: STRICMP
 PUBLIC :: StripSpaces
 PUBLIC :: INTTOSTR
+PUBLIC :: REALTOSTR
 PUBLIC :: ISINT
 PUBLIC :: set_formatting
 PUBLIC :: clear_formatting
@@ -225,6 +230,16 @@ INTEGER,INTENT(IN)  :: value
 CHARACTER(LEN=255)  :: INTTOSTR
 WRITE(INTTOSTR,"(I20)") value
 END FUNCTION INTTOSTR
+
+!==================================================================================================================================
+!> Converts real to string
+!==================================================================================================================================
+PURE FUNCTION REALTOSTR(value) 
+INTEGER,INTENT(IN)  :: value
+CHARACTER(LEN=255)  :: REALTOSTR
+WRITE(REALTOSTR,*) value
+REALTOSTR = trim(REALTOSTR)
+END FUNCTION REALTOSTR
 
 !==================================================================================================================================
 !> Checks if a string is an integer

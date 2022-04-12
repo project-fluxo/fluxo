@@ -105,6 +105,9 @@ SUBROUTINE DefineParametersAMR()
                                                         "  2: Do nothing (needed to restart AMR simulation properly)",&
                                                   '0')
  CALL prms%CreateRealOption(   'IniHalfwidthAMR',       " Parameter for InitialRefinement.","0.1")
+#if SHOCK_NFVSE
+ CALL prms%CreateRealOption(   'AMRalpha_min'   ,       " Minimum alpha (shock capturing) to activate refinement", "0.1") 
+#endif /*SHOCK_NFVSE*/
 END SUBROUTINE DefineParametersAMR
 
 
@@ -163,6 +166,10 @@ SUBROUTINE InitAMR()
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
+    
+#if SHOCK_NFVSE
+    AMRalpha_min = GetREal('AMRalpha_min',"0.1")
+#endif /*SHOCK_NFVSE*/
     
     ! Do some checks
     if (MinLevel > MaxLevel) then

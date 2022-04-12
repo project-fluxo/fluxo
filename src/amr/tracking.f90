@@ -38,6 +38,7 @@ subroutine InitialAMRRefinement()
   use MOD_AMR_Vars    , only: InitialRefinement, UseAMR, MaxLevel, MinLevel, IniHalfwidthAMR
   use MOD_AMR         , only: RunAMR
   use MOD_Mesh_Vars   , only: nElems, Elem_xGP
+  use MOD_DG          , only: DGTimeDerivative
   implicit none
   !-local-variables-----------------------------------------
   real    :: r
@@ -52,6 +53,7 @@ subroutine InitialAMRRefinement()
   select case (InitialRefinement)  
     case default ! (0) Use the default indicator up to max-level
       do iter = 1,MaxLevel
+        call DGTimeDerivative(0.0)
         call PerformAMR()
         call InitData()
       end do
@@ -108,7 +110,8 @@ end subroutine
         USE MOD_AMR_Vars,               ONLY : MinLevel, MaxLevel, RefineVal, CoarseVal, AMR_Indicator
         USE MOD_P4EST,                  ONLY: SaveP4est
 #if SHOCK_NFVSE
-        use MOD_NFVSE_Vars,             only: alpha, alpha_max, SpacePropFactor
+        use MOD_NFVSE_Vars,             only: alpha
+        use MOD_AMR_Vars,               only: AMRalpha_min
 #endif /*SHOCK_NFVSE*/
         IMPLICIT NONE
         ! SAVE
@@ -132,7 +135,7 @@ end subroutine
           END IF
 #if SHOCK_NFVSE
           ! Always refine if the shock capturing is firing
-          if ( alpha(iElem) > min(0.1,alpha_max*max(0.5,SpacePropFactor))) ElemToRefineAndCoarse(iElem) = MaxLevel
+          if ( alpha(iElem) >= AMRalpha_min) ElemToRefineAndCoarse(iElem) = MaxLevel
 #endif /*SHOCK_NFVSE*/
         ENDDO
 

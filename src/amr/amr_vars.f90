@@ -39,6 +39,9 @@ INTEGER                     :: nDoAMRShift          ! Initial shift fot time-ste
 integer                     :: InitialRefinement    ! Initial refinement switch
 integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
 real                        :: IniHalfwidthAMR
+#if SHOCK_NFVSE
+real                        :: AMRalpha_min         ! Minimum alpha (shock capturing) to activate refinement
+#endif /*SHOCK_NFVSE*/
 REAL                        :: RefineVal            ! Loaded from .ini file
 REAL                        :: CoarseVal            ! Loaded from .ini file 
 real, allocatable           :: Vdm_Interp_1_0(:,:)    ! Interpolation Vandermonde matrix from [-1,1] to first half of [-1,3]
