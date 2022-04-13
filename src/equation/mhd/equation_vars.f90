@@ -1,8 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
-! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -113,6 +113,7 @@ INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
+LOGICAL             :: useEntropyProlongToFace  !< set true if entropy prolongtoface interpolation is needed. Is set depending on the whichVolumeFlux
 #endif /*PP_DiscType==2*/
 PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDissipMatrices =>Null()
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 

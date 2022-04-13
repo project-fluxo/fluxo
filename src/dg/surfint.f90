@@ -1,7 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2021 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -54,6 +55,20 @@ USE MOD_DG_Vars,            ONLY: L_HatMinus
 #elif (PP_NodeType==2)
 USE MOD_DG_Vars,            ONLY: L_HatMinus0
 #endif /*PP_NodeType*/ 
+#if (PP_DiscType==2 & PP_NodeType==1)
+use MOD_flux_Average,       ONLY: EvalAdvFluxAverage 
+USE MOD_DG_Vars,            ONLY: U,U_master,U_slave
+USE MOD_Mesh_Vars,          ONLY: metrics_ftilde,metrics_gtilde,metrics_htilde, SurfMetrics, NormalSigns
+USE MOD_DG_Vars,            ONLY: L_Minus
+#ifdef PP_u_aux_exist
+use MOD_Flux_Average,       ONLY: EvalUaux
+USE MOD_DG_Vars,            only: Uaux
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /* PP_u_aux_exist*/
+#if NONCONS
+use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
+#endif /*NONCONS*/
+#endif /*(PP_DiscType==2 & PP_NodeType==1)*/
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
 USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
@@ -71,6 +86,13 @@ REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)
 INTEGER                         :: l
+#if (PP_DiscType==2)
+REAL                            :: FluxB(PP_nVar,0:PP_N),FluxB_sum(PP_nVar), FluxB_cont(PP_nVar)
+#ifdef PP_u_aux_exist
+REAL                            :: UauxB(nAuxVar)
+#endif
+real, pointer                   :: metrics(:,:,:,:)
+#endif /*(PP_DiscType==2)*/
 #endif /*PP_NodeType*/ 
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
 INTEGER                         :: ElemID,locSide,SideID,flip
@@ -93,11 +115,63 @@ DO SideID=firstSideID,lastSideID
     flip=0
 #if (PP_NodeType==1)
     !gauss nodes
+#if (PP_DiscType==2)
+    ! Get the right metric terms
+    select case(locSide)
+      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
+      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
+      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
+    end select
+#endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
+#if (PP_DiscType==2)
+      ! Evaluate the auxiliar variables the boundary
+#ifdef PP_u_aux_exist
+      call EvalUaux(1,U_master(:,p,q,SideID),UauxB)
+#endif
+      ! Evaluate the correction term for the line
+      FluxB_sum = 0.0
+      DO l=0,PP_N
+        ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
+        ! Evaluate flux between node and boundary (symmetric contribution)
+        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,ElemID),U_master(:,p,q,SideID), &
+#ifdef PP_u_aux_exist
+                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),UauxB, &
+#endif
+                               metrics(:,ijk(1),ijk(2),ijk(3)),SurfMetrics(:,p,q,locSide,ElemID), &
+                                 FluxB(:,l)                )
+        ! Project 'boundary to volume' flux to the nodes 
+#if NONCONS
+        ! Store flux in container
+        FluxB_cont = FluxB(:,l)
+        ! Add non-conservative flux from boundary to volume
+        call AddNonConsFluxVec(U_master(:,p,q,SideID)        ,      U(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
+                                                       UauxB ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID), &
+                            SurfMetrics(:,p,q,locSide,ElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                                  FluxB_cont)
+        FluxB_sum = FluxB_sum + FluxB_cont* L_Minus(l)
+#else
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_Minus(l)
+#endif /*NONCONS*/
+        
+#if NONCONS
+        ! Compute non-conservative flux from volume to boundary
+        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,ElemID),   U_master(:,p,q,SideID), &
+                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,ElemID),   UauxB, &
+                                metrics(:,ijk(1),ijk(2),ijk(3))        ,SurfMetrics(:,p,q,locSide,ElemID), &
+                                  FluxB(:,l))
+#endif /*NONCONS*/
+        
+      END DO !l=0,PP_N
+#endif /*PP_DiscType==2*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
         Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + Flux_master(:,p,q,SideID)*L_hatMinus(l)
+                                          + (Flux_master(:,p,q,SideID) & 
+#if (PP_DiscType==2)
+                                             - (FluxB_sum -FluxB(:,l))*NormalSigns(locSide) &
+#endif /*(PP_DiscType==2)*/
+                                                                        )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)
@@ -118,11 +192,62 @@ DO SideID=firstSideID,lastSideID
     nbFlip    = SideToElem(S2E_FLIP,SideID)
 #if (PP_NodeType==1)
     !gauss nodes
+#if (PP_DiscType==2)
+    ! Get the right metric terms
+    select case(nblocSide)
+      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,nbElemID)
+      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,nbElemID)
+      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,nbElemID)
+    end select
+#endif /*(PP_DiscType==2)*/
     DO q=0,PP_N; DO p=0,PP_N
+#if (PP_DiscType==2)
+      ! Evaluate the auxiliar variables the boundary
+#ifdef PP_u_aux_exist
+      call EvalUaux(1,U_slave(:,p,q,SideID),UauxB)
+#endif
+      ! Evaluate the correction term for the line
+      FluxB_sum = 0.0
+      DO l=0,PP_N
+        ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide)
+        ! Evaluate flux between node and boundary (symmetric contribution)
+        CALL EvalAdvFluxAverage(     U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    U_slave(:,p,q,SideID), &
+#ifdef PP_u_aux_exist
+                                  Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    UauxB, &
+#endif
+                               metrics(:,ijk(1),ijk(2),ijk(3))          ,SurfMetrics(:,p,q,nblocSide,nbElemID), &
+                                 FluxB(:,l)                )
+        ! Project 'boundary to volume' flux to the nodes 
+#if NONCONS
+        ! Store flux in container
+        FluxB_cont = FluxB(:,l)
+        ! Add non-conservative flux from boundary to volume
+        call AddNonConsFluxVec(U_slave(:,p,q,SideID)            ,      U(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
+                                               UauxB            ,   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID), &
+                           SurfMetrics(:,p,q,nblocSide,nbElemID),metrics(:,ijk(1),ijk(2),ijk(3)), &
+                                  FluxB_cont)
+        FluxB_sum = FluxB_sum + FluxB_cont* L_Minus(l)
+#else
+        FluxB_sum = FluxB_sum + FluxB(:,l)* L_Minus(l)
+#endif /*NONCONS*/
+        
+#if NONCONS
+        ! Compute non-conservative flux from volume to boundary
+        call AddNonConsFluxVec(       U(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    U_slave(:,p,q,SideID), &
+                                   Uaux(:,ijk(1),ijk(2),ijk(3) ,nbElemID),    UauxB, &
+                                metrics(:,ijk(1),ijk(2),ijk(3))          ,SurfMetrics(:,p,q,nblocSide,nbElemID), &
+                                  FluxB(:,l))
+#endif /*NONCONS*/
+      END DO !l=0,PP_N
+#endif /*PP_DiscType==2*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
         Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) &
-                                          - Flux_slave(:,p,q,SideID)*L_hatMinus(l)
+                                          - (Flux_slave(:,p,q,SideID) &
+#if (PP_DiscType==2)
+                                             + (FluxB_sum -FluxB(:,l))*NormalSigns(nblocSide) &
+#endif /*(PP_DiscType==2)*/
+                                                                       )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #elif (PP_NodeType==2)

@@ -898,7 +898,10 @@ END SUBROUTINE RiemannSolverByHLLC_LM
 pure SUBROUTINE RiemannSolverByRoe(F,U_LL,U_RR)
 !MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars, ONLY: kappaM1,WhichVolumeFlux
+USE MOD_Equation_Vars, ONLY: kappaM1
+#if (PP_DiscType==2)
+USE MOD_Equation_Vars, ONLY: WhichVolumeFlux
+#endif
 USE MOD_Flux         , ONLY: EvalEulerFlux1D 
 USE MOD_Flux_Average , ONLY: KennedyAndGruberFlux1,DucrosFlux, KennedyAndGruberFlux2
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -987,6 +990,7 @@ DO j=0,PP_N
     Alpha5 = Delta_U(1) - Alpha1 - Alpha2
     ! assemble Roe flux
     ! Get the baseline flux needed for the standard Roe solver
+#if (PP_DiscType==2)
     SELECT CASE(WhichVolumeFlux)
     CASE DEFAULT
       F_c=0.5*(F_L(:,i,j)+F_R(:,i,j))
@@ -1004,6 +1008,9 @@ DO j=0,PP_N
       a1 = MAX(ABS(RoeVel(1)-Roec),ABS(RoeVel(1)+Roec)) ! ensures consistent KE dissipation
       a5 = MAX(ABS(RoeVel(1)-Roec),ABS(RoeVel(1)+Roec))
     END SELECT   
+#else
+    F_c=0.5*(F_L(:,i,j)+F_R(:,i,j))
+#endif
     F(:,i,j) = F_c - 0.5*(Alpha1*ABS(a1)*r1(:) + &
                                       Alpha2*ABS(a2)*r2(:) + &
                                       Alpha3*ABS(a3)*r3(:) + &

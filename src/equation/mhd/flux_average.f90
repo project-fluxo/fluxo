@@ -1,7 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -70,6 +71,7 @@ END INTERFACE
 
 #if (PP_DiscType==2)
 PUBLIC::EvalAdvFluxAverage3D
+PUBLIC::EvalAdvFluxAverage
 PUBLIC::EvalUaux
 #endif /*PP_DiscType==2*/
 #if NONCONS
@@ -107,7 +109,11 @@ CONTAINS
 !==================================================================================================================================
 !> Compute flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !==================================================================================================================================
-SUBROUTINE EvalAdvFluxAverage3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
+SUBROUTINE EvalAdvFluxAverage3D(U_in,&
+#if (PP_NodeType==1)
+                                Uaux, &
+#endif /*(PP_NodeType==1)*/
+                                     M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
 #if PP_VolFlux==-1
@@ -124,9 +130,13 @@ REAL,DIMENSION(1:3      ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< met
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
+#if (PP_NodeType==1)
+REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N)       ,INTENT(OUT) :: Uaux                 !auxiliary variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL      :: Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N)  !auxiliary variables
+#else
+REAL           :: Uaux(nAuxVar,  0:PP_N,0:PP_N,0:PP_N)  !auxiliary variables
+#endif /*(PP_NodeType==1)*/
 INTEGER   :: i,j,k,l
 !==================================================================================================================================
 
@@ -174,6 +184,38 @@ CALL AddNonConsFluxTilde3D(U_in,Uaux,M_f,M_g,M_h,ftilde,gtilde,htilde)
 #endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage3D
+
+!==================================================================================================================================
+!> Compute volumetric flux differences (advective and non-conservative contributions) between two points appling also directly the metrics  
+!==================================================================================================================================
+SUBROUTINE EvalAdvFluxAverage(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+! MODULES
+USE MOD_PreProc
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+USE MOD_Equation_Vars  ,ONLY:nAuxVar
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
+REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
+REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+
+! Compute advective flux
+CALL PP_VolumeFluxAverageVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+
+END SUBROUTINE EvalAdvFluxAverage
 
 !==================================================================================================================================
 !> computes auxiliary nodal variables (1/rho,v_1,v_2,v_3,p_t,|v|^2) 
@@ -251,60 +293,87 @@ INTEGER,PARAMETER:: ve=4
 INTEGER,PARAMETER:: vs=6
 INTEGER,PARAMETER:: ve=8
 #endif /*NONCONSTYPE*/
-REAL :: phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-REAL :: phi_GLM_f_s2(2),phi_GLM_g_s2(2),phi_GLM_h_s2(2) 
-#endif /*PP_GLM and PP_NC_GLM*/
+REAL :: Phi_MHD_s2(vs:ve)
+REAL :: Phi_GLM_s2(2)
+REAL :: Bhat_L
 !==================================================================================================================================
-!phi=0.
+
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+
 #if NONCONS==1 /*Powell*/
-  Phi_s4(2:4)=0.25* U_in(6:8,i,j,k) ! B
-  Phi_s4(  5)=0.25* Uaux(  8,i,j,k) ! vB
-  Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k) ! v
+  ! Powell: Phi(2:8) =B,vB,v
+  Phi_MHD_s2(vs:ve) = 0.5 * (/U_in(6:8,i,j,k),Uaux(8,i,j,k),Uaux(2:4,i,j,k)/)
 #elif NONCONS==2 /*Brackbill*/
-  Phi_s4(2:4)=0.25* U_in(6:8,i,j,k) ! B
+  ! Brackbill: Phi(2:4) =B
+  Phi_MHD_s2(vs:ve) = 0.5 * U_in(6:8,i,j,k)
 #elif NONCONS==3 /*Janhunen*/
-  Phi_s4(6:8)=0.25* Uaux(2:4,i,j,k) ! v
+  ! Janhunen: Phi(6:8) =v
+  Phi_MHD_s2(vs:ve) = 0.5 * Uaux(2:4,i,j,k)
 #endif /*NONCONSTYPE*/
+  
+  ! Non-conservative terms in xi
+  !-----------------------------
 #if defined(PP_GLM) && defined (PP_NC_GLM)
-  phi_GLM_f_s2(1:2) = (0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
-  phi_GLM_g_s2(1:2) = (0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
-  phi_GLM_h_s2(1:2) = (0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)))*(/U_in(9,i,j,k),1./)
+  Phi_GLM_s2 = 0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
-
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_f(:,i,j,k),U_in(6:8,i,j,k))
+  
   DO l=0,PP_N
-    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k)+(SUM(( M_f(:,i,j,k) &
-                                              +M_f(:,l,j,k))*U_in(6:8,l,j,k)))*Phi_s4(vs:ve) 
+    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_f(:,i,j,k)+M_f(:,l,j,k)),U_in(6:8,l,j,k)))
 #if defined(PP_GLM) && defined (PP_NC_GLM)
-    !nonconservative term to restore galilein invariance for GLM term: (grad\psi) (0,0,0,0,vec{v}\psi, 0,0,0, \vec{v})
-    ! => 5/9. component: 1/2 vec{Ja^d}_{(l,i),jk} . vec{v}_ijk \psi_ljk (\psi_ijk,1)
-    !
-    f((/5,9/),l,i,j,k) = f((/5,9/),l,i,j,k)  +U_in(9,l,j,k) *phi_GLM_f_s2(1:2)
-#endif /*PP_GLM and PP_NC_GLM*/
-  END DO !l=0,PP_N
-
-  DO l=0,PP_N
-    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k)+(SUM(( M_g(:,i,j,k) & 
-                                              +M_g(:,i,l,k))*U_in(6:8,i,l,k)))*Phi_s4(vs:ve) 
-#if defined(PP_GLM) && defined (PP_NC_GLM)
-    g((/5,9/),l,i,j,k) = g((/5,9/),l,i,j,k)  +U_in(9,i,l,k) *phi_GLM_g_s2(1:2)
+    !nonconservative term to restore Galilean invariance for GLM term
+    f((/5,9/),l,i,j,k) = f((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,l,j,k)) * Phi_GLM_s2
 #endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
-
-  DO l=0,PP_N
-    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k)+(SUM(( M_h(:,i,j,k) & 
-                                              +M_h(:,i,j,l))*U_in(6:8,i,j,l)))*Phi_s4(vs:ve) 
+  
+  ! Non-conservative terms in eta
+  !------------------------------
 #if defined(PP_GLM) && defined (PP_NC_GLM)
-    h((/5,9/),l,i,j,k) = h((/5,9/),l,i,j,k)  +U_in(9,i,j,l) *phi_GLM_h_s2(1:2)
+  Phi_GLM_s2 = 0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_g(:,i,j,k),U_in(6:8,i,j,k))
+  
+  DO l=0,PP_N
+    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_g(:,i,j,k)+M_g(:,i,l,k)),U_in(6:8,i,l,k)))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    g((/5,9/),l,i,j,k) = g((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,l,k)) * Phi_GLM_s2
+#endif /*PP_GLM and PP_NC_GLM*/
+  END DO !l=0,PP_N
+  
+  ! Non-conservative terms in zeta
+  !-------------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  Phi_GLM_s2 = 0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  ! First metrics dealiasing term
+  Bhat_L = dot_product(M_h(:,i,j,k),U_in(6:8,i,j,k))
+  
+  DO l=0,PP_N
+    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_h(:,i,j,k)+M_h(:,i,j,l)),U_in(6:8,i,j,l)))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    h((/5,9/),l,i,j,k) = h((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,j,l)) * Phi_GLM_s2
 #endif /*PP_GLM and PP_NC_GLM*/
   END DO !l=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE AddNonConsFluxTilde3D
-
 !==================================================================================================================================
-!> Compute transformed nonconservative MHD flux given left and right states and metrics 
+!> Compute transformed nonconservative MHD flux given left and right states and metrics:
+!> phi^◇ = 0.5*(B_L·metrics_L+B_R·{metrics})*phi_L^MHD + {psi}*metrics_L·phi_L^GLM
+!>
+!> phi^MHD is the Powell, Brackbill or Janhunen nonconservative term:
+!> * Powell:    phi^MHD = (0,B_1,B_2,B_3,v·B,v_1,v_2,v_3,0)
+!> * Brackbill: phi^MHD = (0,B_1,B_2,B_3,0,0,0,0)
+!> * Janhunen:  phi^MHD = (0,0,0,0,0,v_1,v_2,v_3,0)
+!> phi^GLM is the GLM nonconservative term
+!> * phi^GLM = (0,0,0,0,psi*v,0,0,0,v)
 !==================================================================================================================================
 PURE SUBROUTINE AddNonConsFluxVec(UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
 ! MODULES
@@ -323,21 +392,24 @@ REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
 REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: Fstar   !< added to flux
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+real :: Bhat
 !==================================================================================================================================
+
+Bhat = 0.5*(dot_product(metric_L,UL(6:8))+dot_product(0.5*(metric_L+metric_R),UR(6:8)))
+
 #if NONCONS==1 /*Powell*/
   ! Powell: Phi(2:8) =B,vB,v
-  Fstar(2:8) = Fstar(2:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*(/UL(6:8),UauxL(8),UauxL(2:4)/)
+  Fstar(2:8) = Fstar(2:8) +Bhat*(/UL(6:8),UauxL(8),UauxL(2:4)/)
 #elif NONCONS==2 /*Brackbill*/
   ! Brackbill: Phi(2:4) =B
-  Fstar(2:4) = Fstar(2:4) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UL(6:8)
+  Fstar(2:4) = Fstar(2:4) +Bhat*UL(6:8)
 #elif NONCONS==3 /*Janhunen*/
   ! Janhunen: Phi(6:8) =v
-  Fstar(6:8) = Fstar(6:8) +(0.25*SUM((metric_L(:)+metric_R(:))*UR(6:8)))*UauxL(2:4)
+  Fstar(6:8) = Fstar(6:8) +Bhat*UauxL(2:4)
 #endif /*NONCONSTYPE*/
 #if defined(PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term, 1/2 cancels with 2*Dmat 
-  ! grad\psi (0,0,0,0,vec{v}\phi, 0,0,0, \vec{v}) => vec{Ja^d}_{i,j,k} . vec{v}_ijk \psi_l,j,k
-  Fstar((/5,9/)) = Fstar((/5,9/)) +(UR(9)*0.5*SUM(metric_L(:)*UauxL(2:4))) *(/UL(9),1./)
+  !nonconservative term to restore Galilean invariance for GLM term
+  Fstar((/5,9/)) = Fstar((/5,9/)) +(0.5*(UL(9)+UR(9))*SUM(metric_L*UauxL(2:4))) *(/UL(9),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
 
 END SUBROUTINE AddNonConsFluxVec

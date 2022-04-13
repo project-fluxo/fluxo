@@ -1,8 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
-! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Andrés Rueda
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -218,15 +218,15 @@ pure subroutine RotateFluxBack(F,nv,t1,t2)
 end subroutine RotateFluxBack
 #if NONCONS
 !==================================================================================================================================
-!> strong nonconservative flux on a side:
-!> phi^L 1/2(B^L+B^R)*nvec  - phi^L B^L nvec = phi^L 1/2(B^R-B^L)*nvec
-!> CAREFUL, the "weak" implementation of the nonconservative term in the volume (Phi div B ) already includes the boundary part:
-!> -1/2(phi^L B^L nvec)
-!> so that here, we only add
-!> 1/2(phi^L B^R nvec)
-!> analogously, the GLM nonconservative term is (0,0,0,v*phi, 0,0,0,v) grad phi  in the volume, therefore
-!> we only need to add
-!> 1/2(v^L*n) (0,0,0,0,phi^L*phi^R,0,0,0,phi^R)
+!> Nonconservative flux on a side: 
+!> ({B}·nvec)*phi_L^MHD + {psi}*phi_L^GLM·nvec
+!> 
+!> phi^MHD is the Powell, Brackbill or Janhunen nonconservative term:
+!> * Powell:    phi^MHD = (0,B_1,B_2,B_3,v·B,v_1,v_2,v_3,0)
+!> * Brackbill: phi^MHD = (0,B_1,B_2,B_3,0,0,0,0)
+!> * Janhunen:  phi^MHD = (0,0,0,0,0,v_1,v_2,v_3,0)
+!> phi^GLM is the GLM nonconservative term
+!> * phi^GLM = (0,0,0,0,psi*v,0,0,0,v)
 !==================================================================================================================================
 pure SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
@@ -250,17 +250,17 @@ REAL    :: v_L(3)
 DO i=1,nTotal_Face
   v_L=UL(2:4,i)/UL(1,i)
 #if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
+  FL(2:8,i)=FL(2:8,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
 #elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*UL(6:8,i)
+  FL(2:4,i)=FL(2:4,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*UL(6:8,i)
 #elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) +(0.5*SUM(UR(6:8,i)*nv(:,i)))*v_L(1:3)
+  FL(6:8,i)=FL(6:8,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*v_L(1:3)
 #endif /*NONCONSTYPE*/
 
 
 #if defined (PP_GLM) && defined (PP_NC_GLM)
-  !nonconservative term to restore galilein invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*UR(9,i),UR(9,i)/)
+  !nonconservative term to restore Galilean invariance for GLM term
+  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*(UR(9,i)+UL(9,i)),UR(9,i)+UL(9,i)/)
 #endif /*PP_GLM and PP_NC_GLM*/
 
 END DO !i=1,nTotal_Face

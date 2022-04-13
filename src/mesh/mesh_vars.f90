@@ -1,5 +1,7 @@
 !==================================================================================================================================
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
+! Copyright (c) 2020 - 2021 Andrés Rueda
+! Copyright (c) 2020 - 2021 Florian Hindenlang
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
@@ -46,9 +48,9 @@ LOGICAL          :: MeshIsNonConforming
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Metrics on GaussPoints
 !----------------------------------------------------------------------------------------------------------------------------------
-REAL,ALLOCATABLE :: Metrics_fTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes f (1:3,0:N,0:N,0:N,nElems)
-REAL,ALLOCATABLE :: Metrics_gTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes g (1:3,0:N,0:N,0:N,nElems)
-REAL,ALLOCATABLE :: Metrics_hTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes h (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_fTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes f (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_gTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes g (1:3,0:N,0:N,0:N,nElems)
+REAL,ALLOCATABLE,TARGET :: Metrics_hTilde(:,:,:,:,:)    !< Metrics for transforming the fluxes h (1:3,0:N,0:N,0:N,nElems)
 REAL,ALLOCATABLE :: dXGL_N      (:,:,:,:,:,:)    !< covariant Metric tensor, first dimension deriviatves d/dxi, d/deta, d/dzeta
                                                  !< second dimension X,Y,Z, on Gauss-Lobatto points!!!
 REAL,ALLOCATABLE :: detJac_Ref(:,:,:,:,:)        !< determinant of the mesh Jacobian for each Gauss point at degree 3*NGeo
@@ -62,6 +64,10 @@ REAL,ALLOCATABLE :: NormVec(:,:,:,:)           !< normal vector for each side   
 REAL,ALLOCATABLE :: TangVec1(:,:,:,:)          !< tangential vector 1 for each side (1:3,0:N,0:N,nSides)
 REAL,ALLOCATABLE :: TangVec2(:,:,:,:)          !< tangential vector 3 for each side (1:3,0:N,0:N,nSides)
 REAL,ALLOCATABLE :: SurfElem(:,:,:)            !< surface area for each side        (    0:N,0:N,nSides)
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+REAL,ALLOCATABLE :: SurfMetrics(:,:,:,:,:)     !< Normal surface metric (from volume metric at surface) only needed for ES Gauss collocation methods
+                                               !< size \([1..3,0..N,0..N,1..6,nElems]\)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 !----------------------------------------------------------------------------------------------------------------------------------
 INTEGER,ALLOCATABLE, TARGET :: ElemToSide(:,:,:)       !< Array containing element-wise connectivity information to sides
                                                !< SideID    = ElemToSide(E2S_SIDE_ID,ZETA_PLUS,iElem)

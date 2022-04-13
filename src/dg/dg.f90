@@ -1,8 +1,8 @@
 !==================================================================================================================================
 ! Copyright (c) 2016 - 2017 Gregor Gassner
-! Copyright (c) 2016 - 2017 Florian Hindenlang
+! Copyright (c) 2016 - 2021 Florian Hindenlang
 ! Copyright (c) 2016 - 2017 Andrew Winters
-! Copyright (c) 2020 - 2020 Andrés Rueda
+! Copyright (c) 2020 - 2021 Andrés Rueda
 ! Copyright (c) 2010 - 2016 Claus-Dieter Munz (github.com/flexi-framework/flexi)
 !
 ! This file is part of FLUXO (github.com/project-fluxo/fluxo). FLUXO is free software: you can redistribute it and/or modify
@@ -71,6 +71,9 @@ USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Equation_Vars,      ONLY: IniExactFunc
 USE MOD_Equation_Vars,      ONLY: EquationInitIsDone
 USE MOD_Equation,           ONLY: FillIni
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_u_aux_exist))
+USE MOD_Equation_Vars,      ONLY: nAuxVar
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_u_aux_exist))*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -78,7 +81,7 @@ IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
-! LOCAL VARIABLES 
+! LOCAL VARIABLES
 !===================================================================================================================================
 IF((.NOT.InterpolationInitIsDone).OR.(.NOT.MeshInitIsDone).OR.(.NOT.EquationInitIsDone) &
    .OR.(.NOT.RestartInitIsDone).OR.DGInitIsDone)THEN
@@ -98,6 +101,21 @@ Ut=0.
 ! the Source
 ALLOCATE(Source(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
 Source = 0.0
+
+#if ((PP_NodeType==1) & (PP_DiscType==2))
+#ifdef PP_u_aux_exist
+ALLOCATE(Uaux(nAuxVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+Uaux=0.
+#endif /*PP_u_aux_exist*/
+#ifdef PP_entropy_vars_exist
+ALLOCATE(V   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems))
+V=0.
+ALLOCATE(V_master(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+ALLOCATE(V_slave( PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+V_master=0.
+V_slave=0.
+#endif /*PP_entropy_vars_exist*/
+#endif /*((PP_NodeType==1) & (PP_DiscType==2))*/
 
 nDOFElem=(PP_N+1)**3
 nTotal_face=(PP_N+1)*(PP_N+1)
@@ -168,7 +186,7 @@ SUBROUTINE InitDGbasis(N_in,xGP,wGP,wBary)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Basis,              ONLY: PolynomialDerivativeMatrix,LagrangeInterpolationPolys
-USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_HatMinus,L_HatMinus0,L_HatPlus
+USE MOD_DG_Vars,            ONLY: D,D_T,D_Hat,D_Hat_T,L_Minus,L_Plus,L_HatMinus,L_HatMinus0,L_HatPlus
 #if PP_DiscType==2
 USE MOD_DG_Vars,            ONLY: DvolSurf,DvolSurf_T
 #endif
@@ -184,14 +202,16 @@ REAL,DIMENSION(0:N_in),INTENT(IN)  :: wBary     !< Barycentric weights to evalua
 ! OUTPUT VARIABLES
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
-REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv
-REAL,DIMENSION(0:N_in)             :: L_Minus,L_Plus
+REAL,DIMENSION(0:N_in,0:N_in)      :: M,Minv  
+real,DIMENSION(2,0:N_in)           :: Vf
+real,DIMENSION(2,2)                :: B
 INTEGER                            :: i
 !===================================================================================================================================
+ALLOCATE(L_Minus(0:N_in), L_Plus(0:N_in))
 ALLOCATE(L_HatMinus(0:N_in), L_HatPlus(0:N_in))
 ALLOCATE(D(    0:N_in,0:N_in), D_T(    0:N_in,0:N_in))
 ALLOCATE(D_Hat(0:N_in,0:N_in), D_Hat_T(0:N_in,0:N_in))
-! Compute Differentiation matrix D for given Gausspoints
+! Compute Differentiation matrix D on given interpolation points
 CALL PolynomialDerivativeMatrix(N_in,xGP,D)
 D_T=TRANSPOSE(D)
 
@@ -205,24 +225,34 @@ END DO
 D_Hat(:,:) = -MATMUL(Minv,MATMUL(TRANSPOSE(D),M))
 D_Hat_T= TRANSPOSE(D_hat)
 
-#if PP_DiscType==2
-!NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since M*Dvolsurf is fully skew symmetric! M*DvolSurf^T = -M*DvolSurf
-ALLOCATE(Dvolsurf(0:N_in,0:N_in))
-ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
-!modified D matrix for fluxdifference volint
-Dvolsurf=2.0*D
-Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
-Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
-Dvolsurf_T= TRANSPOSE(Dvolsurf)
-
-#endif /*PP_DiscType==2*/
-
 ! interpolate to left and right face (1 and -1) and pre-divide by mass matrix
 CALL LagrangeInterpolationPolys(1.,N_in,xGP,wBary,L_Plus)
 L_HatPlus(:) = MATMUL(Minv,L_Plus)
 CALL LagrangeInterpolationPolys(-1.,N_in,xGP,wBary,L_Minus)
 L_HatMinus(:) = MATMUL(Minv,L_Minus)
 L_HatMinus0 = L_HatMinus(0)
+
+#if PP_DiscType==2
+! * (generalized) SBP property: Q + Q^T = B, Q=M*D,  boundary matrix B=B^T
+! * modified D matrix for volint_SplitForm: Dvolsurf = 2*D - Minv*B, 
+!   substracts the 'inner' flux contribution of the boundaries in the strong split-form formulation (which would use 2*D), 
+!   thus with Dvolsurf, the volint implements a weak form. 
+! * NOTE THAT ALL DIAGONAL ENTRIES OF Dvolsurf = 0, since its fully skew symmetric! M*DvolSurf^T = -M*DvolSurf
+! * For LGL (NodeType==2, SBP with diagonal norm), it can be explicitly written as:
+!     Dvolsurf=2.0*D
+!     Dvolsurf(0,0)=2.0*D(0,0)+1.0/wGP(0)
+!     Dvolsurf(N_in,N_in)=2.0*D(N_in,N_in)-1.0/wGP(N_in)
+ALLOCATE(Dvolsurf(0:N_in,0:N_in))
+ALLOCATE(Dvolsurf_T(0:N_in,0:N_in))
+!modified D matrix for split-form volint, with a generalized SBP property, so Gauss-Legendre and LGL nodes
+Vf(1,:) = L_Minus
+Vf(2,:) = L_Plus
+B(1,:) = (/-1.0, 0.0/)
+B(2,:) = (/ 0.0, 1.0/)
+Dvolsurf  = 2.0*D - MATMUL(Minv,MATMUL(MATMUL(TRANSPOSE(Vf),B),Vf))
+Dvolsurf_T= TRANSPOSE(Dvolsurf)
+#endif /*PP_DiscType==2*/
+
 END SUBROUTINE InitDGbasis
 
 !==================================================================================================================================
@@ -266,7 +296,6 @@ USE MOD_FillMortar          ,ONLY: fill_delta_flux_jesse
 #endif
 USE MOD_Mesh_Vars           ,ONLY: sJ
 USE MOD_DG_Vars             ,ONLY: nTotalU,nTotal_IP
-USE MOD_ProlongToFace       ,ONLY: ProlongToFace
 #if SHOCK_NFVSE
 use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 #endif /*SHOCK_NFVSE*/
@@ -274,6 +303,10 @@ use MOD_NFVSE               ,only: VolInt_NFVSE, CalcBlendingCoefficient
 USE MOD_VolInt              ,ONLY: VolInt, VolInt_adv
 #elif PP_DiscType==2
 USE MOD_VolInt              ,ONLY: VolInt_adv_SplitForm
+#if (PP_NodeType==1 & defined(PP_entropy_vars_exist))
+USE MOD_DG_Vars             ,ONLY: V
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec,useEntropyProlongToFace
+#endif /*PP_NodeType==1 & defined(PP_entropy_vars_exist)*/
 #endif /*PP_DiscType==2*/
 #if PARABOLIC
 USE MOD_VolInt              ,ONLY: VolInt_visc
@@ -319,20 +352,25 @@ end if
 ! Nullify arrays
 CALL VNullify(nTotalU,Ut)
 
+! If we use ES Gauss methods, we need the entropy variables in all nodes
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
+IF(useEntropyProlongToFace) call ConsToEntropyVec(nTotal_IP,V,U)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
+
 #if MPI
 ! Solution is always communicated on the U_Slave array
 ! start off with the receive command
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
 ! prolong MPI sides and do the mortar on the MPI sides
-CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.TRUE.)
+CALL ProlongToFace_U(doMPISides=.TRUE.)
 CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
 #endif /* MPI */
 
-CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=.FALSE.)
+CALL ProlongToFace_U(doMPISides=.FALSE.)
 CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.FALSE.)
 
 ! If we're doing shock-capturing with NFVSE, compute the blending coefficient (MPI communication is done inside)
@@ -433,7 +471,64 @@ Ut = Ut + Source
 
 END SUBROUTINE DGTimeDerivative_weakForm
 
+!==================================================================================================================================
+!> Prolongs the conservatives variables to the sides
+!> In the case of Gauss disc2, we project the entropy variables and then transform back to conservative variables
+!==================================================================================================================================
+SUBROUTINE ProlongToFace_U(doMPISides)
+!----------------------------------------------------------------------------------------------------------------------------------
+! MODULES
+use MOD_Preproc
+USE MOD_Mesh_Vars           ,ONLY: SideToElem
+USE MOD_ProlongToFace       ,ONLY: ProlongToFace
+USE MOD_Mesh_Vars           ,ONLY: firstMPISide_YOUR, nSides, lastMPISide_MINE
+USE MOD_DG_Vars             ,ONLY: U_master, U_slave
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
+USE MOD_DG_Vars             ,ONLY: V, nTotal_face, V_master, V_slave
+USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec, EntropyToConsVec,useEntropyProlongToFace
+#endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
+USE MOD_DG_Vars             ,ONLY: U
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+logical, intent(in) :: doMPISides
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+integer :: sideID,firstSideID,lastSideID,ElemID,nbElemID
+!==================================================================================================================================
+#if ((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))
+IF(useEntropyProlongToFace)THEN
+  ! Prolong the entropy variables
+  CALL ProlongToFace(PP_nVar,V,V_master,V_slave,doMPISides=doMPISides)
+  ! Transform back to conservative variables
+  IF(doMPISides)THEN
+    firstSideID = firstMPISide_YOUR
+     lastSideID = nSides
+  ELSE
+    firstSideID = 1
+     lastSideID =  lastMPISide_MINE
+  END IF
+  do sideID=firstSideID, lastSideID
+    ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+    !master sides(ElemID,locSide and flip =-1 if not existing)
+    IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
+      call EntropyToConsVec(nTotal_face,V_master(:,:,:,sideID),U_master(:,:,:,sideID))
+    END IF
+    
+    nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+    !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+    IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
+      call EntropyToConsVec(nTotal_face,V_slave(:,:,:,sideID),U_slave(:,:,:,sideID))
+    END IF
+  end do
+ELSE !useEntropyProlongToFace=False
+  CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
+END IF
+#else
+CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
+#endif /*((PP_NodeType==1) & (PP_DiscType==2)) & defined(PP_entropy_vars_exist)*/
 
+END SUBROUTINE ProlongToFace_U
 
 
 !==================================================================================================================================
@@ -457,7 +552,19 @@ SDEALLOCATE(D_Hat_T)
 #if PP_DiscType==2
 SDEALLOCATE(Dvolsurf)
 SDEALLOCATE(Dvolsurf_T)
+#if PP_NodeType==1
+#ifdef PP_u_aux_exist
+SDEALLOCATE(Uaux)
+#endif
+#ifdef PP_entropy_vars_exist
+SDEALLOCATE(V)
+SDEALLOCATE(V_master)
+SDEALLOCATE(V_slave)
+#endif
+#endif /*PP_NodeType==1*/
 #endif /*PP_DiscType==2*/
+SDEALLOCATE(L_Minus)
+SDEALLOCATE(L_Plus)
 SDEALLOCATE(L_HatMinus)
 SDEALLOCATE(L_HatPlus)
 SDEALLOCATE(Ut)

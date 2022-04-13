@@ -33,31 +33,7 @@ variables:
 # =================================================================================================================================
 # TEMPLATE DEFINITIONS
 # =================================================================================================================================
-# NOTE: _ipp is the runner testimony_fluxo , with tag: IPP_vm_linux_fluxo
-#       _pcm is the runner fluxo@gitlab.mi.uni-koeln.de with tag: PCM_linux_fluxo
-
-.job_IPP_setup_intel: &IPP_setup_intel
-  variables:
-    RUNNERNAME: IPP
-    CURR_CMP: intel
-  tags:
-    - ipp_vm_linux_fluxo
-  before_script:
-    - . ~/environments/modules_for_fluxo_intel ; pwd
-    - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
-
-.job_IPP_setup_intel_build: &IPP_setup_intel_build
-  variables:
-    RUNNERNAME: IPP
-    CURR_CMP: intel
-    GIT_STRATEGY: clone
-  tags:
-    - ipp_vm_linux_fluxo
-  before_script:
-    - . ~/environments/modules_for_fluxo_intel ; pwd
-    - export MPIRUNCOMMAND="mpirun -np"
-    - export NIGHTLYBUILDMODE="Release"
+# NOTE: _pcm is the runner fluxo@gitlab.mi.uni-koeln.de with tag: PCM_linux_fluxo
 
 .job_PCM_setup_gnu: &PCM_setup_gnu
   variables:
@@ -245,10 +221,6 @@ variables:
 # Stage "startup"
 # =================================================================================================================================
 
-IPP_intel_startup:
-  <<: *IPP_setup_intel
-  <<: *script_startup
-
 PCM_gnu_startup:
   <<: *PCM_setup_gnu
   <<: *script_startup
@@ -257,22 +229,12 @@ PCM_gnu_startup:
 # Stage "build"
 # =================================================================================================================================
 
-IPP_intel_mhd_build:
-  needs: ["IPP_intel_startup"]
-  <<: *IPP_setup_intel_build
-  <<: *script_build_mhd
-
 PCM_gnu_mhd_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
-
-IPP_intel_linadv_build:
-  needs: ["IPP_intel_startup"]
-  <<: *IPP_setup_intel_build
-  <<: *script_build_linadv
 
 PCM_gnu_linadv_build:
   needs: ["PCM_gnu_startup"]
@@ -281,22 +243,12 @@ PCM_gnu_linadv_build:
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_intel_maxwell_build:
-  needs: ["IPP_intel_startup"]
-  <<: *IPP_setup_intel_build
-  <<: *script_build_maxwell
-
 PCM_gnu_maxwell_build:
   needs: ["PCM_gnu_startup"]
   <<: *PCM_setup_gnu_build
   <<: *script_build_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
-
-IPP_intel_nav-st_build:
-  needs: ["IPP_intel_startup"]
-  <<: *IPP_setup_intel_build
-  <<: *script_build_nav-st
 
 PCM_gnu_nav-st_build:
   needs: ["PCM_gnu_startup"]
@@ -307,22 +259,12 @@ PCM_gnu_nav-st_build:
 # Stage "runs"
 # =================================================================================================================================
 
-IPP_intel_mhd_runs:
-  needs: ["IPP_intel_mhd_build"]
-  <<: *IPP_setup_intel
-  <<: *script_runs_mhd
-
 PCM_gnu_mhd_runs:
   needs: ["PCM_gnu_mhd_build"]
   <<: *PCM_setup_gnu
   <<: *script_runs_mhd
 
 # -------------------------------------------------------------------------------------------------------------------------------
-
-IPP_intel_linadv_runs:
-  needs: ["IPP_intel_linadv_build"]
-  <<: *IPP_setup_intel
-  <<: *script_runs_linadv
 
 PCM_gnu_linadv_runs:
   needs: ["PCM_gnu_linadv_build"]
@@ -331,22 +273,12 @@ PCM_gnu_linadv_runs:
 
 # -------------------------------------------------------------------------------------------------------------------------------
 
-IPP_intel_maxwell_runs:
-  needs: ["IPP_intel_maxwell_build"]
-  <<: *IPP_setup_intel
-  <<: *script_runs_maxwell
-
 PCM_gnu_maxwell_runs:
   needs: ["PCM_gnu_maxwell_build"]
   <<: *PCM_setup_gnu
   <<: *script_runs_maxwell
 
 # -------------------------------------------------------------------------------------------------------------------------------
-
-IPP_intel_nav-st_runs:
-  needs: ["IPP_intel_nav-st_build"]
-  <<: *IPP_setup_intel
-  <<: *script_runs_nav-st
 
 PCM_gnu_nav-st_runs:
   needs: ["PCM_gnu_nav-st_build"]
@@ -356,11 +288,6 @@ PCM_gnu_nav-st_runs:
 # =================================================================================================================================
 # Stage "cleanup"
 # =================================================================================================================================
-
-IPP_intel_cleanup_cache:
-  needs: ["IPP_intel_linadv_runs", "IPP_intel_maxwell_runs", "IPP_intel_mhd_runs", "IPP_intel_nav-st_runs"]
-  <<: *IPP_setup_intel
-  <<: *script_cleanup
 
 PCM_gnu_cleanup_cache:
   needs: ["PCM_gnu_linadv_runs", "PCM_gnu_maxwell_runs", "PCM_gnu_mhd_runs", "PCM_gnu_nav-st_runs"]
