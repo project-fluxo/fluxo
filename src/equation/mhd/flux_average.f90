@@ -70,7 +70,7 @@ END INTERFACE
 
 
 #if (PP_DiscType==2)
-PUBLIC::EvalAdvFluxAverage3D
+PUBLIC::EvalAdvFluxAverage3D, EvalAdvFluxAverage3D_separate
 PUBLIC::EvalAdvFluxAverage
 PUBLIC::EvalUaux
 #endif /*PP_DiscType==2*/
@@ -184,6 +184,94 @@ CALL AddNonConsFluxTilde3D(U_in,Uaux,M_f,M_g,M_h,ftilde,gtilde,htilde)
 #endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage3D
+!==================================================================================================================================
+!> Computes flux differences in 3D, making use of the symmetry and appling also directly the metrics  
+!> Symmetric and non-symmetric terms are provided separately
+!==================================================================================================================================
+SUBROUTINE EvalAdvFluxAverage3D_separate(U_in,&
+#if (PP_NodeType==1)
+                                Uaux, &
+#endif /*(PP_NodeType==1)*/
+                                     M_f,M_g,M_h,ftilde,gtilde,htilde,f_noncons,g_noncons,h_noncons,phi)
+! MODULES
+USE MOD_PreProc
+#if PP_VolFlux==-1
+USE MOD_Equation_Vars  ,ONLY:VolumeFluxAverageVec !pointer to flux averaging routine
+#endif
+USE MOD_Equation_Vars  ,ONLY:nAuxVar
+USE MOD_DG_Vars       ,ONLY:nTotal_vol
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: U_in        !< solution
+REAL,DIMENSION(1:3      ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< metrics
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
+#if NONCONS
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+REAL,DIMENSION(            2,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f_noncons,g_noncons,h_noncons !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
+REAL,DIMENSION(1:PP_nVar,3,2,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi                           !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
+#else
+REAL,DIMENSION(            1,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f_noncons,g_noncons,h_noncons !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
+REAL,DIMENSION(1:PP_nVar,3,1,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi                           !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
+#endif /*PP_GLM and PP_NC_GLM*/
+#endif /*NONCONS*/
+#if (PP_NodeType==1)
+REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N)       ,INTENT(OUT) :: Uaux                 !auxiliary variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+#else
+REAL           :: Uaux(nAuxVar,  0:PP_N,0:PP_N,0:PP_N)  !auxiliary variables
+#endif /*(PP_NodeType==1)*/
+INTEGER   :: i,j,k,l
+!==================================================================================================================================
+
+!opt_v1
+CALL EvalUaux(nTotal_vol,U_in,Uaux)
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !ftilde(:,i,i,j,k)=ftilde_c(:,i,j,k) 
+  ftilde(:,i,i,j,k)=0.
+  DO l=i+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,l,j,k), &
+                                 Uaux(:,i,j,k),Uaux(:,l,j,k), &
+                                  M_f(:,i,j,k), M_f(:,l,j,k), &
+                             ftilde(:,l,i,j,k)                )
+    ftilde(:,i,l,j,k)=ftilde(:,l,i,j,k) !symmetric
+  END DO!l=i+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !gtilde(:,j,i,j,k)=gtilde_c(:,i,j,k) 
+  gtilde(:,j,i,j,k)=0.
+  DO l=j+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,l,k), &
+                                 Uaux(:,i,j,k),Uaux(:,i,l,k), &
+                                  M_g(:,i,j,k), M_g(:,i,l,k), &
+                             gtilde(:,l,i,j,k)                )
+    gtilde(:,j,i,l,k)=gtilde(:,l,i,j,k) !symmetric
+  END DO!l=j+1,N
+END DO; END DO; END DO ! i,j,k
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+  !diagonal (consistent) part not needed since diagonal of DvolSurfMat is zero!
+  !htilde(:,k,i,j,k)=htilde_c(:,i,j,k) 
+  htilde(:,k,i,j,k)=0.
+  DO l=k+1,PP_N
+    CALL PP_VolumeFluxAverageVec(U_in(:,i,j,k),U_in(:,i,j,l), &
+                                 Uaux(:,i,j,k),Uaux(:,i,j,l), &
+                                  M_h(:,i,j,k), M_h(:,i,j,l), &
+                             htilde(:,l,i,j,k)                )
+    htilde(:,k,i,j,l)=htilde(:,l,i,j,k) !symmetric
+  END DO!l=k+1,N
+END DO; END DO; END DO ! i,j,k
+
+#if NONCONS
+CALL AddNonConsFluxTilde3D_separate(U_in,Uaux,M_f,M_g,M_h,f_noncons,g_noncons,h_noncons,phi)
+#endif /*NONCONS*/
+
+END SUBROUTINE EvalAdvFluxAverage3D_separate
 
 !==================================================================================================================================
 !> Compute volumetric flux differences (advective and non-conservative contributions) between two points appling also directly the metrics  
@@ -354,6 +442,103 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 END DO; END DO; END DO ! i,j,k
 
 END SUBROUTINE AddNonConsFluxTilde3D
+!==================================================================================================================================
+!> Compute transformed nonconservative MHD fluxes as a product of a symmetric contribution (f,g,h) and a local contribution (phi)
+!==================================================================================================================================
+PURE SUBROUTINE AddNonConsFluxTilde3D_separate(U_in,Uaux,M_f,M_g,M_h,f,g,h,phi)
+! MODULES
+USE MOD_PreProc
+USE MOD_Equation_Vars ,ONLY:nAuxVar
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N),INTENT(IN) :: U_in   !< solution
+REAL,DIMENSION(nAuxVar,0:PP_N,0:PP_N,0:PP_N),INTENT(IN) :: Uaux   !< auxiliary variables
+REAL,DIMENSION(1:3    ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN) :: M_f,M_g,M_h !< metrics
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+REAL,DIMENSION(            2,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f,g,h !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
+REAL,DIMENSION(1:PP_nVar,3,2,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi   !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
+#else
+REAL,DIMENSION(            1,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f,g,h !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
+REAL,DIMENSION(1:PP_nVar,3,1,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi   !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
+#endif /*PP_GLM and PP_NC_GLM*/
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER             :: i,j,k,l
+#if NONCONS==1 /*Powell*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=8
+#elif NONCONS==2 /*Brackbill*/
+INTEGER,PARAMETER:: vs=2
+INTEGER,PARAMETER:: ve=4
+#elif NONCONS==3 /*Janhunen*/
+INTEGER,PARAMETER:: vs=6
+INTEGER,PARAMETER:: ve=8
+#endif /*NONCONSTYPE*/
+!==================================================================================================================================
+phi = 0.0
+DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+
+#if NONCONS==1 /*Powell*/
+  ! Powell: Phi(2:8) =B,vB,v
+  phi(vs:ve,1,1,i,j,k) = 0.25 * (/U_in(6:8,i,j,k),Uaux(8,i,j,k),Uaux(2:4,i,j,k)/)
+#elif NONCONS==2 /*Brackbill*/
+  ! Brackbill: Phi(2:4) =B
+  phi(vs:ve,1,1,i,j,k) = 0.25 * U_in(6:8,i,j,k)
+#elif NONCONS==3 /*Janhunen*/
+  ! Janhunen: Phi(6:8) =v
+  phi(vs:ve,1,1,i,j,k) = 0.25 * Uaux(2:4,i,j,k)
+#endif /*NONCONSTYPE*/
+  ! The other directions are the same
+  phi(vs:ve,2,1,i,j,k) = phi(vs:ve,1,1,i,j,k)
+  phi(vs:ve,3,1,i,j,k) = phi(vs:ve,1,1,i,j,k)
+  
+  ! Non-conservative terms in xi
+  !-----------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  phi((/5,9/),1,2,i,j,k) = 0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  DO l=0,PP_N
+    f(1,l,i,j,k) = dot_product(M_f(:,i,j,k)+M_f(:,l,j,k),U_in(6:8,i,j,k)+U_in(6:8,l,j,k))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    f(2,l,i,j,k) = U_in(9,i,j,k)+U_in(9,l,j,k)
+#endif /*PP_GLM and PP_NC_GLM*/
+  END DO !l=0,PP_N
+  
+  ! Non-conservative terms in eta
+  !------------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  phi((/5,9/),2,2,i,j,k) = 0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  DO l=0,PP_N
+    g(1,l,i,j,k) = dot_product(M_g(:,i,j,k)+M_g(:,i,l,k),U_in(6:8,i,j,k)+U_in(6:8,i,l,k))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    g(2,l,i,j,k) = U_in(9,i,j,k)+U_in(9,i,l,k)
+#endif /*PP_GLM and PP_NC_GLM*/
+  END DO !l=0,PP_N
+  
+  ! Non-conservative terms in zeta
+  !-------------------------------
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+  phi((/5,9/),3,2,i,j,k) = 0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
+#endif /*PP_GLM and PP_NC_GLM*/
+  
+  DO l=0,PP_N
+    h(1,l,i,j,k) = dot_product(M_h(:,i,j,k)+M_h(:,i,j,l),U_in(6:8,i,j,k)+U_in(6:8,i,j,l))
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+    !nonconservative term to restore Galilean invariance for GLM term
+    h(2,l,i,j,k) = U_in(9,i,j,k)+U_in(9,i,j,l)
+#endif /*PP_GLM and PP_NC_GLM*/
+  END DO !l=0,PP_N
+END DO; END DO; END DO ! i,j,k
+
+END SUBROUTINE AddNonConsFluxTilde3D_separate
 !==================================================================================================================================
 !> Compute transformed nonconservative MHD flux given left and right states and metrics:
 !> phi^◇ = 0.5*(B_L·metrics_L+B_R·{metrics})*phi_L^MHD + {psi}*metrics_L·phi_L^GLM

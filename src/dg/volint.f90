@@ -199,6 +199,10 @@ USE MOD_DG_Vars,            ONLY: Uaux
 USE MOD_Mesh_Vars,          ONLY: nElems,metrics_ftilde,metrics_gtilde,metrics_htilde
 USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D
 #if LOCAL_ALPHA
+#if NONCONS
+USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D_separate
+use MOD_NFVSE_Vars,         only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif NONCONS
 use MOD_NFVSE_Vars,         only: ftilde_DG, gtilde_DG, htilde_DG, sWGP
 use MOD_Interpolation_Vars, only: wGP
 #endif /*LOCAL_ALPHA*/
@@ -214,16 +218,46 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N):: ftilde,gtilde,htilde !tran
                                                                            ! ftilde(:,l,i,j,k) ={{metrics1}}.vecF(U_ljk,U_ijk)
                                                                            ! gtilde(:,l,i,j,k) ={{metrics2}}.vecF(U_ilk,U_ijk)
                                                                            ! htilde(:,l,i,j,k) ={{metrics3}}.vecF(U_ijl,U_ijk)
-INTEGER                                           :: i,j,k,l,m,iElem
+#if NONCONS
+#if defined(PP_GLM) && defined (PP_NC_GLM)
+INTEGER,PARAMETER:: nnonc = 2
+#else
+INTEGER,PARAMETER:: nnonc = 1
+#endif /*PP_GLM and PP_NC_GLM*/
+REAL,DIMENSION(            nnonc,0:PP_N,0:PP_N,0:PP_N,0:PP_N) :: f_noncons,g_noncons,h_noncons !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
+REAL,DIMENSION(1:PP_nVar,3,nnonc,       0:PP_N,0:PP_N,0:PP_N) :: phi                           !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
+REAL :: phi_tildex(nnonc,-1:PP_N, 0:PP_N, 0:PP_N) 
+REAL :: phi_tildey(nnonc, 0:PP_N,-1:PP_N, 0:PP_N) 
+REAL :: phi_tildez(nnonc, 0:PP_N, 0:PP_N,-1:PP_N) 
+#endif /*NONCONS*/
+real :: Ut_dbg(PP_nVar) ! Debug!!
+INTEGER                                           :: i,j,k,l,m,iElem,term
 !==================================================================================================================================
 #if LOCAL_ALPHA
 ftilde_DG=0.0
 htilde_DG=0.0
 gtilde_DG=0.0
+#if NONCONS
+phi_tildex=0.0
+phi_tildey=0.0
+phi_tildez=0.0
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
 
 DO iElem=1,nElems
-  !compute Euler contribution of the fluxes, 
+  
+#if LOCAL_ALPHA && NONCONS
+  ! Get the conservative and nonconservative fluxes separately
+  CALL EvalAdvFluxAverage3D_separate(    U(:,:,:,:,iElem), &
+#if (PP_NodeType==1 & defined(PP_u_aux_exist))
+                                      Uaux(:,:,:,:,iElem), &
+#endif /*(PP_NodeType==1 & defined(PP_u_aux_exist))*/
+                            metrics_fTilde(:,:,:,:,iElem), &
+                            metrics_gTilde(:,:,:,:,iElem), &
+                            metrics_hTilde(:,:,:,:,iElem), &
+                                   ftilde,gtilde,htilde,f_noncons,g_noncons,h_noncons,phi)
+#else /*LOCAL_ALPHA && NONCONS*/
+  !compute advective+nonconservative contribution of the fluxes
   CALL EvalAdvFluxAverage3D(             U(:,:,:,:,iElem), &
 #if (PP_NodeType==1 & defined(PP_u_aux_exist))
                                       Uaux(:,:,:,:,iElem), &
@@ -232,22 +266,38 @@ DO iElem=1,nElems
                             metrics_gTilde(:,:,:,:,iElem), &
                             metrics_hTilde(:,:,:,:,iElem), &
                                    ftilde,gtilde,htilde)
-  
+#endif /*LOCAL_ALPHA && NONCONS*/
+
 #if LOCAL_ALPHA
-    
-    ! High-order fluxes:
-    ! ******************
+    ! Conservative part of high-order "staggered" fluxes:
+    ! ***************************************************
     do j=0, PP_N-1
       ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j-1,:,:,iElem)
       gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j-1,:,iElem)
       htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j-1,iElem)
+#if NONCONS
+      phi_tildex(:,j,:,:) = phi_tildex(:,j-1,:,:)
+      phi_tildey(:,:,j,:) = phi_tildey(:,:,j-1,:)
+      phi_tildez(:,:,:,j) = phi_tildez(:,:,:,j-1)
+#endif /*NONCONS*/
       
       do i=0, PP_N
         ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
         gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
         htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
+#if NONCONS
+        phi_tildex(:,j,:,:) = phi_tildex(:,j,:,:) + wGP(j)*Dvolsurf_T(i,j)*f_noncons(:,i,j,:,:)
+        phi_tildey(:,:,j,:) = phi_tildey(:,:,j,:) + wGP(j)*Dvolsurf_T(i,j)*g_noncons(:,i,:,j,:)
+        phi_tildez(:,:,:,j) = phi_tildez(:,:,:,j) + wGP(j)*Dvolsurf_T(i,j)*h_noncons(:,i,:,:,j)
+#endif /*NONCONS*/
       end do
     end do
+#if NONCONS
+    ! Copy conservative part into the right non-conservative fluxes
+    ftildeR_DG(:,:,:,:,iElem) = ftilde_DG(:,:,:,:,iElem)
+    gtildeR_DG(:,:,:,:,iElem) = gtilde_DG(:,:,:,:,iElem)
+    htildeR_DG(:,:,:,:,iElem) = htilde_DG(:,:,:,:,iElem)
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   
   !only euler
@@ -255,10 +305,29 @@ DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     
 #if LOCAL_ALPHA
+#if NONCONS
+    ! Add nonconservative part to fluxes
+    do term=1,nnonc
+      ! Fluxes on the left
+      ftilde_DG(:,i-1,j,k,iElem) = ftilde_DG(:,i-1,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i-1,j,k)
+      gtilde_DG(:,i,j-1,k,iElem) = gtilde_DG(:,i,j-1,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j-1,k)
+      htilde_DG(:,i,j,k-1,iElem) = htilde_DG(:,i,j,k-1,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k-1)
+      ! Fluxes on the right
+      ftildeR_DG(:,i,j,k,iElem) = ftildeR_DG(:,i,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i,j,k)
+      gtildeR_DG(:,i,j,k,iElem) = gtildeR_DG(:,i,j,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j,k)
+      htildeR_DG(:,i,j,k,iElem) = htildeR_DG(:,i,j,k,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k)
+    end do
+    ! Use flux differencing formula to get Ut
+    Ut(:,i,j,k,iElem) =  sWGP(i) * ( ftildeR_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j  ,k  ,iElem) ) &
+                       + sWGP(j) * ( gtildeR_DG(:,i,j,k,iElem) - gtilde_DG(:,i  ,j-1,k  ,iElem) ) &
+                       + sWGP(k) * ( htildeR_DG(:,i,j,k,iElem) - htilde_DG(:,i  ,j  ,k-1,iElem) )
+#else /*NONCONS*/
+    ! Use flux differencing formula to get Ut
     Ut(:,i,j,k,iElem) =  sWGP(i) * ( ftilde_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j  ,k  ,iElem) ) &
                        + sWGP(j) * ( gtilde_DG(:,i,j,k,iElem) - gtilde_DG(:,i  ,j-1,k  ,iElem) ) &
                        + sWGP(k) * ( htilde_DG(:,i,j,k,iElem) - htilde_DG(:,i  ,j  ,k-1,iElem) )
-#else
+#endif /*NONCONS*/
+#else /*LOCAL_ALPHA*/
     DO l=0,PP_N
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) + Dvolsurf_T(l,i)*ftilde(:,l,i,j,k)  &
                                             + Dvolsurf_T(l,j)*gtilde(:,l,i,j,k)  &

@@ -237,7 +237,14 @@ contains
     ftilde_DG = 0.0
     gtilde_DG = 0.0
     htilde_DG = 0.0
-    
+#if NONCONS
+    allocate ( ftildeR_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
+    allocate ( gtildeR_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
+    allocate ( htildeR_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
+    ftildeR_DG = 0.0
+    gtildeR_DG = 0.0
+    htildeR_DG = 0.0
+#endif /*NONCONS*/
     allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
 #endif /*LOCAL_ALPHA*/
     
@@ -519,7 +526,7 @@ contains
   subroutine ResetBounds
     use MOD_Preproc
     use MOD_Globals
-    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max, idp_bounds_delta
+    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max
     use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
     implicit none
     !-arguments------------------------------------------------------------
@@ -2117,6 +2124,11 @@ contains
     SDEALLOCATE ( ftilde_DG )
     SDEALLOCATE ( gtilde_DG )
     SDEALLOCATE ( htilde_DG )
+#if NONCONS
+    SDEALLOCATE ( ftildeR_DG )
+    SDEALLOCATE ( gtildeR_DG )
+    SDEALLOCATE ( htildeR_DG )
+#endif /*NONCONS*/
     SDEALLOCATE ( dalpha_loc )
 #endif /*LOCAL_ALPHA*/
     

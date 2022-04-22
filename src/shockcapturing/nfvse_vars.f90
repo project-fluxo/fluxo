@@ -31,6 +31,9 @@ module MOD_NFVSE_Vars
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
   public :: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+  public :: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   public :: sdxR, sdxL, rL, rR, U_ext 
   public :: Compute_FVFluxes, SubFVMethod
@@ -76,6 +79,11 @@ module MOD_NFVSE_Vars
   real                  , allocatable :: ftilde_DG(:,:,:,:,:)
   real                  , allocatable :: gtilde_DG(:,:,:,:,:)
   real                  , allocatable :: htilde_DG(:,:,:,:,:)
+#if NONCONS
+  real                  , allocatable :: ftildeR_DG(:,:,:,:,:)
+  real                  , allocatable :: gtildeR_DG(:,:,:,:,:)
+  real                  , allocatable :: htildeR_DG(:,:,:,:,:)
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   real, target          , allocatable :: alpha(:)         !< Element-wise blending function (modified every time Ut is computed)
   real                  , allocatable :: alpha_Master(:)  !< Blending function on master sides
