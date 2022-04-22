@@ -561,6 +561,9 @@ contains
     use MOD_IDP_Vars           , only: FFV_m_FDG, IDPafterIndicator, IDPPositivity
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars         , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
     use MOD_Basis              , only: ALMOSTEQUAL
@@ -634,10 +637,16 @@ contains
                                                ftildeR, gtildeR, htildeR, &
 #endif /*NONCONS*/
                                                SubCellMetrics(iElem), iElem )
+!     Compute antidiffusive fluxes in the case of local alpha
 #if LOCAL_ALPHA
       ftilde_DG(:,:,:,:,iElem) = ftilde_DG(:,:,:,:,iElem) - ftilde
       gtilde_DG(:,:,:,:,iElem) = gtilde_DG(:,:,:,:,iElem) - gtilde
       htilde_DG(:,:,:,:,iElem) = htilde_DG(:,:,:,:,iElem) - htilde
+#if NONCONS
+      ftildeR_DG(:,:,:,:,iElem) = ftildeR_DG(:,:,:,:,iElem) - ftildeR
+      gtildeR_DG(:,:,:,:,iElem) = gtildeR_DG(:,:,:,:,iElem) - gtildeR
+      htildeR_DG(:,:,:,:,iElem) = htildeR_DG(:,:,:,:,iElem) - htildeR
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
 !     Update Ut
 !     ---------

@@ -360,6 +360,9 @@ contains
     use MOD_Mesh_Vars   , only: nElems, sJ
     use MOD_IDP_Vars    , only: dalpha_loc
     use MOD_NFVSE_Vars  , only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars  , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
     use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPressureTVD, IDPPositivity, dalpha
     use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator, IDPalpha_min
@@ -380,6 +383,7 @@ contains
 #endif /*LOCAL_ALPHA*/
     logical :: doIDP
     !--------------------------------------------------------
+    
 !   Initialize
 !   ----------
 #if LOCAL_ALPHA
@@ -414,9 +418,15 @@ contains
 #if LOCAL_ALPHA
         do k=1, PP_N ; do j=0, PP_N ; do i=-1, PP_N
           ftilde_DG(:,i,j,k,eID) = ftilde_DG(:,i,j,0,eID)
+#if NONCONS
+          ftildeR_DG(:,i,j,k,eID) = ftildeR_DG(:,i,j,0,eID)
+#endif /*NONCONS*/
         end do       ; end do       ; end do
         do k=1, PP_N ; do j=-1, PP_N ; do i=0, PP_N
           gtilde_DG(:, i,j,k,eID) = gtilde_DG(:, i,j,0,eID)
+#if NONCONS
+          gtildeR_DG(:, i,j,k,eID) = gtildeR_DG(:, i,j,0,eID)
+#endif /*NONCONS*/
         end do       ; end do       ; end do
 #endif /*LOCAL_ALPHA*/  
       end if
@@ -877,6 +887,9 @@ contains
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars    , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
@@ -977,24 +990,42 @@ contains
         ! Positive contributions
         Pp = 0.0
         Pp = Pp + max(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
-        Pp = Pp + max(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
         Pp = Pp + max(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+#if NONCONS
+        Pp = Pp + max(0.0,-sWGP(i) * ftildeR_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(j) * gtildeR_DG(1,i  ,j  ,k  ,eID))
+#else
+        Pp = Pp + max(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
         Pp = Pp + max(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         if (.not. IDPForce2D) then
         Pp = Pp + max(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+#if NONCONS
+        Pp = Pp + max(0.0,-sWGP(k) * htildeR_DG(1,i  ,j  ,k  ,eID))
+#else
         Pp = Pp + max(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         end if
         Pp = Pp*sJ(i,j,k,eID)
         
         ! Negative contributions
         Pm = 0.0
         Pm = Pm + min(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
-        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
         Pm = Pm + min(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+#if NONCONS
+        Pm = Pm + min(0.0,-sWGP(i) * ftildeR_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtildeR_DG(1,i  ,j  ,k  ,eID))
+#else
+        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
         Pm = Pm + min(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         if (.not. IDPForce2D) then
         Pm = Pm + min(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+#if NONCONS
+        Pm = Pm + min(0.0,-sWGP(k) * htildeR_DG(1,i  ,j  ,k  ,eID))
+#else
         Pm = Pm + min(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
@@ -1056,6 +1087,9 @@ contains
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars    , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: Usafe, dalpha_loc
@@ -1269,7 +1303,7 @@ contains
     use MOD_IDP_Vars      , only: Usafe, IDPForce2D
     use MOD_IDP_Vars      , only: IDPparam_t
     use MOD_Mesh_Vars     , only: nElems
-    use MOD_Equation_Vars , only: Get_SpecEntropy, ConsToSpecEntropy
+    use MOD_Equation_Vars , only: Get_SpecEntropy
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
 #else
@@ -1592,6 +1626,9 @@ contains
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars    , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
 #endif /*LOCAL_ALPHA*/
@@ -1639,13 +1676,22 @@ contains
         
         ! Negative contributions
         Pm = 0.0
-        Pm = Pm + min(0.0,  sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
-        Pm = Pm + min(0.0, -sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
-        Pm = Pm + min(0.0,  sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
-        Pm = Pm + min(0.0, -sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+#if NONCONS
+        Pm = Pm + min(0.0,-sWGP(i) * ftildeR_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtildeR_DG(1,i  ,j  ,k  ,eID))
+#else
+        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         if (.not. IDPForce2D) then
-        Pm = Pm + min(0.0,  sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
-        Pm = Pm + min(0.0, -sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+#if NONCONS
+        Pm = Pm + min(0.0,-sWGP(k) * htildeR_DG(1,i  ,j  ,k  ,eID))
+#else
+        Pm = Pm + min(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+#endif /*NONCONS*/
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
@@ -1792,6 +1838,9 @@ contains
 !===================================================================================================================================
   subroutine NewtonLoops_LocalAlpha(param,i,j,k,eID,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars    , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
     use MOD_IDP_Vars      , only: IDPForce2D, Usafe, IDPparam_t, i_sub_Goal, i_sub_InitialCheck, IDPgamma
@@ -1814,7 +1863,11 @@ contains
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! xi+
+#if NONCONS
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftildeR_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
+#else
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(i) * (ftilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in xi+
+#endif /*NONCONS*/
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     ! eta-
@@ -1823,7 +1876,11 @@ contains
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! eta+
+#if NONCONS
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtildeR_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
+#else
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(j) * (gtilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in eta+
+#endif /*NONCONS*/
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
@@ -1834,7 +1891,11 @@ contains
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     
     ! zeta+
+#if NONCONS
+    param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htildeR_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
+#else
     param % F_antidiff = -IDPgamma * sJ(i,j,k,eID) * sWGP(k) * (htilde_DG(:,i  ,j  ,k  ,eID)) ! Anti-difussive flux in zeta+
+#endif /*NONCONS*/
     call NewtonLoop(Usafe(:,i,j,k,eID), &  ! Safe (FV) solution
                               param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     end if
@@ -1963,6 +2024,9 @@ contains
     use MOD_IDP_Vars  , only: alpha_maxIDP
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars, only: ftilde_DG, gtilde_DG, htilde_DG
+#if NONCONS
+    use MOD_NFVSE_Vars, only: ftildeR_DG, gtildeR_DG, htildeR_DG
+#endif /*NONCONS*/
     use MOD_NFVSE_Vars, only: sWGP
     use MOD_Mesh_Vars , only: sJ
 #else
@@ -2019,7 +2083,11 @@ contains
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+#if NONCONS
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftildeR_DG(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+#else
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (ftilde_DG (:,i  ,j,k,eID))*sJ(i,j,k,eID)
+#endif /*NONCONS*/
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
@@ -2031,7 +2099,11 @@ contains
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
+#if NONCONS
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtildeR_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
+#else
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (gtilde_DG (:,i,  j,k,eID))*sJ(i,j,k,eID)
+#endif /*NONCONS*/
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
@@ -2043,7 +2115,11 @@ contains
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
       
       ! right
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
+#if NONCONS
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htildeR_DG(:,i,  j,k,eID))*sJ(i,j,k,eID)
+#else
+      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (htilde_DG (:,i,  j,k,eID))*sJ(i,j,k,eID)
+#endif /*NONCONS*/
       U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
       Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
     end do       ; end do       ; enddo
