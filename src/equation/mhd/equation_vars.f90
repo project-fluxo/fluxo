@@ -892,7 +892,6 @@ end subroutine Get_DensityTimesPressure
   END FUNCTION Get_MathEntropy
 !==================================================================================================================================
 !> Transformation from conservative variables specific entropy
-!> ATTENTION: This is a dummy routine and does not work (yet) for MHD
 !==================================================================================================================================
   PURE FUNCTION Get_SpecEntropy(cons) RESULT(Entropy)
     ! MODULES
@@ -906,7 +905,7 @@ end subroutine Get_DensityTimesPressure
     REAL                                :: entropy !< vector of entropy variables
     !----------------------------------------------------------------------------------------------------------------------------------
     ! LOCAL VARIABLES
-    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+    REAL                                :: srho,u,v,w,v2s2
     !==================================================================================================================================
     srho   = 1./cons(1)
     u      = cons(2)*srho
@@ -915,14 +914,12 @@ end subroutine Get_DensityTimesPressure
     v2s2   = 0.5*(u*u+v*v+w*w)
     
     ! Other specific entropy
-    Entropy = -1. !(cons(5)-cons(1)*v2s2) * srho**Kappa
-!~    stop 'Get_SpecEntropy not specified for MHD yet!'
+    Entropy = (cons(5)-cons(1)*v2s2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))) * srho**Kappa
     
   END FUNCTION Get_SpecEntropy
   
 !==================================================================================================================================
-!> Transformation from conservative variables U to specific entropy vector, dS/dU, 
-!> ATTENTION: This is a dummy routine and does not work (yet) for MHD
+!> Transformation from conservative variables U to specific entropy vector, dS/dU
 !==================================================================================================================================
 PURE FUNCTION ConsToSpecEntropy(cons) RESULT(Entropy)
 ! MODULES
@@ -939,20 +936,19 @@ REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 REAL                                :: srho,u,v,w,v2s2,srho_KappaP1
 !==================================================================================================================================
 srho   = 1./cons(1)
+
 u      = cons(2)*srho
 v      = cons(3)*srho
 w      = cons(4)*srho
 v2s2   = 0.5*(u*u+v*v+w*w)
 srho_KappaP1 = srho**KappaP1
 
-! Convert to entropy variables
-entropy = -1.0!
-!~entropy(1)   =  srho_KappaP1 * (v2s2*KappaP1*cons(1) - Kappa * cons(5))
-!~entropy(2)   =  - cons(2) * srho_KappaP1
-!~entropy(3)   =  - cons(3) * srho_KappaP1
-!~entropy(4)   =  - cons(4) * srho_KappaP1
-!~entropy(5)   =  srho**Kappa
-!~stop 'Get_SpecEntropy not specified for MHD yet!'
+! 
+entropy(1)   =  srho_KappaP1 * (v2s2*KappaP1*cons(1) - Kappa * cons(5) + Kappa * s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))
+entropy(2:4) =  - cons(2:4) * srho_KappaP1
+entropy(5)   =  srho**Kappa
+entropy(6:PP_nVar) =  - cons(6:PP_nVar) *smu_0 * srho**Kappa
+
 END FUNCTION ConsToSpecEntropy
   
 END MODULE MOD_Equation_Vars
