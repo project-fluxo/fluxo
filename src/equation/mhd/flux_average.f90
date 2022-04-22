@@ -293,22 +293,21 @@ INTEGER,PARAMETER:: ve=4
 INTEGER,PARAMETER:: vs=6
 INTEGER,PARAMETER:: ve=8
 #endif /*NONCONSTYPE*/
-REAL :: Phi_MHD_s2(vs:ve)
+REAL :: Phi_MHD_s4(vs:ve)
 REAL :: Phi_GLM_s2(2)
-REAL :: Bhat_L
 !==================================================================================================================================
 
 DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
 
 #if NONCONS==1 /*Powell*/
   ! Powell: Phi(2:8) =B,vB,v
-  Phi_MHD_s2(vs:ve) = 0.5 * (/U_in(6:8,i,j,k),Uaux(8,i,j,k),Uaux(2:4,i,j,k)/)
+  Phi_MHD_s4(vs:ve) = 0.25 * (/U_in(6:8,i,j,k),Uaux(8,i,j,k),Uaux(2:4,i,j,k)/)
 #elif NONCONS==2 /*Brackbill*/
   ! Brackbill: Phi(2:4) =B
-  Phi_MHD_s2(vs:ve) = 0.5 * U_in(6:8,i,j,k)
+  Phi_MHD_s4(vs:ve) = 0.25 * U_in(6:8,i,j,k)
 #elif NONCONS==3 /*Janhunen*/
   ! Janhunen: Phi(6:8) =v
-  Phi_MHD_s2(vs:ve) = 0.5 * Uaux(2:4,i,j,k)
+  Phi_MHD_s4(vs:ve) = 0.25 * Uaux(2:4,i,j,k)
 #endif /*NONCONSTYPE*/
   
   ! Non-conservative terms in xi
@@ -317,11 +316,8 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   Phi_GLM_s2 = 0.5*SUM(M_f(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
   
-  ! First metrics dealiasing term
-  Bhat_L = dot_product(M_f(:,i,j,k),U_in(6:8,i,j,k))
-  
   DO l=0,PP_N
-    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_f(:,i,j,k)+M_f(:,l,j,k)),U_in(6:8,l,j,k)))
+    f(vs:ve,l,i,j,k) = f(vs:ve,l,i,j,k) + Phi_MHD_s4 * dot_product(M_f(:,i,j,k)+M_f(:,l,j,k),U_in(6:8,i,j,k)+U_in(6:8,l,j,k))
 #if defined(PP_GLM) && defined (PP_NC_GLM)
     !nonconservative term to restore Galilean invariance for GLM term
     f((/5,9/),l,i,j,k) = f((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,l,j,k)) * Phi_GLM_s2
@@ -334,11 +330,8 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   Phi_GLM_s2 = 0.5*SUM(M_g(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
   
-  ! First metrics dealiasing term
-  Bhat_L = dot_product(M_g(:,i,j,k),U_in(6:8,i,j,k))
-  
   DO l=0,PP_N
-    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_g(:,i,j,k)+M_g(:,i,l,k)),U_in(6:8,i,l,k)))
+    g(vs:ve,l,i,j,k) = g(vs:ve,l,i,j,k) + Phi_MHD_s4 * dot_product(M_g(:,i,j,k)+M_g(:,i,l,k),U_in(6:8,i,j,k)+U_in(6:8,i,l,k))
 #if defined(PP_GLM) && defined (PP_NC_GLM)
     !nonconservative term to restore Galilean invariance for GLM term
     g((/5,9/),l,i,j,k) = g((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,l,k)) * Phi_GLM_s2
@@ -351,11 +344,8 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   Phi_GLM_s2 = 0.5*SUM(M_h(:,i,j,k)*Uaux(2:4,i,j,k)) *(/U_in(9,i,j,k),1./)
 #endif /*PP_GLM and PP_NC_GLM*/
   
-  ! First metrics dealiasing term
-  Bhat_L = dot_product(M_h(:,i,j,k),U_in(6:8,i,j,k))
-  
   DO l=0,PP_N
-    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k) + Phi_MHD_s2 * (Bhat_L + dot_product(0.5*(M_h(:,i,j,k)+M_h(:,i,j,l)),U_in(6:8,i,j,l)))
+    h(vs:ve,l,i,j,k) = h(vs:ve,l,i,j,k) + Phi_MHD_s4 * dot_product(M_h(:,i,j,k)+M_h(:,i,j,l),U_in(6:8,i,j,k)+U_in(6:8,i,j,l))
 #if defined(PP_GLM) && defined (PP_NC_GLM)
     !nonconservative term to restore Galilean invariance for GLM term
     h((/5,9/),l,i,j,k) = h((/5,9/),l,i,j,k) + (U_in(9,i,j,k)+U_in(9,i,j,l)) * Phi_GLM_s2
@@ -395,7 +385,7 @@ REAL,DIMENSION(PP_nVar),INTENT(INOUT) :: Fstar   !< added to flux
 real :: Bhat
 !==================================================================================================================================
 
-Bhat = 0.5*(dot_product(metric_L,UL(6:8))+dot_product(0.5*(metric_L+metric_R),UR(6:8)))
+Bhat = 0.25*dot_product(metric_L+metric_R,UL(6:8)+UR(6:8))
 
 #if NONCONS==1 /*Powell*/
   ! Powell: Phi(2:8) =B,vB,v
