@@ -630,7 +630,7 @@ contains
   subroutine Get_IDP_Variables(U,dt,tIn)
     use MOD_NFVSE_Vars, only: alpha
     use MOD_PreProc
-    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe, IDPalpha_min
+    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe, IDPalpha_min, IDPafterIndicator
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: Uprev_ext,Uprev
     use MOD_IDP_Vars      , only: Usafe, p_safe
@@ -694,7 +694,7 @@ contains
     if (IDPneedsUbar) then
       maxdt_IDP = huge(1.0)
       do eID=1, nElems
-        if (alpha(eID) < IDPalpha_min ) cycle
+        if (IDPafterIndicator .and. (alpha(eID) < IDPalpha_min) ) cycle
         associate (SCM => SubCellMetrics(eID))
         do i=-1, PP_N ! i goes through the interfaces
           do k=0, PP_N  ; do j=0, PP_N ! j and k go through DOFs
