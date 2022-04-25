@@ -198,7 +198,7 @@ USE MOD_DG_Vars      ,ONLY: U_master
 USE MOD_Mesh_Vars    ,ONLY: nSides,nBCSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
-USE MOD_Equation_Vars,ONLY: RefStateCons
+USE MOD_Equation_Vars,ONLY: RefStateCons, SolveRiemannProblem_BC
 USE MOD_Equation_Vars,ONLY: IniExactFunc
 USE MOD_Equation_Vars,ONLY: s2mu_0
 USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
@@ -254,7 +254,7 @@ DO iBC=1,nBCs
                        NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
 #endif 
     END DO !iSide=1,nBCloc
-  CASE(2)
+  CASE(2) ! Dirichlet condition using Riemann solver with the external state (ExactFunc/BCSate)
     ! BCState specifies refstate to be used, if 0 then use iniexactfunc
     IF(BCState.EQ.0)THEN
       DO iSide=1,nBCLoc
@@ -291,6 +291,50 @@ DO iBC=1,nBCs
                      gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
 #endif /*PARABOLIC*/
                      NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
+      END DO !iSide=1,nBCloc
+    END IF !BCState=0
+    
+  CASE(21) ! Dirichlet condition using Riemann solver 15 with the external state (ExactFunc/BCSate)
+    ! BCState specifies refstate to be used, if 0 then use iniexactfunc
+    IF(BCState.EQ.0)THEN
+      DO iSide=1,nBCLoc
+        SideID=BCSideID(iBC,iSide)
+        DO q=0,PP_N
+          DO p=0,PP_N
+            CALL ExactFunc(IniExactFunc,tIn,Face_xGP(:,p,q,SideID),U_Face_loc(:,p,q))
+          END DO ! p
+        END DO ! q
+        CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
+#if PARABOLIC
+                     gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                     gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                     gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                     NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID),SolveRiemannProblem_BC)
+#if NONCONS
+        CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
+                         NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))
+#endif 
+      END DO !iSide=1,nBCloc
+    ELSE !BCstate /= 0
+      DO q=0,PP_N
+        DO p=0,PP_N
+          U_Face_loc(:,p,q) = RefStateCons(BCState,:)
+        END DO ! p
+      END DO ! q
+      DO iSide=1,nBCLoc
+        SideID=BCSideID(iBC,iSide)
+        CALL Riemann(Flux(:,:,:,SideID),U_master(:,:,:,SideID),U_Face_loc, &
+#if PARABOLIC
+                     gradPx_master(:,:,:,SideID),gradPx_master(:,:,:,SideID), &
+                     gradPy_master(:,:,:,SideID),gradPy_master(:,:,:,SideID), &
+                     gradPz_master(:,:,:,SideID),gradPz_master(:,:,:,SideID), &
+#endif /*PARABOLIC*/
+                     NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID),SolveRiemannProblem_BC)
 #if NONCONS
         CALL AddNonConsFlux(Flux(:,:,:,SideID),U_master(:,:,:,SideID),     U_Face_loc, &
                          NormVec(:,:,:,SideID),TangVec1(:,:,:,SideID),TangVec2(:,:,:,SideID))

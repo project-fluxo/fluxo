@@ -110,7 +110,7 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
                                            "13: FloGor EC+LLF entropy stable flux,"//&
                                            "14: Derigs EC + 9wave entropy stable flux,"//&
                                            "15: FloGor EC + 9wave entropy dissipation flux")
-
+CALL prms%CreateIntOption(     "Riemann_BC",  " Specifies Riemann solver for boundary 21. Default value: Riemann")
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
@@ -249,7 +249,12 @@ END IF
 IF(MPIroot) CALL CheckFluxes()
 
 WhichRiemannSolver = GETINT('Riemann','1')
-CALL SetRiemannSolver(whichRiemannSolver)
+WhichRiemannSolver_BC = GETINT('Riemann_BC',INTTOSTR(WhichRiemannSolver))
+
+! Set the Riemann solver for the BC 21
+CALL SetRiemannSolver(whichRiemannSolver_BC,SolveRiemannProblem_BC)
+! Set the Riemann solver for the general faces (overwrites VolumeFluxAverage and RiemannVolFluxAndDissipMatrices)
+CALL SetRiemannSolver(whichRiemannSolver,SolveRiemannProblem)
 
 #if (PP_DiscType==2)
 #if PP_VolFlux==-1
@@ -308,17 +313,18 @@ END SUBROUTINE InitEquationAfterAdapt
 !==================================================================================================================================
 !> Set the pointer of the riemann solver
 !==================================================================================================================================
-SUBROUTINE SetRiemannSolver(which)
+SUBROUTINE SetRiemannSolver(which,SolveRiemannProblem)
 ! MODULES
 USE MOD_Globals
-USE MOD_Equation_Vars,ONLY: VolumeFluxAverage
-USE MOD_Equation_Vars,ONLY: SolveRiemannProblem,mu_0,RiemannVolFluxAndDissipMatrices
+USE MOD_Equation_Vars,ONLY: VolumeFluxAverage, i_sub_SolveRiemannProblem
+USE MOD_Equation_Vars,ONLY: mu_0,RiemannVolFluxAndDissipMatrices
 USE MOD_Riemann
 USE MOD_Flux_Average
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
 INTEGER,INTENT(IN) :: which
+PROCEDURE(i_sub_SolveRiemannProblem), POINTER :: SolveRiemannProblem
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------

@@ -683,7 +683,6 @@ contains
                                             sCM, iElem )
     use MOD_PreProc
     use MOD_NFVSE_Vars, only: SubCellMetrics_t
-    use MOD_Riemann   , only: AdvRiemann
 #if NONCONS
     USE MOD_Riemann   , only: AddNonConsFlux
 #endif /*NONCONS*/
@@ -1504,8 +1503,9 @@ contains
                                          U_,FR_, &
 #endif /*NONCONS*/
                                             metrics)
-    use MOD_Riemann   , only: AdvRiemann
-    use MOD_NFVSE_Vars, only: InnerFaceMetrics_t
+    use MOD_Riemann      , only: AdvRiemann
+    use MOD_Equation_Vars, only: SolveRiemannProblem
+    use MOD_NFVSE_Vars   , only: InnerFaceMetrics_t
 #if NONCONS
     use MOD_Riemann   , only: AddNonConsFlux
 #endif /*NONCONS*/
@@ -1528,7 +1528,7 @@ contains
     do i=0, PP_N-1
       
       call AdvRiemann(F_(:,:,:,i),UR(:,:,:,i),UL(:,:,:,i+1), &
-                      metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i))
+                      metrics%nv(:,:,:,i),metrics%t1(:,:,:,i),metrics%t2(:,:,:,i),SolveRiemannProblem)
       
 #if NONCONS
       ! Copy conservative part

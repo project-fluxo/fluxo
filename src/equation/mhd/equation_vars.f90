@@ -109,7 +109,7 @@ character(len=255) :: IndicatorQuantityNames(nIndVar) = (/character(len=132) :: 
 
 LOGICAL           :: EquationInitIsDone=.FALSE. !< Init switch  
 !procedure pointers
-INTEGER             :: WhichRiemannSolver       !< choice of riemann solver
+INTEGER             :: WhichRiemannSolver, WhichRiemannSolver_BC       !< choice of riemann solver
 #if (PP_DiscType==2)
 !procedure pointers for split form DG
 INTEGER             :: WhichVolumeFlux          !< for split-form DG, two-point average flux
@@ -119,6 +119,8 @@ PROCEDURE(i_sub_RiemannVolFluxAndDissipMatrices),POINTER :: RiemannVolFluxAndDis
 PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem  =>Null() !< procedure pointer to riemann solver 
 PROCEDURE(i_sub_VolumeFluxAverage   ),POINTER :: VolumeFluxAverage    =>Null() !< procedure pointer to 1D two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: VolumeFluxAverageVec =>Null() !< procedure pointer to 3D two-point average flux
+
+PROCEDURE(i_sub_SolveRiemannProblem ),POINTER :: SolveRiemannProblem_BC  =>Null() !< procedure pointer to riemann solver 
 #ifdef JESSE_MORTAR
 INTEGER             :: WhichMortarFlux          !< for split-form DG, two-point average flux
 PROCEDURE(i_sub_VolumeFluxAverageVec),POINTER :: MortarFluxAverageVec     !< procedure pointer to two-point average flux
