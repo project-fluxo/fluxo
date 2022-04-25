@@ -70,7 +70,10 @@ END INTERFACE
 
 
 #if (PP_DiscType==2)
-PUBLIC::EvalAdvFluxAverage3D, EvalAdvFluxAverage3D_separate
+PUBLIC::EvalAdvFluxAverage3D
+#if NONCONS
+PUBLIC::EvalAdvFluxAverage3D_separate
+#endif /*NONCONS*/
 PUBLIC::EvalAdvFluxAverage
 PUBLIC::EvalUaux
 #endif /*PP_DiscType==2*/
@@ -188,6 +191,7 @@ END SUBROUTINE EvalAdvFluxAverage3D
 !> Computes flux differences in 3D, making use of the symmetry and appling also directly the metrics  
 !> Symmetric and non-symmetric terms are provided separately
 !==================================================================================================================================
+#if NONCONS
 SUBROUTINE EvalAdvFluxAverage3D_separate(U_in,&
 #if (PP_NodeType==1)
                                 Uaux, &
@@ -209,7 +213,6 @@ REAL,DIMENSION(1:3      ,0:PP_N,0:PP_N,0:PP_N),INTENT(IN ) :: M_f,M_g,M_h !< met
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,DIMENSION(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: ftilde,gtilde,htilde !< 4D transformed fluxes (iVar,i,,k)
-#if NONCONS
 #if defined(PP_GLM) && defined (PP_NC_GLM)
 REAL,DIMENSION(            2,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f_noncons,g_noncons,h_noncons !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
 REAL,DIMENSION(1:PP_nVar,3,2,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi                           !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
@@ -217,7 +220,6 @@ REAL,DIMENSION(1:PP_nVar,3,2,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi    
 REAL,DIMENSION(            1,0:PP_N,0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: f_noncons,g_noncons,h_noncons !< 4D transformed symmetric part of non-conservative terms  (iVar,i,,k)
 REAL,DIMENSION(1:PP_nVar,3,1,       0:PP_N,0:PP_N,0:PP_N),INTENT(OUT) :: phi                           !< 4D transformed symmetric part of non-conservative terms (iVar,i,,k)
 #endif /*PP_GLM and PP_NC_GLM*/
-#endif /*NONCONS*/
 #if (PP_NodeType==1)
 REAL,DIMENSION(1:nAuxVar,0:PP_N,0:PP_N,0:PP_N)       ,INTENT(OUT) :: Uaux                 !auxiliary variables
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -267,11 +269,10 @@ DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
   END DO!l=k+1,N
 END DO; END DO; END DO ! i,j,k
 
-#if NONCONS
 CALL AddNonConsFluxTilde3D_separate(U_in,Uaux,M_f,M_g,M_h,f_noncons,g_noncons,h_noncons,phi)
-#endif /*NONCONS*/
 
 END SUBROUTINE EvalAdvFluxAverage3D_separate
+#endif /*NONCONS*/
 
 !==================================================================================================================================
 !> Compute volumetric flux differences (advective and non-conservative contributions) between two points appling also directly the metrics  
