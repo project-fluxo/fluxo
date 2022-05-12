@@ -517,7 +517,17 @@ contains
     ftilde_DG = 0.0
     gtilde_DG = 0.0
     htilde_DG = 0.0
-    
+#if NONCONS
+    SDEALLOCATE(ftildeR_DG)
+    SDEALLOCATE(gtildeR_DG)
+    SDEALLOCATE(htildeR_DG)
+    allocate ( ftildeR_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
+    allocate ( gtildeR_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
+    allocate ( htildeR_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
+    ftildeR_DG = 0.0
+    gtildeR_DG = 0.0
+    htildeR_DG = 0.0
+#endif /*NONCONS*/
     SDEALLOCATE(dalpha_loc)
     allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
 #endif /*LOCAL_ALPHA*/
