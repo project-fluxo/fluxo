@@ -352,7 +352,7 @@ CALL MPI_ALLREDUCE(MPI_IN_PLACE,Vol ,1   ,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_
 CALL MPI_ALLREDUCE(MPI_IN_PLACE,Surf,nBCs,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,iError)
 #endif /*MPI*/
 
-if (abs(oldVol - Vol) > 1.e-13) then
+if (abs(oldVol - Vol)/oldVol > 1.e-10) then
   SWRITE(*,*) 'ERROR. The domain is changing size!! (oldVol/newVol): ', oldVol, Vol
   CALL CollectiveStop(__STAMP__,'Problems in AMR.')
 end if
@@ -360,7 +360,7 @@ end if
 SurfIsWrong = .FALSE.
 do iBC=1,nBCs
   IF(Boundarytype(iBC,BC_TYPE) .EQ. 1) CYCLE
-  if (abs(oldSurf(iBC) - Surf(iBC)) > 1.e-13) then
+  if (abs(oldSurf(iBC) - Surf(iBC))/oldSurf(iBC) > 1.e-10) then
     SurfIsWrong(iBC) = .TRUE.
     SWRITE(*,*) 'ERROR. The boundary ', iBC, 'changed size!! (oldSurf/newSurf): ', oldSurf(iBC), Surf(iBC)
   end if
