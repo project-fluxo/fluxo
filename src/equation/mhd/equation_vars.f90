@@ -74,6 +74,34 @@ REAL                :: GLM_scr          !< 1/cr. damping of divergence error, fa
 LOGICAL             :: divBSource       !< switch for adding source terms depending on diverngece errors
 #endif /*PP_GLM*/
 
+!----------------------------------------------------------------------------------------------------------------------------------
+! INDICES OF SOLUTION ARRAYS
+!----------------------------------------------------------------------------------------------------------------------------------
+! Solution variables (same convention for the entropy variables)
+INTEGER, PARAMETER :: IRHO1 = 1
+INTEGER, PARAMETER :: IRHOU = 2
+INTEGER, PARAMETER :: IRHOV = 3
+INTEGER, PARAMETER :: IRHOW = 4
+INTEGER, PARAMETER :: IRHOE = 5
+INTEGER, PARAMETER :: IB1   = 6
+INTEGER, PARAMETER :: IB2   = 7
+INTEGER, PARAMETER :: IB3   = 8
+#ifdef PP_GLM
+INTEGER, PARAMETER :: IPSI  = 9
+#endif
+! Primitive variables
+! IRHO1, IB1, IB2, IB3
+INTEGER, PARAMETER :: IU = 2
+INTEGER, PARAMETER :: IV = 3
+INTEGER, PARAMETER :: IW = 4
+INTEGER, PARAMETER :: IP = 5
+! Auxiliary variables
+! IU, IV, IW, IP
+INTEGER, PARAMETER :: ISRHO = 1
+INTEGER, PARAMETER :: IVV   = 6
+INTEGER, PARAMETER :: IBB   = 7
+INTEGER, PARAMETER :: IVB   = 8
+!----------------------------------------------------------------------------------------------------------------------------------
 
 CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames(PP_nVar)=(/ CHARACTER(LEN=255) :: &
                    'Density',    &
@@ -239,15 +267,15 @@ REAL,INTENT(OUT)    :: prim(PP_nVar) !< vector of primitive variables
 ! LOCAL VARIABLES 
 REAL                :: sRho    ! 1/Rho
 !==================================================================================================================================
-sRho=1./cons(1)
+sRho=1./cons(IRHO1)
 ! rho
-prim(1)=cons(1)
+prim(IRHO1)=cons(IRHO1)
 ! velocity
-prim(2:4)=cons(2:4)*sRho
+prim(IU:IW)=cons(IRHOU:IRHOW)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
-prim(5)=KappaM1*(cons(5)-0.5*SUM(cons(2:4)*prim(2:4))-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))
+prim(IP)=KappaM1*(cons(IRHOE)-0.5*SUM(cons(IRHOU:IRHOW)*prim(IU:IW))-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar)))
 ! B,psi
-prim(6:PP_nVar)=cons(6:PP_nVar)
+prim(IB1:PP_nVar)=cons(IB1:PP_nVar)
 END SUBROUTINE ConsToPrim
 
 
@@ -268,13 +296,13 @@ REAL,INTENT(OUT)    :: cons(PP_nVar) !< vector of conservative variables
 ! LOCAL VARIABLES 
 !==================================================================================================================================
 ! rho
-cons(1)=prim(1)
+cons(IRHO1)=prim(IRHO1)
 ! velocity
-cons(2:4)=prim(2:4)*prim(1)
+cons(IRHOU:IRHOW)=prim(IU:IW)*prim(IRHO1)
 ! total energy
-cons(5)=sKappaM1*prim(5)+0.5*SUM(cons(2:4)*prim(2:4))+s2mu_0*(SUM(prim(6:PP_nVar)*prim(6:PP_nVar)))
+cons(IRHOE)=sKappaM1*prim(IP)+0.5*SUM(cons(IRHOU:IRHOW)*prim(IU:IW))+s2mu_0*(SUM(prim(IB1:PP_nVar)*prim(IB1:PP_nVar)))
 ! B,psi
-cons(6:PP_nVar)=prim(6:PP_nVar)
+cons(IB1:PP_nVar)=prim(IB1:PP_nVar)
 END SUBROUTINE PrimToCons
 
 
@@ -341,22 +369,22 @@ REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 ! LOCAL VARIABLES
 REAL                                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
-srho   = 1./cons(1)
-u      = cons(2)*srho
-v      = cons(3)*srho
-w      = cons(4)*srho
+srho   = 1./cons(IRHO1)
+u      = cons(IRHOU)*srho
+v      = cons(IRHOV)*srho
+w      = cons(IRHOW)*srho
 v2s2   = 0.5*(u*u+v*v+w*w)
-rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9
-!s      = LOG(p) - kappa*LOG(cons(1))
-s      = - LOG(rho_sp*(cons(1)**kappaM1))
+rho_sp = cons(IRHO1)/(KappaM1*(cons(IRHOE)-cons(IRHO1)*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9
+!s      = LOG(p) - kappa*LOG(cons(IRHO1))
+s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
 
 ! Convert to entropy variables
-entropy(1)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-entropy(2)         =  rho_sp*u                  ! 2*beta*u
-entropy(3)         =  rho_sp*v                  ! 2*beta*v
-entropy(4)         =  rho_sp*w                  ! 2*beta*w
-entropy(5)         = -rho_sp                    !-2*beta
-entropy(6:PP_nVar) =  rho_sp*cons(6:PP_nVar)    ! 2*beta*B +2*beta*psi
+entropy(IRHO1)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+entropy(IRHOU)         =  rho_sp*u                  ! 2*beta*u
+entropy(IRHOV)         =  rho_sp*v                  ! 2*beta*v
+entropy(IRHOW)         =  rho_sp*w                  ! 2*beta*w
+entropy(IRHOE)         = -rho_sp                    !-2*beta
+entropy(IB1:PP_nVar) =  rho_sp*cons(IB1:PP_nVar)    ! 2*beta*B +2*beta*psi
 
 END FUNCTION ConsToEntropy
 
@@ -377,26 +405,26 @@ REAL,DIMENSION(PP_nVar)  :: cons    !< vector of conservative variables
 ! LOCAL VARIABLES
 REAL                                :: p_srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
-! entropy(5)   = -rho_sp    !-2*beta
-rho_sp  = - entropy(5)
+! entropy(IRHOE)   = -rho_sp    !-2*beta
+rho_sp  = - entropy(IRHOE)
 p_srho = 1./rho_sp
-! entropy(2)   =  rho_sp*u  ! 2*beta*v
-! entropy(3)   =  rho_sp*v  ! 2*beta*v
-! entropy(4)   =  rho_sp*w  ! 2*beta*v
-u = entropy(2)*p_srho
-v = entropy(3)*p_srho
-w = entropy(4)*p_srho
+! entropy(IRHOU)   =  rho_sp*u  ! 2*beta*v
+! entropy(IRHOV)   =  rho_sp*v  ! 2*beta*v
+! entropy(IRHOW)   =  rho_sp*w  ! 2*beta*v
+u = entropy(IRHOU)*p_srho
+v = entropy(IRHOV)*p_srho
+w = entropy(IRHOW)*p_srho
 
 v2s2   = 0.5*(u*u+v*v+w*w)
-! entropy(1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-s =kappa -((entropy(1) + rho_sp*v2s2) * kappaM1) 
-! s      = - LOG(rho_sp*(cons(1)**kappaM1))
-cons(1) = (exp(-s)*p_srho)**(skappaM1)
-cons(2) = u * cons(1)
-cons(3) = v * cons(1)
-cons(4) = w * cons(1)
-cons(6:PP_nVar) =entropy(6:PP_nVar)*p_srho
-cons(5) = cons(1)*(sKappaM1*p_srho + v2s2) +s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))
+! entropy(IRHO1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+s =kappa -((entropy(IRHO1) + rho_sp*v2s2) * kappaM1) 
+! s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
+cons(IRHO1) = (exp(-s)*p_srho)**(skappaM1)
+cons(IRHOU) = u * cons(IRHO1)
+cons(IRHOV) = v * cons(IRHO1)
+cons(IRHOW) = w * cons(IRHO1)
+cons(IB1:PP_nVar) =entropy(IB1:PP_nVar)*p_srho
+cons(IRHOE) = cons(IRHO1)*(sKappaM1*p_srho + v2s2) +s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))
 
 END FUNCTION EntropyToCons
 
@@ -441,22 +469,22 @@ INTEGER             :: i
 REAL                :: srho,u,v,w,v2s2,rho_sp,s
 !==================================================================================================================================
 DO i=1,dim2
-  srho   = 1./cons(1,i)
+  srho   = 1./cons(IRHO1,i)
   u      = cons(2,i)*srho
-  v      = cons(3,i)*srho
-  w      = cons(4,i)*srho
+  v      = cons(IRHOV,i)*srho
+  w      = cons(IRHOW,i)*srho
   v2s2   = 0.5*(u*u+v*v+w*w)
-  rho_sp = cons(1,i)/(KappaM1*(cons(5,i)-cons(1,i)*v2s2-s2mu_0*SUM(cons(6:PP_nVar,i)*cons(6:PP_nVar,i)))) ! pressure includes psi^2 if PP_nVar=9
-  !s      = LOG(p) - kappa*LOG(cons(1))
-  s      = - LOG(rho_sp*(cons(1,i)**kappaM1))
+  rho_sp = cons(IRHO1,i)/(KappaM1*(cons(IP,i)-cons(IRHO1,i)*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i)))) ! pressure includes psi^2 if PP_nVar=9
+  !s      = LOG(p) - kappa*LOG(cons(IRHO1))
+  s      = - LOG(rho_sp*(cons(IRHO1,i)**kappaM1))
   
   ! Convert to entropy variables
-  entropy(1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+  entropy(IRHO1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
   entropy(2,i)         =  rho_sp*u                  ! 2*beta*u
-  entropy(3,i)         =  rho_sp*v                  ! 2*beta*v
-  entropy(4,i)         =  rho_sp*w                  ! 2*beta*w
-  entropy(5,i)         = -rho_sp                    !-2*beta
-  entropy(6:PP_nVar,i) =  rho_sp*cons(6:PP_nVar,i)    ! 2*beta*B +2*beta*psi
+  entropy(IRHOV,i)         =  rho_sp*v                  ! 2*beta*v
+  entropy(IRHOW,i)         =  rho_sp*w                  ! 2*beta*w
+  entropy(IRHOE,i)         = -rho_sp                    !-2*beta
+  entropy(IB1:PP_nVar,i) =  rho_sp*cons(IB1:PP_nVar,i)    ! 2*beta*B +2*beta*psi
 END DO!i
 END SUBROUTINE ConsToEntropyVec
 
@@ -486,58 +514,58 @@ REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho
 
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
-  sRho      = 1./cons(1)
-      u     = cons(2)*sRho
-      v     = cons(3)*sRho
-      w     = cons(4)*sRho
-  gradu     = sRho*(grad_in(2)-grad_in(1)*u)
-  gradv     = sRho*(grad_in(3)-grad_in(1)*v)
-  gradw     = sRho*(grad_in(4)-grad_in(1)*w)
+  sRho      = 1./cons(IRHO1)
+      u     = cons(IRHOU)*sRho
+      v     = cons(IRHOV)*sRho
+      w     = cons(IRHOW)*sRho
+  gradu     = sRho*(grad_in(IRHOU)-grad_in(IRHO1)*u)
+  gradv     = sRho*(grad_in(IRHOV)-grad_in(IRHO1)*v)
+  gradw     = sRho*(grad_in(IRHOW)-grad_in(IRHO1)*w)
   
   !density gradient
-  gradP(1)  = grad_in(1)
+  gradP(IRHO1)  = grad_in(IRHO1)
   !velocity gradient
-  gradP(2)  = gradu
-  gradP(3)  = gradv
-  gradP(4)  = gradw
+  gradP(IU)  = gradu
+  gradP(IV)  = gradv
+  gradP(IW)  = gradw
   !pressure gradient
-  gradP(5)  = KappaM1*(grad_in(5)                                        & !gradE
-                       -(0.5*grad_in(1)*(u*u+v*v+w*w) + (cons(2)*gradu+cons(3)*gradv+cons(4)*gradw)) & !-grad_Ekin
-                       - smu_0*SUM(cons(6:PP_nVar)*grad_in(6:PP_nVar))   ) !-grad_Emag
+  gradP(IP)  = KappaM1*(grad_in(IRHOE)                                        & !gradE
+                       -(0.5*grad_in(IRHO1)*(u*u+v*v+w*w) + (cons(IRHOU)*gradu+cons(IRHOV)*gradv+cons(IRHOW)*gradw)) & !-grad_Ekin
+                       - smu_0*SUM(cons(IB1:PP_nVar)*grad_in(IB1:PP_nVar))   ) !-grad_Emag
   !gradient of B,psi same in primitive
-  gradP(6:PP_nVar)=grad_in(6:PP_nVar) 
+  gradP(IB1:PP_nVar)=grad_in(IB1:PP_nVar) 
 #elif (PP_Lifting_Var==2) 
   !grad_in is gradient of primitive variable, do nothing
   gradP(:)=grad_in(:)
 #elif (PP_Lifting_Var==3) 
   !grad_in is gradient of entropy variable,  entropy variables are:
-  ! w(1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(2:4)=(rho/p)*v, w(5)=-(rho/p), w(6:8)=(rho/p)*B(:) , w(9)=(rho/p)*psi 
+  ! w(IRHO1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(IRHOU:IRHOW)=(rho/p)*v, w(IRHOE)=-(rho/p), w(IB1:IB3)=(rho/p)*B(:) , w(9)=(rho/p)*psi 
 
-  !gradient of (p/rho),  (p/rho)_x = -grad_in(5)
+  !gradient of (p/rho),  (p/rho)_x = -grad_in(IRHOE)
 
-  sRho   = 1./cons(1)
-  u      = cons(2)*sRho
-  v      = cons(3)*sRho
-  w      = cons(4)*sRho
-  Ekin   = 0.5*(cons(2)*u+cons(3)*v+cons(4)*w)
-  p      = KappaM1*(cons(5)-Ekin-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar))) ! includes psi^2 if PP_nVar=9
-  rho_sp = cons(1)/p
+  sRho   = 1./cons(IRHO1)
+  u      = cons(IRHOU)*sRho
+  v      = cons(IRHOV)*sRho
+  w      = cons(IRHOW)*sRho
+  Ekin   = 0.5*(cons(IRHOU)*u+cons(IRHOV)*v+cons(IRHOW)*w)
+  p      = KappaM1*(cons(IRHOE)-Ekin-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))) ! includes psi^2 if PP_nVar=9
+  rho_sp = cons(IRHO1)/p
   p_srho = p * sRho
   
-  gradu  = p_sRho * (grad_in(2) +u*grad_in(5))
-  gradv  = p_sRho * (grad_in(3) +v*grad_in(5))
-  gradw  = p_sRho * (grad_in(4) +w*grad_in(5))
+  gradu  = p_sRho * (grad_in(IRHOU) +u*grad_in(IRHOE))
+  gradv  = p_sRho * (grad_in(IRHOV) +v*grad_in(IRHOE))
+  gradw  = p_sRho * (grad_in(IRHOW) +w*grad_in(IRHOE))
   
   !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
-  gradP(1)  = cons(1)*grad_in(1) - grad_in(5)*(Ekin -p*sKappaM1) + rho_sp*(cons(2)*gradu+cons(3)*gradv+cons(4)*gradw)
+  gradP(IRHO1)  = cons(IRHO1)*grad_in(IRHO1) - grad_in(IRHOE)*(Ekin -p*sKappaM1) + rho_sp*(cons(IRHOU)*gradu+cons(IRHOV)*gradv+cons(IRHOW)*gradw)
   !velocity gradient
-  gradP(2)  = gradu
-  gradP(3)  = gradv
-  gradP(4)  = gradw
+  gradP(IU)  = gradu
+  gradP(IV)  = gradv
+  gradP(IW)  = gradw
   !pressure gradient, =1/(rho/p)*(rho_x-p*(rho/p)_x)
-  gradP(5)  = p_srho * (gradP(1) + p *grad_in(5))
+  gradP(IP)  = p_srho * (gradP(IRHO1) + p *grad_in(IRHOE))
   !gradient of B,psi: 
-  gradP(6:PP_nVar) = p_sRho * (grad_in(6:PP_nVar) +cons(6:PP_nVar)*grad_in(5))
+  gradP(IB1:PP_nVar) = p_sRho * (grad_in(IB1:PP_nVar) +cons(IB1:PP_nVar)*grad_in(IRHOE))
 #endif /*PP_Lifting_Var*/
 END FUNCTION ConvertToGradPrim
 
@@ -567,62 +595,62 @@ REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho,grad_in1,grad_in5
 DO i=1,dim2
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
-  sRho      = 1./cons(1,i)
+  sRho      = 1./cons(IRHO1,i)
       u     = cons(2,i)*sRho
-      v     = cons(3,i)*sRho
-      w     = cons(4,i)*sRho
-  grad_in1  = gradP(1,i)
-  gradu     = sRho*(gradP(2,i)-gradP(1,i)*u)
-  gradv     = sRho*(gradP(3,i)-gradP(1,i)*v)
-  gradw     = sRho*(gradP(4,i)-gradP(1,i)*w)
-  grad_in5  = gradP(5,i)
+      v     = cons(IRHOV,i)*sRho
+      w     = cons(IRHOW,i)*sRho
+  grad_in1  = gradP(IRHO1,i)
+  gradu     = sRho*(gradP(2,i)-gradP(IRHO1,i)*u)
+  gradv     = sRho*(gradP(IRHOV,i)-gradP(IRHO1,i)*v)
+  gradw     = sRho*(gradP(IRHOW,i)-gradP(IRHO1,i)*w)
+  grad_in5  = gradP(IRHOE,i)
   
   !density gradient
-  !gradP(1,i)  = gradP(1,i)
+  !gradP(IRHO1,i)  = gradP(IRHO1,i)
   !velocity gradient
-  gradP(2,i)  = gradu
-  gradP(3,i)  = gradv
-  gradP(4,i)  = gradw
+  gradP(IU,i)  = gradu
+  gradP(IV,i)  = gradv
+  gradP(IW,i)  = gradw
   !pressure gradient
-  gradP(5,i)  = KappaM1*(grad_in5                                        & !gradE
-                       -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(2,i)*gradu+cons(3,i)*gradv+cons(4,i)*gradw)) & !-grad_Ekin
-                       - smu_0*SUM(cons(6:PP_nVar,i)*gradP(6:PP_nVar,i))   ) !-grad_Emag
+  gradP(IP,i)  = KappaM1*(grad_in5                                        & !gradE
+                       -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(2,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)) & !-grad_Ekin
+                       - smu_0*SUM(cons(IB1:PP_nVar,i)*gradP(IB1:PP_nVar,i))   ) !-grad_Emag
   !gradient of B,psi same in primitive
-  !gradP(6:PP_nVar,i)=grad_P(6:PP_nVar,i) 
+  !gradP(IB1:PP_nVar,i)=grad_P(IB1:PP_nVar,i) 
 #elif (PP_Lifting_Var==2) 
   !grad_in is gradient of primitive variable, do nothing
   gradP(:,i)=gradP(:,i)
 #elif (PP_Lifting_Var==3) 
   !grad_in is gradient of entropy variable,  entropy variables are:
-  ! w(1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(2:4)=(rho/p)*v, w(5)=-(rho/p), w(6:8)=(rho/p)*B(:) , w(9)=(rho/p)*psi 
+  ! w(IRHO1)= (kappa-s)/(kappa-1)+(rho/p)/2*|v|^2  ,w(IRHOU:IRHOW)=(rho/p)*v, w(IRHOE)=-(rho/p), w(IB1:IB3)=(rho/p)*B(:) , w(9)=(rho/p)*psi 
 
-  !gradient of (p/rho),  (p/rho)_x = -grad_in(5)
+  !gradient of (p/rho),  (p/rho)_x = -grad_in(IRHOE)
 
-  sRho   = 1./cons(1,i)
+  sRho   = 1./cons(IRHO1,i)
   u      = cons(2,i)*sRho
-  v      = cons(3,i)*sRho
-  w      = cons(4,i)*sRho
-  Ekin   = 0.5*(cons(2,i)*u+cons(3,i)*v+cons(4,i)*w)
-  p      = KappaM1*(cons(5,i)-Ekin-s2mu_0*SUM(cons(6:PP_nVar,i)*cons(6:PP_nVar,i))) ! includes psi^2 if PP_nVar=9
-  rho_sp = cons(1,i)/p
+  v      = cons(IRHOV,i)*sRho
+  w      = cons(IRHOW,i)*sRho
+  Ekin   = 0.5*(cons(2,i)*u+cons(IRHOV,i)*v+cons(IRHOW,i)*w)
+  p      = KappaM1*(cons(IRHOE,i)-Ekin-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i))) ! includes psi^2 if PP_nVar=9
+  rho_sp = cons(IRHO1,i)/p
   p_srho = p * sRho
   
-  grad_in1=gradP(1,i)
-  gradu  = p_sRho * (gradP(2,i) +u*gradP(5,i))
-  gradv  = p_sRho * (gradP(3,i) +v*gradP(5,i))
-  gradw  = p_sRho * (gradP(4,i) +w*gradP(5,i))
-  grad_in5=gradP(5,i)
+  grad_in1=gradP(IRHO1,i)
+  gradu  = p_sRho * (gradP(2,i) +u*gradP(IRHOE,i))
+  gradv  = p_sRho * (gradP(IRHOV,i) +v*gradP(IRHOE,i))
+  gradw  = p_sRho * (gradP(IRHOW,i) +w*gradP(IRHOE,i))
+  grad_in5=gradP(IRHOE,i)
   
   !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
-  gradP(1,i)  = cons(1,i)*grad_in1 - grad_in5*(Ekin -p*sKappaM1) + rho_sp*(cons(2,i)*gradu+cons(3,i)*gradv+cons(4,i)*gradw)
+  gradP(IRHO1,i)  = cons(IRHO1,i)*grad_in1 - grad_in5*(Ekin -p*sKappaM1) + rho_sp*(cons(2,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)
   !velocity gradient
-  gradP(2,i)  = gradu
-  gradP(3,i)  = gradv
-  gradP(4,i)  = gradw
+  gradP(IU,i)  = gradu
+  gradP(IV,i)  = gradv
+  gradP(IW,i)  = gradw
   !pressure gradient, =1/(rho/p)*(rho_x-p*(rho/p)_x)
-  gradP(5,i)  = p_srho * (gradP(1,i) + p *grad_in5)
+  gradP(IP,i)  = p_srho * (gradP(IRHO1,i) + p *grad_in5)
   !gradient of B,psi: 
-  gradP(6:PP_nVar,i) = p_sRho * (gradP(6:PP_nVar,i) +cons(6:PP_nVar,i)*grad_in5)
+  gradP(IB1:PP_nVar,i) = p_sRho * (gradP(IB1:PP_nVar,i) +cons(IB1:PP_nVar,i)*grad_in5)
 #endif /*PP_Lifting_Var*/
 END DO!i
 END SUBROUTINE ConvertToGradPrimVec
@@ -645,10 +673,10 @@ REAL,INTENT(OUT)    :: ca,cs,cf      !< alfven, sound and fast magnetosonic wave
 REAL                :: sRho,c2,va2,ca2
 REAL                :: astar
 !==================================================================================================================================
-sRho=1./prim(1)
-c2=kappa*prim(5)*sRho
-ca2=Prim(6)*Prim(6)*sRho*smu_0 !Alfen wave speed
-va2=SUM(prim(7:8)*prim(7:8))*sRho*smu_0+ca2
+sRho=1./prim(IRHO1)
+c2=kappa*prim(IP)*sRho
+ca2=Prim(IB1)*Prim(IB1)*sRho*smu_0 !Alfen wave speed
+va2=SUM(prim(IB2:IB3)*prim(IB2:IB3))*sRho*smu_0+ca2
 ca=SQRT(ca2)
 
 astar=SQRT((c2+va2)*(c2+va2)-4.*c2*ca2)
@@ -674,10 +702,10 @@ REAL,INTENT(OUT)    :: cf            !< fast magnetosonic wave speed
 REAL                :: sRho,c2,va2,ca2
 REAL                :: astar
 !==================================================================================================================================
-sRho=1./prim(1)
-c2=kappa*prim(5)*sRho
-ca2=Prim(6)*Prim(6)*sRho*smu_0 !Alfen wave speed
-va2=SUM(prim(7:8)*prim(7:8))*sRho*smu_0+ca2
+sRho=1./prim(IRHO1)
+c2=kappa*prim(IP)*sRho
+ca2=Prim(IB1)*Prim(IB1)*sRho*smu_0 !Alfen wave speed
+va2=SUM(prim(IB2:IB3)*prim(IB2:IB3))*sRho*smu_0+ca2
 
 astar=SQRT((c2+va2)*(c2+va2)-4.*c2*ca2)
 cf=SQRT(0.5*(c2+va2+astar))
@@ -699,13 +727,13 @@ REAL,INTENT(OUT)    :: cf            !< fast magnetosonic wave speed
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 !==================================================================================================================================
-! sRho=1./prim(1)
-! c2=kappa*prim(5)*sRho
-! va2=SUM(prim(6:8)*prim(6:8))*sRho*smu_0
+! sRho=1./prim(IRHO1)
+! c2=kappa*prim(IP)*sRho
+! va2=SUM(prim(IB1:IB3)*prim(IB1:IB3))*sRho*smu_0
 ! astar=SQRT((c2+va2)*(c2+va2)-4.*c2*ca2)
 
 ! cf max in direction of ca2=0 => astar=c2+va2 => cf2=c2+va2
-cf=SQRT((kappa*prim(5)+SUM(prim(6:8)*prim(6:8))*smu_0)/prim(1))
+cf=SQRT((kappa*prim(IP)+SUM(prim(IB1:IB3)*prim(IB1:IB3))*smu_0)/prim(IRHO1))
 END SUBROUTINE FastestWave3D
 
 
@@ -736,23 +764,23 @@ REAL             :: sRho_Roe,RoeVel(3),RoeB(3)
 REAL             :: H_L,H_R,RoeH
 REAL             :: XX, va2_Roe,c2_Roe,ca2_Roe,astar_Roe
 !==================================================================================================================================
-SqrtRho_L   = SQRT(PrimL(1))
-SqrtRho_R   = SQRT(PrimR(1))
+SqrtRho_L   = SQRT(PrimL(IRHO1))
+SqrtRho_R   = SQRT(PrimR(IRHO1))
 sSqrtRoe_LR = 1./(SqrtRho_L+SqrtRho_R)
 Roe_L       = SqrtRho_L*sSqrtRoe_LR
 Roe_R       = SqrtRho_R*sSqrtRoe_LR
-ptot_L      = PrimL(5)+s2mu_0*SUM(PrimL(6:8)**2) !Total presssure!
-ptot_R      = PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2) !Total presssure!
+ptot_L      = PrimL(IP)+s2mu_0*SUM(PrimL(IB1:IB3)**2) !Total presssure!
+ptot_R      = PrimR(IP)+s2mu_0*SUM(PrimR(IB1:IB3)**2) !Total presssure!
 
 sRho_Roe    = 1./(SqrtRho_L*SqrtRho_R)
-RoeVel(1:3) = Roe_L*PrimL(2:4)+Roe_R*PrimR(2:4)
-RoeB(1:3)   = Roe_L*PrimR(6:8)+Roe_R*PrimL(6:8)
+RoeVel(1:3) = Roe_L*PrimL(IU:IW)+Roe_R*PrimR(IU:IW)
+RoeB(1:3)   = Roe_L*PrimR(IB1:IB3)+Roe_R*PrimL(IB1:IB3)
 
-H_L  = (ConsL(5)+ptot_L)/PrimL(1)
-H_R  = (ConsR(5)+ptot_R)/PrimR(1)
+H_L  = (ConsL(IRHOE)+ptot_L)/PrimL(IRHO1)
+H_R  = (ConsR(IRHOE)+ptot_R)/PrimR(IRHO1)
 RoeH = Roe_L*H_L+Roe_R*H_R
 
-XX   = 0.5*SUM((PrimL(6:8)-PrimR(6:8))**2)*(sSqrtRoe_LR**2)
+XX   = 0.5*SUM((PrimL(IB1:IB3)-PrimR(IB1:IB3))**2)*(sSqrtRoe_LR**2)
 
 va2_Roe   = SUM(RoeB(:)**2)*smu_0*sRho_Roe
 c2_Roe    = (2.-Kappa)*XX+ (Kappa-1)*(RoeH-0.5*SUM(RoeVel(:)**2)-va2_Roe)
@@ -795,7 +823,7 @@ pure subroutine Get_Density(U,rho)
   real,intent(out) :: rho
   !-------------------------------------------------
   
-  rho = U(1)
+  rho = U(IRHO1)
 end subroutine Get_Density
 !===================================================================================================================================
 !> Returns the pressure
@@ -807,7 +835,7 @@ pure subroutine Get_Pressure(U,p)
   real,intent(out) :: p
   !-------------------------------------------------
   
-  p = KappaM1*(U(5)-0.5*(SUM(U(2:4)*U(2:4))/U(1))-s2mu_0*SUM(U(6:PP_nVar)*U(6:PP_nVar)))
+  p = KappaM1*(U(IRHOE)-0.5*(SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/U(IRHO1))-s2mu_0*SUM(U(IB1:PP_nVar)*U(IB1:PP_nVar)))
   
 end subroutine Get_Pressure
 !============================================================================================================================
@@ -823,7 +851,7 @@ pure subroutine Get_DensityTimesPressure(U,rhop)
   !-------------------------------------------------
   
   call Get_Pressure(U,p)
-  rhop = U(1) * p
+  rhop = U(IRHO1) * p
 end subroutine Get_DensityTimesPressure
 !============================================================================================================================
 !> Get kinetic energy
@@ -835,7 +863,7 @@ end subroutine Get_DensityTimesPressure
     real, intent(out) :: kinen
     !-------------------------------------------------
     
-    kinen = 0.5*SUM(U(2:4)*U(2:4))/U(1) + s2mu_0*SUM(U(6:8)*U(6:8))
+    kinen = 0.5*SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/U(IRHO1) + s2mu_0*SUM(U(IB1:IB3)*U(IB1:IB3))
   end subroutine Get_KinPlusMagEnergy
 
 !============================================================================================================================
@@ -850,12 +878,12 @@ end subroutine Get_DensityTimesPressure
     real :: vel(3)
     !-------------------------------------------------
     
-    vel = U(2:4)/U(1)
+    vel = U(IRHOU:IRHOW)/U(IRHO1)
     
-    dpdu(1)         = 0.5*sum(vel**2)
-    dpdu(2:4)       = -vel
-    dpdu(5)         = 1.0
-    dpdu(6:PP_nVar) = -smu_0*U(6:PP_nVar)
+    dpdu(IRHO1)         = 0.5*sum(vel**2)
+    dpdu(IRHOU:IRHOW)   = -vel
+    dpdu(IRHOE)         = 1.0
+    dpdu(IB1:PP_nVar)   = -smu_0*U(IB1:PP_nVar)
     
     dpdu = dpdu*KappaM1
     
