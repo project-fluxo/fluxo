@@ -1741,8 +1741,8 @@ USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL  :: PL(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
-REAL  :: PR(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
+REAL  :: P_L(PP_nVar),UL(PP_nVar),FrefL(PP_nVar),FrefR(PP_nVar),Fcheck(PP_nVar)
+REAL  :: P_R(PP_nVar),UR(PP_nVar),Frefsym(PP_nVar)
 REAL  :: check,absdiff
 INTEGER :: icase,i,nCases
 PROCEDURE(),POINTER :: fluxProc
@@ -1760,18 +1760,18 @@ LOGICAL :: failed
 !==================================================================================================================================
 WRITE(*,*)'    CHECK ALL FLUXES...'
 !test consistency, random state:
-PL(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
-PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
+P_L(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
+P_R(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 #ifdef PP_GLM
-PL(IPSI)= 0.31999469
-PR(IPSI)= 0.
+P_L(IPSI)= 0.31999469
+P_R(IPSI)= 0.
 GLM_ch = 0.5 !was not set yet
 nCases=8
 #else
 nCases=7
 #endif
-CALL PrimToCons(PL,UL)
-CALL PrimToCons(PR,UR)
+CALL PrimToCons(P_L,UL)
+CALL PrimToCons(P_R,UR)
 !use EvalAdvectionFlux1D as reference Flux
 CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
