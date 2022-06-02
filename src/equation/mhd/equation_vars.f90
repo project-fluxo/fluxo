@@ -175,10 +175,11 @@ ABSTRACT INTERFACE
   END SUBROUTINE i_sub_VolumeFluxAverage
 
   PURE SUBROUTINE i_sub_VolumeFluxAverageVec (UL,UR,UauxL,UauxR,metric_L,metric_R,Fstar)
+    IMPORT nAuxVar
     REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UL             !< left state
     REAL,DIMENSION(PP_nVar),INTENT(IN)  :: UR             !< right state
-    REAL,DIMENSION(8),INTENT(IN)        :: UauxL          !< left auxiliary variables
-    REAL,DIMENSION(8),INTENT(IN)        :: UauxR          !< right auxiliary variables
+    REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxL          !< left auxiliary variables
+    REAL,DIMENSION(nAuxVar),INTENT(IN)  :: UauxR          !< right auxiliary variables
     REAL,INTENT(IN)                     :: metric_L(3)    !< left metric
     REAL,INTENT(IN)                     :: metric_R(3)    !< right metric
     REAL,DIMENSION(PP_nVar),INTENT(OUT) :: Fstar          !< transformed central flux
