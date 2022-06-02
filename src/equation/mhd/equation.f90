@@ -147,7 +147,7 @@ USE MOD_Equation_Vars
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER :: i,iSide
-INTEGER :: MaxBCState,locType,locState
+INTEGER :: MaxBCState,locType,locState, nVars
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -233,15 +233,19 @@ IF(MaxBCState.GT.nRefState)&
 IF(nRefState .GT. 0)THEN
   ALLOCATE(RefStatePrim(nRefState,PP_nVar))
   ALLOCATE(RefStateCons(nRefState,PP_nVar))
-  DO i=1,nRefState
-    RefStatePrim(i,:)  = GETREALARRAY('RefState',8)
+  nVars = PP_nVar
 #ifdef PP_GLM
-    RefStatePrim(i,9)  =0.
+  nVars = nVars-1
+#endif
+  DO i=1,nRefState
+    RefStatePrim(i,:)  = GETREALARRAY('RefState',nVars)
+#ifdef PP_GLM
+    RefStatePrim(i,IPSI)  =0.
 #endif
     CALL PrimToCons(RefStatePrim(i,:),RefStateCons(i,:))
-    IF(RefStateCons(i,5).LT.0.)THEN
+    IF(RefStateCons(i,IRHOE).LT.0.)THEN
       CALL abort(__STAMP__, &
-          "Refstate has negative energy",i,RefStateCons(i,5))
+          "Refstate has negative energy",i,RefStateCons(i,IRHOE))
     END IF !neg. Energy
   END DO
 END IF
@@ -545,11 +549,7 @@ SUBROUTINE ExactFunc(ExactFunction,tIn,x,resu)
 ! MODULES
 USE MOD_Globals,ONLY:Abort,CROSS
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:Kappa,sKappaM1,RefStateCons,RefStatePrim,IniRefState,nRefState
-USE MOD_Equation_Vars,ONLY:smu_0,mu_0
-USE MOD_Equation_Vars,ONLY:IniCenter,IniFrequency,IniAmplitude,IniHalfwidth,IniWaveNumber
-USE MOD_Equation_Vars,ONLY:IniDisturbance
-USE MOD_Equation_Vars,ONLY:PrimToCons
+USE MOD_Equation_Vars
 USE MOD_TestCase_ExactFunc,ONLY: TestcaseExactFunc
 USE MOD_TimeDisc_vars,ONLY:dt,CurrentStage,FullBoundaryOrder,RKc,RKb,t
 IMPLICIT NONE
@@ -568,7 +568,7 @@ REAL                            :: Resu_t(PP_nVar),Resu_tt(PP_nVar)      ! state
 INTEGER                         :: i,j
 REAL                            :: Omega,a,f
 REAL                            :: Prim(1:PP_nVar)
-REAL                            :: r, e, nx,ny,sqr,va,phi_alv
+REAL                            :: radius, e, nx,ny,sqr,va,phi_alv
 REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
@@ -584,79 +584,79 @@ CASE(0)
   CALL TestcaseExactFunc(ExactFunction,tEval,x,Resu,Resu_t,Resu_tt)
 CASE(1) ! constant
   Resu = RefStateCons(IniRefState,:) ! prim=(/1.,0.3,0.,0.,0.71428571/)
-  !Resu(1)  = Prim(1)
-  !Resu(2:4)= Resu(1)*Prim(2:4)
-  !Resu(5)  = Prim(5)*sKappaM1 + 0.5*Resu(1)*SUM(Prim(2:4)*Prim(2:4))
+  !Resu(IRHO1)  = Prim(IRHO1)
+  !Resu(IU:IW)= Resu(IRHO1)*Prim(IU:IW)
+  !Resu(IRHOE)  = Prim(IP)*sKappaM1 + 0.5*Resu(IRHO1)*SUM(Prim(IU:IW)*Prim(IU:IW))
 CASE(2) ! non-divergence-free magnetic field,diss. Altmann
-  Resu(1)=1.0
-  Resu(2:4)=0.
-  Resu(5)=6.0
-  Resu(6)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
+  Resu(IRHO1)=1.0
+  Resu(IRHOU:IRHOW)=0.
+  Resu(IRHOE)=6.0
+  Resu(IB1)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
 CASE(3,301) ! alfven wave , domain [-1,1]^3
   IF(ExactFunction.EQ.301)THEN
-    Prim(5)=RefStatePrim(IniRefState,5)
+    Prim(IP)=RefStatePrim(IniRefState,5)
   ELSE
-    Prim(5)=1.
+    Prim(IP)=1.
   END IF
   Omega=2.*PP_Pi*IniFrequency
-  ! r: lenght-variable = lenght of computational domain
-  r=2.
+  ! radius: lenght-variable = lenght of computational domain
+  radius=2.
   ! e: epsilon = 0.2
   e=0.2
-  nx  = 1./SQRT(r**2+1.)
-  ny  = r/SQRT(r**2+1.)
+  nx  = 1./SQRT(radius**2+1.)
+  ny  = radius/SQRT(radius**2+1.)
   sqr = 1. !2*SQRT(PP_Pi)
   Va  = omega/(ny*sqr)
-  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(2)-0.5*r)) - Va*tEval
+  phi_alv = omega/ny*(nx*(x(1)-0.5*radius) + ny*(x(2)-0.5*radius)) - Va*tEval
   Resu=0.
-  Resu(1) = 1.
-  Resu(2) = -e*ny*COS(phi_alv)
-  Resu(3) =  e*nx*COS(phi_alv)
-  Resu(4) =  e*SIN(phi_alv)
-  Resu(5) = Prim(5)*sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !rho=1, CASE(3): p=1, CASE(301):p from RefState
-  Resu(6) = nx -Resu(2)*sqr
-  Resu(7) = ny -Resu(3)*sqr
-  Resu(8) =    -Resu(4)*sqr
+  Resu(IRHO1) = 1.
+  Resu(IRHOU) = -e*ny*COS(phi_alv)
+  Resu(IRHOV) =  e*nx*COS(phi_alv)
+  Resu(IRHOW) =  e*SIN(phi_alv)
+  Resu(IRHOE) = Prim(IP)*sKappaM1+0.5*SUM(Resu(IRHOU:IRHOW)*Resu(IRHOU:IRHOW)) !rho=1, CASE(3): p=1, CASE(301):p from RefState
+  Resu(IB1) = nx -Resu(IRHOU)*sqr
+  Resu(IB2) = ny -Resu(IRHOV)*sqr
+  Resu(IB3) =    -Resu(IRHOW)*sqr
   ! g'(t)
   Resu_t     =0.
-  Resu_t(1)  =0.
-  Resu_t(2)  =-Va*e*ny*SIN(phi_alv)
-  Resu_t(3)  = Va*e*nx*SIN(phi_alv)
-  Resu_t(4)  =-Va*e*COS(phi_alv)
-  Resu_t(5)  = SUM(Resu(2:4)*Resu_t(2:4))
-  Resu_t(6)  = -Resu_t(2)*sqr
-  Resu_t(7)  = -Resu_t(3)*sqr
-  Resu_t(8)  = -Resu_t(4)*sqr
+  Resu_t(IRHO1)  =0.
+  Resu_t(IRHOU)  =-Va*e*ny*SIN(phi_alv)
+  Resu_t(IRHOV)  = Va*e*nx*SIN(phi_alv)
+  Resu_t(IRHOW)  =-Va*e*COS(phi_alv)
+  Resu_t(IRHOE)  = SUM(Resu(IRHOU:IRHOW)*Resu_t(IRHOU:IRHOW))
+  Resu_t(IB1)  = -Resu_t(IRHOU)*sqr
+  Resu_t(IB2)  = -Resu_t(IRHOV)*sqr
+  Resu_t(IB3)  = -Resu_t(IRHOW)*sqr
   Resu_tt    =0.
-  Resu_tt(1) =0.
-  Resu_tt(2) =-Va*Va*resu(2)
-  Resu_tt(3) =-Va*Va*resu(3)
-  Resu_tt(4) =-Va*Va*resu(4)
-  Resu_tt(5) = SUM(Resu(2:4)*Resu_tt(2:4)+Resu_t(2:4)*Resu_t(2:4))
-  Resu_tt(6) = -Resu_tt(2)*sqr
-  Resu_tt(7) = -Resu_tt(3)*sqr
-  Resu_tt(8) = -Resu_tt(4)*sqr
+  Resu_tt(IRHO1) =0.
+  Resu_tt(IRHOU) =-Va*Va*resu(IRHOU)
+  Resu_tt(IRHOV) =-Va*Va*resu(IRHOV)
+  Resu_tt(IRHOW) =-Va*Va*resu(IRHOW)
+  Resu_tt(IRHOE) = SUM(Resu(IRHOU:IRHOW)*Resu_tt(IRHOU:IRHOW)+Resu_t(IRHOU:IRHOW)*Resu_t(IRHOU:IRHOW))
+  Resu_tt(IB1) = -Resu_tt(IRHOU)*sqr
+  Resu_tt(IB2) = -Resu_tt(IRHOV)*sqr
+  Resu_tt(IB3) = -Resu_tt(IRHOW)*sqr
 CASE(3001) ! alfven wave , domain [-1,1]^3, rotated
   Omega=2.*PP_Pi*IniFrequency
   ! r: lenght-variable = lenght of computational domain
-  r=2.
+  radius=2.
   ! e: epsilon = 0.2
   e=0.2
-  nx  = 1./SQRT(r**2+1.)
-  ny  = r/SQRT(r**2+1.)
+  nx  = 1./SQRT(radius**2+1.)
+  ny  = radius/SQRT(radius**2+1.)
   sqr = 1. !2*SQRT(PP_Pi)
   Va  = omega/(ny*sqr)
-  phi_alv = omega/ny*(nx*(x(1)-0.5*r) + ny*(x(3)-0.5*r)) - Va*tEval
+  phi_alv = omega/ny*(nx*(x(1)-0.5*radius) + ny*(x(3)-0.5*radius)) - Va*tEval
   Resu=0.
-  Resu(1) = 1.
-  Resu(2) = -e*ny*COS(phi_alv)
-  Resu(3) =  e*SIN(phi_alv)
-  Resu(4) =  e*nx*COS(phi_alv)
-  Resu(5) =  sKappaM1+0.5*SUM(Resu(2:4)*Resu(2:4)) !p=1, rho=1
-  Resu(6) = nx -Resu(2)*sqr
-  Resu(7) =    -Resu(3)*sqr
-  Resu(8) = ny -Resu(4)*sqr
+  Resu(IRHO1) = 1.
+  Resu(IRHOU) = -e*ny*COS(phi_alv)
+  Resu(IRHOV) =  e*SIN(phi_alv)
+  Resu(IRHOW) =  e*nx*COS(phi_alv)
+  Resu(IRHOE) =  sKappaM1+0.5*SUM(Resu(IRHOU:IRHOW)*Resu(IRHOU:IRHOW)) !p=1, rho=1
+  Resu(IB1) = nx -Resu(IRHOU)*sqr
+  Resu(IB2) =    -Resu(IRHOV)*sqr
+  Resu(IB3) = ny -Resu(IRHOW)*sqr
 
 CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
@@ -683,21 +683,21 @@ CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from i
   xc(1:3)=x(1:3)-r0*b0(1:3)/a*tEval ! b_0/a = B_0/|B_0|*va
   e=IniAmplitude*SIN(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))
   Prim=0.
-  Prim(1)  =rho_0
-  Prim(2:3)=(/-b0(2),b0(1)/)*(e/q0) !vperp
-  Prim(5)  =p_0
-  Prim(6:7)=b0(1:2)-r0*Prim(2:3)*a !-B0/(+va)=sqrt(mu0*rho_0)
+  Prim(IRHO1)  =rho_0
+  Prim(IU:IV)=(/-b0(2),b0(1)/)*(e/q0) !vperp
+  Prim(IP)  =p_0
+  Prim(IB1:IB2)=b0(1:2)-r0*Prim(IU:IV)*a !-B0/(+va)=sqrt(mu0*rho_0)
   CALL PrimToCons(Prim,Resu)
   !second time derivative
   Resu_tt     =0.
   e=e*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))**2
-  Resu_tt(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
-  Resu_tt(6:7)=-Resu_tt(2:3)*r0*a
+  Resu_tt(IRHOU:IRHOV)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_tt(IB1:IB2)=-Resu_tt(IRHOU:IRHOV)*r0*a
   !first time derivative
   Resu_t     =0.
   e=IniAmplitude*COS(2.0*PP_Pi*SUM(xc(:)*IniWavenumber(:)))*(-va*2.0*PP_Pi*SUM(b0(:)*IniWavenumber(:)))
-  Resu_t(2:3)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
-  Resu_t(6:7)=-Resu_t(2:3)*r0*a
+  Resu_t(IRHOU:IRHOV)=(rho_0*e/q0)*(/-b0(2),b0(1)/)
+  Resu_t(IB1:IB2)=-Resu_t(IRHOU:IRHOV)*r0*a
 
   END ASSOCIATE !rho_0,p_0
 CASE(4) ! navierstokes exact function
@@ -705,17 +705,17 @@ CASE(4) ! navierstokes exact function
   a=RefStatePrim(IniRefState,2)*2.*PP_Pi
 
   ! g(t)
-  Resu(1:4)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
-  Resu(5)=Resu(1)*Resu(1)
-  Resu(6:PP_nVar)=0.
+  Resu(IRHO1:IRHOW)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu(IRHOE)=Resu(IRHO1)*Resu(IRHO1)
+  ResU(IB1:PP_nVar)=0.
   ! g'(t)
-  Resu_t(1:4)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
-  Resu_t(5)=2.*Resu(1)*Resu_t(1)
-  Resu_t(6:PP_nVar)=0.
+  Resu_t(IRHO1:IRHOW)=(-a)*IniAmplitude*cos(Omega*SUM(x) - a*tEval)
+  Resu_t(IRHOE)=2.*Resu(IRHO1)*Resu_t(IRHO1)
+  Resu_t(IB1:PP_nVar)=0.
   ! g''(t)
-  Resu_tt(1:4)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
-  Resu_tt(5)=2.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))
-  Resu_tt(6:PP_nVar)=0.
+  Resu_tt(IRHO1:IRHOW)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
+  Resu_tt(IRHOE)=2.*(Resu_t(IRHO1)*Resu_t(IRHO1) + Resu(IRHO1)*Resu_tt(IRHO1))
+  Resu_tt(IB1:PP_nVar)=0.
 CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
@@ -723,26 +723,26 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   END IF
   Omega=PP_Pi*IniFrequency
   ! g(t)
-  Resu(1:3)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
-  Resu(4)           = 0.
-  Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
-  Resu(6)           = Resu(1)
-  Resu(7)           =-Resu(1)
-  Resu(8:PP_nVar)   = 0.
+  Resu(IRHO1:IRHOV)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(IRHOW)           = 0.
+  Resu(IRHOE)           = 2*Resu(IRHO1)*Resu(IRHO1)+resU(IRHO1)
+  Resu(IB1)           = Resu(IRHO1)
+  Resu(IB2)           =-Resu(IRHO1)
+  Resu(IB3:PP_nVar)   = 0.
   ! g'(t)
-  Resu_t(1:3)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
-  Resu_t(4)         = 0.
-  Resu_t(5)         = 4.*Resu(1)*Resu_t(1) +Resu_t(1)
-  Resu_t(6)         = Resu_t(1)
-  Resu_t(7)         =-Resu_t(1)
-  Resu_t(8:PP_nVar) = 0.
+  Resu_t(IRHO1:IRHOV)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
+  Resu_t(IRHOW)         = 0.
+  Resu_t(IRHOE)         = 4.*Resu(IRHO1)*Resu_t(IRHO1) +Resu_t(IRHO1)
+  Resu_t(IB1)         = Resu_t(IRHO1)
+  Resu_t(IB2)         =-Resu_t(IRHO1)
+  Resu_t(IB3:PP_nVar) = 0.
   ! g''(t)
-  Resu_tt(1:3)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
-  Resu_tt(4)        = 0.
-  Resu_tt(5)        = 4.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))+Resu_tt(1)
-  Resu_tt(6)        = Resu_tt(1)
-  Resu_tt(7)        =-Resu_tt(1)
-  Resu_tt(8:PP_nVar)= 0.
+  Resu_tt(IRHO1:IRHOV)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
+  Resu_tt(IRHOW)        = 0.
+  Resu_tt(IRHOE)        = 4.*(Resu_t(IRHO1)*Resu_t(IRHO1) + Resu(IRHO1)*Resu_tt(IRHO1))+Resu_tt(IRHO1)
+  Resu_tt(IB1)        = Resu_tt(IRHO1)
+  Resu_tt(IB2)        =-Resu_tt(IRHO1)
+  Resu_tt(IB3:PP_nVar)= 0.
 CASE(6) ! case 5 rotated
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
@@ -751,55 +751,55 @@ CASE(6) ! case 5 rotated
   Omega=PP_Pi*IniFrequency
   ! g(t)
   Resu              = 0.
-  Resu(1:2)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
-  !Resu(3)           = 0.
-  Resu(4)           = Resu(1)
-  Resu(5)           = 2*Resu(1)*Resu(1)+resu(1)
-  Resu(6)           = Resu(1)
-  !Resu(7)           = 0.
-  Resu(8)           =-Resu(1)
+  Resu(IRHO1:IRHOU)         = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  !Resu(IRHOV)           = 0.
+  Resu(IRHOW)           = Resu(IRHO1)
+  Resu(IRHOE)           = 2*Resu(IRHO1)*Resu(IRHO1)+resU(IRHO1)
+  Resu(IB1)           = Resu(IRHO1)
+  !Resu(IB2)           = 0.
+  Resu(IB3)           =-Resu(IRHO1)
   ! g'(t)
   Resu_t            = 0.
-  Resu_t(1:2)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
-  !Resu_t(3)         = 0.
-  Resu_t(4)         = Resu_t(1)
-  Resu_t(5)         = 4.*Resu(1)*Resu_t(1) +Resu_t(1)
-  Resu_t(6)         = Resu_t(1)
-  !Resu_t(7)         = 0.
-  Resu_t(8)         =-Resu_t(1)
+  Resu_t(IRHO1:IRHOU)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
+  !Resu_t(IRHOV)         = 0.
+  Resu_t(IRHOW)         = Resu_t(IRHO1)
+  Resu_t(IRHOE)         = 4.*Resu(IRHO1)*Resu_t(IRHO1) +Resu_t(IRHO1)
+  Resu_t(IB1)         = Resu_t(IRHO1)
+  !Resu_t(IB2)         = 0.
+  Resu_t(IB3)         =-Resu_t(IRHO1)
   ! g''(t)
   Resu_tt           = 0.
-  Resu_tt(1:2)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
-  !Resu_tt(3)        = 0.
-  Resu_tt(4)        = Resu_tt(1)
-  Resu_tt(5)        = 4.*(Resu_t(1)*Resu_t(1) + Resu(1)*Resu_tt(1))+Resu_tt(1)
-  Resu_tt(6)        = Resu_tt(1)
-  !Resu_tt(7)        = 0.
-  Resu_tt(8)        =-Resu_tt(1)
+  Resu_tt(IRHO1:IRHOU)      =-IniAmplitude*omega*omega*SIN(Omega*(SUM(x) - tEval))
+  !Resu_tt(IRHOV)        = 0.
+  Resu_tt(IRHOW)        = Resu_tt(IRHO1)
+  Resu_tt(IRHOE)        = 4.*(Resu_t(IRHO1)*Resu_t(IRHO1) + Resu(IRHO1)*Resu_tt(IRHO1))+Resu_tt(IRHO1)
+  Resu_tt(IB1)        = Resu_tt(IRHO1)
+  !Resu_tt(IB2)        = 0.
+  Resu_tt(IB3)        =-Resu_tt(IRHO1)
 CASE(7) ! constant density / pressure / velocity, periodic magnetic field
   Omega=PP_Pi*IniFrequency
   Prim=0.
-  Prim(1)=1.
-  Prim(2)=-1.
-  Prim(3)=2.
-  Prim(4)=3.1
-  Prim(5)=1.
-  Prim(6) = -2.*IniAmplitude*Omega*COS(Omega*SUM(x))
-  Prim(7) =  3.*IniAmplitude*Omega*COS(Omega*SUM(x))
-  Prim(8) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(IRHO1)=1.
+  Prim(IU)=-1.
+  Prim(IV)=2.
+  Prim(IW)=3.1
+  Prim(IP)=1.
+  Prim(IB1) = -2.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(IB2) =  3.*IniAmplitude*Omega*COS(Omega*SUM(x))
+  Prim(IB3) = -   IniAmplitude*Omega*COS(Omega*SUM(x))
 
   CALL PrimToCons(Prim,Resu)
 CASE(8) ! 2D constant density / pressure / magnetic field , periodic velocity
   Omega=PP_Pi*IniFrequency
   Prim=0.
-  Prim(1)=1.
-  Prim(2) = -2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
-  Prim(3) =  2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
-  Prim(4) = -0.1
-  Prim(5)=1.
-  Prim(6)=-1.
-  Prim(7)=2.
-  Prim(8)=3.1
+  Prim(IRHO1)=1.
+  Prim(IU) = -2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(IV) =  2.*IniAmplitude*Omega*COS(Omega*(x(1)+x(2)))
+  Prim(IW) = -0.1
+  Prim(IP)=1.
+  Prim(IB1)=-1.
+  Prim(IB2)=2.
+  Prim(IB3)=3.1
 
   CALL PrimToCons(Prim,Resu)
 
@@ -807,33 +807,33 @@ CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRO
          !domain should be a cube [0,1]^2, boundary conditions either periodic of perfectly conducting wall
   Prim(:)= RefStatePrim(IniRefState,:)
   Omega=2*PP_Pi*IniFrequency
-  a=SQRT(IniAmplitude*Prim(5))/omega !IniAmplitude is related to the change of pressure (IniAmplitude=0.1: 10% change)
-  Prim(6)= a*omega*SIN(Omega*x(1))*COS(Omega*x(2))
-  Prim(7)=-a*omega*COS(Omega*x(1))*SIN(Omega*x(2))
-  Prim(5)=Prim(5)*(1+ IniAmplitude*(SIN(Omega*x(1))*SIN(Omega*x(2)))**2) !a^2omega^2=p0*IniAmplitude
+  a=SQRT(IniAmplitude*Prim(IP))/omega !IniAmplitude is related to the change of pressure (IniAmplitude=0.1: 10% change)
+  Prim(IB1)= a*omega*SIN(Omega*x(1))*COS(Omega*x(2))
+  Prim(IB2)=-a*omega*COS(Omega*x(1))*SIN(Omega*x(2))
+  Prim(IP)=Prim(IP)*(1+ IniAmplitude*(SIN(Omega*x(1))*SIN(Omega*x(2)))**2) !a^2omega^2=p0*IniAmplitude
 
   CALL PrimToCons(Prim,Resu)
 CASE(11) ! mhd exact equilibrium, Psi=a(x^2+y^2), B_x= dPsi/dy=2ay, B_y=-dPsi/dx=-2ax p=int(-Laplace(Psi),Psi)=-4a Psi
          ! domain |x|,|y|<1, Dirichlet BC needed
-  Prim(:)= RefStatePrim(1,:)
-  a      = SQRT(0.25*(0.5*IniAmplitude)*Prim(5)) !IniAmplitude is related to the change of pressure
+  Prim(:)= RefStatePrim(IRHO1,:)
+  a      = SQRT(0.25*(0.5*IniAmplitude)*Prim(IP)) !IniAmplitude is related to the change of pressure
                                            ! at x,y=1 (x^2+y^2=2) (IniAmplitude=0.1: 10% change)
-  Prim(5)= Prim(5)-4*a*a*SUM(x(1:2)**2)
-  Prim(6)= 2*a*x(2)
-  Prim(7)=-2*a*x(1)
-  Prim(:)= Prim(:)+RefStatePrim(2,:)*IniDisturbance*PRODUCT(SIN(2*PP_Pi*x(1:2)))
+  Prim(IP)= Prim(IP)-4*a*a*SUM(x(1:2)**2)
+  Prim(IB1)= 2*a*x(2)
+  Prim(IB2)=-2*a*x(1)
+  Prim(:)= Prim(:)+RefStatePrim(IU,:)*IniDisturbance*PRODUCT(SIN(2*PP_Pi*x(1:2)))
 
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 11 !',999,prim(5))
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 11 !',999,prim(IP))
   CALL PrimToCons(Prim,Resu)
 CASE(12) ! mhd exact equilibrium, Psi=a*exp(-(x^2+y^2)/H^2), B_x= dPsi/dy=-2x/H^2*Psi, B_y=-dPsi/dx=2y/H^2*Psi
          ! p=int(-Laplace(Psi),Psi)=1/H^2(2*ln(Psi/a)+1)Psi^2
   Prim(:)= RefStatePrim(IniRefState,:)
-  a      = SQRT(IniAmplitude*prim(5))*IniHalfwidth !IniAmplitude is related to the change of pressure (at Psi=Psi_max=a)
+  a      = SQRT(IniAmplitude*prim(IP))*IniHalfwidth !IniAmplitude is related to the change of pressure (at Psi=Psi_max=a)
   psi_a  = a*EXP(-SUM(((x(1:2)-IniCenter(1:2))/IniHalfwidth)**2))
-  Prim(5)= Prim(5)+(2.*LOG(Psi_a/a)+1.)*(Psi_a/IniHalfwidth)**2
-  Prim(6)=-2*(x(2)-IniCenter(2))*Psi_a/IniHalfwidth**2
-  Prim(7)= 2*(x(1)-IniCenter(1))*Psi_a/IniHalfwidth**2
+  Prim(IP)= Prim(IP)+(2.*LOG(Psi_a/a)+1.)*(Psi_a/IniHalfwidth)**2
+  Prim(IB1)=-2*(x(2)-IniCenter(2))*Psi_a/IniHalfwidth**2
+  Prim(IB2)= 2*(x(1)-IniCenter(1))*Psi_a/IniHalfwidth**2
 
   CALL PrimToCons(Prim,Resu)
 CASE(13) ! 3D mhd exact equilibrium with constant pressure,
@@ -841,10 +841,10 @@ CASE(13) ! 3D mhd exact equilibrium with constant pressure,
          ! B = [3*x*z^2-3*x*y^2, -3*y*z^2+2*y^3-3*x^2*y, 3*x^2*z-3*y^2*z]
          ! J=curl(B) = (0,0,0) -> dp=0, constant pressure
   Prim(:)= RefStatePrim(IniRefState,:)
-  Prim(2:4)=0.
-  Prim(6)=3.*x(1)*(x(3)**2-x(2)**2)
-  Prim(7)=   x(2)*(2.*x(2)**2-3.*(x(3)**2+x(1)**2))
-  Prim(8)=3.*x(3)*(x(1)**2-x(2)**2)
+  Prim(IU:IW)=0.
+  Prim(IB1)=3.*x(1)*(x(3)**2-x(2)**2)
+  Prim(IB2)=   x(2)*(2.*x(2)**2-3.*(x(3)**2+x(1)**2))
+  Prim(IB3)=3.*x(3)*(x(1)**2-x(2)**2)
 
   CALL PrimToCons(Prim,Resu)
 CASE(14) ! 3D mhd exact equilibrium with constant pressure & constant magnetic field
@@ -852,18 +852,18 @@ CASE(14) ! 3D mhd exact equilibrium with constant pressure & constant magnetic f
          ! B = [B_1,B_2,B_3] =const
          ! J=curl(B) = (0,0,0) -> dp=0, constant pressure
   Prim(:)= RefStatePrim(IniRefState,:)
-  Prim(2:4)=0.
-  Prim(6)=0.15
-  Prim(7)=0.3
-  Prim(8)=1.0
+  Prim(IU:IW)=0.
+  Prim(IB1)=0.15
+  Prim(IB2)=0.3
+  Prim(IB3)=1.0
 
   CALL PrimToCons(Prim,Resu)
 
 CASE(60) !TEST for MagneticEnergyModes computation
   Prim=0.
-  Prim(1)=1.
-  Prim(5)=1.
-  Prim(6)=1.+0.1*COS(x(1)/3.) +0.2*COS(2./3.*x(1)) -0.3*COS(x(1)) &
+  Prim(IRHO1)=1.
+  Prim(IP)=1.
+  Prim(IB1)=1.+0.1*COS(x(1)/3.) +0.2*COS(2./3.*x(1)) -0.3*COS(x(1)) &
             -0.1*SIN(x(1)/3.) -0.2*SIN(2./3.*x(1)) +0.3*SIN(x(1))
   CALL PrimToCons(Prim,Resu)
 
@@ -872,78 +872,78 @@ CASE(70) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
         ! rho_0=1, p0=0.5*beta (choose with refstate)
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
   Prim=0.
-  Prim(6)=TANH(x(2)/IniHalfwidth) !tanh(y*delta) delta=10.
-  Prim(8)=SQRT(1-Prim(6)*Prim(6))
+  Prim(IB1)=TANH(x(2)/IniHalfwidth) !tanh(y*delta) delta=10.
+  Prim(IB3)=SQRT(1-Prim(IB1)*Prim(IB1))
 
-  Prim(1)=RefStatePrim(IniRefState,1)
-  Prim(3)=IniAmplitude*Prim(6)*Prim(8)*SIN(x(1)/3.*IniWaveNumber(1)+ x(3)*IniWaveNumber(3))
-  Prim(5)=RefStatePrim(IniRefState,5)
-  !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
+  Prim(IRHO1)=RefStatePrim(IniRefState,1)
+  Prim(IV)=IniAmplitude*Prim(IB1)*Prim(IB3)*SIN(x(1)/3.*IniWaveNumber(1)+ x(3)*IniWaveNumber(3))
+  Prim(IP)=RefStatePrim(IniRefState,5)
+  !Prim(IB1:IB3)=sSqrt4pi*Prim(IB1:IB3) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi/2,pi/2]x[0:2Pi]
         ! "Three-dimensional simulations of compressible tearing instability"
         ! rho_0=1, p0=0.5*beta (choose with refstate)
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=1.0E-04
   Prim=0.
-  Prim(6)=TANH((x(2)-0.01)/IniHalfwidth) !tanh(y*delta) delta=10. !NOT FULLY CENTERED
-  Prim(8)=SQRT(1-Prim(6)*Prim(6))
+  Prim(IB1)=TANH((x(2)-0.01)/IniHalfwidth) !tanh(y*delta) delta=10. !NOT FULLY CENTERED
+  Prim(IB3)=SQRT(1-Prim(IB1)*Prim(IB1))
 
-  Prim(1)=RefStatePrim(IniRefState,1)
+  Prim(IRHO1)=RefStatePrim(IniRefState,1)
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
       a=REAL(1+0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
-      Prim(3)=Prim(3)+SIN(x(1)/3.*i+ x(3)*j+2*PP_Pi*a)
+      Prim(IV)=Prim(IV)+SIN(x(1)/3.*i+ x(3)*j+2*PP_Pi*a)
     END DO
   END DO
-  Prim(3)=IniDisturbance*Prim(6)*Prim(8)*Prim(3)
-  Prim(5)=RefStatePrim(IniRefState,5)
-  !Prim(6:8)=sSqrt4pi*Prim(6:8) ! scaling with sqrt(4pi)!?!
+  Prim(IV)=IniDisturbance*Prim(IB1)*Prim(IB3)*Prim(IV)
+  Prim(IP)=RefStatePrim(IniRefState,5)
+  !Prim(IB1:IB3)=sSqrt4pi*Prim(IB1:IB3) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 
 CASE(73) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1,1], with pressure gradient
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniDisturbance=1.0E-01
         ! for symmetry BC in y use domain [0,6]x[0,1]x[-1,1] and iniWaveNumber(2)>0
   Prim=0.
-  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
-  Prim(8)=1.0
+  Prim(IB1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(IB3)=1.0
 
-  Prim(1)=1.0
-  Prim(2)=0.1
+  Prim(IRHO1)=1.0
+  Prim(IU)=0.1
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
       a=(0.8*REAL(i)+0.9*REAL(j))/(1.+0.8*REAL(IniWaveNumber(1))+0.9*REAL(IniWaveNumber(3)))
-      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
+      Prim(IV)=Prim(IV)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
     END DO!i
   END DO!j
   IF(IniWaveNumber(2).GT.0)THEN
-    Prim(3)=IniDisturbance*Prim(3)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
+    Prim(IV)=IniDisturbance*Prim(IV)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
   ELSE
-    Prim(3)=IniDisturbance*Prim(3)
+    Prim(IV)=IniDisturbance*Prim(IV)
   END IF
-  Prim(5)=0.2  +0.5*(1.0-Prim(6)**2)  !beta~0.2
+  Prim(IP)=0.2  +0.5*(1.0-Prim(IB1)**2)  !beta~0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(74) ! own current sheet, periodic domain [0,6]x[-1,1]x[-1:1], without pressure gradient
         ! Re_eta=5000, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniDisturbance=1.0E-01
         ! for symmetry BC in y use domain [0,6]x[0,1]x[-1,1] and iniWaveNumber(2)>0
   Prim=0.
-  Prim(6)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
-  Prim(8)=SQRT(1.0-Prim(6)*Prim(6))
+  Prim(IB1)=TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(IB3)=SQRT(1.0-Prim(IB1)*Prim(IB1))
 
-  Prim(1)=1.0
-  Prim(2)=0.1
+  Prim(IRHO1)=1.0
+  Prim(IU)=0.1
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
       a=(0.8*REAL(i)+0.9*REAL(j))/(1.+0.8*REAL(IniWaveNumber(1))+0.9*REAL(IniWaveNumber(3)))
-      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
+      Prim(IV)=Prim(IV)+SIN(PP_Pi*(x(1)/3.*REAL(i)+ x(3)*REAL(j)+2.*a))
     END DO!i
   END DO!j
   IF(IniWaveNumber(2).GT.0)THEN
-    Prim(3)=IniDisturbance*Prim(3)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
+    Prim(IV)=IniDisturbance*Prim(IV)*SIN(PP_Pi*IniWaveNumber(2)*x(2)) !for symmetry BC
   ELSE
-    Prim(3)=IniDisturbance*Prim(3)
+    Prim(IV)=IniDisturbance*Prim(IV)
   END IF
-  Prim(5)=0.2  !beta~0.2
+  Prim(IP)=0.2  !beta~0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
@@ -951,27 +951,27 @@ CASE(75) !2D tearing mode instability, domain [0,1]x[0,4]
         ! assuming rho_0=p_0=1
         ! eta=1.0E-02, mu=1.0E-03,kappa=5/3
   Prim=0.
-  Prim(1)=1.+1.0E-03*COS(2*PP_Pi*x(1))*SIN(0.5*PP_Pi*x(2))
-  Prim(5)=1.
-  Prim(7)=1.-2./(1+EXP(2*5*(x(1)-0.5))) !tanh((x(1)-0.5)/lambda) lambda=0.2
-  Prim(8)=SQRT(1-Prim(7)*Prim(7))
+  Prim(IRHO1)=1.+1.0E-03*COS(2*PP_Pi*x(1))*SIN(0.5*PP_Pi*x(2))
+  Prim(IP)=1.
+  Prim(IB2)=1.-2./(1+EXP(2*5*(x(1)-0.5))) !tanh((x(1)-0.5)/lambda) lambda=0.2
+  Prim(IB3)=SQRT(1-Prim(IB2)*Prim(IB2))
   CALL PrimToCons(Prim,Resu)
 
 CASE(76) ! Kelvin-Helmholtz from Chacon CPC2004 paper, using a different periodic domain [0,6]x[-1,1]x[-1:1], constant pressure
         ! eta=0, mu=0.,kappa=5/3 1/delta=0.1(=IniHalfwidth)  IniAmplitude=0.5 , constant field Bz=1
   Prim=0.
-  Prim(8)=1.0
-  Prim(2)=IniAmplitude*TANH((ABS(x(2))-0.5)/IniHalfwidth)
+  Prim(IB3)=1.0
+  Prim(IU)=IniAmplitude*TANH((ABS(x(2))-0.5)/IniHalfwidth)
 
-  Prim(1)=1.0
+  Prim(IRHO1)=1.0
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
       a=REAL(0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
-      Prim(3)=Prim(3)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
+      Prim(IV)=Prim(IV)+SIN(PP_Pi*(x(1)/3.*i+ x(3)*j+2.*a))
     END DO
   END DO
-  Prim(3)=IniDisturbance*Prim(3)
-  Prim(5)=0.2
+  Prim(IV)=IniDisturbance*Prim(IV)
+  Prim(IP)=0.2
   CALL PrimToCons(Prim,Resu)
 
 CASE(7601) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x
@@ -982,11 +982,11 @@ CASE(7601) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x
   
   prim = 0.0
   
-  prim(1) = 0.5 + 0.75 * B_R
-  prim(2) = 0.5 * (B_R - 1.0)
-  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
-  prim(5) = 1.0
-  prim(6) = 0.125
+  Prim(IRHO1) = 0.5 + 0.75 * B_R
+  prim(IU) = 0.5 * (B_R - 1.0)
+  prim(IV) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(IP) = 1.0
+  prim(IB1) = 0.125
   
   CALL PrimToCons(Prim,Resu)
   
@@ -998,11 +998,11 @@ CASE(7602) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in y
   
   prim = 0.0
   
-  prim(1) = 0.5 + 0.75 * B_R
-  prim(2) = 0.5 * (B_R - 1.0)
-  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
-  prim(5) = 1.0
-  prim(7) = 0.125
+  Prim(IRHO1) = 0.5 + 0.75 * B_R
+  prim(IU) = 0.5 * (B_R - 1.0)
+  prim(IV) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(IP) = 1.0
+  prim(IB2) = 0.125
   
   CALL PrimToCons(Prim,Resu)
   
@@ -1014,12 +1014,12 @@ CASE(7603) ! 2D Kelvin-Helmholtz instability (KHI) with magnetic field in x-y
   
   prim = 0.0
   
-  prim(1) = 0.5 + 0.75 * B_R
-  prim(2) = 0.5 * (B_R - 1.0)
-  prim(3) = 0.1 * sin(2.0 * PP_Pi * x(1))
-  prim(5) = 1.0
-  prim(6) = 0.125
-  prim(7) = 0.125
+  Prim(IRHO1) = 0.5 + 0.75 * B_R
+  prim(IU) = 0.5 * (B_R - 1.0)
+  prim(IV) = 0.1 * sin(2.0 * PP_Pi * x(1))
+  prim(IP) = 1.0
+  prim(IB1) = 0.125
+  prim(IB2) = 0.125
   
   CALL PrimToCons(Prim,Resu)
 
@@ -1037,13 +1037,13 @@ CASE(80) ! 2D island coalesence domain [-1,1]^2
         ! p  = p0 + 0.5*(1-eps^2)* (COSH(x/lambda)+EPS*COS(y/lambda))^-2
   nx=2*PP_Pi*x(1)
   ny=2*PP_Pi*x(2)
-  r = 1./(COSH(nx)+0.2*COS(ny))
+  radius = 1./(COSH(nx)+0.2*COS(ny))
   Prim=0.
-  Prim(1)=1.
-  Prim(5)=1. + 0.5*(1-0.2*0.2)*r*r
-  Prim(6)=-r*(0.2*SIN(ny)) + 1.0E-03*PP_Pi*SIN(0.25*nx)*SIN(0.5*ny)
-  Prim(7)=-r*(SINH(nx))    + 1.0E-03*0.5*PP_Pi*COS(0.25*nx)*COS(0.5*ny)
-  Prim(8)=0.
+  Prim(IRHO1)=1.
+  Prim(IP)=1. + 0.5*(1-0.2*0.2)*radius*radius
+  Prim(IB1)=-radius*(0.2*SIN(ny)) + 1.0E-03*PP_Pi*SIN(0.25*nx)*SIN(0.5*ny)
+  Prim(IB2)=-radius*(SINH(nx))    + 1.0E-03*0.5*PP_Pi*COS(0.25*nx)*COS(0.5*ny)
+  Prim(IB3)=0.
   CALL PrimToCons(Prim,Resu)
 
 CASE(90) !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2008), current Jz in z direction is given:
@@ -1054,12 +1054,12 @@ CASE(90) !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2
          ! pressure difference from gradp=J x B:
          ! dp(r) = -smu_0 ( 0.5*Bphi^2 + \int_0^r Bphi^2/r dr)
   Prim(:)=0.
-  Prim(1)=1.
-  Prim(5)=0.025/9. ! =pmax, pmin=p(r=1)=pmax-0.0025 and pmax/pmin ~=10
-  Prim(8)=SQRT(2*mu_0*Prim(5)*1.0E4) !beta=p/(0.5*smu0 B^2) =1.0E-04
-  Prim(5)=Prim(5)+0.01  ! BETA CHANGED!!! ~ 1E-02
+  Prim(IRHO1)=1.
+  Prim(IP)=0.025/9. ! =pmax, pmin=p(r=1)=pmax-0.0025 and pmax/pmin ~=10
+  Prim(IB3)=SQRT(2*mu_0*Prim(IP)*1.0E4) !beta=p/(0.5*smu0 B^2) =1.0E-04
+  Prim(IP)=Prim(IP)+0.01  ! BETA CHANGED!!! ~ 1E-02
   r2(1)=SUM(x(1:2)**2)
-  r=SQRT(r2(1))
+  radius=SQRT(r2(1))
   DO i=2,16
     r2(i)=r2(i-1)*r2(1)
   END DO
@@ -1069,11 +1069,11 @@ CASE(90) !cylindrical equilibrium for ideal MHD for current hole (Czarny, JCP, 2
                +27971578034400.*r2( 8)-31525903338930.*r2( 7)+28714629715200.*r2( 6)-20859299741280.*r2( 5) &
                +11747978409024.*r2( 4) -4854306857400.*r2( 3) +1285266977280.*r2( 2)  -138278780640.*r2( 1) &
                +5718295440.)/5.25096E+12
-  Prim(6)=-x(2)*Bphi  !/r
-  Prim(7)= x(1)*Bphi  !/r
-  Prim(5)=Prim(5)+smu_0*dp
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 90 !',999,prim(5))
+  Prim(IB1)=-x(2)*Bphi  !/r
+  Prim(IB2)= x(1)*Bphi  !/r
+  Prim(IP)=Prim(IP)+smu_0*dp
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 90 !',999,prim(IP))
 
   CALL PrimToCons(Prim,Resu)
 CASE(91) !like 90, BUT WITH REAL BETA!!
@@ -1085,12 +1085,12 @@ CASE(91) !like 90, BUT WITH REAL BETA!!
          ! pressure difference from gradp=J x B:
          ! dp(r) = -smu_0 ( 0.5*Bphi^2 + \int_0^r Bphi^2/r dr)
   Prim(:)=0.
-  Prim(1)=1.
-  Prim(5)=0.025/9. ! =pmax, pmin=p(r=1)=pmax-0.0025 and pmax/pmin ~=10
-  Prim(8)=SQRT(2*mu_0*Prim(5)*1.0E4) !beta=p/(0.5*smu0 B^2) =1.0E-04
+  Prim(IRHO1)=1.
+  Prim(IP)=0.025/9. ! =pmax, pmin=p(r=1)=pmax-0.0025 and pmax/pmin ~=10
+  Prim(IB3)=SQRT(2*mu_0*Prim(IP)*1.0E4) !beta=p/(0.5*smu0 B^2) =1.0E-04
 
   r2(1)=SUM(x(1:2)**2)
-  r=SQRT(r2(1))
+  radius=SQRT(r2(1))
   DO i=2,16
     r2(i)=r2(i-1)*r2(1)
   END DO
@@ -1100,14 +1100,14 @@ CASE(91) !like 90, BUT WITH REAL BETA!!
                +27971578034400.*r2( 8)-31525903338930.*r2( 7)+28714629715200.*r2( 6)-20859299741280.*r2( 5) &
                +11747978409024.*r2( 4) -4854306857400.*r2( 3) +1285266977280.*r2( 2)  -138278780640.*r2( 1) &
                +5718295440.)/5.25096E+12
-  Prim(6)=-x(2)*Bphi  !/r
-  Prim(7)= x(1)*Bphi  !/r
-  Prim(5)=Prim(5)+smu_0*dp
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 90 !',999,prim(5))
+  Prim(IB1)=-x(2)*Bphi  !/r
+  Prim(IB2)= x(1)*Bphi  !/r
+  Prim(IP)=Prim(IP)+smu_0*dp
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 90 !',999,prim(IP))
   !disturbance of the velocity in xy plane  (scaled with (1-r^2)^2 and IniDisturbance)
-  Prim(2)=IniDisturbance*(1.-r2(1))**2
-  Prim(3)=x(2)*Prim(2)
+  Prim(IU)=IniDisturbance*(1.-r2(1))**2
+  Prim(IV)=x(2)*Prim(IU)
 
   CALL PrimToCons(Prim,Resu)
 CASE(92) !cylindrical equilibrium for ideal MHD for internal kink (Jorek paper Huysmans),q profile given, Bz=1
@@ -1124,18 +1124,18 @@ CASE(92) !cylindrical equilibrium for ideal MHD for internal kink (Jorek paper H
   q1=1.60 !q(r=1)
   Lz=100.
   Prim(:)=0.
-  Prim(1)=1.-0.9*r2(1)
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
-  Prim(8)=1.  !Bz=1.
+  Prim(IRHO1)=1.-0.9*r2(1)
+  Prim(IW)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(IP)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(IB3)=1.  !Bz=1.
   Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
-  Prim(6)=-x(2)*Bphi  !/r
-  Prim(7)= x(1)*Bphi  !/r
+  Prim(IB1)=-x(2)*Bphi  !/r
+  Prim(IB2)= x(1)*Bphi  !/r
   dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
-  Prim(5)=Prim(5)-smu_0*dp
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 90 !',999,prim(5))
+  Prim(IP)=Prim(IP)-smu_0*dp
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 90 !',999,prim(IP))
 
   CALL PrimToCons(Prim,Resu)
 CASE(910) ! like 91, but with constant density:
@@ -1145,18 +1145,18 @@ CASE(910) ! like 91, but with constant density:
   q1=1.60 !q(r=1)
   Lz=100.
   Prim(:)=0.
-  Prim(1)=1.
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
-  Prim(8)=1.  !Bz=1.
+  Prim(IRHO1)=1.
+  Prim(IW)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(IP)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(IB3)=1.  !Bz=1.
   Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
-  Prim(6)=-x(2)*Bphi  !/r
-  Prim(7)= x(1)*Bphi  !/r
+  Prim(IB1)=-x(2)*Bphi  !/r
+  Prim(IB2)= x(1)*Bphi  !/r
   dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
-  Prim(5)=Prim(5)-smu_0*dp
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 90 !',999,prim(5))
+  Prim(IP)=Prim(IP)-smu_0*dp
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 90 !',999,prim(IP))
 
   CALL PrimToCons(Prim,Resu)
 CASE(911) ! like 91, but with a different q profile 0.82 <= q <= 1.4:
@@ -1165,144 +1165,144 @@ CASE(911) ! like 91, but with a different q profile 0.82 <= q <= 1.4:
   q1=1.40 !q(r=1)
   Lz=100.
   Prim(:)=0.
-  Prim(1)=1.-0.9*r2(1)
-  Prim(4)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
-  Prim(5)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
-  Prim(8)=1.  !Bz=1.
+  Prim(IRHO1)=1.-0.9*r2(1)
+  Prim(IW)=IniDisturbance*r2(1)*(1-r2(1))*SIN(2*PP_Pi*x(3)/Lz)
+  Prim(IP)=smu_0*2.*PP_Pi*PP_Pi*(q0+q1)/(0.98*Lz*Lz*q0*q1*q1)
+  Prim(IB3)=1.  !Bz=1.
   Bphi= 2*PP_Pi/(Lz*((q1-q0)*r2(1)+q0)) !*r !L_0=100 !
-  Prim(6)=-x(2)*Bphi  !/r
-  Prim(7)= x(1)*Bphi  !/r
+  Prim(IB1)=-x(2)*Bphi  !/r
+  Prim(IB2)= x(1)*Bphi  !/r
   dp  = 2*PP_Pi*PP_Pi*r2(1)*((q1-q0)*r2(1)+2*q0)/(Lz*Lz*q0*(((q1-q0)*r2(1)+2*q0)*(q1-q0)*r2(1)+q0**2))
 
-  Prim(5)=Prim(5)-smu_0*dp
-  IF(Prim(5).LT.0.) CALL abort(__STAMP__,  &
-                'negative pressure in exactfunc 90 !',999,prim(5))
+  Prim(IP)=Prim(IP)-smu_0*dp
+  IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
+                'negative pressure in exactfunc 90 !',999,prim(IP))
 
   CALL PrimToCons(Prim,Resu)
 CASE(100) !tearing mode in a torus around z axis and center (0,0,0), small radius a=1 and large radius R=10
           ! desinty constant, pressure (PsiN)
   R0=10.
-  R  = SQRT(x(1)**2+x(2)**2)
-  a  = SQRT((R-R0)**2 +x(3)**2)
+  radius  = SQRT(x(1)**2+x(2)**2)
+  a  = SQRT((radius-R0)**2 +x(3)**2)
   psiN= (-0.062829+(1.84896-0.786131*a)*a)*a  !psi=0 for a=0, psi=1 for a=1
   prim=0.
-  prim(1)=1.
-  Prim(5)=0.0024142343*(0.0497 - 0.0393 * psiN) !rho*T=rho_n*T_n*rho0/(kB*n0)=0.24e-02*rho_n*T_n
+  Prim(IRHO1)=1.
+  Prim(IP)=0.0024142343*(0.0497 - 0.0393 * psiN) !rho*T=rho_n*T_n*rho0/(kB*n0)=0.24e-02*rho_n*T_n
   !psi=(psiN-1)*0.20266, dpsi/da
   psi_a= 0.20266*(-0.062829+(2*1.84896-3*0.786131*a)*a)
   !B_R=-1/R*(dPsi/dZ) = -1/R*(dPsi/da)*(da/dZ) = -Z/(R*a)*(dPsi/da)
   !B_Z=1/R*(dPsi/dR) = 1/R*(dPsi/da)*(da/dR) = (R-R0)/(R*a)*(dPsi/da)
   IF(a.LT.1.0E-12)THEN
-    B_R=-psi_a/R
-    Prim(8)=psi_a/R
+    B_R=-psi_a/radius
+    Prim(IB3)=psi_a/radius
   ELSE
-    B_R=-x(3)/(R*a)*psi_a
-    Prim(8)=(R-R0)/(R*a)*psi_a
+    B_R=-x(3)/(radius*a)*psi_a
+    Prim(IB3)=(radius-R0)/(radius*a)*psi_a
   END IF
-  ! F0=10. B_tor=F0/R
-  B_tor=10./R !10/R
-  Prim(6)= ( x(2)*B_tor + x(1)*B_R)/R
-  Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
+  ! F0=10. B_tor=F0/radius
+  B_tor=10./radius !10/radius
+  Prim(IB1)= ( x(2)*B_tor + x(1)*B_R)/radius
+  Prim(IB2)= (-x(1)*B_tor + x(2)*B_R)/radius
 
   CALL PrimToCons(Prim,Resu)
 CASE(101) !internal kink from Jorek in a torus around z axis and center (0,0,0), small radius a=1 and large radius R=10
           ! not using R=R0 as magnetic axis, but the one provided by jorek!!
   R0=10.
-  R  = SQRT(x(1)**2+x(2)**2)
-  r2(1)= (R-R0)**2 +x(3)**2
+  radius  = SQRT(x(1)**2+x(2)**2)
+  r2(1)= (radius-R0)**2 +x(3)**2
   e  = 0.0310976053 ! dm/(1-dm^2), dm= distance to magnetic axis in xdirection (magnetic axis from Jorek: R0+dm=R0 + 0.03106759)
   !e  = 0.030769957662 ! dm= 0.03074088
-  a  = SQRT(((R-R0)-e*(1-r2(1)))**2 +x(3)**2) !correction to idistance from magnetic axis
+  a  = SQRT(((radius-R0)-e*(1-r2(1)))**2 +x(3)**2) !correction to idistance from magnetic axis
   !psiN= (1.27024127385*a**2+0.0327486740462*a**3-0.531773141036*a**4+0.128783193*a**5)*a**2/0.9 (from density fit, using a)
   psiN= (1.27024127385+(0.0327486740462+(-0.531773141036+0.128783193*a)*a)*a)*a*a/0.9
   prim=0.
-  prim(1)=1.-0.9*psiN
-  Prim(5)=2.0e-03*(1-1.7*psiN+0.72*PsiN**2) !rho*T=rho_n*T_n*rho0/(kB*n0)=0.24e-02*rho_n*T_n
+  Prim(IRHO1)=1.-0.9*psiN
+  Prim(IP)=2.0e-03*(1-1.7*psiN+0.72*PsiN**2) !rho*T=rho_n*T_n*rho0/(kB*n0)=0.24e-02*rho_n*T_n
   !psi=(psiN-1)*0.4792, dpsi/da, non-normalized psi_min=-0.4792
   psi_a= 0.4792*(2*1.27024127385*a+3*0.0327486740462*a**2-4*0.531773141036*a**3+5*0.128783193*a**4)/0.9
   !psi_a= 0.4792*(2*1.27024127385+(3*0.0327486740462+(-4*0.531773141036+5*0.128783193*a)*a)*a)*a/0.9
   !B_R=1/R*(dPsi/dZ) = 1/R*(dPsi/da)*(da/dZ)
   !B_Z=-1/R*(dPsi/dR) = -1/R*(dPsi/da)*(da/dR)
   IF(a.LT.1.0E-12)THEN
-    B_R=psi_a/R
-    Prim(8)=-psi_a/R
+    B_R=psi_a/radius
+    Prim(IB3)=-psi_a/radius
   ELSE
-    B_R=psi_a/(R*a)*  x(3)*(1+2*e*((R-R0)-e*(1-r2(1))))
-    Prim(8)=-psi_a/(R*a)* (1+2*e*(R-R0))*((R-R0)-e*(1-r2(1)))
+    B_R=psi_a/(radius*a)*  x(3)*(1+2*e*((radius-R0)-e*(1-r2(1))))
+    Prim(IB3)=-psi_a/(radius*a)* (1+2*e*(radius-R0))*((radius-R0)-e*(1-r2(1)))
   END IF
   ! F0=10. B_tor=F/R, F=(F0^2-4*0.4792*(Psi_n-Psi_n^2))^0.5
-  B_tor=SQRT(100.-4*0.4792*PsiN*(1-0.5*PsiN))/R
-  Prim(6)= ( x(2)*B_tor + x(1)*B_R)/R
-  Prim(7)= (-x(1)*B_tor + x(2)*B_R)/R
+  B_tor=SQRT(100.-4*0.4792*PsiN*(1-0.5*PsiN))/radius
+  Prim(IB1)= ( x(2)*B_tor + x(1)*B_R)/radius
+  Prim(IB2)= (-x(1)*B_tor + x(2)*B_R)/radius
 
   CALL PrimToCons(Prim,Resu)
 CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplitude, radius=IniHalfwidth
   IF(nRefState.LT.2) CALL abort(__STAMP__, &
          ' 2 states needed for case 201')
-  r=SQRT(SUM((x-IniCenter(:))**2))
-  a=EXP(5.*(r-IniHalfwidth)/IniAmplitude)
+  radius=SQRT(SUM((x-IniCenter(:))**2))
+  a=EXP(5.*(radius-IniHalfwidth)/IniAmplitude)
   a=a/(a+1.)
-  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
+  Prim = (1.-a)*RefStatePrim(IRHO1,:)+a*RefStatePrim(IU,:)
   CALL PrimToCons(Prim,Resu)
 
 CASE(311) ! Orzsag-Tang vortex
   prim    = 0.
-  prim(1) = 1.
-  prim(2) = -SIN(2.*PP_Pi*x(2))
-  prim(3) =  SIN(2.*PP_Pi*x(1))
-  prim(5) =  1./kappa
-  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
-  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  Prim(IRHO1) = 1.
+  prim(IU) = -SIN(2.*PP_Pi*x(2))
+  prim(IV) =  SIN(2.*PP_Pi*x(1))
+  prim(IP) =  1./kappa
+  prim(IB1) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(IB2) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
 CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but rescaled so the runtime is shorter)
   prim    = 0.
-  prim(1) =  1.
-  prim(2) = -(1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(2))
-  prim(3) =  (1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(1))
-  prim(4) =  0.2*SIN(2.*PP_Pi*x(3))
-  prim(5) =  1./kappa
-  prim(6) = -SIN(2.*PP_Pi*x(2))/kappa
-  prim(7) =  SIN(4.*PP_Pi*x(1))/kappa
+  Prim(IRHO1) =  1.
+  prim(IU) = -(1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(2))
+  prim(IV) =  (1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(1))
+  prim(IW) =  0.2*SIN(2.*PP_Pi*x(3))
+  prim(IP) =  1./kappa
+  prim(IB1) = -SIN(2.*PP_Pi*x(2))/kappa
+  prim(IB2) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
 CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
   prim    = 0.
-  prim(1) =  25./(36.*PP_Pi)
-  prim(2) = -SIN(2.*PP_Pi*x(2))
-  prim(3) =  SIN(2.*PP_Pi*x(1))
-  prim(5) =  5./(12*PP_Pi)
-  prim(6) = -SIN(2.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
-  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  Prim(IRHO1) =  25./(36.*PP_Pi)
+  prim(IU) = -SIN(2.*PP_Pi*x(2))
+  prim(IV) =  SIN(2.*PP_Pi*x(1))
+  prim(IP) =  5./(12*PP_Pi)
+  prim(IB1) = -SIN(2.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  prim(IB2) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
   CALL PrimToCons(Prim,Resu)
 
 CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
           ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
   prim    = 0.
-  prim(1) =  25./(36.*PP_Pi)
-  prim(2) = -SIN(2.*PP_Pi*x(3))
-  prim(3) =  SIN(2.*PP_Pi*x(1))
-  prim(4) =  SIN(2.*PP_Pi*x(2))
-  prim(5) =  5./(12*PP_Pi)
-  prim(6) = -SIN(2.*PP_Pi*x(3))/SQRT(4.*PP_Pi)
-  prim(7) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
-  prim(8) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  Prim(IRHO1) =  25./(36.*PP_Pi)
+  prim(IU) = -SIN(2.*PP_Pi*x(3))
+  prim(IV) =  SIN(2.*PP_Pi*x(1))
+  prim(IW) =  SIN(2.*PP_Pi*x(2))
+  prim(IP) =  5./(12*PP_Pi)
+  prim(IB1) = -SIN(2.*PP_Pi*x(3))/SQRT(4.*PP_Pi)
+  prim(IB2) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  prim(IB3) =  SIN(4.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
   CALL PrimToCons(Prim,Resu)
 
 CASE(411) ! Magnetic Rotor
-  r = SQRT((x(1)-0.5)*(x(1)-0.5)+(x(2)-0.5)*(x(2)-0.5))
-  f = (0.115-r)/0.015
+  radius = SQRT((x(1)-0.5)*(x(1)-0.5)+(x(2)-0.5)*(x(2)-0.5))
+  f = (0.115-radius)/0.015
   Prim = 0.
-  Prim(1) = 1.0
-  Prim(5) = 1.0
-  Prim(6) = 5.0/SQRT(4.0*PP_Pi)
-  IF (r .LT. 0.1) THEN
-    Prim(1) = 10.0
-    Prim(2) = 20.0*(0.5-x(2))
-    Prim(3) = 20.0*(x(1)-0.5)
+  Prim(IRHO1) = 1.0
+  Prim(IP) = 1.0
+  Prim(IB1) = 5.0/SQRT(4.0*PP_Pi)
+  IF (radius .LT. 0.1) THEN
+    Prim(IRHO1) = 10.0
+    Prim(IU) = 20.0*(0.5-x(2))
+    Prim(IV) = 20.0*(x(1)-0.5)
   ELSE
-    IF (r .LE. 0.115) THEN
-      Prim(1) = 1.0+9.0*f
-      Prim(2) = f*20.0*(0.5-x(2))
-      Prim(3) = f*20.0*(x(1)-0.5)
+    IF (radius .LE. 0.115) THEN
+      Prim(IRHO1) = 1.0+9.0*f
+      Prim(IU) = f*20.0*(0.5-x(2))
+      Prim(IV) = f*20.0*(x(1)-0.5)
     END IF
   END IF
   CALL PrimToCons(Prim,Resu)
@@ -1310,19 +1310,19 @@ CASE(411) ! Magnetic Rotor
 CASE(102) ! Geophysics application: Flow through cylinder
 
   Prim = 0.
-  Prim(1)=1.
-  Prim(2)=1.
-  Prim(5)=0.148
-  Prim(8)=-3.41
+  Prim(IRHO1)=1.
+  Prim(IU)=1.
+  Prim(IP)=0.148
+  Prim(IB3)=-3.41
   CALL PrimToCons(Prim,Resu)
 
 CASE(109) ! Geophysics application: Flow through sphere
 
   Prim = 0.
-  Prim(1)=1.
-  Prim(2)=1.
-  Prim(5)=0.148
-  Prim(8)=-3.41
+  Prim(IRHO1)=1.
+  Prim(IU)=1.
+  Prim(IP)=0.148
+  Prim(IB3)=-3.41
 
   CALL PrimToCons(Prim,Resu)
 
@@ -1331,58 +1331,58 @@ CASE(110) ! Geophysics application: Flow through sphere .... Tilted B field
   Prim = 0.
 
   ! Density variation with z
-  r = sqrt(x(3)**2+x(2)**2)
-  if (r <= 12.) then ! Io's plasma torus
-    Prim(1) = 1.
-  elseif (r <= 16.) then ! Transition zone between the torus and the low-density plasma
-    Prim(1) = -0.225*r+3.7
-  elseif (r <= 33.) then ! Low-density zone
-    Prim(1) = 0.1
+  radius = sqrt(x(3)**2+x(2)**2)
+  if (radius <= 12.) then ! Io's plasma torus
+    Prim(IRHO1) = 1.
+  elseif (radius <= 16.) then ! Transition zone between the torus and the low-density plasma
+    Prim(IRHO1) = -0.225*radius+3.7
+  elseif (radius <= 33.) then ! Low-density zone
+    Prim(IRHO1) = 0.1
   else  ! Jovian ionosphere
-    Prim(1) = 1.6583*r - 54.625
-!#    Prim(1) = 0.1
+    Prim(IRHO1) = 1.6583*radius - 54.625
+!#    Prim(IRHO1) = 0.1
   end if
 
-  Prim(2)=1.
-  Prim(5)=0.148984037940128
-  Prim(6)=0.373469788265899
-  Prim(7)=-1.19510332245088
-  Prim(8)=-3.60398345676592
+  Prim(IU)=1.
+  Prim(IP)=0.148984037940128
+  Prim(IB1)=0.373469788265899
+  Prim(IB2)=-1.19510332245088
+  Prim(IB3)=-3.60398345676592
 
   CALL PrimToCons(Prim,Resu)
 
 CASE(111) ! Geophysics application: Io interaction with its plasma torus (for shock-capturing MHD paper)
 
   Prim = 0.
-  Prim(1)=1.
-  Prim(2)=1.
-  Prim(5)=0.148984037940128
-  Prim(8)=-3.60398345676592
+  Prim(IRHO1)=1.
+  Prim(IU)=1.
+  Prim(IP)=0.148984037940128
+  Prim(IB3)=-3.60398345676592
 
   CALL PrimToCons(Prim,Resu)
 
 !CASE(666) ! random initialization for velocity and B field, only works with GNU
 !  prim =  0.
-!  !CALL RANDOM_NUMBER(prim(2:4))
-!  prim(1) = RAND(NINT(100000000*a))
+!  !CALL RANDOM_NUMBER(prim(IU:IW))
+!  Prim(IRHO1) = RAND(NINT(100000000*a))
 !  CALL CPU_TIME(a)
-!  prim(2) = RAND(NINT(10000000*a))
+!  prim(IU) = RAND(NINT(10000000*a))
 !  CALL CPU_TIME(a)
-!  prim(3) = RAND(NINT(100000*a))
+!  prim(IV) = RAND(NINT(100000*a))
 !  CALL CPU_TIME(a)
-!  prim(4) = RAND(NINT(100000*a))
-!  prim(5) = RAND(NINT(1000000*a))
+!  prim(IW) = RAND(NINT(100000*a))
+!  prim(IP) = RAND(NINT(1000000*a))
 !  CALL CPU_TIME(a)
-!  prim(6) = RAND(NINT(100000000*a))
+!  prim(IB1) = RAND(NINT(100000000*a))
 !  CALL CPU_TIME(a)
-!  prim(7) = RAND(NINT(1000000*a))
+!  prim(IB2) = RAND(NINT(1000000*a))
 !  CALL CPU_TIME(a)
-!  prim(8) = RAND(NINT(10000*a))
-!  !CALL RANDOM_NUMBER(prim(6:8))
-!  prim(1)  = 1.+0.8*2.*(prim(1)-0.5)
-!  prim(5)  = 1.+0.9*2.*(prim(5)-0.5)
-!  prim(2:4)=(/0.1,0.05,0.04/)+(prim(2:4)-0.5)*IniAmplitude
-!  prim(6:8)=(prim(6:8)-0.5)*IniHalfwidth
+!  prim(IB3) = RAND(NINT(10000*a))
+!  !CALL RANDOM_NUMBER(prim(IB1:IB3))
+!  Prim(IRHO1)  = 1.+0.8*2.*(Prim(IRHO1)-0.5)
+!  prim(IP)  = 1.+0.9*2.*(prim(IP)-0.5)
+!  prim(IU:IW)=(/0.1,0.05,0.04/)+(prim(IU:IW)-0.5)*IniAmplitude
+!  prim(IB1:IB3)=(prim(IB1:IB3)-0.5)*IniHalfwidth
 !  CALL PrimToCons(Prim,Resu)
 
 CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al. Derivation of the pressure initial condition
@@ -1390,52 +1390,52 @@ CASE(24601) ! Alternative insulating Taylor-Green vortex (A) from Brachet et al.
   prim    =  0.
 !  r       =  1. so we don't need it, but include it here to see the similarities between these test cases
 !
-  prim(1) =  1.
-  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
-  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
-  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
+  prim(IRHO1) =  1.
+  prim(IU) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(IV) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(IP) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
              0.0625*(COS(4.*x(1))+COS(4.*x(2)))*(2.-COS(4.*x(3)))
-  prim(6) =  COS(2.*x(1))*SIN(2.*x(2))*SIN(2.*x(3))
-  prim(7) = -SIN(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
+  prim(IB1) =  COS(2.*x(1))*SIN(2.*x(2))*SIN(2.*x(3))
+  prim(IB2) = -SIN(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
   CALL PrimToCons(Prim,Resu)
 CASE(24602) ! Original insulating Taylor-Green vortex (I) from Brachet et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
-  r       =  1./SQRT(3.)
+  radius       =  1./SQRT(3.)
 !
-  prim(1) =  1.
-  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
-  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
-  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
-             r*0.0625*(COS(2.*x(2))+COS(2.*x(3)))*(2.-COS(2.*x(1))) + &
-             r*0.0625*(COS(2.*x(1))+COS(2.*x(3)))*(2.-COS(2.*x(2))) + &
-             r*0.25*COS(2.*x(3)) - r*0.125*COS(2.*x(1))*COS(2.*x(2))
-  prim(6) =  r*COS(x(1))*SIN(x(2))*SIN(x(3))
-  prim(7) =  r*SIN(x(1))*COS(x(2))*SIN(x(3))
-  prim(8) = -r*2.*SIN(x(1))*SIN(x(2))*COS(x(3))
+  prim(IRHO1) =  1.
+  prim(IU) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(IV) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(IP) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) + &
+             radius*0.0625*(COS(2.*x(2))+COS(2.*x(3)))*(2.-COS(2.*x(1))) + &
+             radius*0.0625*(COS(2.*x(1))+COS(2.*x(3)))*(2.-COS(2.*x(2))) + &
+             radius*0.25*COS(2.*x(3)) - radius*0.125*COS(2.*x(1))*COS(2.*x(2))
+  prim(IB1) =  radius*COS(x(1))*SIN(x(2))*SIN(x(3))
+  prim(IB2) =  radius*SIN(x(1))*COS(x(2))*SIN(x(3))
+  prim(IB3) = -radius*2.*SIN(x(1))*SIN(x(2))*COS(x(3))
   CALL PrimToCons(Prim,Resu)
 CASE(24603) ! Conductive Taylor-Green vortex (C) from Brachet et al. Constant chosen such that initial Mach number is 0.1
   prim    =  0.
-  r       =  1./SQRT(3.) ! Brachet et al. proposed SQRT(2./3.) but that doesn't make sense to me as the initial kinetic
+  radius       =  1./SQRT(3.) ! Brachet et al. proposed SQRT(2./3.) but that doesn't make sense to me as the initial kinetic
                          ! and magnetic energies don't match
 !
-  prim(1) =  1.
-  prim(2) =  SIN(x(1))*COS(x(2))*COS(x(3))
-  prim(3) = -COS(x(1))*SIN(x(2))*COS(x(3))
-  prim(5) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) - &
-             r*0.0625*(COS(4.*x(2))+COS(4.*x(3)))*(2.+COS(4.*x(1))) - &
-             r*0.0625*(COS(4.*x(1))+COS(4.*x(3)))*(2.+COS(4.*x(2))) - &
-             r*0.25*COS(4.*x(3)) - r*0.125*COS(4.*x(1))*COS(4.*x(2))
-  prim(6) =  r*SIN(2.*x(1))*COS(2.*x(2))*COS(2.*x(3))
-  prim(7) =  r*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
-  prim(8) = -r*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
+  prim(IRHO1) =  1.
+  prim(IU) =  SIN(x(1))*COS(x(2))*COS(x(3))
+  prim(IV) = -COS(x(1))*SIN(x(2))*COS(x(3))
+  prim(IP) =  100./kappa + 0.0625*(COS(2.*x(1))+COS(2.*x(2)))*(2.+COS(2.*x(3))) - &
+             radius*0.0625*(COS(4.*x(2))+COS(4.*x(3)))*(2.+COS(4.*x(1))) - &
+             radius*0.0625*(COS(4.*x(1))+COS(4.*x(3)))*(2.+COS(4.*x(2))) - &
+             radius*0.25*COS(4.*x(3)) - radius*0.125*COS(4.*x(1))*COS(4.*x(2))
+  prim(IB1) =  radius*SIN(2.*x(1))*COS(2.*x(2))*COS(2.*x(3))
+  prim(IB2) =  radius*COS(2.*x(1))*SIN(2.*x(2))*COS(2.*x(3))
+  prim(IB3) = -radius*2.*COS(2.*x(1))*COS(2.*x(2))*SIN(2.*x(3))
 CALL PrimToCons(Prim,Resu)
 
 case(12345) ! Geospace Environmental Modeling (GEM) reconnection challenge
   prim = 0.
-  prim(1) = 1./cosh(2.*x(2))**2 + 0.2
-  prim(5) = 0.5 *prim(1)
-  prim(6) = tanh(2.*x(2)) - 0.1*(PP_Pi/12.8)   *sin(   PP_Pi*x(2)/12.8)*cos(2.*PP_Pi*x(1)/25.6)
-  prim(7) = 0.1*(2.*PP_Pi/25.6)*sin(2.*PP_Pi*x(1)/25.6)*cos(   PP_Pi*x(2)/12.8)
+  prim(IRHO1) = 1./cosh(2.*x(2))**2 + 0.2
+  prim(IP) = 0.5 *prim(IRHO1)
+  prim(IB1) = tanh(2.*x(2)) - 0.1*(PP_Pi/12.8)   *sin(   PP_Pi*x(2)/12.8)*cos(2.*PP_Pi*x(1)/25.6)
+  prim(IB2) = 0.1*(2.*PP_Pi/25.6)*sin(2.*PP_Pi*x(1)/25.6)*cos(   PP_Pi*x(2)/12.8)
 
   CALL PrimToCons(Prim,Resu)
 END SELECT ! ExactFunction
@@ -1468,17 +1468,9 @@ SUBROUTINE CalcSource(Ut,tIn)
 ! MODULES
 USE MOD_Globals,ONLY:Abort
 USE MOD_PreProc !PP_N
-USE MOD_Equation_Vars, ONLY: IniExactFunc,IniFrequency,IniAmplitude
-USE MOD_Equation_Vars,ONLY:RefStatePrim,IniRefState
-USE MOD_Equation_Vars, ONLY:Kappa,KappaM1
-USE MOD_Equation_Vars, ONLY:doCalcSource
-use MOD_Equation_Vars, only:s2mu_0
+USE MOD_Equation_Vars
 USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
-#if PARABOLIC
-USE MOD_Equation_Vars, ONLY:mu,Pr,eta
-#endif
 #ifdef PP_GLM
-USE MOD_Equation_Vars, ONLY:GLM_scr, GLM_ch
 use MOD_Basis        , ONLY:ALMOSTEQUAL
 #endif /*def PP_GLM*/
 USE MOD_DG_Vars,       ONLY:U
@@ -1497,7 +1489,7 @@ INTEGER                         :: i,j,k,iElem
 REAL                            :: sinXGP,sinXGP2,cosXGP,at
 REAL                            :: tmp(6)
 REAL                            :: rho,rho_x,rho_xx
-REAL                            :: x,y,z,d1,d2,tau,tau_max,s,r,h,tol
+REAL                            :: x,y,z,d1,d2,tau,tau_max,s,radius,h,tol
 LOGICAL                         :: diffCyl
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
@@ -1522,10 +1514,10 @@ CASE(4) ! navierstokes exact function
       sinXGP=SIN(omega*SUM(Elem_xGP(:,i,j,k,iElem))-at)
       sinXGP2=2.*sinXGP*cosXGP !=SIN(2.*(omega*SUM(Elem_xGP(:,i,j,k,iElem))-a*tIn))
       Ut_src=0.
-      Ut_src(1  )       =  tmp(1)*cosXGP
-      Ut_src(2:4)       =  tmp(2)*cosXGP + tmp(3)*sinXGP2
-      Ut_src(5  )       =  tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
-      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src
+      Ut_src(IRHO1      ) =  tmp(1)*cosXGP
+      Ut_src(IRHOU:IRHOW) =  tmp(2)*cosXGP + tmp(3)*sinXGP2
+      Ut_src(IRHOE)       =  tmp(4)*cosXGP + tmp(5)*sinXGP2 + tmp(6)*sinXGP
+      Ut(:,i,j,k,iElem)   = Ut(:,i,j,k,iElem)+Ut_src
     END DO; END DO; END DO ! i,j,k
     !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
@@ -1541,17 +1533,17 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
       rho    = rho + 2.
       Ut_src = 0.
 !
-      Ut_src(1  )  =  rho_x
-      Ut_src(2:3)  =  rho_x +  4.*rho*rho_x
-      Ut_src(4  )  =  4.*rho*rho_x
-      Ut_src(5  )  =  rho_x + 12.*rho*rho_x
-      Ut_src(6  )  =  rho_x
-      Ut_src(7  )  = -rho_x
+      Ut_src(IRHO1)  =  rho_x
+      Ut_src(IRHOU:IRHOV)  =  rho_x +  4.*rho*rho_x
+      Ut_src(IRHOW)  =  4.*rho*rho_x
+      Ut_src(IRHOE)  =  rho_x + 12.*rho*rho_x
+      Ut_src(IB1)  =  rho_x
+      Ut_src(IB2)  = -rho_x
 #if PARABOLIC
       rho_xx       = -Omega*Omega*(rho - 2.)
-      Ut_src(5  )  =  Ut_src(5) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6  )  =  Ut_src(6) - 3.*eta*rho_xx
-      Ut_src(7  )  =  Ut_src(7) + 3.*eta*rho_xx
+      Ut_src(IRHOE)  =  Ut_src(5) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(IB1)  =  Ut_src(IB1) - 3.*eta*rho_xx
+      Ut_src(IB2)  =  Ut_src(IB2) + 3.*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
@@ -1568,17 +1560,17 @@ CASE(6) ! case 5 rotated
       rho_xx =-omega*omega*rho
       rho    = rho+2.
       Ut_src=0.
-      Ut_src(1)   =  rho_x
-      Ut_src(2)   =  rho_x +  4.*rho*rho_x
-      Ut_src(3)   =        +  4.*rho*rho_x
-      Ut_src(4)   =  rho_x +  4.*rho*rho_x
-      Ut_src(5)   =  rho_x + 12.*rho*rho_x
-      Ut_src(6)   =  rho_x
-      Ut_src(8)   =  -rho_x
+      Ut_src(IRHO1)   =  rho_x
+      Ut_src(IRHOU)   =  rho_x +  4.*rho*rho_x
+      Ut_src(IRHOV)   =        +  4.*rho*rho_x
+      Ut_src(IRHOW)   =  rho_x +  4.*rho*rho_x
+      Ut_src(IRHOE)   =  rho_x + 12.*rho*rho_x
+      Ut_src(IB1)   =  rho_x
+      Ut_src(IB3)   =  -rho_x
 #if PARABOLIC
-      Ut_src(5)   = Ut_src(5) - tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
-      Ut_src(6)   = Ut_src(6) - 3*eta*rho_xx
-      Ut_src(8)   = Ut_src(8) + 3*eta*rho_xx
+      Ut_src(IRHOE)   = Ut_src(IRHOE) - tmp(1)*rho_xx-6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(IB1)   = Ut_src(IB1) - 3*eta*rho_xx
+      Ut_src(IB3)   = Ut_src(IB3) + 3*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
@@ -1597,8 +1589,8 @@ CASE(102) ! Geophysics plasma flow through cylinder
     IF (Elem_inCyl(iElem)) THEN
       tau=tau_max
       DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+        Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+        Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)-0.5*tau*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem)
       END DO; END DO; END DO ! i,j,k
     ELSE
       IF (diffCyl) THEN
@@ -1623,8 +1615,8 @@ CASE(102) ! Geophysics plasma flow through cylinder
               END IF
             END IF
           END IF
-          Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-          Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+          Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+          Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)-0.5*tau*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem)
         END DO; END DO; END DO ! i,j,k
       END IF
     END IF
@@ -1636,16 +1628,16 @@ CASE(109) ! Geophysics plasma flow through sphere
     IF (Elem_inCyl(iElem)) THEN
       tau=tau_max
       DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+        Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+        Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)-0.5*tau*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem)
       END DO; END DO; END DO ! i,j,k
     ELSE
       DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-        r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+        radius = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
         h = 150.0/1820.0
-        tau = tau_max*EXP((1.0-r)/h)
-        Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-        Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)
+        tau = tau_max*EXP((1.0-radius)/h)
+        Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+        Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)-0.5*tau*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem)
       END DO; END DO; END DO ! i,j,k
     END IF
 
@@ -1656,17 +1648,17 @@ CASE(110) ! Geophysics plasma flow through sphere (tilted B_field)
   DO iElem=1,nElems
     ! New continuous application of the source term!
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
-      if (r > 1.) then
+      radius = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (radius > 1.) then
         h = 150.0/1820.0
-        tau = tau_max*EXP((1.0-r)/h)
+        tau = tau_max*EXP((1.0-radius)/h)
       else
         tau = tau_max
       end if
-      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)-0.5*tau*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem) !! OLD WRONG
-!#      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- 2*tau* ( U(5,i,j,k,iElem) - 0.5*SUM(U(2:4,i,j,k,iElem)*U(2:4,i,j,k,iElem))/U(1,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW (wrong)
-      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+      Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+!#      Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)-0.5*tau*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem) !! OLD WRONG
+!#      Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)- 2*tau* ( U(IRHOE,i,j,k,iElem) - 0.5*SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IRHOU:IRHOW,i,j,k,iElem))/U(IRHO1,i,j,k,iElem)-s2mu_0*SUM(U(IB1:PP_nVar,i,j,k,iElem)*U(IB1:PP_nVar,i,j,k,iElem)) ) !! NEW (wrong)
+      Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)- tau* ( U(IRHOE,i,j,k,iElem)-s2mu_0*SUM(U(IB1:PP_nVar,i,j,k,iElem)*U(IB1:PP_nVar,i,j,k,iElem)) ) !! NEW good
     END DO; END DO; END DO ! i,j,k
   END DO
 
@@ -1676,15 +1668,15 @@ CASE(111) ! Geophysics: Io interaction with its plasma torus (for shock-capturin
   DO iElem=1,nElems
     ! New continuous application of the source term!
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      r = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
-      if (r > 1.) then
+      radius = SQRT(SUM(Elem_xGP(:,i,j,k,iElem)**2))
+      if (radius > 1.) then
         h = 150.0/1820.0
-        tau = tau_max*EXP((1.0-r)/h)
+        tau = tau_max*EXP((1.0-radius)/h)
       else
         tau = tau_max
       end if
-      Ut(2:4,i,j,k,iElem)=Ut(2:4,i,j,k,iElem)-tau*U(2:4,i,j,k,iElem)
-      Ut(5,i,j,k,iElem)=Ut(5,i,j,k,iElem)- tau* ( U(5,i,j,k,iElem)-s2mu_0*SUM(U(6:PP_nVar,i,j,k,iElem)*U(6:PP_nVar,i,j,k,iElem)) ) !! NEW good
+      Ut(IRHOU:IRHOW,i,j,k,iElem)=Ut(IRHOU:IRHOW,i,j,k,iElem)-tau*U(IRHOU:IRHOW,i,j,k,iElem)
+      Ut(IRHOE,i,j,k,iElem)=Ut(IRHOE,i,j,k,iElem)- tau* ( U(IRHOE,i,j,k,iElem)-s2mu_0*SUM(U(IB1:PP_nVar,i,j,k,iElem)*U(IB1:PP_nVar,i,j,k,iElem)) ) !! NEW good
     END DO; END DO; END DO ! i,j,k
   END DO
 
@@ -1700,7 +1692,7 @@ END SELECT ! ExactFunction
 #ifdef PP_GLM
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-    Ut(9,i,j,k,iElem) = Ut(9,i,j,k,iElem)-GLM_scr*GLM_ch*U(9,i,j,k,iElem)
+    Ut(IPSI,i,j,k,iElem) = Ut(IPSI,i,j,k,iElem)-GLM_scr*GLM_ch*U(IPSI,i,j,k,iElem)
   END DO; END DO; END DO ! i,j,k
 END DO ! iElem
 #endif /*def PP_GLM*/
@@ -1734,8 +1726,7 @@ SUBROUTINE CheckFluxes()
 ! MODULES
 USE MOD_Globals
 USE MOD_Preproc
-USE MOD_Equation_Vars,ONLY:nAuxVar,PrimToCons
-USE MOD_Equation_Vars,ONLY:VolumeFluxAverage
+USE MOD_Equation_Vars
 USE MOD_Flux,         ONLY: EvalAdvFluxTilde3D,EvalAdvectionFlux1D
 USE MOD_Flux_Average
 USE MOD_Riemann
@@ -1743,9 +1734,6 @@ USE MOD_Riemann
 USE MOD_DG_Vars,       ONLY: DGinitIsDone,nTotal_vol,U
 USE MOD_Mesh_Vars,     ONLY: Metrics_fTilde ,Metrics_gTilde ,Metrics_hTilde
 #endif /*PP_DiscType==2*/
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif /*PP_GLM*/
  IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1775,8 +1763,8 @@ WRITE(*,*)'    CHECK ALL FLUXES...'
 PL(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
 PR(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 #ifdef PP_GLM
-PL(9)= 0.31999469
-PR(9)= 0.
+PL(IPSI)= 0.31999469
+PR(IPSI)= 0.
 GLM_ch = 0.5 !was not set yet
 nCases=8
 #else
