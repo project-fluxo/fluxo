@@ -78,29 +78,23 @@ LOGICAL             :: divBSource       !< switch for adding source terms depend
 ! INDICES OF SOLUTION ARRAYS
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Solution variables (same convention for the entropy variables)
-INTEGER, PARAMETER :: IRHO1 = 1
-INTEGER, PARAMETER :: IRHOU = 2
-INTEGER, PARAMETER :: IRHOV = 3
-INTEGER, PARAMETER :: IRHOW = 4
-INTEGER, PARAMETER :: IRHOE = 5
-INTEGER, PARAMETER :: IB1   = 6
-INTEGER, PARAMETER :: IB2   = 7
-INTEGER, PARAMETER :: IB3   = 8
+enum, bind(C)
+  enumerator :: IRHO1 = 1, IRHOU, IRHOV, IRHOW, IRHOE, IB1, IB2, IB3
 #ifdef PP_GLM
-INTEGER, PARAMETER :: IPSI  = 9
+  enumerator :: IPSI
 #endif
+end enum
 ! Primitive variables
-! IRHO1, IB1, IB2, IB3
-INTEGER, PARAMETER :: IU = 2
-INTEGER, PARAMETER :: IV = 3
-INTEGER, PARAMETER :: IW = 4
-INTEGER, PARAMETER :: IP = 5
+! IRHO1, IB1, IB2, IB3 are shared with the solution variables
+enum, bind(C)
+  enumerator :: IU = IRHO1+1, IV, IW, IP
+end enum
 ! Auxiliary variables
 ! IU, IV, IW, IP
 INTEGER, PARAMETER :: ISRHO = 1
-INTEGER, PARAMETER :: IVV   = 6
-INTEGER, PARAMETER :: IBB   = 7
-INTEGER, PARAMETER :: IVB   = 8
+enum, bind(C)
+  enumerator :: IVV = IP+1, IBB, IVB
+end enum
 !----------------------------------------------------------------------------------------------------------------------------------
 
 CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames(PP_nVar)=(/ CHARACTER(LEN=255) :: &
