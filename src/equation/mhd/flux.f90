@@ -100,18 +100,18 @@ REAL                :: Ep                                      ! E + p
 INTEGER             :: i 
 !==================================================================================================================================
 DO i=1,nTotal_vol
-  ASSOCIATE(rho   =>U_in(1,i), &
-            rhov1 =>U_in(2,i), &
-            rhov2 =>U_in(3,i), &
-            rhov3 =>U_in(4,i), &
+  ASSOCIATE(rho   =>U_in(IRHO1,i), &
+            rhov1 =>U_in(IRHOU,i), &
+            rhov2 =>U_in(IRHOV,i), &
+            rhov3 =>U_in(IRHOW,i), &
 #ifdef PP_GLM
-            Etotal=>U_in(5,i)-0.5*smu_0*U_in(9,i)**2, &
+            Etotal=>U_in(IRHOE,i)-0.5*smu_0*U_in(IPSI,i)**2, &
 #else
-            Etotal=>U_in(5,i), &
+            Etotal=>U_in(IRHOE,i), &
 #endif /*def PP_GLM*/
-            b1    =>U_in(6,i), &
-            b2    =>U_in(7,i), &
-            b3    =>U_in(8,i)  ) 
+            b1    =>U_in(IB1,i), &
+            b2    =>U_in(IB2,i), &
+            b3    =>U_in(IB3,i)  ) 
   ! auxiliary variables
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
@@ -126,45 +126,45 @@ DO i=1,nTotal_vol
   
   ! Advection part
   ! Advection fluxes x-direction
-  f(1)=rhov1                     ! rho*u
-  f(2)=rhov1*v1+pt -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
-  f(3)=rhov1*v2    -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
-  f(4)=rhov1*v3    -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
-  f(5)=Ep*v1       -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
-  f(6)=0.
-  f(7)=v1*b2-b1*v2
-  f(8)=v1*b3-b1*v3
+  f(IRHO1)=rhov1                     ! rho*u
+  f(IRHOU)=rhov1*v1+pt -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
+  f(IRHOV)=rhov1*v2    -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
+  f(IRHOW)=rhov1*v3    -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
+  f(IRHOE)=Ep*v1       -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
+  f(IB1)=0.
+  f(IB2)=v1*b2-b1*v2
+  f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
-  g(1)=rhov2                     ! rho*v      
-  g(2)=f(3)                      ! rho*u*v      -1/mu_0*b2*b1
-  g(3)=rhov2*v2+pt -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
-  g(4)=rhov2*v3    -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
-  g(5)=Ep*v2       -smu_0*b2*vb  ! (rho*e+p)*v  -1/mu_0*b2*(v dot B)
-  g(6)=-f(7)                     ! (v2*b1-b2*v1)
-  g(7)=0.
-  g(8)=v2*b3-b2*v3
+  g(IRHO1)=rhov2                     ! rho*v      
+  g(IRHOU)=f(IRHOV)                      ! rho*u*v      -1/mu_0*b2*b1
+  g(IRHOV)=rhov2*v2+pt -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
+  g(IRHOW)=rhov2*v3    -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
+  g(IRHOE)=Ep*v2       -smu_0*b2*vb  ! (rho*e+p)*v  -1/mu_0*b2*(v dot B)
+  g(IB1)=-f(IB2)                     ! (v2*b1-b2*v1)
+  g(IB2)=0.
+  g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
-  h(1)=rhov3                     ! rho*v
-  h(2)=f(4)                      ! rho*u*w      -1/mu_0*b3*b1
-  h(3)=g(4)                      ! rho*v*w      -1/mu_0*b3*b2
-  h(4)=rhov3*v3+pt -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
-  h(5)=Ep*v3       -smu_0*b3*vb  ! (rho*e+p)*w  -1/mu_0*b3*(v dot B)
-  h(6)=-f(8)                     ! v3*b1-b3*v1 
-  h(7)=-g(8)                     ! v3*b2-b3*v2
-  h(8)=0.
+  h(IRHO1)=rhov3                     ! rho*v
+  h(IRHOU)=f(IRHOW)                      ! rho*u*w      -1/mu_0*b3*b1
+  h(IRHOV)=g(IRHOW)                      ! rho*v*w      -1/mu_0*b3*b2
+  h(IRHOW)=rhov3*v3+pt -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
+  h(IRHOE)=Ep*v3       -smu_0*b3*vb  ! (rho*e+p)*w  -1/mu_0*b3*(v dot B)
+  h(IB1)=-f(IB3)                     ! v3*b1-b3*v1 
+  h(IB2)=-g(IB3)                     ! v3*b2-b3*v2
+  h(IB3)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+smu_0*GLM_ch*b1*U_in(9,i)
-  f(6) = f(6)+GLM_ch*U_in(9,i)
-  f(9) = GLM_ch*b1
+  f(IRHOE) = f(IRHOE)+smu_0*GLM_ch*b1*U_in(IPSI,i)
+  f(IB1) = f(IB1)+GLM_ch*U_in(IPSI,i)
+  f(IPSI) = GLM_ch*b1
 
-  g(5) = g(5)+smu_0*GLM_ch*b2*U_in(9,i)
-  g(7) = g(7)+GLM_ch*U_in(9,i)
-  g(9) = GLM_ch*b2
+  g(IRHOE) = g(IRHOE)+smu_0*GLM_ch*b2*U_in(IPSI,i)
+  g(IB2) = g(IB2)+GLM_ch*U_in(IPSI,i)
+  g(IPSI) = GLM_ch*b2
 
-  h(5) = h(5)+smu_0*GLM_ch*b3*U_in(9,i)
-  h(8) = h(8)+GLM_ch*U_in(9,i)
-  h(9) = GLM_ch*b3
+  h(IRHOE) = h(IRHOE)+smu_0*GLM_ch*b3*U_in(IPSI,i)
+  h(IB3) = h(IB3)+GLM_ch*U_in(IPSI,i)
+  h(IPSI) = GLM_ch*b3
 #endif /* PP_GLM */
 
   END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
@@ -228,22 +228,22 @@ REAL                :: divv
 REAL                :: lambda 
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
-REAL,DIMENSION(2:PP_nVar) :: f_visc,g_visc,h_visc
+REAL,DIMENSION(IRHOU:PP_nVar) :: f_visc,g_visc,h_visc
 #endif /*PARABOLIC*/
 INTEGER             :: i 
 !==================================================================================================================================
 DO i=1,nTotal_vol
-  ASSOCIATE(rho   =>U_in(1,i), &
-            rhov1 =>U_in(2,i), &
-            rhov2 =>U_in(3,i), &
-            rhov3 =>U_in(4,i), &
-            b1    =>U_in(6,i), &
-            b2    =>U_in(7,i), &
-            b3    =>U_in(8,i), &
+  ASSOCIATE(rho   =>U_in(IRHO1,i), &
+            rhov1 =>U_in(IRHOU,i), &
+            rhov2 =>U_in(IRHOV,i), &
+            rhov3 =>U_in(IRHOW,i), &
+            b1    =>U_in(IB1,i), &
+            b2    =>U_in(IB2,i), &
+            b3    =>U_in(IB3,i), &
 #ifdef PP_GLM
-            Etotal=>U_in(5,i)-s2mu_0*(U_in(9,i)**2)  &
+            Etotal=>U_in(IRHOE,i)-s2mu_0*(U_in(IPSI,i)**2)  &
 #else
-            Etotal=>U_in(5,i)  &
+            Etotal=>U_in(IRHOE,i)  &
 #endif /*def PP_GLM*/
             )
   ! auxiliary variables
@@ -260,63 +260,63 @@ DO i=1,nTotal_vol
   Ep   = (Etotal + ptilde)
   ! Advection part
   ! Advection fluxes x-direction
-  f(1)=rhov1                          ! rho*u
-  f(2)=rhov1*v1+ptilde  -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
-  f(3)=rhov1*v2         -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
-  f(4)=rhov1*v3         -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
-  f(5)=Ep*v1            -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
-  f(6)=0.
-  f(7)=v1*b2-b1*v2
-  f(8)=v1*b3-b1*v3
+  f(IRHO1)=rhov1                          ! rho*u
+  f(IRHOU)=rhov1*v1+ptilde  -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
+  f(IRHOV)=rhov1*v2         -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
+  f(IRHOW)=rhov1*v3         -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
+  f(IRHOE)=Ep*v1            -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
+  f(IB1)=0.
+  f(IB2)=v1*b2-b1*v2
+  f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
-  g(1)=rhov2                          ! rho*v      
-  g(2)=f(3)                           ! rho*u*v      -1/mu_0*b2*b1
-  g(3)=rhov2*v2+ptilde  -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
-  g(4)=rhov2*v3         -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
-  g(5)=Ep*v2            -smu_0*b2*vb  ! (rho*e+p)*v  -1/mu_0*b2*(v dot B)
-  g(6)=-f(7)                          ! v2*b1-b2*v1 
-  g(7)=0.
-  g(8)=v2*b3-b2*v3
+  g(IRHO1)=rhov2                          ! rho*v      
+  g(IRHOU)=f(IRHOV)                           ! rho*u*v      -1/mu_0*b2*b1
+  g(IRHOV)=rhov2*v2+ptilde  -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
+  g(IRHOW)=rhov2*v3         -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
+  g(IRHOE)=Ep*v2            -smu_0*b2*vb  ! (rho*e+p)*v  -1/mu_0*b2*(v dot B)
+  g(IB1)=-f(IB2)                          ! v2*b1-b2*v1 
+  g(IB2)=0.
+  g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
-  h(1)=rhov3                          ! rho*v
-  h(2)=f(4)                           ! rho*u*w      -1/mu_0*b3*b1
-  h(3)=g(4)                           ! rho*v*w      -1/mu_0*b3*b2
-  h(4)=rhov3*v3+ptilde  -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
-  h(5)=Ep*v3            -smu_0*b3*vb  ! (rho*e+p)*w  -1/mu_0*b3*(v dot B)
-  h(6)=-f(8)                          ! v3*b1-b3*v1 
-  h(7)=-g(8)                          ! v3*b2-b3*v2
-  h(8)=0.
+  h(IRHO1)=rhov3                          ! rho*v
+  h(IRHOU)=f(IRHOW)                           ! rho*u*w      -1/mu_0*b3*b1
+  h(IRHOV)=g(IRHOW)                           ! rho*v*w      -1/mu_0*b3*b2
+  h(IRHOW)=rhov3*v3+ptilde  -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
+  h(IRHOE)=Ep*v3            -smu_0*b3*vb  ! (rho*e+p)*w  -1/mu_0*b3*(v dot B)
+  h(IB1)=-f(IB3)                          ! v3*b1-b3*v1 
+  h(IB2)=-g(IB3)                          ! v3*b2-b3*v2
+  h(IB3)=0.
 
 #ifdef PP_GLM
-  f(5) = f(5)+smu_0*GLM_ch*b1*U_in(9,i)
-  f(6) = f(6)+      GLM_ch   *U_in(9,i)
-  f(9) =            GLM_ch*b1
+  f(IRHOE) = f(IRHOE)+smu_0*GLM_ch*b1*U_in(IPSI,i)
+  f(IB1) = f(IB1)+      GLM_ch   *U_in(IPSI,i)
+  f(IPSI) =            GLM_ch*b1
 
-  g(5) = g(5)+smu_0*GLM_ch*b2*U_in(9,i)
-  g(7) = g(7)+      GLM_ch   *U_in(9,i)
-  g(9) =            GLM_ch*b2
+  g(IRHOE) = g(IRHOE)+smu_0*GLM_ch*b2*U_in(IPSI,i)
+  g(IB2) = g(IB2)+      GLM_ch   *U_in(IPSI,i)
+  g(IPSI) =            GLM_ch*b2
 
-  h(5) = h(5)+smu_0*GLM_ch*b3*U_in(9,i)
-  h(8) = h(8)+      GLM_ch   *U_in(9,i)
-  h(9) =            GLM_ch*b3
+  h(IRHOE) = h(IRHOE)+smu_0*GLM_ch*b3*U_in(IPSI,i)
+  h(IB3) = h(IB3)+      GLM_ch   *U_in(IPSI,i)
+  h(IPSI) =            GLM_ch*b3
 #endif /* PP_GLM */
 
 #if PARABOLIC
   ! Viscous part
-  ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), & 
-             gradv2x => gradPx_in(3,i), gradB2x => gradPx_in(7,i), & 
-             gradv3x => gradPx_in(4,i), gradB3x => gradPx_in(8,i), & 
-             gradv1y => gradPy_in(2,i), gradB1y => gradPy_in(6,i), & 
-             gradv2y => gradPy_in(3,i), gradB2y => gradPy_in(7,i), & 
-             gradv3y => gradPy_in(4,i), gradB3y => gradPy_in(8,i), & 
-             gradv1z => gradPz_in(2,i), gradB1z => gradPz_in(6,i), & 
-             gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
-             gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i)  )
+  ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), & 
+             gradv2x => gradPx_in(IV,i), gradB2x => gradPx_in(IB2,i), & 
+             gradv3x => gradPx_in(IW,i), gradB3x => gradPx_in(IB3,i), & 
+             gradv1y => gradPy_in(IU,i), gradB1y => gradPy_in(IB1,i), & 
+             gradv2y => gradPy_in(IV,i), gradB2y => gradPy_in(IB2,i), & 
+             gradv3y => gradPy_in(IW,i), gradB3y => gradPy_in(IB3,i), & 
+             gradv1z => gradPz_in(IU,i), gradB1z => gradPz_in(IB1,i), & 
+             gradv2z => gradPz_in(IV,i), gradB2z => gradPz_in(IB2,i), & 
+             gradv3z => gradPz_in(IW,i), gradB3z => gradPz_in(IB3,i)  )
 
   divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)-srho*p*gradPx_in(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)-srho*p*gradPy_in(IRHO1,i)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)-srho*p*gradPz_in(IRHO1,i)) 
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
@@ -337,42 +337,42 @@ DO i=1,nTotal_vol
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f_visc(2)=mu*(2*gradv1x-s23*divv)
-  f_visc(3)=mu*(  gradv2x+gradv1y)   
-  f_visc(4)=mu*(  gradv3x+gradv1z)   
-  f_visc(6)=0.
-  f_visc(7)=etasmu_0*(gradB2x-gradB1y)
-  f_visc(8)=etasmu_0*(gradB3x-gradB1z)
+  f_visc(IRHOU)=mu*(2*gradv1x-s23*divv)
+  f_visc(IRHOV)=mu*(  gradv2x+gradv1y)   
+  f_visc(IRHOW)=mu*(  gradv3x+gradv1z)   
+  f_visc(IB1)=0.
+  f_visc(IB2)=etasmu_0*(gradB2x-gradB1y)
+  f_visc(IB3)=etasmu_0*(gradB3x-gradB1z)
   !energy
-  f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) + Qx
+  f_visc(IRHOE)= v1*f_visc(IRHOU)+v2*f_visc(IRHOV)+v3*f_visc(IRHOW) +smu_0*(b1*f_visc(IB1)+b2*f_visc(IB2)+b3*f_visc(IB3)) + Qx
 
   ! viscous fluxes in y-direction      
-  g_visc(2)= f_visc(3)                  !mu*(  gradv1y+gradv2x)  
-  g_visc(3)=mu*(2*gradv2y-s23*divv)     
-  g_visc(4)=mu*(  gradv3y+gradv2z)      
-  g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
-  g_visc(7)=0.
-  g_visc(8)=etasmu_0*(gradB3y-gradB2z)
+  g_visc(IRHOU)= f_visc(IRHOV)                  !mu*(  gradv1y+gradv2x)  
+  g_visc(IRHOV)=mu*(2*gradv2y-s23*divv)     
+  g_visc(IRHOW)=mu*(  gradv3y+gradv2z)      
+  g_visc(IB1)=-f_visc(IB2)                  !etasmu_0*(gradB1y-gradB2x)
+  g_visc(IB2)=0.
+  g_visc(IB3)=etasmu_0*(gradB3y-gradB2z)
   !energy
-  g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) + Qy 
+  g_visc(IRHOE)=v1*g_visc(IRHOU)+v2*g_visc(IRHOV)+v3*g_visc(IRHOW) + smu_0*(b1*g_visc(IB1)+b2*g_visc(IB2)+b3*g_visc(IB3)) + Qy 
 
 
 
   ! viscous fluxes in z-direction      
-  h_visc(2)= f_visc(4)                       !mu*(  gradv1z+gradv3x)                 
-  h_visc(3)= g_visc(4)                       !mu*(  gradv2z+gradv3y)                
-  h_visc(4)=mu*(2*gradv3z-s23*divv )             
-  h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
-  h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
-  h_visc(8)=0.
+  h_visc(IRHOU)= f_visc(IRHOW)                       !mu*(  gradv1z+gradv3x)                 
+  h_visc(IRHOV)= g_visc(IRHOW)                       !mu*(  gradv2z+gradv3y)                
+  h_visc(IRHOW)=mu*(2*gradv3z-s23*divv )             
+  h_visc(IB1)=-f_visc(IB3)                       !etasmu_0*(gradB1z-gradB3x)
+  h_visc(IB2)=-g_visc(IB3)                       !etasmu_0*(gradB2z-gradB3y)
+  h_visc(IB3)=0.
   !energy
-  h_visc(5)=v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)+smu_0*(b1*h_visc(6)+b2*h_visc(7)+b3*h_visc(8)) + Qz
+  h_visc(IRHOE)=v1*h_visc(IRHOU)+v2*h_visc(IRHOV)+v3*h_visc(IRHOW)+smu_0*(b1*h_visc(IB1)+b2*h_visc(IB2)+b3*h_visc(IB3)) + Qz
 
-  f(2:8)=f(2:8)-f_visc(2:8)
-  g(2:8)=g(2:8)-g_visc(2:8)
-  h(2:8)=h(2:8)-h_visc(2:8)
+  f(IRHOU:IB3)=f(IRHOU:IB3)-f_visc(IRHOU:IB3)
+  g(IRHOU:IB3)=g(IRHOU:IB3)-g_visc(IRHOU:IB3)
+  h(IRHOU:IB3)=h(IRHOU:IB3)-h_visc(IRHOU:IB3)
 
-END ASSOCIATE ! gradB1x => gradPx(6 ...
+END ASSOCIATE ! gradB1x => gradPx(IB1 ...
 
 #endif /*PARABOLIC*/
 END ASSOCIATE ! rho,rhov1,rhov2,rhov3,Etotal,b1,b2,b3
@@ -408,37 +408,37 @@ REAL                :: v1,v2,v3,ptilde    ! velocity and pressure(including magn
 REAL                :: vb                 ! magnetic field, bb2=|bvec|^2
 !==================================================================================================================================
 ! auxiliary variables
-srho = 1. / U_Face(1) ! 1/rho
-v1   = U_Face(2)*srho ! u
-v2   = U_Face(3)*srho ! v
-v3   = U_Face(4)*srho ! w
-ASSOCIATE( b1 => U_Face(6), &
-           b2 => U_Face(7), &
-           b3 => U_Face(8), &
+srho = 1. / U_Face(IRHO1) ! 1/rho
+v1   = U_Face(IRHOU)*srho ! u
+v2   = U_Face(IRHOV)*srho ! v
+v3   = U_Face(IRHOW)*srho ! w
+ASSOCIATE( b1 => U_Face(IB1), &
+           b2 => U_Face(IB2), &
+           b3 => U_Face(IB3), &
 #ifdef PP_GLM
-           Etotal => U_Face(5)-s2mu_0*U_Face(9)**2  &
+           Etotal => U_Face(IRHOE)-s2mu_0*U_Face(IPSI)**2  &
 #else
-           Etotal => U_Face(5)  &
+           Etotal => U_Face(IRHOE)  &
 #endif
 )
 vb   = (b1*v1+b2*v2+b3*v3)
 ! ptilde includes magnetic pressure
-ptilde = kappaM1*(Etotal-0.5*U_Face(1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
+ptilde = kappaM1*(Etotal-0.5*U_Face(IRHO1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
 ! Advection fluxes x-direction
-F_Face(1)= U_Face(2)          ! rho*u
-F_Face(2)= U_Face(2)*v1+ptilde    -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
-F_Face(3)= U_Face(2)*v2           -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
-F_Face(4)= U_Face(2)*v3           -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
-F_Face(5)=(Etotal + ptilde)*v1    -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
-F_Face(6)=0.
-F_Face(7)=v1*b2-b1*v2
-F_Face(8)=v1*b3-b1*v3
+F_Face(IRHO1)= U_Face(IRHOU)          ! rho*u
+F_Face(IRHOU)= U_Face(IRHOU)*v1+ptilde    -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
+F_Face(IRHOV)= U_Face(IRHOU)*v2           -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
+F_Face(IRHOW)= U_Face(IRHOU)*v3           -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
+F_Face(IRHOE)=(Etotal + ptilde)*v1    -smu_0*b1*vb  ! (rho*e+p)*u  -1/mu_0*b1*(v dot B)
+F_Face(IB1)=0.
+F_Face(IB2)=v1*b2-b1*v2
+F_Face(IB3)=v1*b3-b1*v3
 #ifdef PP_GLM
-F_Face(5)=F_Face(5)+smu_0*GLM_ch*b1*U_Face(9)
-F_Face(6)=F_Face(6)+      GLM_ch   *U_Face(9)
-F_Face(9)=                GLM_ch*b1
+F_Face(IRHOE)=F_Face(IRHOE)+smu_0*GLM_ch*b1*U_Face(IPSI)
+F_Face(IB1)=F_Face(IB1)+      GLM_ch   *U_Face(IPSI)
+F_Face(IPSI)=                GLM_ch*b1
 #endif /* PP_GLM */
-END ASSOCIATE ! b1 => UFace(6) ...
+END ASSOCIATE ! b1 => UFace(IB1) ...
 END SUBROUTINE EvalAdvectionFlux1D
 
 
@@ -482,32 +482,32 @@ INTEGER             :: i
 !==================================================================================================================================
 DO i=1,nTotal_face
   ! auxiliary variables
-  ASSOCIATE(rho   =>U_Face(1,i), &
-            b1    =>U_Face(6,i), &
-            b2    =>U_Face(7,i), &
-            b3    =>U_Face(8,i)  )
+  ASSOCIATE(rho   =>U_Face(IRHO1,i), &
+            b1    =>U_Face(IB1,i), &
+            b2    =>U_Face(IB2,i), &
+            b3    =>U_Face(IB3,i)  )
   srho = 1. / rho
-  v1   = U_Face(2,i)*srho
-  v2   = U_Face(3,i)*srho
-  v3   = U_Face(4,i)*srho
-  p    = kappaM1*(U_Face(5,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_Face(6:PP_nVar,i)**2) )
+  v1   = U_Face(IRHOU,i)*srho
+  v2   = U_Face(IRHOV,i)*srho
+  v3   = U_Face(IRHOW,i)*srho
+  p    = kappaM1*(U_Face(IRHOE,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_Face(IB1:PP_nVar,i)**2) )
 
   ! Viscous part
   ! ideal gas law
-ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), & 
-           gradv2x => gradPx_Face(3,i),  gradB2x => gradPx_Face(7,i), & 
-           gradv3x => gradPx_Face(4,i),  gradB3x => gradPx_Face(8,i), & 
-           gradv1y => gradPy_Face(2,i),  gradB1y => gradPy_Face(6,i), & 
-           gradv2y => gradPy_Face(3,i),  gradB2y => gradPy_Face(7,i), & 
-           gradv3y => gradPy_Face(4,i),  gradB3y => gradPy_Face(8,i), & 
-           gradv1z => gradPz_Face(2,i),  gradB1z => gradPz_Face(6,i), & 
-           gradv2z => gradPz_Face(3,i),  gradB2z => gradPz_Face(7,i), & 
-           gradv3z => gradPz_Face(4,i),  gradB3z => gradPz_Face(8,i)  )
+ASSOCIATE( gradv1x => gradPx_Face(IU,i),  gradB1x => gradPx_Face(IB1,i), & 
+           gradv2x => gradPx_Face(IV,i),  gradB2x => gradPx_Face(IB2,i), & 
+           gradv3x => gradPx_Face(IW,i),  gradB3x => gradPx_Face(IB3,i), & 
+           gradv1y => gradPy_Face(IU,i),  gradB1y => gradPy_Face(IB1,i), & 
+           gradv2y => gradPy_Face(IV,i),  gradB2y => gradPy_Face(IB2,i), & 
+           gradv3y => gradPy_Face(IW,i),  gradB3y => gradPy_Face(IB3,i), & 
+           gradv1z => gradPz_Face(IU,i),  gradB1z => gradPz_Face(IB1,i), & 
+           gradv2z => gradPz_Face(IV,i),  gradB2z => gradPz_Face(IB2,i), & 
+           gradv3z => gradPz_Face(IW,i),  gradB3z => gradPz_Face(IB3,i)  )
 
   divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx_face(5,i)-srho*p*gradPx_face(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy_face(5,i)-srho*p*gradPy_face(1,i)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz_face(5,i)-srho*p*gradPz_face(1,i)) 
+  cv_gradTx  = sKappaM1*sRho*(gradPx_face(IP,i)-srho*p*gradPx_face(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy  = sKappaM1*sRho*(gradPy_face(IP,i)-srho*p*gradPy_face(IRHO1,i)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_face(IP,i)-srho*p*gradPz_face(IRHO1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu*KappasPr
@@ -529,46 +529,46 @@ ASSOCIATE( gradv1x => gradPx_Face(2,i),  gradB1x => gradPx_Face(6,i), &
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f(1,i)=0.
-  f(2,i)=-mu*(2*gradv1x-s23*divv)
-  f(3,i)=-mu*(  gradv2x+gradv1y)   
-  f(4,i)=-mu*(  gradv3x+gradv1z)   
-  f(6,i)= 0.
-  f(7,i)=-etasmu_0*(gradB2x-gradB1y)
-  f(8,i)=-etasmu_0*(gradB3x-gradB1z)
+  f(IRHO1,i)=0.
+  f(IRHOU,i)=-mu*(2*gradv1x-s23*divv)
+  f(IRHOV,i)=-mu*(  gradv2x+gradv1y)   
+  f(IRHOW,i)=-mu*(  gradv3x+gradv1z)   
+  f(IB1,i)= 0.
+  f(IB2,i)=-etasmu_0*(gradB2x-gradB1y)
+  f(IB3,i)=-etasmu_0*(gradB3x-gradB1z)
   !energy
-  f(5,i)=v1*f(2,i)+v2*f(3,i)+v3*f(4,i) +smu_0*(b1*f(6,i)+b2*f(7,i)+b3*f(8,i)) - Qx
+  f(IRHOE,i)=v1*f(IRHOU,i)+v2*f(IRHOV,i)+v3*f(IRHOW,i) +smu_0*(b1*f(IB1,i)+b2*f(IB2,i)+b3*f(IB3,i)) - Qx
 
   ! viscous fluxes in y-direction      
-  g(1,i)=0.
-  g(2,i)= f(3,i)                  !mu*(  gradv1y+gradv2x)  
-  g(3,i)=-mu*(2*gradv2y-s23*divv)
-  g(4,i)=-mu*(  gradv3y+gradv2z)      
-  g(6,i)=-f(7,i)                  !etasmu_0*(gradB1y-gradB2x)
-  g(7,i)= 0.
-  g(8,i)=-etasmu_0*(gradB3y-gradB2z)
+  g(IRHO1,i)=0.
+  g(IRHOU,i)= f(IRHOV,i)                  !mu*(  gradv1y+gradv2x)  
+  g(IRHOV,i)=-mu*(2*gradv2y-s23*divv)
+  g(IRHOW,i)=-mu*(  gradv3y+gradv2z)      
+  g(IB1,i)=-f(IB2,i)                  !etasmu_0*(gradB1y-gradB2x)
+  g(IB2,i)= 0.
+  g(IB3,i)=-etasmu_0*(gradB3y-gradB2z)
   !energy
-  g(5,i)=v1*g(2,i)+v2*g(3,i)+v3*g(4,i) + smu_0*(b1*g(6,i)+b2*g(7,i)+b3*g(8,i)) - Qy
+  g(IRHOE,i)=v1*g(IRHOU,i)+v2*g(IRHOV,i)+v3*g(IRHOW,i) + smu_0*(b1*g(IB1,i)+b2*g(IB2,i)+b3*g(IB3,i)) - Qy
 
   ! viscous fluxes in z-direction      
-  h(1,i)=0.
-  h(2,i)= f(4,i)                       !mu*(  gradv1z+gradv3x)                 
-  h(3,i)= g(4,i)                       !mu*(  gradv2z+gradv3y)                
-  h(4,i)=-mu*(2*gradv3z-s23*divv )        
-  h(6,i)=-f(8,i)                       !etasmu_0*(gradB1z-gradB3x)
-  h(7,i)=-g(8,i)                       !etasmu_0*(gradB2z-gradB3y)
-  h(8,i)= 0.
+  h(IRHO1,i)=0.
+  h(IRHOU,i)= f(IRHOW,i)                       !mu*(  gradv1z+gradv3x)                 
+  h(IRHOV,i)= g(IRHOW,i)                       !mu*(  gradv2z+gradv3y)                
+  h(IRHOW,i)=-mu*(2*gradv3z-s23*divv )        
+  h(IB1,i)=-f(IB3,i)                       !etasmu_0*(gradB1z-gradB3x)
+  h(IB2,i)=-g(IB3,i)                       !etasmu_0*(gradB2z-gradB3y)
+  h(IB3,i)= 0.
   !energy
-  h(5,i)=v1*h(2,i)+v2*h(3,i)+v3*h(4,i) +smu_0*(b1*h(6,i)+b2*h(7,i)+b3*h(8,i)) - Qz
+  h(IRHOE,i)=v1*h(IRHOU,i)+v2*h(IRHOV,i)+v3*h(IRHOW,i) +smu_0*(b1*h(IB1,i)+b2*h(IB2,i)+b3*h(IB3,i)) - Qz
   
 #ifdef PP_GLM
-  f(9,i) = 0.
-  g(9,i) = 0.
-  h(9,i) = 0.
+  f(IPSI,i) = 0.
+  g(IPSI,i) = 0.
+  h(IPSI,i) = 0.
 #endif /*PP_GLM*/
 
 END ASSOCIATE ! gradv1x => gradPx(2,....
-END ASSOCIATE ! b1 => UFace(6,i) ...
+END ASSOCIATE ! b1 => UFace(IB1,i) ...
 END DO !i=1,nTotal
 END SUBROUTINE EvalDiffFlux3D
 
@@ -614,32 +614,32 @@ INTEGER             :: i
 !==================================================================================================================================
 DO i=1,nTotal_vol
   ! auxiliary variables
-ASSOCIATE( rho => U_in(1,i), &
-           b1  => U_in(6,i), &
-           b2  => U_in(7,i), &
-           b3  => U_in(8,i)  )
+ASSOCIATE( rho => U_in(IRHO1,i), &
+           b1  => U_in(IB1,i), &
+           b2  => U_in(IB2,i), &
+           b3  => U_in(IB3,i)  )
   srho = 1. / rho
   
-  v1   = U_in(2,i)*srho 
-  v2   = U_in(3,i)*srho 
-  v3   = U_in(4,i)*srho 
+  v1   = U_in(IRHOU,i)*srho 
+  v2   = U_in(IRHOV,i)*srho 
+  v3   = U_in(IRHOW,i)*srho 
 
-  p    = kappaM1*(U_in(5,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_in(6:PP_nVar,i)**2) )
+  p    = kappaM1*(U_in(IRHOE,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_in(IB1:PP_nVar,i)**2) )
   ! Viscous part
-ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), & 
-           gradv2x => gradPx_in(3,i), gradB2x => gradPx_in(7,i), & 
-           gradv3x => gradPx_in(4,i), gradB3x => gradPx_in(8,i), & 
-           gradv1y => gradPy_in(2,i), gradB1y => gradPy_in(6,i), & 
-           gradv2y => gradPy_in(3,i), gradB2y => gradPy_in(7,i), & 
-           gradv3y => gradPy_in(4,i), gradB3y => gradPy_in(8,i), & 
-           gradv1z => gradPz_in(2,i), gradB1z => gradPz_in(6,i), & 
-           gradv2z => gradPz_in(3,i), gradB2z => gradPz_in(7,i), & 
-           gradv3z => gradPz_in(4,i), gradB3z => gradPz_in(8,i))
+ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), & 
+           gradv2x => gradPx_in(IV,i), gradB2x => gradPx_in(IB2,i), & 
+           gradv3x => gradPx_in(IW,i), gradB3x => gradPx_in(IB3,i), & 
+           gradv1y => gradPy_in(IU,i), gradB1y => gradPy_in(IB1,i), & 
+           gradv2y => gradPy_in(IV,i), gradB2y => gradPy_in(IB2,i), & 
+           gradv3y => gradPy_in(IW,i), gradB3y => gradPy_in(IB3,i), & 
+           gradv1z => gradPz_in(IU,i), gradB1z => gradPz_in(IB1,i), & 
+           gradv2z => gradPz_in(IV,i), gradB2z => gradPz_in(IB2,i), & 
+           gradv3z => gradPz_in(IW,i), gradB3z => gradPz_in(IB3,i))
 
   divv    = gradv1x+gradv2y+gradv3z
-  cv_gradTx  = sKappaM1*sRho*(gradPx_in(5,i)-srho*p*gradPx_in(1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
-  cv_gradTy  = sKappaM1*sRho*(gradPy_in(5,i)-srho*p*gradPy_in(1,i)) 
-  cv_gradTz  = sKappaM1*sRho*(gradPz_in(5,i)-srho*p*gradPz_in(1,i)) 
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)-srho*p*gradPx_in(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)-srho*p*gradPy_in(IRHO1,i)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)-srho*p*gradPz_in(IRHO1,i)) 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   
@@ -662,47 +662,47 @@ ASSOCIATE( gradv1x => gradPx_in(2,i), gradB1x => gradPx_in(6,i), &
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f_visc(1)=0.
-  f_visc(2)=-mu*(2*gradv1x-s23*divv)
-  f_visc(3)=-mu*(  gradv2x+gradv1y)   
-  f_visc(4)=-mu*(  gradv3x+gradv1z)   
-  f_visc(6)=0.
-  f_visc(7)=-etasmu_0*(gradB2x-gradB1y)
-  f_visc(8)=-etasmu_0*(gradB3x-gradB1z)
+  f_visc(IRHO1)=0.
+  f_visc(IRHOU)=-mu*(2*gradv1x-s23*divv)
+  f_visc(IRHOV)=-mu*(  gradv2x+gradv1y)   
+  f_visc(IRHOW)=-mu*(  gradv3x+gradv1z)   
+  f_visc(IB1)=0.
+  f_visc(IB2)=-etasmu_0*(gradB2x-gradB1y)
+  f_visc(IB3)=-etasmu_0*(gradB3x-gradB1z)
   !energy
-  f_visc(5)= v1*f_visc(2)+v2*f_visc(3)+v3*f_visc(4) +smu_0*(b1*f_visc(6)+b2*f_visc(7)+b3*f_visc(8)) - Qx
+  f_visc(IRHOE)= v1*f_visc(IRHOU)+v2*f_visc(IRHOV)+v3*f_visc(IRHOW) +smu_0*(b1*f_visc(IB1)+b2*f_visc(IB2)+b3*f_visc(IB3)) - Qx
 
   ! viscous fluxes in y-direction      
-  g_visc(1)=0.
-  g_visc(2)= f_visc(3)                  !-mu*(  gradv1y+gradv2x)  
-  g_visc(3)=-mu*(2*gradv2y-s23*divv)     
-  g_visc(4)=-mu*(  gradv3y+gradv2z)      
-  g_visc(6)=-f_visc(7)                  !etasmu_0*(gradB1y-gradB2x)
-  g_visc(7)=0.
-  g_visc(8)=-etasmu_0*(gradB3y-gradB2z)
+  g_visc(IRHO1)=0.
+  g_visc(IRHOU)= f_visc(IRHOV)                  !-mu*(  gradv1y+gradv2x)  
+  g_visc(IRHOV)=-mu*(2*gradv2y-s23*divv)     
+  g_visc(IRHOW)=-mu*(  gradv3y+gradv2z)      
+  g_visc(IB1)=-f_visc(IB2)                  !etasmu_0*(gradB1y-gradB2x)
+  g_visc(IB2)=0.
+  g_visc(IB3)=-etasmu_0*(gradB3y-gradB2z)
   !energy
-  g_visc(5)=v1*g_visc(2)+v2*g_visc(3)+v3*g_visc(4) + smu_0*(b1*g_visc(6)+b2*g_visc(7)+b3*g_visc(8)) - Qy 
+  g_visc(IRHOE)=v1*g_visc(IRHOU)+v2*g_visc(IRHOV)+v3*g_visc(IRHOW) + smu_0*(b1*g_visc(IB1)+b2*g_visc(IB2)+b3*g_visc(IB3)) - Qy 
 
   ! viscous fluxes in z-direction      
-  h_visc(1)=0.
-  h_visc(2)= f_visc(4)                       !-mu*(  gradv1z+gradv3x)                 
-  h_visc(3)= g_visc(4)                       !-mu*(  gradv2z+gradv3y)                
-  h_visc(4)=-mu*(2*gradv3z-s23*divv )             
-  h_visc(6)=-f_visc(8)                       !etasmu_0*(gradB1z-gradB3x)
-  h_visc(7)=-g_visc(8)                       !etasmu_0*(gradB2z-gradB3y)
-  h_visc(8)=0.
+  h_visc(IRHO1)=0.
+  h_visc(IRHOU)= f_visc(IRHOW)                       !-mu*(  gradv1z+gradv3x)                 
+  h_visc(IRHOV)= g_visc(IRHOW)                       !-mu*(  gradv2z+gradv3y)                
+  h_visc(IRHOW)=-mu*(2*gradv3z-s23*divv )             
+  h_visc(IB1)=-f_visc(IB3)                       !etasmu_0*(gradB1z-gradB3x)
+  h_visc(IB2)=-g_visc(IB3)                       !etasmu_0*(gradB2z-gradB3y)
+  h_visc(IB3)=0.
   !energy
-  h_visc(5)=v1*h_visc(2)+v2*h_visc(3)+v3*h_visc(4)+smu_0*(b1*h_visc(6)+b2*h_visc(7)+b3*h_visc(8)) - Qz
+  h_visc(IRHOE)=v1*h_visc(IRHOU)+v2*h_visc(IRHOV)+v3*h_visc(IRHOW)+smu_0*(b1*h_visc(IB1)+b2*h_visc(IB2)+b3*h_visc(IB3)) - Qz
 
 #ifdef PP_GLM
-  f_visc(9) = 0. 
-  g_visc(9) = 0. 
-  h_visc(9) = 0. 
+  f_visc(IPSI) = 0. 
+  g_visc(IPSI) = 0. 
+  h_visc(IPSI) = 0. 
 #endif /*PP_GLM*/
 
-END ASSOCIATE ! gradB1x => gradPx(6 ...
+END ASSOCIATE ! gradB1x => gradPx(IB1 ...
 
-END ASSOCIATE ! b1 = U(6,....
+END ASSOCIATE ! b1 = U(IB1,....
 
   !now transform fluxes to reference ftilde,gtilde,htilde
   ftilde(:,i) =   f_visc(:)*M_f(1,i) + g_visc(:)*M_f(2,i) + h_visc(:)*M_f(3,i)
