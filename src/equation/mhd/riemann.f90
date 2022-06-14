@@ -86,7 +86,7 @@ SUBROUTINE Riemann(F,UL,UR,                                                     
 #endif /*PARABOLIC*/
                    nv,t1,t2)
 USE MOD_PreProc
-USE MOD_Equation_vars,ONLY: SolveRiemannProblem
+USE MOD_Equation_vars
 #if PARABOLIC
 USE MOD_Flux         ,ONLY: EvalDiffFlux3D
 #endif /*PARABOLIC*/
@@ -129,9 +129,9 @@ CALL EvalDiffFlux3D(k_R,g_R,j_R,UR,gradUx_R,gradUy_R,gradUz_R)
 
 !
 ! !BR1/BR2 uses arithmetic mean of the fluxes
-! ATTENTION: This is done from iVar=2 because the first component of the viscous fluxes is  F(1,:,:)=0
+! ATTENTION: This is done from iVar=2 because the first component of the viscous fluxes is  F(IRHO1,:,:)=0
 !            ... Change to iVar=1 if that is no longer the case
-DO iVar=2,PP_nVar
+DO iVar=IRHOU,PP_nVar
   F(iVar,:,:)=F(iVar,:,:)+0.5*( nv(1,:,:)*(k_L(iVar,:,:)+k_R(iVar,:,:))  &
                                +nv(2,:,:)*(g_L(iVar,:,:)+g_R(iVar,:,:))  &
                                +nv(3,:,:)*(j_L(iVar,:,:)+j_R(iVar,:,:))  )
@@ -183,6 +183,7 @@ END SUBROUTINE AdvRiemann
 !> Rotate the state to the normal frame of reference
 !==================================================================================================================================
 pure function RotateState(U,nv,t1,t2) result(rotU)
+  use MOD_Equation_Vars
   implicit none
   real, intent(in) :: U(PP_nVar)
   real, intent(in) :: nv(3)
@@ -190,30 +191,35 @@ pure function RotateState(U,nv,t1,t2) result(rotU)
   real, intent(in) :: t2(3)
   real             :: rotU(PP_nVar)
 
-  rotU(:) =     U(:  )
-  rotU(2) = SUM(U(2:4)*nv(:))
-  rotU(3) = SUM(U(2:4)*t1(:))
-  rotU(4) = SUM(U(2:4)*t2(:))
-  rotU(6) = SUM(U(6:8)*nv(:))
-  rotU(7) = SUM(U(6:8)*t1(:))
-  rotU(8) = SUM(U(6:8)*t2(:))
+  rotU(IRHO1) = U(IRHO1)
+  rotU(IRHOU) = SUM(U(IRHOU:IRHOW)*nv(:))
+  rotU(IRHOV) = SUM(U(IRHOU:IRHOW)*t1(:))
+  rotU(IRHOW) = SUM(U(IRHOU:IRHOW)*t2(:))
+  rotU(IRHOE) = U(IRHOE)
+  rotU(IB1) = SUM(U(IB1:IB3)*nv(:))
+  rotU(IB2) = SUM(U(IB1:IB3)*t1(:))
+  rotU(IB3) = SUM(U(IB1:IB3)*t2(:))
+#ifdef PP_GLM
+  rotU(IPSI) = U(IPSI)
+#endif /*PP_GLM*/
 end function RotateState
 !==================================================================================================================================
 !> Rotate the flux from the normal frame of reference back to the physical framework
 !==================================================================================================================================
 pure subroutine RotateFluxBack(F,nv,t1,t2)
+  use MOD_Equation_Vars
   implicit none
   real, intent(inout) :: F(PP_nVar)
   real, intent(in)    :: nv(3)
   real, intent(in)    :: t1(3)
   real, intent(in)    :: t2(3)
 
-  F(2:4) =   nv(:)*F(2) &
-           + t1(:)*F(3) &
-           + t2(:)*F(4)
-  F(6:8) =   nv(:)*F(6) &
-           + t1(:)*F(7) &
-           + t2(:)*F(8)
+  F(IRHOU:IRHOW) =   nv(:)*F(IRHOU) &
+                   + t1(:)*F(IRHOV) &
+                   + t2(:)*F(IRHOW)
+  F(IB1:IB3) =   nv(:)*F(IB1) &
+               + t1(:)*F(IB2) &
+               + t2(:)*F(IB3)
 end subroutine RotateFluxBack
 #if NONCONS
 !==================================================================================================================================
@@ -229,6 +235,7 @@ end subroutine RotateFluxBack
 !==================================================================================================================================
 pure SUBROUTINE AddNonConsFlux(FL,UL,UR,nv,t1,t2)
 USE MOD_PreProc
+use MOD_Equation_Vars
 USE MOD_DG_Vars,ONLY:nTotal_Face
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -247,19 +254,19 @@ INTEGER :: i
 REAL    :: v_L(3)
 !==================================================================================================================================
 DO i=1,nTotal_Face
-  v_L=UL(2:4,i)/UL(1,i)
+  v_L=UL(IRHOU:IRHOW,i)/UL(IRHO1,i)
 #if NONCONS==1 /*Powell*/
-  FL(2:8,i)=FL(2:8,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*(/UL(6:8,i),SUM(UL(6:8,i)*v_L(1:3)),v_L(1:3)/)
+  FL(IRHOU:IB3  ,i)=FL(IRHOU:IB3  ,i) +(0.5*SUM((UL(IB1:IB3,i)+UR(IB1:IB3,i))*nv(:,i)))*(/UL(IB1:IB3,i),SUM(UL(IB1:IB3,i)*v_L(1:3)),v_L(1:3)/)
 #elif NONCONS==2 /*Brackbill*/
-  FL(2:4,i)=FL(2:4,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*UL(6:8,i)
+  FL(IRHOU:IRHOW,i)=FL(IRHOU:IRHOW,i) +(0.5*SUM((UL(IB1:IB3,i)+UR(IB1:IB3,i))*nv(:,i)))*UL(IB1:IB3,i)
 #elif NONCONS==3 /*Janhunen*/
-  FL(6:8,i)=FL(6:8,i) +(0.5*SUM((UL(6:8,i)+UR(6:8,i))*nv(:,i)))*v_L(1:3)
+  FL(IB1:IB3    ,i)=FL(IB1:IB3    ,i) +(0.5*SUM((UL(IB1:IB3,i)+UR(IB1:IB3,i))*nv(:,i)))*v_L(1:3)
 #endif /*NONCONSTYPE*/
 
 
 #if defined (PP_GLM) && defined (PP_NC_GLM)
   !nonconservative term to restore Galilean invariance for GLM term
-  FL((/5,9/),i)=FL((/5,9/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(9,i)*(UR(9,i)+UL(9,i)),UR(9,i)+UL(9,i)/)
+  FL((/IRHOE,IPSI/),i)=FL((/IRHOE,IPSI/),i) +(0.5*SUM(v_L(:)*nv(:,i)))*(/UL(IPSI,i)*(UR(IPSI,i)+UL(IPSI,i)),UR(IPSI,i)+UL(IPSI,i)/)
 #endif /*PP_GLM and PP_NC_GLM*/
 
 END DO !i=1,nTotal_Face
@@ -273,8 +280,7 @@ END SUBROUTINE AddNonConsFlux
 pure SUBROUTINE RiemannSolverByRusanov(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: FastestWave1D
-USE MOD_Equation_vars, ONLY: ConsToPrim
+USE MOD_Equation_vars
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -301,7 +307,7 @@ CALL ConsToPrim(PrimR(:),ConsR(:))
 CALL FastestWave1D(PrimL(1:PP_nVar),cf_L)
 CALL FastestWave1D(PrimR(1:PP_nVar),cf_R)
 
-LambdaMax = MAX(ABS(PrimL(2))+cf_L,ABS(PrimR(2))+cf_R)
+LambdaMax = MAX(ABS(PrimL(IU))+cf_L,ABS(PrimR(IU))+cf_R)
 
 Flux = 0.5*((FluxL + FluxR) - LambdaMax*(ConsR - ConsL))
 
@@ -314,9 +320,7 @@ END SUBROUTINE RiemannSolverByRusanov
 pure SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: FastestWave1D
-USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
-USE MOD_Equation_vars, ONLY: ConsToPrim
+USE MOD_Equation_vars
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -340,7 +344,7 @@ CALL ConsToPrim(PrimR(:),ConsR(:))
 
 CALL FastestWave1D(PrimL,cf_L)
 CALL FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
-SL = MIN(PrimL(2)-cf_L, RoeVelx-cf_Roe   )
+SL = MIN(PrimL(IU)-cf_L, RoeVelx-cf_Roe   )
 
 
 IF (SL .GT. 0.0)  THEN
@@ -349,7 +353,7 @@ IF (SL .GT. 0.0)  THEN
 END IF
 
 CALL FastestWave1D(PrimR,cf_R)
-SR = MAX(RoeVelx+cf_Roe, PrimR(2)+cf_R   )
+SR = MAX(RoeVelx+cf_Roe, PrimR(IU)+cf_R   )
 
 IF (SR .LT. 0.0) THEN
   CALL EvalAdvectionFlux1D(ConsR,Flux)
@@ -371,13 +375,7 @@ END SUBROUTINE RiemannSolverByHLL
 pure SUBROUTINE RiemannSolverByHLLC(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: FastestWave1D
-USE MOD_Equation_vars, ONLY: FastestWave1D_Roe
-USE MOD_Equation_vars, ONLY: smu_0,s2mu_0
-USE MOD_Equation_vars, ONLY: ConsToPrim
-#ifdef PP_GLM
-USE MOD_Equation_vars, ONLY: GLM_ch
-#endif /*PP_GLM*/
+USE MOD_Equation_vars
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -417,7 +415,7 @@ CALL FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
 
 
 
-SL = MIN(PrimL(2)-cf_L, RoeVelx-cf_Roe   )
+SL = MIN(PrimL(IU)-cf_L, RoeVelx-cf_Roe   )
 
 
 IF (SL .GT. 0.0)  THEN
@@ -426,7 +424,7 @@ IF (SL .GT. 0.0)  THEN
 END IF
 
 CALL FastestWave1D(PrimR,cf_R)
-SR = MAX(RoeVelx+cf_Roe, PrimR(2)+cf_R   )
+SR = MAX(RoeVelx+cf_Roe, PrimR(IU)+cf_R   )
 
 IF (SR .LT. 0.0) THEN
   CALL EvalAdvectionFlux1D(ConsR,Flux)
@@ -438,28 +436,28 @@ CALL EvalAdvectionFlux1D(ConsL,FluxL)
 CALL EvalAdvectionFlux1D(ConsR,FluxR)
 CALL EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
 
-rho_L = PrimL(1)
-vx_L  = PrimL(2)
-Bx_L  = PrimL(6)
+rho_L = PrimL(IRHO1)
+vx_L  = PrimL(IU)
+Bx_L  = PrimL(IB1)
 
-rho_R = PrimR(1)
-vx_R  = PrimR(2)
-Bx_R  = PrimR(6)
+rho_R = PrimR(IRHO1)
+vx_R  = PrimR(IU)
+Bx_R  = PrimR(IB1)
 
-ptot_L   = PrimL(5)+s2mu_0*SUM(PrimL(6:8)**2) !Total presssure!
+ptot_L   = PrimL(IP)+s2mu_0*SUM(PrimL(IB1:IB3)**2) !Total presssure!
 
 !SM = ((rho_L*vx_L*(vx_L-SL)+ptot_L-smu_0*Bx_L*Bx_L)-(rho_R*vx_R*(vx_R-SR)+ptot_R-smu_0*Bx_R*Bx_R)) &
 !     /(rho_L*(vx_L-SL)-rho_R*(vx_R-SR))
-sRho_HLL = 1./U_HLL(1)
-SM       = U_HLL(2)*sRho_HLL
+sRho_HLL = 1./U_HLL(IRHO1)
+SM       = U_HLL(IRHOU)*sRho_HLL
 
-Bx_star  = U_HLL(6)
-By_star  = U_HLL(7)
-Bz_star  = U_HLL(8)
+Bx_star  = U_HLL(IB1)
+By_star  = U_HLL(IB2)
+Bz_star  = U_HLL(IB3)
 p_star   = ptot_L + rho_L*(vx_L-SL)*(vx_L-SM)-s2mu_0*(Bx_L*Bx_L-Bx_star*Bx_star)
-E_star   = p_star*SM + smu_0*(-Bx_star*SUM(U_HLL(6:8)*U_HLL(2:4))*sRho_HLL  &
+E_star   = p_star*SM + smu_0*(-Bx_star*SUM(U_HLL(IB1:IB3)*U_HLL(IRHOU:IRHOW))*sRho_HLL  &
 #ifdef PP_GLM
-                              +U_HLL(9)*(GLM_ch*Bx_star-0.5*U_HLL(9)*SM  )&
+                              +U_HLL(IPSI)*(GLM_ch*Bx_star-0.5*U_HLL(IPSI)*SM  )&
 #endif /* PP_GLM */
                              )
 
@@ -469,30 +467,30 @@ E_star   = p_star*SM + smu_0*(-Bx_star*SUM(U_HLL(6:8)*U_HLL(2:4))*sRho_HLL  &
 
 IF ((SL .LE. 0.0) .AND. (0.0 .LT. SM)) THEN
   s_SL_SM=1./(SL-SM)
-  U_star_L(1) = rho_L*(SL-vx_L)*s_SL_SM
-  U_star_L(2) = U_star_L(1)*SM
-  U_star_L(3) = (ConsL(3)*SL-FluxL(3) -smu_0*Bx_star*By_star)*s_SL_SM
-  U_star_L(4) = (ConsL(4)*SL-FluxL(4) -smu_0*Bx_star*Bz_star)*s_SL_SM
-  U_star_L(5) = (E_star+ ConsL(5)*SL-FluxL(5) )*s_SL_SM
-  U_star_L(6) = Bx_star
-  U_star_L(7) = By_star
-  U_star_L(8) = Bz_star
+  U_star_L(IRHO1) = rho_L*(SL-vx_L)*s_SL_SM
+  U_star_L(IRHOU) = U_star_L(IRHO1)*SM
+  U_star_L(IRHOV) = (ConsL(IRHOV)*SL-FluxL(IRHOV) -smu_0*Bx_star*By_star)*s_SL_SM
+  U_star_L(IRHOW) = (ConsL(IRHOW)*SL-FluxL(IRHOW) -smu_0*Bx_star*Bz_star)*s_SL_SM
+  U_star_L(IRHOE) = (E_star+ ConsL(IRHOE)*SL-FluxL(IRHOE) )*s_SL_SM
+  U_star_L(IB1) = Bx_star
+  U_star_L(IB2) = By_star
+  U_star_L(IB3) = Bz_star
 #ifdef PP_GLM
-  U_star_L(9) = ConsL(9)
+  U_star_L(IPSI) = ConsL(IPSI)
 #endif /* PP_GLM */
   Flux = FluxL+SL*(U_star_L-ConsL)
 ELSE
   s_SR_SM=1./(SR-SM)
-  U_star_R(1)  = rho_R*(SR-vx_R)*s_SR_SM
-  U_star_R(2) = U_star_R(1)*SM
-  U_star_R(3) = (ConsR(3)*SR-FluxR(3) -smu_0*Bx_star*By_star)*s_SR_SM
-  U_star_R(4) = (ConsR(4)*SR-FluxR(4) -smu_0*Bx_star*Bz_star)*s_SR_SM
-  U_star_R(5) = (E_star+ ConsR(5)*SR-FluxR(5) )*s_SR_SM
-  U_star_R(6) = Bx_star
-  U_star_R(7) = By_star
-  U_star_R(8) = Bz_star
+  U_star_R(IRHO1)  = rho_R*(SR-vx_R)*s_SR_SM
+  U_star_R(IRHOU) = U_star_R(IRHO1)*SM
+  U_star_R(IRHOV) = (ConsR(IRHOV)*SR-FluxR(IRHOV) -smu_0*Bx_star*By_star)*s_SR_SM
+  U_star_R(IRHOW) = (ConsR(IRHOW)*SR-FluxR(IRHOW) -smu_0*Bx_star*Bz_star)*s_SR_SM
+  U_star_R(IRHOE) = (E_star+ ConsR(IRHOE)*SR-FluxR(IRHOE) )*s_SR_SM
+  U_star_R(IB1) = Bx_star
+  U_star_R(IB2) = By_star
+  U_star_R(IB3) = Bz_star
 #ifdef PP_GLM
-  U_star_R(9) = ConsR(9)!0.0
+  U_star_R(IPSI) = ConsR(IPSI)!0.0
 #endif /* PP_GLM */
   Flux = FluxR+SR*(U_star_R-ConsR)
 END IF
@@ -511,9 +509,7 @@ END SUBROUTINE RiemannSolverByHLLC
 pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: FastestWave1D
-USE MOD_Equation_vars, ONLY: PrimToCons
-USE MOD_Equation_vars, ONLY: ConsToPrim
+USE MOD_Equation_vars
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -553,9 +549,9 @@ REAL, PARAMETER      :: hlld_small_eps = 1.0e-12
 CALL ConsToPrim(PrimL(:),ConsL_in(:))
 CALL ConsToPrim(PrimR(:),ConsR_in(:))
 ! make B_n continuous
-Bn=0.5*(PrimL(6)+PrimR(6))
-PrimR(6)=Bn
-PrimL(6)=Bn
+Bn=0.5*(PrimL(IB1)+PrimR(IB1))
+PrimR(IB1)=Bn
+PrimL(IB1)=Bn
 
 CALL PrimToCons(PrimL(:),ConsL(:))
 CALL PrimToCons(PrimR(:),ConsR(:))
@@ -573,7 +569,7 @@ IF (SL .GT. 0.0)  THEN
   RETURN
 END IF
 
-SR = MAX(PrimL(2),PrimR(2))+FastestWave
+SR = MAX(PrimL(IU),PrimR(IU))+FastestWave
 
 IF (SR .LT. 0.0) THEN
   CALL EvalAdvectionFlux1D(ConsR,Flux)
@@ -587,12 +583,12 @@ CALL EvalAdvectionFlux1D(ConsR,FluxR)
 !-------------------------------------------------
 
 !Left and Right variables
-ASSOCIATE( rhoL => PrimL(1)          , rhoR => PrimR(1)          ,  &
-           unL  => PrimL(2)          , unR  => PrimR(2)          ,  &
-           pL   => PrimL(5)          , pR   => PrimR(5)          ,  &
-           eL   => ConsL(5)          , eR   => ConsR(5)          ,  &
-           uL   => PrimL(2:4)        , uR   => PrimR(2:4)        ,  &
-           BL   => PrimL(6:8)        , BR   => PrimR(6:8)           )
+ASSOCIATE( rhoL => PrimL(IRHO1)       , rhoR => PrimR(IRHO1)          ,  &
+           unL  => PrimL(IU)          , unR  => PrimR(IU)          ,  &
+           pL   => PrimL(IP)          , pR   => PrimR(IP)          ,  &
+           eL   => ConsL(IRHOE)       , eR   => ConsR(IRHOE)          ,  &
+           uL   => PrimL(IU:IW)       , uR   => PrimR(IU:IW)        ,  &
+           BL   => PrimL(IB1:IB3)     , BR   => PrimR(IB1:IB3)           )
 
 utL(1:3)  = (/0.,uL(2),uL(3)/) ; utR(1:3)  = (/0.,uR(2),uR(3)/)
 BtL(1:3)  = (/0.,BL(2),BL(3)/) ; BtR(1:3)  = (/0.,BR(2),BR(3)/)
@@ -637,12 +633,12 @@ uB  = uL(1) *BL(1)  + uL(2) *BL(2)  + uL(3) *BL(3)
 
 eLS = ( eL*(SL-unL) +  ptotS*SM - ptotL*unL + Bn*(uB-uBS) ) *sSL_SM
 
-U_LS(1)   = rhoLS
-U_LS(2:4) = rhoLS * uLS
-U_LS(5)   = eLS
-U_LS(6:8) = BLS
+U_LS(IRHO1)   = rhoLS
+U_LS(IRHOU:IRHOW) = rhoLS * uLS
+U_LS(IRHOE)   = eLS
+U_LS(IB1:IB3) = BLS
 #ifdef PP_GLM
-U_LS(9) = ConsL(9)
+U_LS(IPSI) = ConsL(IPSI)
 #endif /* PP_GLM */
 
 !Right * state
@@ -663,12 +659,12 @@ uB  = uR(1) *BR(1)  + uR(2) *BR(2)  + uR(3) *BR(3)
 
 eRS = (eR*(SR-unR) - ptotR*unR + ptotS*SM  + Bn*(uB-uBS) ) *sSR_SM
 
-U_RS(1)   = rhoRS
-U_RS(2:4) = rhoRS * uRS
-U_RS(5)   = eRS
-U_RS(6:8) = BRS
+U_RS(IRHO1)   = rhoRS
+U_RS(IRHOU:IRHOW) = rhoRS * uRS
+U_RS(IRHOE)   = eRS
+U_RS(IB1:IB3) = BRS
 #ifdef PP_GLM
-U_RS(9) = ConsR(9)
+U_RS(IPSI) = ConsR(IPSI)
 #endif /* PP_GLM */
 
 IF (ABS(Bn)<hlld_small_eps) THEN
@@ -700,12 +696,12 @@ ELSE
    uB   = uRS(1)*BtRS(1) + utRS(2)*BtRS(2) + utRS(3)*BtRS(3)
    eRSS = eRS + signBn * sqrtRhoRS * (uB - uBS)
 
-   U_LSS(1)   = rhoLSS          ; U_RSS(1)   = rhoRSS
-   U_LSS(2:4) = rhoLSS*uSS      ; U_RSS(2:4) = rhoRSS*uSS
-   U_LSS(5)   = eLSS            ; U_RSS(5)   = eRSS
-   U_LSS(6:8) = BSS             ; U_RSS(6:8) = BSS
+   U_LSS(IRHO1)   = rhoLSS          ; U_RSS(IRHO1)   = rhoRSS
+   U_LSS(IRHOU:IRHOW) = rhoLSS*uSS  ; U_RSS(IRHOU:IRHOW) = rhoRSS*uSS
+   U_LSS(IRHOE)   = eLSS            ; U_RSS(IRHOE)   = eRSS
+   U_LSS(IB1:IB3) = BSS             ; U_RSS(IB1:IB3) = BSS
 #ifdef PP_GLM
-   U_LSS(9) = ConsL(9)          ; U_RSS(9)   = consR(9)
+   U_LSS(IPSI) = ConsL(IPSI)          ; U_RSS(IPSI)   = consR(IPSI)
 #endif /* PP_GLM */
 END IF !|Bn|<0
 
@@ -760,13 +756,12 @@ END SUBROUTINE EvalHLLState
 
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
+!> Attention: 1) Does not work for GLM
 !==================================================================================================================================
 pure SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
-USE MOD_Equation_vars, ONLY: WaveSpeeds1D
-USE MOD_Equation_vars, ONLY: Kappa,KappaM1,KappaM2,sKappaM1,smu_0,s2mu_0
-USE MOD_Equation_vars, ONLY: ConsToPrim
+USE MOD_Equation_vars
 !----------------------------------------------------------------------------------------------------------------------------------
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -789,7 +784,7 @@ REAL             :: Rho_Roe,sRho_Roe,SqrtRho_Roe,sSqrtRho_Roe,RoeVel(3),RoeB(3),
 REAL             :: H_L,H_R,RoeH
 REAL             :: XX, va2_Roe,c2_Roe,sc2_Roe,ca2_Roe,cs2_Roe,cf2_Roe,astar_Roe
 REAL             :: c_Roe,ca_Roe,cs_Roe,cf_Roe
-REAL             :: lambda(1:7), eta(1:7), EVr(1:8,1:7)
+REAL             :: lambda(1:7), etaRoe(1:7), EVr(1:8,1:7)
 REAL             :: delta_rho,delta_v(3),delta_B(3),delta_p
 REAL             :: beta_y,beta_z,beta_v,beta_dv,beta_dB,BtMag,sBx
 REAL             :: alpha_f,alpha_s,scf2_cs2,as_cs_s,as_c_ssqRho,af_cf_s,af_c_ssqRho
@@ -803,28 +798,28 @@ CALL ConsToPrim(PrimR(:),ConsR(:))
 !--------------------------------------------------------------------------------
 !use Roe mean wavespeeds from  Roe meanvalues
 !   (paper by Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997)
-SqrtRho_L   = SQRT(PrimL(1))
-SqrtRho_R   = SQRT(PrimR(1))
+SqrtRho_L   = SQRT(PrimL(IRHO1))
+SqrtRho_R   = SQRT(PrimR(IRHO1))
 sSqrtRoe_LR = 1./(SqrtRho_L+SqrtRho_R)
 Roe_L       = SqrtRho_L*sSqrtRoe_LR
 Roe_R       = SqrtRho_R*sSqrtRoe_LR
-ptot_L      = PrimL(5)+s2mu_0*SUM(PrimL(6:8)**2) !Total presssure!
-ptot_R      = PrimR(5)+s2mu_0*SUM(PrimR(6:8)**2) !Total presssure!
+ptot_L      = PrimL(IP)+s2mu_0*SUM(PrimL(IB1:IB3)**2) !Total presssure!
+ptot_R      = PrimR(IP)+s2mu_0*SUM(PrimR(IB1:IB3)**2) !Total presssure!
 
 Rho_Roe     = (SqrtRho_L*SqrtRho_R)
 sRho_Roe    = 1./Rho_Roe
 SqrtRho_Roe = SQRT(Rho_Roe)
 sSqrtRho_Roe= 1./SqrtRho_Roe
-RoeVel(1:3) = Roe_L*PrimL(2:4)+Roe_R*PrimR(2:4)
+RoeVel(1:3) = Roe_L*PrimL(IU:IW)+Roe_R*PrimR(IU:IW)
 RoeVel2     = SUM(RoeVel(:)**2)
-RoeB(1:3)   = Roe_L*PrimR(6:8)+Roe_R*PrimL(6:8)
+RoeB(1:3)   = Roe_L*PrimR(IB1:IB3)+Roe_R*PrimL(IB1:IB3)
 RoeB2       = SUM(RoeB(:)**2)
 
-H_L  = (ConsL(5)+ptot_L)/PrimL(1)
-H_R  = (ConsR(5)+ptot_R)/PrimR(1)
+H_L  = (ConsL(IRHOE)+ptot_L)/PrimL(IRHO1)
+H_R  = (ConsR(IRHOE)+ptot_R)/PrimR(IRHO1)
 RoeH = Roe_L*H_L+Roe_R*H_R
 
-XX   = 0.5*SUM((PrimL(6:8)-PrimR(6:8))**2)*(sSqrtRoe_LR**2)
+XX   = 0.5*SUM((PrimL(IB1:IB3)-PrimR(IB1:IB3))**2)*(sSqrtRoe_LR**2)
 
 va2_Roe   = RoeB2*smu_0*sRho_Roe
 c2_Roe    = (2.-Kappa)*XX+ KappaM1*(RoeH-0.5*RoeVel2-va2_Roe)
@@ -871,10 +866,10 @@ ELSE
 END IF
 
 ! calculate differences in primitive variables
-Delta_rho    = PrimR(1) - PrimL(1)
-Delta_v(1:3) = PrimR(2:4) - PrimL(2:4)
-Delta_B(1:3) = PrimR(6:8) - PrimL(6:8)
-Delta_p   = KappaM1*( (0.5*RoeVel2-XX)*delta_rho -SUM(RoeVel*(ConsR(2:4)-ConsL(2:4)))+(ConsR(5)-ConsL(5))-smu_0*SUM(RoeB*delta_B))
+Delta_rho    = PrimR(IRHO1) - PrimL(IRHO1)
+Delta_v(1:3) = PrimR(IU:IW) - PrimL(IU:IW)
+Delta_B(1:3) = PrimR(IB1:IB3) - PrimL(IB1:IB3)
+Delta_p   = KappaM1*( (0.5*RoeVel2-XX)*delta_rho -SUM(RoeVel*(ConsR(IRHOU:IRHOW)-ConsL(IRHOU:IRHOW)))+(ConsR(IRHOE)-ConsL(IRHOE))-smu_0*SUM(RoeB*delta_B))
 
 ! mean eigenvalues
 lambda(1)    = RoeVel(1)-cf_Roe
@@ -904,7 +899,7 @@ EVr(7,1) = as_c_ssqRho*beta_y
 EVr(8,1) = as_c_ssqRho*beta_z
 
 
-eta(1) = 0.5*sc2_Roe*(  alpha_f*(XX*delta_rho+delta_p)  &
+etaRoe(1) = 0.5*sc2_Roe*(  alpha_f*(XX*delta_rho+delta_p)  &
                       + Rho_Roe*(as_cs_s*beta_dv-alpha_f*cf_Roe*delta_v(1) + as_c_ssqRho*beta_dB))
 
 ! u+c_f
@@ -919,7 +914,7 @@ EVr(7,7) = EVr(7,1)
 EVr(8,7) = EVr(8,1)
 
 
-eta(7) = 0.5*sc2_Roe*(  alpha_f*(XX*delta_rho+delta_p)  &
+etaRoe(7) = 0.5*sc2_Roe*(  alpha_f*(XX*delta_rho+delta_p)  &
                       - Rho_Roe*(as_cs_s*beta_dv-alpha_f*cf_Roe*delta_v(1) - as_c_ssqRho*beta_dB))
 
 ! u -c_s
@@ -935,7 +930,7 @@ EVr(6,3) = 0.
 EVr(7,3) = -af_c_ssqRho*beta_y
 EVr(8,3) = -af_c_ssqRho*beta_z
 
-eta(3) = 0.5*sc2_Roe*(  alpha_s*(XX*delta_rho+delta_p) &
+etaRoe(3) = 0.5*sc2_Roe*(  alpha_s*(XX*delta_rho+delta_p) &
                       - Rho_Roe*(af_cf_s*beta_dv+alpha_s*cs_Roe*delta_v(1) + af_c_ssqRho*beta_dB))
 
 ! u +c_s
@@ -949,7 +944,7 @@ EVr(6,5) = 0.
 EVr(7,5) = EVr(7,3)
 EVr(8,5) = EVr(8,3)
 
-eta(5) = 0.5*sc2_Roe*(  alpha_s*(XX*delta_rho+delta_p) &
+etaRoe(5) = 0.5*sc2_Roe*(  alpha_s*(XX*delta_rho+delta_p) &
                       + Rho_Roe*(af_cf_s*beta_dv+alpha_s*cs_Roe*delta_v(1) - af_c_ssqRho*beta_dB))
 
 ! u-c_a
@@ -966,7 +961,7 @@ EVr(6,2)=0.
 EVr(7,2)=-sBx*SqrtRho_roe*beta_z
 EVr(8,2)= sBx*SqrtRho_roe*beta_y
 
-eta(2) = 0.5*( -beta_dv  - sBx*sSqrtRho_Roe*beta_dB)
+etaRoe(2) = 0.5*( -beta_dv  - sBx*sSqrtRho_Roe*beta_dB)
 
 ! u+c_a
 
@@ -979,7 +974,7 @@ EVr(6,6)=0.
 EVr(7,6)=EVr(7,2)
 EVr(8,6)=EVr(8,2)
 
-eta(6) = 0.5*( beta_dv  - sBx*sSqrtRho_Roe*beta_dB)
+etaRoe(6) = 0.5*( beta_dv  - sBx*sSqrtRho_Roe*beta_dB)
 
 
 !u
@@ -989,9 +984,9 @@ Evr(2,4)   = RoeVel(1)
 Evr(3,4)   = RoeVel(2)
 Evr(4,4)   = RoeVel(3)
 Evr(5,4)   = 0.5*RoeVel2+ KappaM2*sKappaM1*XX
-Evr(6:8,4) = 0.
+Evr(IB1:IB3,4) = 0.
 
-eta(4) =  sc2_Roe*((c2_Roe - XX)*delta_rho - delta_p)
+etaRoe(4) =  sc2_Roe*((c2_Roe - XX)*delta_rho - delta_p)
 
 
 !entropy fix
@@ -1001,10 +996,10 @@ IF(ABS(lambda(7)) .LT. 0.5*efix_delta) lambda(7)= lambda(7)*lambda(7)*sefix_delt
 IF(ABS(lambda(3)) .LT. 0.5*efix_delta) lambda(3)= lambda(3)*lambda(3)*sefix_delta+0.25*efix_delta
 IF(ABS(lambda(6)) .LT. 0.5*efix_delta) lambda(6)= lambda(6)*lambda(6)*sefix_delta+0.25*efix_delta
 
-!CHECK Roe Matrix condition FR-FL = A*(UR-UL) = R*lambda*eta
+!CHECK Roe Matrix condition FR-FL = A*(UR-UL) = R*lambda*etaRoe
 !Flux(:)=FluxR-FluxL
 !DO i=1,7
-!  Flux(1:8)=Flux(1:8) - eta(i)*lambda(i)*EVr(1:8,i)
+!  Flux(1:8)=Flux(1:8) - etaRoe(i)*lambda(i)*EVr(1:8,i)
 !END DO
 !DO i=1,8
 !  IF(ABS(Flux(i))>1.0E-08)THEN
@@ -1017,7 +1012,7 @@ IF(ABS(lambda(6)) .LT. 0.5*efix_delta) lambda(6)= lambda(6)*lambda(6)*sefix_delt
 ! assemble Roe flux
 Flux(:)=FluxL(:)+FluxR(:)
 DO i=1,7
-  Flux(1:8)=Flux(1:8) - eta(i)*ABS(lambda(i))*EVr(1:8,i)
+  Flux(IRHO1:IB3)=Flux(IRHO1:IB3) - etaRoe(i)*ABS(lambda(i))*EVr(1:8,i)
 END DO
 Flux(:)=0.5*Flux(:)
 
@@ -1034,11 +1029,7 @@ pure SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
-USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
-USE MOD_Equation_Vars,ONLY:VolumeFluxAverage !pointer to EC routine
-!##ifdef PP_GLM
-!#USE MOD_Equation_Vars,ONLY:GLM_ch
-!##endif
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1058,21 +1049,21 @@ REAL            :: a2Avg,va2Avg,ca2Avg,cfAvg,LambdaMax_s2
 REAL            :: u_L(3),u_R(3)
 REAL            :: BAvg(3),uAvg(3)
 !REAL            :: u1_B2Avg,uB_Avg
-REAL            :: Hmatrix(5,5),tau,Eavg
+REAL            :: Hmatrix(IRHO1:IRHOE,IRHO1:IRHOE),tau,Eavg
 REAL            :: V_jump(PP_nVar)
 #ifdef PP_GLM
 REAL            :: psiAvg
 #endif
 !==================================================================================================================================
-ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
-           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+ASSOCIATE(  rho_L => UL(IRHO1)      ,  rho_R =>   UR(IRHO1), &
+           rhoU_L => UL(IRHOU:IRHOW), rhoU_R => UR(IRHOU:IRHOW), &
 #ifdef PP_GLM
-              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
-            psi_L =>UL(9)   ,  psi_R =>UR(9), &
+              E_L =>UL(IRHOE)-s2mu_0*UL(IPSI)**2, E_R =>UR(IRHOE)-s2mu_0*UR(IPSI)**2, &
+            psi_L =>UL(IPSI)    ,  psi_R =>UR(IPSI), &
 #else
-              E_L =>UL(5)   ,    E_R =>UR(5), &
+              E_L =>UL(IRHOE)   ,    E_R =>UR(IRHOE), &
 #endif
-              B_L => UL(6:8),    B_R => UR(6:8)  )
+              B_L => UL(IB1:IB3),    B_R => UR(IB1:IB3)  )
 ! Get the inverse density, velocity, and pressure on left and right
 srho_L=1./rho_L
 srho_R=1./rho_R
@@ -1107,13 +1098,13 @@ psiAvg     = 0.5*(psi_L+psi_R)
 ! Entropy conserving and kinetic energy conserving flux, pointer to EC routine
 CALL VolumeFluxAverage(UL,UR,Fstar)
 
-!u1_B2Avg   = 0.5 * (u_L(1)*B2_L       + u_R(1)*B2_R)
+!u1_B2Avg   = 0.5 * (u_L(IRHO1)*B2_L       + u_R(IRHO1)*B2_R)
 !uB_Avg     = 0.5 * (SUM(u_L(:)*B_L(:))+ SUM(u_R(:)*B_R(:)))
 !pTilde     = pAvg+ s2mu_0*B2Avg !+1/(2mu_0)({{|B|^2}}...)
-!Fstar(1) = rhoLN*uAvg(1)
-!Fstar(2) = Fstar(1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
-!Fstar(3) = Fstar(1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
-!Fstar(4) = Fstar(1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
+!Fstar(IRHO1) = rhoLN*uAvg(1)
+!Fstar(2) = Fstar(IRHO1)*uAvg(1) - smu_0*Bavg(1)*BAvg(1) + pTilde
+!Fstar(3) = Fstar(IRHO1)*uAvg(2) - smu_0*Bavg(1)*BAvg(2)
+!Fstar(4) = Fstar(IRHO1)*uAvg(3) - smu_0*Bavg(1)*BAvg(3)
 !Fstar(7) = uAvg(1)*Bavg(2) - BAvg(1)*uAvg(2)
 !Fstar(8) = uAvg(1)*Bavg(3) - BAvg(1)*uAvg(3)
 !#ifdef PP_GLM
@@ -1121,9 +1112,9 @@ CALL VolumeFluxAverage(UL,UR,Fstar)
 !Fstar(9) = GLM_ch*BAvg(1)
 !#endif
 !
-!Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
-!           + SUM(uAvg(:)*Fstar(2:4)) &
-!           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+!Fstar(5) = Fstar(IRHO1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
+!           + SUM(uAvg(:)*Fstar(IRHOU:IRHOW)) &
+!           +smu_0*( SUM(BAvg(:)*Fstar(IB1:IB3)) &
 !                   -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
 !#ifdef PP_GLM
 !                   +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
@@ -1149,28 +1140,28 @@ Eavg = pLN*sKappaM1 + 0.5*rhoLN*(2.0*uAvg2-u2Avg)
 ! Euler components as derived by Dominik, April 18-20, 2016
 ! MATRIX IS SYMMETRIC!!
 ! Hmatrix = 0.0
-Hmatrix(1:5,1)=(/rhoLN       ,rhoLN*uAvg(1)            ,rhoLN*uAvg(2)            ,rhoLN*uAvg(3)            , Eavg               /)
-!                -------------     ||                       ||                         ||
-Hmatrix(1:5,2)=(/Hmatrix(2,1),Hmatrix(2,1)*uAvg(1)+pAvg,Hmatrix(3,1)*uAvg(1)     ,Hmatrix(4,1)*uAvg(1)     ,(Eavg+pAvg)*uAvg(1) /)
-!                            ---------------------------    ||                         ||
-Hmatrix(1:5,3)=(/Hmatrix(3,1),    Hmatrix(3,2)         ,Hmatrix(3,1)*uAvg(2)+pAvg,Hmatrix(4,1)*uAvg(2)     ,(Eavg+pAvg)*uAvg(2) /)
-!                                                      ---------------------------     ||
-Hmatrix(1:5,4)=(/Hmatrix(4,1),    Hmatrix(4,2)         ,    Hmatrix(4,3)         ,Hmatrix(4,1)*uAvg(3)+pAvg,(Eavg+pAvg)*uAvg(3) /)
-!                                                                                ---------------------------
-Hmatrix(1:4,5)=(/Hmatrix(5,1),    Hmatrix(5,2)         ,    Hmatrix(5,3)         ,     Hmatrix(5,4)       /)   !Hmatrix(5,5)
+Hmatrix(IRHO1:IRHOE,IRHO1)=(/rhoLN               ,rhoLN*uAvg(1)                    ,rhoLN*uAvg(2)            ,rhoLN*uAvg(3)            , Eavg               /)
+!                            ---------------------     ||                               ||                                        ||
+Hmatrix(IRHO1:IRHOE,IRHOU)=(/Hmatrix(IRHOU,IRHO1),Hmatrix(IRHOU,IRHO1)*uAvg(1)+pAvg,Hmatrix(IRHOV,IRHO1)*uAvg(1)     ,Hmatrix(IRHOW,IRHO1)*uAvg(1)     ,(Eavg+pAvg)*uAvg(1) /)
+!                                                -----------------------------------    ||                                        ||
+Hmatrix(IRHO1:IRHOE,IRHOV)=(/Hmatrix(IRHOV,IRHO1),    Hmatrix(IRHOV,IRHOU)         ,Hmatrix(IRHOV,IRHO1)*uAvg(2)+pAvg,Hmatrix(IRHOW,IRHO1)*uAvg(2)     ,(Eavg+pAvg)*uAvg(2) /)
+!                                                                                  -----------------------------------            ||
+Hmatrix(IRHO1:IRHOE,IRHOW)=(/Hmatrix(IRHOW,IRHO1),    Hmatrix(IRHOW,IRHOU)         ,    Hmatrix(IRHOW,IRHOV)         ,Hmatrix(IRHOW,IRHO1)*uAvg(3)+pAvg,(Eavg+pAvg)*uAvg(3) /)
+!                                                                                                                    -----------------------------------
+Hmatrix(IRHO1:IRHOW,IRHOE)=(/Hmatrix(IRHOE,IRHO1),    Hmatrix(IRHOE,IRHOU)         ,    Hmatrix(IRHOE,IRHOV)         ,     Hmatrix(IRHOE,IRHOW)       /)   !Hmatrix(5,5)
 
 tau = 1./(beta_L+beta_R) !0.5/betaA
 !Hmatrix(5,5) = 0.25*rhoA/(betaL*betaR)*sKappaM1 + Eavg*Eavg/rhoLN + (u1A*u1A+v1A*v1A+w1A*w1A)*pAvg + tau*(B11A*B11A + B21A*B21A + B31A*B31A)
 !Special averaging such that RSRT-H = 0 in the Euler case
-Hmatrix(5,5) = (pLN*pLN*sKappaM1 + Eavg*Eavg)*srhoLN + uAvg2*pAvg + tau*( SUM(BAvg(:)*Bavg(:)) &
+Hmatrix(IRHOE,IRHOE) = (pLN*pLN*sKappaM1 + Eavg*Eavg)*srhoLN + uAvg2*pAvg + tau*( SUM(BAvg(:)*Bavg(:)) &
 #ifdef PP_GLM
                                                                          + psiAvg*psiAvg &
 #endif
                                                                         )
 
 !! Magnetic field components
-!Hmatrix(6:8,5) = tau * Bavg(:)
-!Hmatrix(5,6:8) = Hmatrix(5,6:8)
+!Hmatrix(IB1:IB3,5) = tau * Bavg(:)
+!Hmatrix(5,IB1:IB3) = Hmatrix(5,IB1:IB3)
 !
 !Hmatrix(6,6) = tau
 !Hmatrix(7,7) = tau
@@ -1186,25 +1177,25 @@ Hmatrix(5,5) = (pLN*pLN*sKappaM1 + Eavg*Eavg)*srhoLN + uAvg2*pAvg + tau*( SUM(BA
 !V_jump=consToEntropy(UR)-consToEntropy(UL) !better use already computed values!!
 
 !V(1)=(kappa-s)/(kappa-1)-beta*|v|^2 , s = LOG(p) - kappa*LOG(cons(1)), VR-VL, using Log(R)-Log(L)=LOG(R/L)
-V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
+V_jump(IRHO1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
                        - (beta_R*u2_R         -beta_L*u2_L  )
-V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
-V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
-V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
+V_jump(IRHOU:IRHOW)   =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
+V_jump(IRHOE)         = -2.0*(beta_R              -beta_L       )        !-2*beta
+V_jump(IB1:PP_nVar)   =  2.0*(beta_R*UR(IB1:PP_nVar)-beta_L*UL(IB1:PP_nVar)) ! 2*beta*B
 
 !Fstar(:) = Fstar -LambdaMax_s2*MATMUL(Hmatrix,(V_jump))
 
 !Hmatrix has only non-zero entries (1:5,1:5),(5,6:9),(6:9,5),diag(6:9,6:9)
-Fstar(1:4) = Fstar(1:4) - LambdaMax_s2       *MATMUL(Hmatrix(1:4,1:5),V_jump(1:5))
-Fstar(  5) = Fstar(  5) - LambdaMax_s2       *(  SUM(Hmatrix(1:5,  5)*V_jump(1:5))  &
-                                                +tau*  (SUM(Bavg(1:3)*V_jump(6:8)) &
+Fstar(IRHO1:IRHOW)   = Fstar(IRHO1:IRHOW) - LambdaMax_s2       *MATMUL(Hmatrix(IRHO1:IRHOW,IRHO1:IRHOE),V_jump(IRHO1:IRHOE))
+Fstar(IRHOE) = Fstar(IRHOE) - LambdaMax_s2       *(  SUM(Hmatrix(IRHO1:IRHOE,  IRHOE)*V_jump(IRHO1:IRHOE))  &
+                                                +tau*  (SUM(Bavg(1:3)*V_jump(IB1:IB3)) &
 #ifdef PP_GLM
-                                                        +      psiAvg*V_jump(  9)  &
+                                                        +      psiAvg*V_jump(IPSI)  &
 #endif
                                                        ))
-Fstar(6:8) = Fstar(6:8) - (LambdaMax_s2*tau)*(Bavg(1:3)*V_jump(5)   + V_jump(6:8))
+Fstar(IB1:IB3) = Fstar(IB1:IB3) - (LambdaMax_s2*tau)*(Bavg(1:3)*V_jump(IRHOE)   + V_jump(IB1:IB3))
 #ifdef PP_GLM
-Fstar(  9) = Fstar(  9) - (LambdaMax_s2*tau)*(   psiAvg*V_jump(5)   + V_jump(  9))
+Fstar(IPSI) = Fstar(IPSI) - (LambdaMax_s2*tau)*(   psiAvg*V_jump(IRHOE)   + V_jump(IPSI))
 #endif
 
 END ASSOCIATE
@@ -1225,7 +1216,7 @@ pure SUBROUTINE EntropyStableDerigsFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
 USE MOD_Flux_Average, ONLY:LN_MEAN
-USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0,consToEntropy
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1244,15 +1235,15 @@ REAL            :: u_L(3),u_R(3)
 REAL            :: V_jump(PP_nVar)
 REAL            :: Dmatrix(PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 !==================================================================================================================================
-ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
+ASSOCIATE(  rho_L =>   UL(IRHO1),  rho_R =>   UR(IRHO1), &
 !
-           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+           rhoU_L => UL(IRHOU:IRHOW), rhoU_R => UR(IRHOU:IRHOW), &
 #ifdef PP_GLM
-              E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
+              E_L =>UL(IRHOE)-s2mu_0*UL(IPSI)**2, E_R =>UR(IRHOE)-s2mu_0*UR(IPSI)**2, &
 #else
-              E_L =>UL(5)   ,    E_R =>UR(5), &
+              E_L =>UL(IRHOE)   ,    E_R =>UR(IRHOE), &
 #endif
-              B_L => UL(6:8),    B_R => UR(6:8)  )
+              B_L => UL(IB1:IB3),    B_R => UR(IB1:IB3)  )
 
 ! Get auxiliar variables
 srho_L=1./rho_L
@@ -1267,11 +1258,11 @@ beta_L = 0.5*rho_L/p_L !beta=rho/(2*p)
 beta_R = 0.5*rho_R/P_R
 
 ! Jump in entropy vars
-V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
+V_jump(IRHO1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
                        - (beta_R*u2_R         -beta_L*u2_L  )
-V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
-V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
-V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
+V_jump(IRHOU:IRHOW)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
+V_jump(IRHOE)         = -2.0*(beta_R              -beta_L       )        !-2*beta
+V_jump(IB1:PP_nVar) =  2.0*(beta_R*UR(IB1:PP_nVar)-beta_L*UL(IB1:PP_nVar)) ! 2*beta*B
 
 call EntropyStableDerigsFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
 RT = TRANSPOSE(Rmatrix)
@@ -1285,11 +1276,8 @@ END SUBROUTINE EntropyStableDerigsFlux
 !> Computation of the entropy conserving flux and the dissipation matrices for the entropy stable 9wave solver
 !==================================================================================================================================
 pure subroutine EntropyStableDerigsFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
-  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1, Kappa
+  USE MOD_Equation_Vars
   USE MOD_Flux_Average, ONLY:LN_MEAN
-#ifdef PP_GLM
-  USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
   implicit none
   !-arguments-----------------------------------------------
   real, intent(in)  :: UL(PP_nVar)      !< left state
@@ -1313,15 +1301,15 @@ pure subroutine EntropyStableDerigsFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dma
   real :: LambdaMax, phi
   !---------------------------------------------------------
 
-  ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
-             rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+  ASSOCIATE(  rho_L =>   UL(IRHO1),  rho_R =>   UR(IRHO1), &
+             rhoU_L => UL(IRHOU:IRHOW), rhoU_R => UR(IRHOU:IRHOW), &
 #ifdef PP_GLM
                 E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
               psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
                 E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
-                B_L => UL(6:8),    B_R => UR(6:8)  )
+                B_L => UL(IB1:IB3),    B_R => UR(IB1:IB3)  )
   ! Get auxiliar variables
   srho_L=1./rho_L
   srho_R=1./rho_R
@@ -1365,8 +1353,8 @@ Fstar(9) = GLM_ch*BAvg(1)
 #endif
 
 Fstar(5) = Fstar(1)*0.5*(skappaM1*sbetaLN - u2Avg)  &
-           + SUM(uAvg(:)*Fstar(2:4)) &
-           +smu_0*( SUM(BAvg(:)*Fstar(6:8)) &
+           + SUM(uAvg(:)*Fstar(IRHOU:IRHOW)) &
+           +smu_0*( SUM(BAvg(:)*Fstar(IB1:IB3)) &
                    -0.5*u1_B2Avg +BAvg(1)*uB_Avg &
 #ifdef PP_GLM
                    +Fstar(9)*psiAvg-GLM_ch*0.5*(B_L(1)*psi_L+B_R(1)*psi_R)     &
@@ -1633,7 +1621,7 @@ end subroutine EntropyStableDerigsFlux_VolFluxAndDissipMatrices
 PURE SUBROUTINE EntropyStableFloGorFlux(UL,UR,Fstar)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:kappa,kappaM1,skappaM1,smu_0,s2mu_0
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -1654,13 +1642,13 @@ REAL            :: Dmatrix(PP_nVar),Rmatrix(PP_nVar,PP_nVar),RT(PP_nVar,PP_nVar)
 !==================================================================================================================================
 ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
 !
-           rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+           rhoU_L => UL(IRHOU:IRHOW), rhoU_R => UR(IRHOU:IRHOW), &
 #ifdef PP_GLM
               E_L =>UL(5)-s2mu_0*UL(9)**2, E_R =>UR(5)-s2mu_0*UR(9)**2, &
 #else
               E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
-              B_L => UL(6:8),    B_R => UR(6:8)  )
+              B_L => UL(IB1:IB3),    B_R => UR(IB1:IB3)  )
 
 ! Get auxiliar variables
 srho_L=1./rho_L
@@ -1677,7 +1665,7 @@ beta_R = 0.5*rho_R/P_R
 ! Jump in entropy vars
 V_jump(1)         = (kappa*(LOG(rho_R*srho_L))-LOG(p_R/p_L))*skappaM1 &
                        - (beta_R*u2_R         -beta_L*u2_L  )
-V_jump(2:4)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
+V_jump(IRHOU:IRHOW)       =  2.0*(beta_R*u_R(:)       -beta_L*u_L(:))        ! 2*beta*v
 V_jump(5)         = -2.0*(beta_R              -beta_L       )        !-2*beta
 V_jump(6:PP_nVar) =  2.0*(beta_R*UR(6:PP_nVar)-beta_L*UL(6:PP_nVar)) ! 2*beta*B
 
@@ -1693,11 +1681,8 @@ END SUBROUTINE EntropyStableFloGorFlux
 !> Computation of the entropy conserving flux and the dissipation matrices for the entropy stable FloGor solver
 !==================================================================================================================================
 PURE SUBROUTINE EntropyStableFloGorFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dmatrix,Rmatrix)
-  USE MOD_Equation_Vars,ONLY:kappaM1, smu_0, s2mu_0, sKappaM1, Kappa
+  USE MOD_Equation_Vars
   USE MOD_Flux_Average, ONLY:LN_MEAN
-#ifdef PP_GLM
-  USE MOD_Equation_Vars,ONLY:GLM_ch
-#endif
   implicit none
   !-arguments-----------------------------------------------
   real, intent(in)  :: UL(PP_nVar)      !< left state
@@ -1723,14 +1708,14 @@ PURE SUBROUTINE EntropyStableFloGorFlux_VolFluxAndDissipMatrices(UL,UR,Fstar,Dma
   !---------------------------------------------------------
 
   ASSOCIATE(  rho_L =>   UL(1),  rho_R =>   UR(1), &
-             rhoU_L => UL(2:4), rhoU_R => UR(2:4), &
+             rhoU_L => UL(IRHOU:IRHOW), rhoU_R => UR(IRHOU:IRHOW), &
 #ifdef PP_GLM
                 E_L =>UL(5)-0.5*smu_0*UL(9)**2, E_R =>UR(5)-0.5*smu_0*UR(9)**2, &
               psi_L =>UL(9)   ,  psi_R =>UR(9), &
 #else
                 E_L =>UL(5)   ,    E_R =>UR(5), &
 #endif
-                B_L => UL(6:8),    B_R => UR(6:8)  )
+                B_L => UL(IB1:IB3),    B_R => UR(IB1:IB3)  )
 
 ! Get the inverse density, velocity, and pressure on left and right
 srho_L = 1./rho_L
