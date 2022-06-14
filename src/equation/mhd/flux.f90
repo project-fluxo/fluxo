@@ -73,10 +73,7 @@ CONTAINS
 PURE SUBROUTINE EvalAdvFluxTilde3D(U_in,M_f,M_g,M_h,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars ,ONLY:nAuxVar,kappaM1,kappaM2,smu_0,s2mu_0
-#ifdef PP_GLM
-USE MOD_Equation_vars ,ONLY:GLM_ch
-#endif /*PP_GLM*/
+USE MOD_Equation_Vars
 USE MOD_DG_Vars       ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -186,18 +183,7 @@ SUBROUTINE EvalFluxTilde3D(U_in,M_f,M_g,M_h, &
                            ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars      ,ONLY:kappaM1,smu_0,s2mu_0,sKappaM1
-#ifdef PP_GLM
-USE MOD_Equation_Vars      ,ONLY: GLM_ch
-#endif /*PP_GLM*/
-#if PARABOLIC
-USE MOD_Equation_Vars      ,ONLY:mu,s23,etasmu_0
-#ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars      ,ONLY:kperp,kpar
-#else
-USE MOD_Equation_vars      ,ONLY:kappasPr
-#endif 
-#endif /*PARABOLIC*/
+USE MOD_Equation_Vars
 USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -390,10 +376,7 @@ END SUBROUTINE EvalFluxTilde3D
 !==================================================================================================================================
 pure SUBROUTINE EvalAdvectionFlux1D(U_Face,F_Face)
 ! MODULES
-USE MOD_Equation_Vars,ONLY:KappaM1,KappaM2,smu_0,s2mu_0
-#ifdef PP_GLM
-USE MOD_Equation_vars,ONLY:GLM_ch
-#endif 
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -449,14 +432,8 @@ END SUBROUTINE EvalAdvectionFlux1D
 SUBROUTINE EvalDiffFlux3D(f,g,h,U_Face,gradPx_Face,gradPy_Face,gradPz_Face)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars,ONLY:s23,smu_0,s2mu_0,kappaM1,sKappaM1
-USE MOD_Equation_Vars,ONLY:mu,etasmu_0
+USE MOD_Equation_Vars
 USE MOD_DG_Vars,ONLY:nTotal_face
-#ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars,ONLY:kperp,kpar
-#else
-USE MOD_Equation_vars,ONLY:kappasPr
-#endif /*PP_ANISO_HEAT*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -579,12 +556,7 @@ END SUBROUTINE EvalDiffFlux3D
 SUBROUTINE EvalDiffFluxTilde3D(U_in,M_f,M_g,M_h,gradPx_in,gradPy_in,gradPz_in,ftilde,gtilde,htilde)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars      ,ONLY:smu_0,mu,s23,etasmu_0,s2mu_0,kappaM1,sKappaM1
-#ifdef PP_ANISO_HEAT
-USE MOD_Equation_vars      ,ONLY:kperp,kpar
-#else
-USE MOD_Equation_vars      ,ONLY:kappasPr
-#endif 
+USE MOD_Equation_Vars
 USE MOD_DG_Vars            ,ONLY:nTotal_vol
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
