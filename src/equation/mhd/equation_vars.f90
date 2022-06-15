@@ -475,7 +475,7 @@ DO i=1,dim2
   
   ! Convert to entropy variables
   entropy(IRHO1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-  entropy(2,i)         =  rho_sp*u                  ! 2*beta*u
+  entropy(IRHOU,i)         =  rho_sp*u                  ! 2*beta*u
   entropy(IRHOV,i)         =  rho_sp*v                  ! 2*beta*v
   entropy(IRHOW,i)         =  rho_sp*w                  ! 2*beta*w
   entropy(IRHOE,i)         = -rho_sp                    !-2*beta
