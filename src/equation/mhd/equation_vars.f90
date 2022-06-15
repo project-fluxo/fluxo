@@ -29,7 +29,7 @@ SAVE
 LOGICAL             :: doCalcSource      !< logical to define if a source term (e.g. exactfunc) is added
 INTEGER             :: IniExactFunc      !< Exact Function for initialization
 INTEGER             :: IniRefState       !< RefState for initialization (case IniExactFunc=1 only)
-INTEGER,PARAMETER   :: nAuxVar=8         !< number of auxiliary variables for average flux
+INTEGER,PARAMETER   :: nAuxVar=7+PP_NumComponents  !< number of auxiliary variables for average flux
 INTEGER             :: nRefState         !< number of RefState in inifile
 REAL,ALLOCATABLE    :: RefStatePrim(:,:) !< primitive reference states
 REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
@@ -79,7 +79,11 @@ LOGICAL             :: divBSource       !< switch for adding source terms depend
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Solution variables (same convention for the entropy variables)
 enum, bind(C)
-  enumerator :: IRHO1 = 1, IRHOU, IRHOV, IRHOW, IRHOE, IB1, IB2, IB3
+  enumerator :: IRHO1 = 1
+#if PP_NumComponents>1
+  enumerator :: IRHO2
+#endif /*PP_NumComponents>1*/
+  enumerator :: IRHOU, IRHOV, IRHOW, IRHOE, IB1, IB2, IB3
 #ifdef PP_GLM
   enumerator :: IPSI
 #endif
@@ -87,7 +91,7 @@ end enum
 ! Primitive variables
 ! IRHO1, IB1, IB2, IB3 are shared with the solution variables
 enum, bind(C)
-  enumerator :: IU = IRHO1+1, IV, IW, IP
+  enumerator :: IU = IRHO1+PP_NumComponents, IV, IW, IP
 end enum
 ! Auxiliary variables
 ! IU, IV, IW, IP
@@ -98,7 +102,10 @@ end enum
 !----------------------------------------------------------------------------------------------------------------------------------
 
 CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames(PP_nVar)=(/ CHARACTER(LEN=255) :: &
-                   'Density',    &
+                   'Density1',   &
+#if PP_NumComponents>1
+                   'Density2',   &
+#endif /*PP_NumComponents>1*/
                    'MomentumX',  &
                    'MomentumY',  &
                    'MomentumZ',  &
@@ -113,6 +120,9 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames(PP_nVar)=(/ CHARA
                    /)
 CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ CHARACTER(LEN=255) :: &
                    'Density',    &
+#if PP_NumComponents>1
+                   'Density2',   &
+#endif /*PP_NumComponents>1*/
                    'VelocityX',  &
                    'VelocityY',  &
                    'VelocityZ',  &
@@ -264,7 +274,7 @@ REAL                :: sRho    ! 1/Rho
 !==================================================================================================================================
 sRho=1./cons(IRHO1)
 ! rho
-prim(IRHO1)=cons(IRHO1)
+prim(IRHO1:PP_NumComponents)=cons(IRHO1:PP_NumComponents)
 ! velocity
 prim(IU:IW)=cons(IRHOU:IRHOW)*sRho
 ! GAS PRESSURE (WITHOUT magnetic pressure)
@@ -291,7 +301,7 @@ REAL,INTENT(OUT)    :: cons(PP_nVar) !< vector of conservative variables
 ! LOCAL VARIABLES 
 !==================================================================================================================================
 ! rho
-cons(IRHO1)=prim(IRHO1)
+cons(IRHO1:PP_NumComponents)=prim(IRHO1:PP_NumComponents)
 ! velocity
 cons(IRHOU:IRHOW)=prim(IU:IW)*prim(IRHO1)
 ! total energy
@@ -375,6 +385,9 @@ s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
 
 ! Convert to entropy variables
 entropy(IRHO1)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+#if PP_NumComponents>1
+entropy(IRHO2) = 0.0 ! TODO: Assign proper entropy variables
+#endif /*PP_NumComponents>1*/
 entropy(IRHOU)         =  rho_sp*u                  ! 2*beta*u
 entropy(IRHOV)         =  rho_sp*v                  ! 2*beta*v
 entropy(IRHOW)         =  rho_sp*w                  ! 2*beta*w
@@ -415,6 +428,9 @@ v2s2   = 0.5*(u*u+v*v+w*w)
 s =kappa -((entropy(IRHO1) + rho_sp*v2s2) * kappaM1) 
 ! s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
 cons(IRHO1) = (exp(-s)*p_srho)**(skappaM1)
+#if PP_NumComponents>1
+cons(IRHO2) = 0.0 ! TODO: Assign proper coservative variables
+#endif /*PP_NumComponents>1*/
 cons(IRHOU) = u * cons(IRHO1)
 cons(IRHOV) = v * cons(IRHO1)
 cons(IRHOW) = w * cons(IRHO1)
@@ -475,6 +491,9 @@ DO i=1,dim2
   
   ! Convert to entropy variables
   entropy(IRHO1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
+#if PP_NumComponents>1
+  entropy(IRHO2,i) = 0.0 ! TODO: Assign proper entropy variables
+#endif /*PP_NumComponents>1*/
   entropy(IRHOU,i)         =  rho_sp*u                  ! 2*beta*u
   entropy(IRHOV,i)         =  rho_sp*v                  ! 2*beta*v
   entropy(IRHOW,i)         =  rho_sp*w                  ! 2*beta*w

@@ -39,6 +39,7 @@ INTERFACE RiemannSolverByHLLC
   MODULE PROCEDURE RiemannSolverByHLLC
 END INTERFACE
 
+#if PP_NumComponents==1
 INTERFACE RiemannSolverByHLLD
   MODULE PROCEDURE RiemannSolverByHLLD
 END INTERFACE
@@ -54,16 +55,18 @@ END INTERFACE
 INTERFACE EntropyStableByLLF
   MODULE PROCEDURE EntropyStableByLLF
 END INTERFACE
+#endif /*PP_NumComponents==1*/
 
 PUBLIC :: Riemann, AdvRiemann
 #if NONCONS
 PUBLIC :: AddNonConsFlux
 #endif /*NONCONS*/
+PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
+#if PP_NumComponents==1
 PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
-PUBLIC :: RiemannSolverByRusanov
 PUBLIC :: EntropyStableByLLF
 #ifdef PP_GLM
 PUBLIC :: EntropyStableDerigsFlux
@@ -71,6 +74,7 @@ PUBLIC :: EntropyStableDerigsFlux_VolFluxAndDissipMatrices
 PUBLIC :: EntropyStableFloGorFlux
 PUBLIC :: EntropyStableFloGorFlux_VolFluxAndDissipMatrices
 #endif
+#endif /*PP_NumComponents==1*/
 PUBLIC :: RotateState
 PUBLIC :: RotateFluxBack
 !==================================================================================================================================
@@ -191,7 +195,7 @@ pure function RotateState(U,nv,t1,t2) result(rotU)
   real, intent(in) :: t2(3)
   real             :: rotU(PP_nVar)
 
-  rotU(IRHO1) = U(IRHO1)
+  rotU(IRHO1:PP_NumComponents) = U(IRHO1:PP_NumComponents)
   rotU(IRHOU) = SUM(U(IRHOU:IRHOW)*nv(:))
   rotU(IRHOV) = SUM(U(IRHOU:IRHOW)*t1(:))
   rotU(IRHOW) = SUM(U(IRHOU:IRHOW)*t2(:))
@@ -467,7 +471,7 @@ E_star   = p_star*SM + smu_0*(-Bx_star*SUM(U_HLL(IB1:IB3)*U_HLL(IRHOU:IRHOW))*sR
 
 IF ((SL .LE. 0.0) .AND. (0.0 .LT. SM)) THEN
   s_SL_SM=1./(SL-SM)
-  U_star_L(IRHO1) = rho_L*(SL-vx_L)*s_SL_SM
+  U_star_L(IRHO1:PP_NumComponents) = PrimL(IRHO1:PP_NumComponents)*(SL-vx_L)*s_SL_SM
   U_star_L(IRHOU) = U_star_L(IRHO1)*SM
   U_star_L(IRHOV) = (ConsL(IRHOV)*SL-FluxL(IRHOV) -smu_0*Bx_star*By_star)*s_SL_SM
   U_star_L(IRHOW) = (ConsL(IRHOW)*SL-FluxL(IRHOW) -smu_0*Bx_star*Bz_star)*s_SL_SM
@@ -481,7 +485,7 @@ IF ((SL .LE. 0.0) .AND. (0.0 .LT. SM)) THEN
   Flux = FluxL+SL*(U_star_L-ConsL)
 ELSE
   s_SR_SM=1./(SR-SM)
-  U_star_R(IRHO1)  = rho_R*(SR-vx_R)*s_SR_SM
+  U_star_R(IRHO1:PP_NumComponents)  = PrimR(IRHO1:PP_NumComponents)*(SR-vx_R)*s_SR_SM
   U_star_R(IRHOU) = U_star_R(IRHO1)*SM
   U_star_R(IRHOV) = (ConsR(IRHOV)*SR-FluxR(IRHOV) -smu_0*Bx_star*By_star)*s_SR_SM
   U_star_R(IRHOW) = (ConsR(IRHOW)*SR-FluxR(IRHOW) -smu_0*Bx_star*Bz_star)*s_SR_SM
@@ -506,6 +510,7 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
+#if PP_NumComponents==1
 pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
@@ -723,7 +728,7 @@ ELSE
 END IF
 
 END SUBROUTINE RiemannSolverByHLLD
-
+#endif /*PP_NumComponents==1*/
 
 
 pure SUBROUTINE EvalHLLState(ConsL,ConsR,SL,SR,FluxL,FluxR,U_HLL)
@@ -757,7 +762,9 @@ END SUBROUTINE EvalHLLState
 !==================================================================================================================================
 !> Roe solver following the paper of Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997
 !> Attention: 1) Does not work for GLM
+!>            2) Only available for single-component
 !==================================================================================================================================
+#if PP_NumComponents==1
 pure SUBROUTINE RiemannSolverByRoe(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
@@ -1017,7 +1024,6 @@ END DO
 Flux(:)=0.5*Flux(:)
 
 END SUBROUTINE RiemannSolverByRoe
-
 
 pure SUBROUTINE EntropyStableByLLF(UL,UR,Fstar)
 !==================================================================================================================================
@@ -2026,5 +2032,6 @@ Fstar(8) = 0.5* ((u_L(1)*B_L(3)-u_L(3)*B_L(1)) + (u_R(1)*B_R(3)-u_R(3)*B_R(1)))
 END ASSOCIATE
 END SUBROUTINE EntropyStableFloGorFlux_VolFluxAndDissipMatrices
 #endif
+#endif /*PP_NumComponents==1*/
 
 END MODULE MOD_Riemann

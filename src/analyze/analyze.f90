@@ -422,7 +422,7 @@ END IF !MPIroot & AnalyzeToFile
 IF(doCalcErrorNorms)THEN
   CALL CalcErrorNorms(Time,L_2_Error,L_2_colloc,L_Inf_Error)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
+    WRITE(formatStr,'(A5,I0,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)' L_2        : ',L_2_Error
     WRITE(UNIT_StdOut,formatStr)' L_2_colloc : ',L_2_colloc
     WRITE(UNIT_StdOut,formatStr)' L_inf      : ',L_Inf_Error

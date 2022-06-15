@@ -462,6 +462,9 @@ vb_R  = v1_R*b1_R+v2_R*b2_R+v3_R*b3_R
 rhoqL    = rho_L*v1_L
 rhoqR    = rho_R*v1_R
 Fstar(IRHO1) = 0.5*(rhoqL      + rhoqR)
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = 0.5*(rhoqL*v1_L + rhoqR*v1_R +(pt_L + pt_R)-smu_0*(b1_L*b1_L+b1_R*b1_R))
 Fstar(IRHOV) = 0.5*(rhoqL*v2_L + rhoqR*v2_R               -smu_0*(b2_L*b1_L+b2_R*b1_R))
 Fstar(IRHOW) = 0.5*(rhoqL*v3_L + rhoqR*v3_R               -smu_0*(b3_L*b1_L+b3_R*b1_R))
@@ -536,6 +539,9 @@ qb_R = b1_R*metric_R(1) + b2_R*metric_R(2) + b3_R*metric_R(3)
 ! Standard DG flux
 !without metric dealiasing (=standard DG weak form on curved meshes)
 Fstar(IRHO1) = 0.5*( rho_L*qv_L +  rho_R*qv_R )
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = 0.5*(rhoU_L*qv_L + rhoU_R*qv_R + metric_L(1)*pt_L+metric_R(1)*pt_R -smu_0*(qb_L*b1_L+qb_R*b1_R) )
 Fstar(IRHOV) = 0.5*(rhoV_L*qv_L + rhoV_R*qv_R + metric_L(2)*pt_L+metric_R(2)*pt_R -smu_0*(qb_L*b2_L+qb_R*b2_R) )
 Fstar(IRHOW) = 0.5*(rhoW_L*qv_L + rhoW_R*qv_R + metric_L(3)*pt_L+metric_R(3)*pt_R -smu_0*(qb_L*b3_L+qb_R*b3_R) )
@@ -618,6 +624,9 @@ qb_R = b1_R*metric(1) + b2_R*metric(2) + b3_R*metric(3)
 
 ! Standard DG flux
 Fstar(IRHO1) = 0.5*( rho_L*qv_L +  rho_R*qv_R )
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = 0.5*(rhoU_L*qv_L + rhoU_R*qv_R + metric(1)*(pt_L+pt_R) -smu_0*(qb_L*b1_L+qb_R*b1_R) )
 Fstar(IRHOV) = 0.5*(rhoV_L*qv_L + rhoV_R*qv_R + metric(2)*(pt_L+pt_R) -smu_0*(qb_L*b2_L+qb_R*b2_R) )
 Fstar(IRHOW) = 0.5*(rhoW_L*qv_L + rhoW_R*qv_R + metric(3)*(pt_L+pt_R) -smu_0*(qb_L*b3_L+qb_R*b3_R) )
@@ -711,6 +720,9 @@ psiAvg     = 0.5*(psi_L+psi_R)
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(IRHO1) = rhoLN*vAvg(1)
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = Fstar(IRHO1)*vAvg(1) - smu_0*BAvg(1)*BAvg(1) + pTilde
 Fstar(IRHOV) = Fstar(IRHO1)*vAvg(2) - smu_0*BAvg(1)*BAvg(2)
 Fstar(IRHOW) = Fstar(IRHO1)*vAvg(3) - smu_0*BAvg(1)*BAvg(3)
@@ -807,6 +819,9 @@ PsiAvg = 0.5*(Psi_L+Psi_R)
 
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(IRHO1) = rhoLN*vm
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU:IRHOW) = Fstar(IRHO1)*vAvg(1:3)-(smu_0*Bm)*BAvg(:) + pTilde*metric(1:3)
 #ifdef PP_GLM
 Fstar(IB1:IB3) = vm*BAvg(1:3) - Bm*vAvg(1:3) + (GLM_ch*PsiAvg)*metric(1:3)
@@ -895,7 +910,9 @@ p_avg     = 0.5*(p_L+p_R)
 #define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(IRHO1) = rhoLN*vAvg(1)
-
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = Fstar(IRHO1)*vAvg(1)+p_avg+s2mu_0*B2_ZIP- smu_0*ZIP(B_L(1),B_R(1),B_L(1),B_R(1))
 Fstar(IRHOV) = Fstar(IRHO1)*vAvg(2)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(2),B_R(2))
 Fstar(IRHOW) = Fstar(IRHO1)*vAvg(3)                    - smu_0*ZIP(B_L(1),B_R(1),B_L(3),B_R(3))
@@ -1007,7 +1024,9 @@ Bm_R=SUM(B_R(:)*metric(:))
 #define ZIP(a,b,c,d) 0.5*(a*d+b*c)
 ! Entropy conserving and kinetic energy conserving flux
 Fstar(IRHO1) = rhoLN*0.5*(vm_L+vm_R)
-
+#if PP_NumComponents>1
+Fstar(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 Fstar(IRHOU) = Fstar(IRHO1)*vAvg(1)+metric(1)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(1),B_R(1),Bm_L,Bm_R)
 Fstar(IRHOV) = Fstar(IRHO1)*vAvg(2)+metric(2)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(2),B_R(2),Bm_L,Bm_R)
 Fstar(IRHOW) = Fstar(IRHO1)*vAvg(3)+metric(3)*(p_avg+s2mu_0*B2_ZIP)-smu_0*ZIP(B_L(3),B_R(3),Bm_L,Bm_R)

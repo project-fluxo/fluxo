@@ -97,19 +97,26 @@ CALL prms%CreateRealOption(   "GLM_scr", "MHD with GLM option: damping term of G
 #endif /*PP_GLM*/
 CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference state, used for exactfunction/initialization" &
                                 ,multiple=.TRUE.)
-CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:"//&
-                                           "0: Central flux, "//&
-                                           "1: Lax-Friedrichs, "//&
-                                           "2: HLLC, "//&
-                                           "3: Roe, "//&
-                                           "4: HLL, "//&
-                                           "5: HLLD (only with mu_0=1), "//&
-                                           "10: LLF entropy stable flux, "//&
-                                           "11: Derigs et al. entropy conservative flux,"//&
-                                           "12: FloGor entropy conservative flux,"//&
-                                           "13: FloGor EC+LLF entropy stable flux,"//&
-                                           "14: Derigs EC + 9wave entropy stable flux,"//&
-                                           "15: FloGor EC + 9wave entropy dissipation flux")
+CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:\n"&
+                                         //"0: Central flux\n"&
+                                         //"1: Lax-Friedrichs\n"&
+                                         //"2: HLLC\n"&
+#if PP_NumComponents==1
+                                         //"3: Roe\n"&
+#endif /*PP_NumComponents==1*/
+                                         //"4: HLL\n"&
+#if PP_NumComponents==1
+                                         //"5: HLLD (only with mu_0=1)\n"&
+                                         //"10: LLF entropy stable flux\n"&
+#endif /*PP_NumComponents==1*/
+                                         //"11: Derigs et al. entropy conservative flux\n"&
+                                         //"12: FloGor entropy conservative flux\n"&
+#if PP_NumComponents==1
+                                         //"13: FloGor EC+LLF entropy stable flux\n"&
+                                         //"14: Derigs EC + 9wave entropy stable flux\n"&
+                                         //"15: FloGor EC + 9wave entropy dissipation flux\n"&
+#endif /*PP_NumComponents==1*/
+                                            )
 
 #if (PP_DiscType==2)
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
@@ -338,12 +345,15 @@ CASE(1)
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC'
   SolveRiemannProblem => RiemannSolverByHLLC
+#if PP_NumComponents==1
 CASE(3)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
   SolveRiemannProblem => RiemannSolverByRoe
+#endif /*PP_NumComponents==1*/
 CASE(4)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
   SolveRiemannProblem => RiemannSolverByHLL
+#if PP_NumComponents==1
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLD'
   IF(ABS(mu_0-1.).GT.1.0E-12) &
@@ -358,12 +368,14 @@ CASE(10)
 #endif
   VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_Derigs
   SolveRiemannProblem => EntropyStableByLLF
+#endif /*PP_NumComponents==1*/
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Derigs et al. KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_Derigs
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor
+#if PP_NumComponents==1
 CASE(13)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
   VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor
@@ -388,6 +400,7 @@ CASE(15)
   CALL abort(__STAMP__,&
    'Entropy Stable 9 wave dissipation can currently only be run with GLM!!!')
 #endif
+#endif /*PP_NumComponents==1*/
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
        "Riemann solver not implemented")
@@ -1756,12 +1769,16 @@ REAL  :: metricL(3),metricR(3),mtmp(3),Utmp(PP_nVar)
 REAL  :: ULaux(1:nAuxVar),URaux(1:nAuxVar)
 LOGICAL :: failed_vol
 #endif /*PP_DiscType==2*/
-LOGICAL :: failed
+LOGICAL :: failed, cyclethis
 !==================================================================================================================================
 WRITE(*,*)'    CHECK ALL FLUXES...'
 !test consistency, random state:
-P_L(1:8)=(/1.12794,0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
-P_R(1:8)=(/0.94325,-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
+P_L = 0.0
+P_R = 0.0
+P_L(IRHO1)=1.12794
+P_R(IRHO1)=0.94325
+P_L(IU:IB3)=(/0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
+P_R(IU:IB3)=(/-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 #ifdef PP_GLM
 P_L(IPSI)= 0.31999469
 P_R(IPSI)= 0.
@@ -1777,6 +1794,7 @@ CALL EvalAdvectionFlux1D(UL,FrefL)
 CALL EvalAdvectionFlux1D(UR,FrefR)
 failed=.FALSE.
 DO icase=0,nCases
+  cyclethis = .FALSE.
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1786,30 +1804,47 @@ DO icase=0,nCases
     fluxProc => RiemannSolverByHLL
     fluxName = "RiemannSolverByHLL"
   CASE(2)
+#if PP_NumComponents==1
     fluxProc => RiemannSolverByRoe
     fluxName = "RiemannSolverByRoe"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   CASE(3)
     fluxProc => RiemannSolverByHLLC
     fluxName = "RiemannSolverByHLLC"
   CASE(4)
+#if PP_NumComponents==1
     fluxProc => RiemannSolverByHLLD
     fluxName = "RiemannSolverByHLLD"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   CASE(5)
     fluxProc => EntropyAndKinEnergyConservingFlux_Derigs
     fluxName = "Derigs et al. EntropyAndKinEnergyConservingFlux"
   CASE(6)
+#if PP_NumComponents==1
     VolumeFluxAverage => EntropyAndKinEnergyConservingFlux_Derigs !needed by EntropyStableByLLF
     fluxProc => EntropyStableByLLF
     fluxName = "Derigs et al. EntropyStableByLLF"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   CASE(7)
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
 #ifdef PP_GLM
   CASE(8)
+#if PP_NumComponents==1
     fluxProc => EntropyStableDerigsFlux
     fluxName = "9Wave EntropyStableDerigsFlux"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
 #endif
   END SELECT
+  if (cyclethis) cycle
   !CONSISTENCY
   CALL fluxProc(UL,UL,Fcheck)
   check=1.0e-12

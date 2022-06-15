@@ -123,7 +123,11 @@ DO i=1,nTotal_vol
   
   ! Advection part
   ! Advection fluxes x-direction
+#if PP_NumComponents>1
+  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
   f(IRHO1)=rhov1                     ! rho*u
+#endif /*PP_NumComponents>1*/
   f(IRHOU)=rhov1*v1+pt -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
   f(IRHOV)=rhov1*v2    -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
   f(IRHOW)=rhov1*v3    -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
@@ -132,7 +136,11 @@ DO i=1,nTotal_vol
   f(IB2)=v1*b2-b1*v2
   f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
-  g(IRHO1)=rhov2                     ! rho*v      
+#if PP_NumComponents>1
+  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
+  g(IRHO1)=rhov2                     ! rho*v  
+#endif /*PP_NumComponents>1*/
   g(IRHOU)=f(IRHOV)                      ! rho*u*v      -1/mu_0*b2*b1
   g(IRHOV)=rhov2*v2+pt -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
   g(IRHOW)=rhov2*v3    -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
@@ -141,7 +149,11 @@ DO i=1,nTotal_vol
   g(IB2)=0.
   g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
+#if PP_NumComponents>1
+  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
   h(IRHO1)=rhov3                     ! rho*v
+#endif /*PP_NumComponents>1*/
   h(IRHOU)=f(IRHOW)                      ! rho*u*w      -1/mu_0*b3*b1
   h(IRHOV)=g(IRHOW)                      ! rho*v*w      -1/mu_0*b3*b2
   h(IRHOW)=rhov3*v3+pt -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
@@ -246,7 +258,11 @@ DO i=1,nTotal_vol
   Ep   = (Etotal + ptilde)
   ! Advection part
   ! Advection fluxes x-direction
-  f(IRHO1)=rhov1                          ! rho*u
+#if PP_NumComponents>1
+  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
+  f(IRHO1)=rhov1                     ! rho*u
+#endif /*PP_NumComponents>1*/
   f(IRHOU)=rhov1*v1+ptilde  -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
   f(IRHOV)=rhov1*v2         -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
   f(IRHOW)=rhov1*v3         -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
@@ -255,7 +271,11 @@ DO i=1,nTotal_vol
   f(IB2)=v1*b2-b1*v2
   f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
-  g(IRHO1)=rhov2                          ! rho*v      
+#if PP_NumComponents>1
+  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
+  g(IRHO1)=rhov2                     ! rho*v
+#endif /*PP_NumComponents>1*/
   g(IRHOU)=f(IRHOV)                           ! rho*u*v      -1/mu_0*b2*b1
   g(IRHOV)=rhov2*v2+ptilde  -smu_0*b2*b2  ! rho*v²+p     -1/mu_0*b2*b2
   g(IRHOW)=rhov2*v3         -smu_0*b2*b3  ! rho*v*w      -1/mu_0*b2*b3
@@ -264,7 +284,11 @@ DO i=1,nTotal_vol
   g(IB2)=0.
   g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
-  h(IRHO1)=rhov3                          ! rho*v
+#if PP_NumComponents>1
+  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+#else
+  h(IRHO1)=rhov3                     ! rho*w
+#endif /*PP_NumComponents>1*/
   h(IRHOU)=f(IRHOW)                           ! rho*u*w      -1/mu_0*b3*b1
   h(IRHOV)=g(IRHOW)                           ! rho*v*w      -1/mu_0*b3*b2
   h(IRHOW)=rhov3*v3+ptilde  -smu_0*b3*b3  ! rho*v²+p     -1/mu_0*b3*b3
@@ -409,6 +433,9 @@ vb   = (b1*v1+b2*v2+b3*v3)
 ptilde = kappaM1*(Etotal-0.5*U_Face(IRHO1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
 ! Advection fluxes x-direction
 F_Face(IRHO1)= U_Face(IRHOU)          ! rho*u
+#if PP_NumComponents>1
+F_Face(IRHO2) = 0.0
+#endif /*PP_NumComponents>1*/
 F_Face(IRHOU)= U_Face(IRHOU)*v1+ptilde    -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
 F_Face(IRHOV)= U_Face(IRHOU)*v2           -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
 F_Face(IRHOW)= U_Face(IRHOU)*v3           -smu_0*b1*b3  ! rho*u*w      -1/mu_0*b1*b3
@@ -634,7 +661,7 @@ ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), &
   !END IF 
 #endif /*PP_ANISO_HEAT*/
   ! viscous fluxes in x-direction      
-  f_visc(IRHO1)=0.
+  f_visc(IRHO1:PP_NumComponents)=0.
   f_visc(IRHOU)=-mu*(2*gradv1x-s23*divv)
   f_visc(IRHOV)=-mu*(  gradv2x+gradv1y)   
   f_visc(IRHOW)=-mu*(  gradv3x+gradv1z)   
@@ -645,7 +672,7 @@ ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), &
   f_visc(IRHOE)= v1*f_visc(IRHOU)+v2*f_visc(IRHOV)+v3*f_visc(IRHOW) +smu_0*(b1*f_visc(IB1)+b2*f_visc(IB2)+b3*f_visc(IB3)) - Qx
 
   ! viscous fluxes in y-direction      
-  g_visc(IRHO1)=0.
+  g_visc(IRHO1:PP_NumComponents)=0.
   g_visc(IRHOU)= f_visc(IRHOV)                  !-mu*(  gradv1y+gradv2x)  
   g_visc(IRHOV)=-mu*(2*gradv2y-s23*divv)     
   g_visc(IRHOW)=-mu*(  gradv3y+gradv2z)      
@@ -656,7 +683,7 @@ ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), &
   g_visc(IRHOE)=v1*g_visc(IRHOU)+v2*g_visc(IRHOV)+v3*g_visc(IRHOW) + smu_0*(b1*g_visc(IB1)+b2*g_visc(IB2)+b3*g_visc(IB3)) - Qy 
 
   ! viscous fluxes in z-direction      
-  h_visc(IRHO1)=0.
+  h_visc(IRHO1:PP_NumComponents)=0.
   h_visc(IRHOU)= f_visc(IRHOW)                       !-mu*(  gradv1z+gradv3x)                 
   h_visc(IRHOV)= g_visc(IRHOW)                       !-mu*(  gradv2z+gradv3y)                
   h_visc(IRHOW)=-mu*(2*gradv3z-s23*divv )             
