@@ -595,7 +595,7 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(7:PP_nVar)=0.
 CASE(3,301) ! alfven wave , domain [-1,1]^3
   IF(ExactFunction.EQ.301)THEN
-    Prim(IP)=RefStatePrim(IniRefState,5)
+    Prim(IP)=RefStatePrim(IniRefState,IP)
   ELSE
     Prim(IP)=1.
   END IF
@@ -670,7 +670,7 @@ CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from i
   ELSE
     b0(1:2)=(/MIN(1.,IniWavenumber(1)/IniWavenumber(2)),MIN(1.,IniWavenumber(2)/IniWavenumber(1)) /)
   END IF
-  ASSOCIATE(rho_0=>RefStatePrim(IniRefState,1),p_0=>RefStatePrim(IniRefState,5))
+  ASSOCIATE(rho_0=>RefStatePrim(IniRefState,IRHO1),p_0=>RefStatePrim(IniRefState,IP))
   q0=SQRT(SUM(b0(:)**2))        !=|B_0|
   a=SQRT(mu_0*rho_0)  !=|B_0|/va = sqrt(mu_0*rho_0)
   IF(Exactfunction.EQ.32) a=-a ! case(32) -va!
@@ -702,7 +702,7 @@ CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from i
   END ASSOCIATE !rho_0,p_0
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
-  a=RefStatePrim(IniRefState,2)*2.*PP_Pi
+  a=RefStatePrim(IniRefState,IU)*2.*PP_Pi
 
   ! g(t)
   Resu(IRHO1:IRHOW)=2.+ IniAmplitude*sin(Omega*SUM(x) - a*tEval)
@@ -815,13 +815,13 @@ CASE(10) ! mhd exact equilibrium, from potential A=(0,0,A3), A3=IniAmplitude*PRO
   CALL PrimToCons(Prim,Resu)
 CASE(11) ! mhd exact equilibrium, Psi=a(x^2+y^2), B_x= dPsi/dy=2ay, B_y=-dPsi/dx=-2ax p=int(-Laplace(Psi),Psi)=-4a Psi
          ! domain |x|,|y|<1, Dirichlet BC needed
-  Prim(:)= RefStatePrim(IRHO1,:)
+  Prim(:)= RefStatePrim(1,:)
   a      = SQRT(0.25*(0.5*IniAmplitude)*Prim(IP)) !IniAmplitude is related to the change of pressure
                                            ! at x,y=1 (x^2+y^2=2) (IniAmplitude=0.1: 10% change)
   Prim(IP)= Prim(IP)-4*a*a*SUM(x(1:2)**2)
   Prim(IB1)= 2*a*x(2)
   Prim(IB2)=-2*a*x(1)
-  Prim(:)= Prim(:)+RefStatePrim(IU,:)*IniDisturbance*PRODUCT(SIN(2*PP_Pi*x(1:2)))
+  Prim(:)= Prim(:)+RefStatePrim(2,:)*IniDisturbance*PRODUCT(SIN(2*PP_Pi*x(1:2)))
 
   IF(Prim(IP).LT.0.) CALL abort(__STAMP__,  &
                 'negative pressure in exactfunc 11 !',999,prim(IP))
@@ -875,9 +875,9 @@ CASE(70) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
   Prim(IB1)=TANH(x(2)/IniHalfwidth) !tanh(y*delta) delta=10.
   Prim(IB3)=SQRT(1-Prim(IB1)*Prim(IB1))
 
-  Prim(IRHO1)=RefStatePrim(IniRefState,1)
+  Prim(IRHO1)=RefStatePrim(IniRefState,IRHO1)
   Prim(IV)=IniAmplitude*Prim(IB1)*Prim(IB3)*SIN(x(1)/3.*IniWaveNumber(1)+ x(3)*IniWaveNumber(3))
-  Prim(IP)=RefStatePrim(IniRefState,5)
+  Prim(IP)=RefStatePrim(IniRefState,IP)
   !Prim(IB1:IB3)=sSqrt4pi*Prim(IB1:IB3) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi/2,pi/2]x[0:2Pi]
@@ -888,7 +888,7 @@ CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
   Prim(IB1)=TANH((x(2)-0.01)/IniHalfwidth) !tanh(y*delta) delta=10. !NOT FULLY CENTERED
   Prim(IB3)=SQRT(1-Prim(IB1)*Prim(IB1))
 
-  Prim(IRHO1)=RefStatePrim(IniRefState,1)
+  Prim(IRHO1)=RefStatePrim(IniRefState,IRHO1)
   DO j=0,NINT(IniWaveNumber(3))
     DO i=0,NINT(IniWaveNumber(1))
       a=REAL(1+0.8*i+0.9*j)/(1+0.8*IniWaveNumber(1)+0.9*IniWaveNumber(3))
@@ -896,7 +896,7 @@ CASE(71) !Tearing mode instability, of paper Landi et al. , domain [0,6*pi]x[-pi
     END DO
   END DO
   Prim(IV)=IniDisturbance*Prim(IB1)*Prim(IB3)*Prim(IV)
-  Prim(IP)=RefStatePrim(IniRefState,5)
+  Prim(IP)=RefStatePrim(IniRefState,IP)
   !Prim(IB1:IB3)=sSqrt4pi*Prim(IB1:IB3) ! scaling with sqrt(4pi)!?!
   CALL PrimToCons(Prim,Resu)
 
@@ -1242,7 +1242,7 @@ CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplit
   radius=SQRT(SUM((x-IniCenter(:))**2))
   a=EXP(5.*(radius-IniHalfwidth)/IniAmplitude)
   a=a/(a+1.)
-  Prim = (1.-a)*RefStatePrim(IRHO1,:)+a*RefStatePrim(IU,:)
+  Prim = (1.-a)*RefStatePrim(1,:)+a*RefStatePrim(2,:)
   CALL PrimToCons(Prim,Resu)
 
 CASE(311) ! Orzsag-Tang vortex
@@ -1495,7 +1495,7 @@ LOGICAL                         :: diffCyl
 SELECT CASE (IniExactFunc)
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
-  a=RefStatePrim(IniRefState,2)*2.*PP_Pi
+  a=RefStatePrim(IniRefState,IU)*2.*PP_Pi
   tmp(1)=-a+3*Omega
   tmp(2)=-a+0.5*Omega*(1.+kappa*5.)
   tmp(3)=IniAmplitude*Omega*KappaM1
