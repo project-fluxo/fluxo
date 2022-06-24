@@ -31,6 +31,7 @@ END INTERFACE
 !  MODULE PROCEDURE AddNonConsFlux
 !END INTERFACE
 
+#if PP_NumComponents==1
 INTERFACE RiemannSolverByHLL
   MODULE PROCEDURE RiemannSolverByHLL
 END INTERFACE
@@ -39,7 +40,6 @@ INTERFACE RiemannSolverByHLLC
   MODULE PROCEDURE RiemannSolverByHLLC
 END INTERFACE
 
-#if PP_NumComponents==1
 INTERFACE RiemannSolverByHLLD
   MODULE PROCEDURE RiemannSolverByHLLD
 END INTERFACE
@@ -62,9 +62,9 @@ PUBLIC :: Riemann, AdvRiemann
 PUBLIC :: AddNonConsFlux
 #endif /*NONCONS*/
 PUBLIC :: RiemannSolverByRusanov
+#if PP_NumComponents==1
 PUBLIC :: RiemannSolverByHLL
 PUBLIC :: RiemannSolverByHLLC
-#if PP_NumComponents==1
 PUBLIC :: RiemannSolverByHLLD
 PUBLIC :: RiemannSolverByRoe
 PUBLIC :: EntropyStableByLLF
@@ -258,7 +258,7 @@ INTEGER :: i
 REAL    :: v_L(3)
 !==================================================================================================================================
 DO i=1,nTotal_Face
-  v_L=UL(IRHOU:IRHOW,i)/UL(IRHO1,i)
+  v_L=UL(IRHOU:IRHOW,i)/sum(UL(IRHO1:PP_NumComponents,i))
 #if NONCONS==1 /*Powell*/
   FL(IRHOU:IB3  ,i)=FL(IRHOU:IB3  ,i) +(0.5*SUM((UL(IB1:IB3,i)+UR(IB1:IB3,i))*nv(:,i)))*(/UL(IB1:IB3,i),SUM(UL(IB1:IB3,i)*v_L(1:3)),v_L(1:3)/)
 #elif NONCONS==2 /*Brackbill*/
@@ -321,6 +321,7 @@ END SUBROUTINE RiemannSolverByRusanov
 !==================================================================================================================================
 !> HLL solver following the paper of Shentai Li: "An HLLC Riemann Solver for Magnetohydrodynamics"
 !==================================================================================================================================
+#if PP_NumComponents==1
 pure SUBROUTINE RiemannSolverByHLL(ConsL,ConsR,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D
@@ -510,7 +511,6 @@ END SUBROUTINE RiemannSolverByHLLC
 !> Input state already rotated to normal system, and
 !> ONLY WORKS FOR mu_0=1!!!
 !==================================================================================================================================
-#if PP_NumComponents==1
 pure SUBROUTINE RiemannSolverByHLLD(ConsL_in,ConsR_in,Flux)
 USE MOD_PreProc
 USE MOD_Flux,          ONLY: EvalAdvectionFlux1D

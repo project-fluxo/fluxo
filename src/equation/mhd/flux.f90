@@ -95,9 +95,13 @@ REAL                :: v1,v2,v3,v_2,pt                         ! velocity and pr
 REAL                :: bb2,vb                                  ! magnetic field, bb2=|bvec|^2, v dot b
 REAL                :: Ep                                      ! E + p
 INTEGER             :: i 
+#if PP_NumComponents>1
+REAL                :: KappaM1, KappaM2
+#endif /*PP_NumComponents>1*/
 !==================================================================================================================================
+
 DO i=1,nTotal_vol
-  ASSOCIATE(rho   =>U_in(IRHO1,i), &
+  ASSOCIATE(rho   =>sum(U_in(IRHO1:PP_NumComponents,i)), &
             rhov1 =>U_in(IRHOU,i), &
             rhov2 =>U_in(IRHOV,i), &
             rhov3 =>U_in(IRHOW,i), &
@@ -110,6 +114,10 @@ DO i=1,nTotal_vol
             b2    =>U_in(IB2,i), &
             b3    =>U_in(IB3,i)  ) 
   ! auxiliary variables
+#if PP_NumComponents>1
+  KappaM1 = totalKappa(U_in(:,i)) - 1.0
+  KappaM2 = KappaM1 - 1.0
+#endif /*PP_NumComponents>1*/
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
   v2   = rhov2*srho 
@@ -124,7 +132,7 @@ DO i=1,nTotal_vol
   ! Advection part
   ! Advection fluxes x-direction
 #if PP_NumComponents>1
-  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/rho                     ! rho*u
 #else
   f(IRHO1)=rhov1                     ! rho*u
 #endif /*PP_NumComponents>1*/
@@ -137,7 +145,7 @@ DO i=1,nTotal_vol
   f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
 #if PP_NumComponents>1
-  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/rho                     ! rho*u
 #else
   g(IRHO1)=rhov2                     ! rho*v  
 #endif /*PP_NumComponents>1*/
@@ -150,7 +158,7 @@ DO i=1,nTotal_vol
   g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
 #if PP_NumComponents>1
-  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/rho                     ! rho*u
 #else
   h(IRHO1)=rhov3                     ! rho*v
 #endif /*PP_NumComponents>1*/
@@ -229,9 +237,12 @@ REAL                :: Qx,Qy,Qz
 REAL,DIMENSION(IRHOU:PP_nVar) :: f_visc,g_visc,h_visc
 #endif /*PARABOLIC*/
 INTEGER             :: i 
+#if PP_NumComponents>1
+REAL                :: KappaM1
+#endif /*PP_NumComponents>1*/
 !==================================================================================================================================
 DO i=1,nTotal_vol
-  ASSOCIATE(rho   =>U_in(IRHO1,i), &
+  ASSOCIATE(rho   =>sum(U_in(IRHO1:PP_NumComponents,i)), &
             rhov1 =>U_in(IRHOU,i), &
             rhov2 =>U_in(IRHOV,i), &
             rhov3 =>U_in(IRHOW,i), &
@@ -245,6 +256,9 @@ DO i=1,nTotal_vol
 #endif /*def PP_GLM*/
             )
   ! auxiliary variables
+#if PP_NumComponents>1
+  KappaM1 = totalKappa(U_in(:,i)) - 1.0
+#endif /*PP_NumComponents>1*/
   srho = 1. / rho ! 1/rho
   v1   = rhov1*srho 
   v2   = rhov2*srho 
@@ -259,7 +273,7 @@ DO i=1,nTotal_vol
   ! Advection part
   ! Advection fluxes x-direction
 #if PP_NumComponents>1
-  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  f(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov1/rho                     ! rho*u
 #else
   f(IRHO1)=rhov1                     ! rho*u
 #endif /*PP_NumComponents>1*/
@@ -272,7 +286,7 @@ DO i=1,nTotal_vol
   f(IB3)=v1*b3-b1*v3
   ! Advection fluxes y-direction
 #if PP_NumComponents>1
-  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  g(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov2/rho                     ! rho*u
 #else
   g(IRHO1)=rhov2                     ! rho*v
 #endif /*PP_NumComponents>1*/
@@ -285,7 +299,7 @@ DO i=1,nTotal_vol
   g(IB3)=v2*b3-b2*v3
   ! Advection fluxes z-direction
 #if PP_NumComponents>1
-  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/sum(U_in(IRHO1:PP_NumComponents,i))                     ! rho*u
+  h(IRHO1:PP_NumComponents)=U_in(IRHO1:PP_NumComponents,i)*rhov3/rho                     ! rho*u
 #else
   h(IRHO1)=rhov3                     ! rho*w
 #endif /*PP_NumComponents>1*/
@@ -413,13 +427,14 @@ REAL,INTENT(OUT)    :: F_Face(PP_nVar)    !< F_Face(iVar), Cartesian flux in "x"
 REAL                :: srho               ! reciprocal values for density and kappa/Pr
 REAL                :: v1,v2,v3,ptilde    ! velocity and pressure(including magnetic pressure
 REAL                :: vb                 ! magnetic field, bb2=|bvec|^2
+#if PP_NumComponents>1
+REAL                :: KappaM1, KappaM2
 !==================================================================================================================================
-! auxiliary variables
-srho = 1. / U_Face(IRHO1) ! 1/rho
-v1   = U_Face(IRHOU)*srho ! u
-v2   = U_Face(IRHOV)*srho ! v
-v3   = U_Face(IRHOW)*srho ! w
-ASSOCIATE( b1 => U_Face(IB1), &
+KappaM1 = totalKappa(U_Face) - 1.0
+KappaM2 = KappaM1 - 1.0
+#endif /*PP_NumComponents>1*/
+ASSOCIATE(rho =>sum(U_Face(IRHO1:PP_NumComponents)), &
+           b1 => U_Face(IB1), &
            b2 => U_Face(IB2), &
            b3 => U_Face(IB3), &
 #ifdef PP_GLM
@@ -428,13 +443,19 @@ ASSOCIATE( b1 => U_Face(IB1), &
            Etotal => U_Face(IRHOE)  &
 #endif
 )
+! auxiliary variables
+srho = 1. / rho ! 1/rho
+v1   = U_Face(IRHOU)*srho ! u
+v2   = U_Face(IRHOV)*srho ! v
+v3   = U_Face(IRHOW)*srho ! w
 vb   = (b1*v1+b2*v2+b3*v3)
 ! ptilde includes magnetic pressure
-ptilde = kappaM1*(Etotal-0.5*U_Face(IRHO1)*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
+ptilde = kappaM1*(Etotal-0.5*rho*(v1*v1+v2*v2+v3*v3))-kappaM2*s2mu_0*(b1*b1+b2*b2+b3*b3)
 ! Advection fluxes x-direction
-F_Face(IRHO1)= U_Face(IRHOU)          ! rho*u
 #if PP_NumComponents>1
-F_Face(IRHO2) = 0.0
+F_Face(IRHO1:PP_NumComponents)= U_Face(IRHO1:PP_NumComponents)*U_Face(IRHOU)/rho
+#else
+F_Face(IRHO1)= U_Face(IRHOU)          ! rho*u
 #endif /*PP_NumComponents>1*/
 F_Face(IRHOU)= U_Face(IRHOU)*v1+ptilde    -smu_0*b1*b1  ! rho*u²+p     -1/mu_0*b1*b1
 F_Face(IRHOV)= U_Face(IRHOU)*v2           -smu_0*b1*b2  ! rho*u*v      -1/mu_0*b1*b2
@@ -486,7 +507,7 @@ INTEGER             :: i
 !==================================================================================================================================
 DO i=1,nTotal_face
   ! auxiliary variables
-  ASSOCIATE(rho   =>U_Face(IRHO1,i), &
+  ASSOCIATE(rho   =>sum(U_Face(IRHO1:PP_NumComponents,i)), & 
             b1    =>U_Face(IB1,i), &
             b2    =>U_Face(IB2,i), &
             b3    =>U_Face(IB3,i)  )
@@ -613,7 +634,7 @@ INTEGER             :: i
 !==================================================================================================================================
 DO i=1,nTotal_vol
   ! auxiliary variables
-ASSOCIATE( rho => U_in(IRHO1,i), &
+ASSOCIATE( rho   =>sum(U_in(IRHO1:PP_NumComponents,i)), &
            b1  => U_in(IB1,i), &
            b2  => U_in(IB2,i), &
            b3  => U_in(IB3,i)  )

@@ -439,7 +439,7 @@ END IF  ! ErrorNorms
 IF(doCalcBulk)THEN
   CALL CalcBulk(bulk,bulk_t,maxabs_Ut)
   IF(MPIroot) THEN
-    WRITE(formatStr,'(A5,I1,A8)')'(A14,',PP_nVar,'ES21.12)'
+    WRITE(formatStr,'(A5,I0,A8)')'(A14,',PP_nVar,'ES21.12)'
     WRITE(UNIT_StdOut,formatStr)'Bulk       : ',bulk(:)
     WRITE(UNIT_StdOut,formatStr)'Bulk_t     : ',bulk_t(:)
     WRITE(UNIT_StdOut,formatStr)' max|Ut|    : ',maxabs_Ut

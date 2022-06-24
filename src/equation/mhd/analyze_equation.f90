@@ -392,7 +392,7 @@ Energy=0.
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    Energy(1)  = Energy(1)+SUM(U(IRHOU:IRHOW,i,j,k,iElem)**2)/U(IRHO1,i,j,k,iElem)*IntegrationWeight
+    Energy(1)  = Energy(1)+SUM(U(IRHOU:IRHOW,i,j,k,iElem)**2)/sum(U(IRHO1:PP_NumComponents,i,j,k,iElem))*IntegrationWeight
     Energy(2)  = Energy(2)+SUM(U(IB1:IB3,i,j,k,iElem)**2)*IntegrationWeight
     Energy(3)  = Energy(3)+U(IRHOE,i,j,k,iElem)*IntegrationWeight
 #ifdef PP_GLM
@@ -440,14 +440,13 @@ INTEGER                      :: iElem,i,j,k
 REAL                         :: ent_loc,prim(PP_nVar),dSdU(PP_nVar)
 #if MPI
 REAL                         :: box(2)
-#endif 
+#endif
 !==================================================================================================================================
   Entropy=0.
   dSdU_Ut=0.
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      CALL ConsToPrim(prim,U(:,i,j,k,iElem))
-      ent_loc  = -prim(IRHO1)*(LOG(prim(IP))-kappa*LOG(prim(IRHO1)))
+      ent_loc = Get_MathEntropy(U(:,i,j,k,iElem))
       Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
       dSdU     = ConsToEntropy(U(:,i,j,k,iElem))
       ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
@@ -466,8 +465,6 @@ REAL                         :: box(2)
     CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   END IF
 #endif /*MPI*/
-  Entropy=Entropy*sKappaM1
-
 
 END SUBROUTINE CalcEntropy
 
@@ -506,11 +503,11 @@ REAL                         :: box(2)
   maxAbs_vB=-1.0e-10
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      srho=1./U(IRHO1,i,j,k,iElem)
+      srho=1./sum(U(IRHO1:PP_NumComponents,i,j,k,iElem))
       vB  =SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))*srho
       maxAbs_vB=MAX(maxAbs_vB,ABS(vB))
       CH  = CH+(vB)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-      vB_t =srho*(SUM(U(IRHOU:IRHOW,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem) + Ut(IRHOU:IRHOW,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))-Ut(IRHO1,i,j,k,iElem)*vB)
+      vB_t =srho*(SUM(U(IRHOU:IRHOW,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem) + Ut(IRHOU:IRHOW,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))-sum(Ut(IRHO1:PP_NumComponents,i,j,k,iElem))*vB)
       CH_t =CH_t+(vB_t)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
     END DO; END DO; END DO !i,j,k
   END DO ! iElem

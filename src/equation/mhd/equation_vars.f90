@@ -37,7 +37,6 @@ REAL,ALLOCATABLE    :: RefStateCons(:,:) !< =primToCons(RefStatePrim)
 REAL,ALLOCATABLE    :: BCData(:,:,:,:)  !< data for steady state boundary conditions
 INTEGER,ALLOCATABLE :: nBCByType(:)     !< Number of sides for each boundary
 INTEGER,ALLOCATABLE :: BCSideID(:,:)    !< SideIDs for BC types
-REAL                :: R                !< Gas constant
 #if PARABOLIC
 REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navier-stokes ANYMORE!!!!
 REAL                :: eta              !< Current resistivity
@@ -53,12 +52,19 @@ REAL                :: kpar             !< parallel (to magnetic field) heat dif
 REAL                :: mu_0             !< magnetic permeability in vacuum
 REAL                :: smu_0            !< =1/mu_0
 REAL                :: s2mu_0           !< =1/(2*mu_0)
+#if PP_NumComponents==1
+REAL                :: R                !< Gas constant
 REAL                :: Kappa            !< ratio of specific heats
 REAL                :: KappaM1          !< = kappa - 1
 REAL                :: KappaM2          !< = kappa - 2
 REAL                :: sKappaM1         !< = 1/(kappa -1)
 REAL                :: KappaP1          !< = kappa + 1
 REAL                :: sKappaP1         !< = 1/(kappa +1)
+#else
+REAL                :: Kappas(PP_NumComponents)  !< ratio of specific heats for each species
+REAL                :: Cvs   (PP_NumComponents)  !< Heat capacity at constant volume
+REAL                :: Rs    (PP_NumComponents)  !< Gas constant for each species
+#endif /*PP_NumComponents==1*/
 REAL                :: IniWavenumber(3) !< wavenumbers in 3 directions (sinus periodic with exactfunc=6)
 REAL                :: IniFrequency     !< frequency for exactfunc
 REAL                :: IniAmplitude     !< amplitude for exactfunc
@@ -249,12 +255,25 @@ INTERFACE FastestWave3D
   MODULE PROCEDURE FastestWave3D
 END INTERFACE
 
-INTERFACE FastestWave1D_Roe
-  MODULE PROCEDURE FastestWave1D_Roe
-END INTERFACE
-
 CONTAINS
 
+#if PP_NumComponents>1
+!==================================================================================================================================
+!> Computes the total heat capacity ratio for a mixture of plasmas... Can be called with "conservative" or primitive variables
+!==================================================================================================================================
+pure function totalKappa(U)
+implicit none
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+real, intent(in) :: U(PP_nVar)
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+real :: totalKappa
+!==================================================================================================================================
+
+totalKappa = sum(U(IRHO1:PP_NumComponents)*Kappas*Cvs) / sum(U(IRHO1:PP_NumComponents)*Cvs)
+end function totalKappa
+#endif /*PP_NumComponents>1*/
 
 !==================================================================================================================================
 !> Transformation from conservative variables to primitive variables
@@ -271,8 +290,15 @@ REAL,INTENT(OUT)    :: prim(PP_nVar) !< vector of primitive variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 REAL                :: sRho    ! 1/Rho
+#if PP_NumComponents>1
+REAL                :: KappaM1
 !==================================================================================================================================
+KappaM1 = totalKappa(cons) - 1.0
+srho=1./sum(cons(IRHO1:PP_NumComponents))
+#else
 sRho=1./cons(IRHO1)
+#endif /*PP_NumComponents>1*/
+
 ! rho
 prim(IRHO1:PP_NumComponents)=cons(IRHO1:PP_NumComponents)
 ! velocity
@@ -299,11 +325,15 @@ REAL,INTENT(IN)    :: prim(PP_nVar) !< vector of primitive variables
 REAL,INTENT(OUT)    :: cons(PP_nVar) !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+#if PP_NumComponents>1
+REAL                :: sKappaM1
 !==================================================================================================================================
+sKappaM1 = 1.0 / (totalKappa(prim) - 1.0)
+#endif /*PP_NumComponents>1*/
 ! rho
 cons(IRHO1:PP_NumComponents)=prim(IRHO1:PP_NumComponents)
 ! velocity
-cons(IRHOU:IRHOW)=prim(IU:IW)*prim(IRHO1)
+cons(IRHOU:IRHOW)=prim(IU:IW)*sum(prim(IRHO1:PP_NumComponents))
 ! total energy
 cons(IRHOE)=sKappaM1*prim(IP)+0.5*SUM(cons(IRHOU:IRHOW)*prim(IU:IW))+s2mu_0*(SUM(prim(IB1:PP_nVar)*prim(IB1:PP_nVar)))
 ! B,psi
@@ -372,27 +402,46 @@ REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variabl
 REAL,DIMENSION(PP_nVar)             :: entropy !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
-REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+REAL                                :: rho,srho,u,v,w,v2s2,rho_sp,s,p
+#if PP_NumComponents>1
+REAL                :: Kappa, KappaM1, sKappaM1, sT
 !==================================================================================================================================
-srho   = 1./cons(IRHO1)
+Kappa    = totalKappa(cons)
+KappaM1  = Kappa - 1.0
+sKappaM1 = 1.0 / KappaM1
+srho=1./sum(cons(IRHO1:PP_NumComponents))
+#else
+srho=1./cons(IRHO1)
+#endif /*PP_NumComponents>1*/
+
 u      = cons(IRHOU)*srho
 v      = cons(IRHOV)*srho
 w      = cons(IRHOW)*srho
 v2s2   = 0.5*(u*u+v*v+w*w)
-rho_sp = cons(IRHO1)/(KappaM1*(cons(IRHOE)-cons(IRHO1)*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9
+p = KappaM1*(cons(IRHOE)-sum(cons(IRHO1:PP_NumComponents))*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar)))
+
+#if PP_NumComponents==1
+rho_sp = cons(IRHO1)/p ! pressure includes psi^2 if PP_nVar=9
 !s      = LOG(p) - kappa*LOG(cons(IRHO1))
 s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
 
 ! Convert to entropy variables
 entropy(IRHO1)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-#if PP_NumComponents>1
-entropy(IRHO2) = 0.0 ! TODO: Assign proper entropy variables
-#endif /*PP_NumComponents>1*/
 entropy(IRHOU)         =  rho_sp*u                  ! 2*beta*u
 entropy(IRHOV)         =  rho_sp*v                  ! 2*beta*v
 entropy(IRHOW)         =  rho_sp*w                  ! 2*beta*w
 entropy(IRHOE)         = -rho_sp                    !-2*beta
 entropy(IB1:PP_nVar) =  rho_sp*cons(IB1:PP_nVar)    ! 2*beta*B +2*beta*psi
+#else
+! For multicomponent, the entropy variables are multiplied by the (solution dependent) total gas constant 
+sT = KappaM1 * sum(Cvs*cons(IRHO1:PP_NumComponents)) / p  ! T = p/(rho*R) = p/(rho*(Kappa-1)*Cv)
+entropy(IRHO1:PP_NumComponents) = -1.0 * (Cvs * log(1./sT) - Rs * log(cons(IRHO1:PP_NumComponents))) + Rs + Cvs - (v2s2 * sT)
+entropy(IRHOU) = u * sT
+entropy(IRHOV) = v * sT
+entropy(IRHOW) = w * sT
+entropy(IRHOE) = -1.0 * sT
+entropy(IB1:PP_nVar) =  cons(IB1:PP_nVar)*sT
+#endif /*PP_NumComponents>1*/
 
 END FUNCTION ConsToEntropy
 
@@ -412,31 +461,44 @@ REAL,DIMENSION(PP_nVar)  :: cons    !< vector of conservative variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 REAL                                :: p_srho,u,v,w,v2s2,rho_sp,s
+#if PP_NumComponents>1
+REAL                                :: T, internal_energy, rho
 !==================================================================================================================================
-! entropy(IRHOE)   = -rho_sp    !-2*beta
+T  = - 1. / entropy(IRHOE)
+u = entropy(IRHOU)*T
+v = entropy(IRHOV)*T
+w = entropy(IRHOW)*T
+v2s2   = 0.5*(u*u+v*v+w*w)
+
+cons(IRHO1:PP_NumComponents) = exp ( entropy(IRHO1:PP_NumComponents) - Rs - Cvs + (v2s2 / T) + Cvs * log(T) ) / Rs
+rho = sum(cons(IRHO1:PP_NumComponents))
+cons(IRHOU) = u * rho
+cons(IRHOV) = v * rho
+cons(IRHOW) = w * rho
+cons(IB1:PP_nVar) =entropy(IB1:PP_nVar)*T
+
+internal_energy  = sum(Cvs*cons(IRHO1:PP_NumComponents)) * T  ! p/(Kappa-1) = rho*R*T/(Kappa-1) = rho*Cv*T
+
+cons(IRHOE) = internal_energy + sum(cons(IRHO1:PP_NumComponents))*v2s2 + s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))
+#else
 rho_sp  = - entropy(IRHOE)
 p_srho = 1./rho_sp
-! entropy(IRHOU)   =  rho_sp*u  ! 2*beta*v
-! entropy(IRHOV)   =  rho_sp*v  ! 2*beta*v
-! entropy(IRHOW)   =  rho_sp*w  ! 2*beta*v
 u = entropy(IRHOU)*p_srho
 v = entropy(IRHOV)*p_srho
 w = entropy(IRHOW)*p_srho
 
 v2s2   = 0.5*(u*u+v*v+w*w)
+
 ! entropy(IRHO1)   =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
 s =kappa -((entropy(IRHO1) + rho_sp*v2s2) * kappaM1) 
 ! s      = - LOG(rho_sp*(cons(IRHO1)**kappaM1))
 cons(IRHO1) = (exp(-s)*p_srho)**(skappaM1)
-#if PP_NumComponents>1
-cons(IRHO2) = 0.0 ! TODO: Assign proper coservative variables
-#endif /*PP_NumComponents>1*/
 cons(IRHOU) = u * cons(IRHO1)
 cons(IRHOV) = v * cons(IRHO1)
 cons(IRHOW) = w * cons(IRHO1)
 cons(IB1:PP_nVar) =entropy(IB1:PP_nVar)*p_srho
 cons(IRHOE) = cons(IRHO1)*(sKappaM1*p_srho + v2s2) +s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))
-
+#endif /*PP_NumComponents>1*/
 END FUNCTION EntropyToCons
 
 !==================================================================================================================================
@@ -477,28 +539,47 @@ REAL,INTENT(OUT)    :: Entropy(PP_nVar,dim2) !< vector of entropy variables
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
 INTEGER             :: i
-REAL                :: srho,u,v,w,v2s2,rho_sp,s
+REAL                :: srho,u,v,w,v2s2,rho_sp,s, p
+#if PP_NumComponents>1
+REAL                :: Kappa, KappaM1, sKappaM1, sT
 !==================================================================================================================================
 DO i=1,dim2
+  Kappa    = totalKappa(cons(:,i))
+  KappaM1  = Kappa - 1.0
+  sKappaM1 = 1.0 / KappaM1
+  srho=1./sum(cons(IRHO1:PP_NumComponents,i))
+#else
+DO i=1,dim2
   srho   = 1./cons(IRHO1,i)
+#endif /*PP_NumComponents>1*/
   u      = cons(2,i)*srho
   v      = cons(IRHOV,i)*srho
   w      = cons(IRHOW,i)*srho
   v2s2   = 0.5*(u*u+v*v+w*w)
-  rho_sp = cons(IRHO1,i)/(KappaM1*(cons(IP,i)-cons(IRHO1,i)*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i)))) ! pressure includes psi^2 if PP_nVar=9
+  p = KappaM1*(cons(IRHOE,i)-sum(cons(IRHO1:PP_NumComponents,i))*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i)))
+  
+#if PP_NumComponents==1
+  rho_sp = cons(IRHO1,i)/p ! pressure includes psi^2 if PP_nVar=9
   !s      = LOG(p) - kappa*LOG(cons(IRHO1))
   s      = - LOG(rho_sp*(cons(IRHO1,i)**kappaM1))
-  
+
   ! Convert to entropy variables
   entropy(IRHO1,i)         =  (kappa-s)*skappaM1 - rho_sp*v2s2  !(kappa-s)/(kappa-1)-beta*|v|^2
-#if PP_NumComponents>1
-  entropy(IRHO2,i) = 0.0 ! TODO: Assign proper entropy variables
-#endif /*PP_NumComponents>1*/
   entropy(IRHOU,i)         =  rho_sp*u                  ! 2*beta*u
   entropy(IRHOV,i)         =  rho_sp*v                  ! 2*beta*v
   entropy(IRHOW,i)         =  rho_sp*w                  ! 2*beta*w
   entropy(IRHOE,i)         = -rho_sp                    !-2*beta
   entropy(IB1:PP_nVar,i) =  rho_sp*cons(IB1:PP_nVar,i)    ! 2*beta*B +2*beta*psi
+#else
+  ! For multicomponent, the entropy variables are multiplied by the (solution dependent) total gas constant 
+  sT = KappaM1 * sum(Cvs*cons(IRHO1:PP_NumComponents,i)) / p  ! T = p/(rho*R) = p/(rho*(Kappa-1)*Cv)
+  entropy(IRHO1:PP_NumComponents,i) = -1.0 * (Cvs * log(1./sT) - Rs * log(cons(IRHO1:PP_NumComponents,i))) + Rs + Cvs - (v2s2 * sT)
+  entropy(IRHOU,i) = u * sT
+  entropy(IRHOV,i) = v * sT
+  entropy(IRHOW,i) = w * sT
+  entropy(IRHOE,i) = -1.0 * sT
+  entropy(IB1:PP_nVar,i) =  cons(IB1:PP_nVar,i)*sT
+#endif /*PP_NumComponents>1*/
 END DO!i
 END SUBROUTINE ConsToEntropyVec
 
@@ -686,8 +767,14 @@ REAL,INTENT(OUT)    :: ca,cs,cf      !< alfven, sound and fast magnetosonic wave
 ! LOCAL VARIABLES 
 REAL                :: sRho,c2,va2,ca2
 REAL                :: astar
+#if PP_NumComponents>1
+REAL                :: Kappa
 !==================================================================================================================================
-sRho=1./prim(IRHO1)
+Kappa = totalKappa(Prim)
+srho=1./sum(Prim(IRHO1:PP_NumComponents))
+#else
+sRho=1./Prim(IRHO1)
+#endif /*PP_NumComponents>1*/
 c2=kappa*prim(IP)*sRho
 ca2=Prim(IB1)*Prim(IB1)*sRho*smu_0 !Alfen wave speed
 va2=SUM(prim(IB2:IB3)*prim(IB2:IB3))*sRho*smu_0+ca2
@@ -715,8 +802,14 @@ REAL,INTENT(OUT)    :: cf            !< fast magnetosonic wave speed
 ! LOCAL VARIABLES 
 REAL                :: sRho,c2,va2,ca2
 REAL                :: astar
+#if PP_NumComponents>1
+REAL                :: Kappa
 !==================================================================================================================================
-sRho=1./prim(IRHO1)
+Kappa = totalKappa(Prim)
+srho=1./sum(Prim(IRHO1:PP_NumComponents))
+#else
+sRho=1./Prim(IRHO1)
+#endif /*PP_NumComponents>1*/
 c2=kappa*prim(IP)*sRho
 ca2=Prim(IB1)*Prim(IB1)*sRho*smu_0 !Alfen wave speed
 va2=SUM(prim(IB2:IB3)*prim(IB2:IB3))*sRho*smu_0+ca2
@@ -740,14 +833,15 @@ REAL,INTENT(IN)     :: prim(PP_nVar) !< vector of primitive variables, rotated!!
 REAL,INTENT(OUT)    :: cf            !< fast magnetosonic wave speed
 !----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES 
+#if PP_NumComponents>1
+REAL                :: Kappa
 !==================================================================================================================================
-! sRho=1./prim(IRHO1)
-! c2=kappa*prim(IP)*sRho
-! va2=SUM(prim(IB1:IB3)*prim(IB1:IB3))*sRho*smu_0
-! astar=SQRT((c2+va2)*(c2+va2)-4.*c2*ca2)
-
+Kappa = totalKappa(Prim)
 ! cf max in direction of ca2=0 => astar=c2+va2 => cf2=c2+va2
+cf=SQRT((kappa*prim(IP)+SUM(prim(IB1:IB3)*prim(IB1:IB3))*smu_0)/sum(Prim(IRHO1:PP_NumComponents)))
+#else
 cf=SQRT((kappa*prim(IP)+SUM(prim(IB1:IB3)*prim(IB1:IB3))*smu_0)/prim(IRHO1))
+#endif /*PP_NumComponents>1*/
 END SUBROUTINE FastestWave3D
 
 
@@ -756,6 +850,7 @@ END SUBROUTINE FastestWave3D
 !> use Roe mean wavespeeds from  Roe meanvalues 
 !>   (paper by Cargo & Gallice: "Roe Matrices for Ideal MHD and ...",1997)
 !==================================================================================================================================
+#if PP_NumComponents==1
 pure SUBROUTINE FastestWave1D_Roe(ConsL,ConsR,PrimL,PrimR,RoeVelx,cf_Roe)
 ! MODULES
 IMPLICIT NONE 
@@ -803,7 +898,7 @@ astar_Roe = SQRT((c2_Roe+va2_Roe)**2-4.*c2_Roe*ca2_Roe)
 cf_Roe    = SQRT(0.5*(c2_Roe+va2_Roe+astar_Roe))
 RoeVelx   = RoeVel(1)
 END SUBROUTINE FastestWave1D_Roe
-
+#endif /*PP_NumComponents==1*/
 !===================================================================================================================================
 !> Subroutine to initialize a procedure pointer to a specific indicator function
 !===================================================================================================================================
@@ -837,7 +932,7 @@ pure subroutine Get_Density(U,rho)
   real,intent(out) :: rho
   !-------------------------------------------------
   
-  rho = U(IRHO1)
+  rho = sum(U(IRHO1:PP_NumComponents))
 end subroutine Get_Density
 !===================================================================================================================================
 !> Returns the pressure
@@ -847,9 +942,13 @@ pure subroutine Get_Pressure(U,p)
   !-arguments---------------------------------------
   real,intent(in)  :: U(PP_nVar)
   real,intent(out) :: p
+#if PP_NumComponents>1
+  REAL             :: KappaM1
   !-------------------------------------------------
+  KappaM1 = totalKappa(U) - 1.0
+#endif /*PP_NumComponents>1*/
   
-  p = KappaM1*(U(IRHOE)-0.5*(SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/U(IRHO1))-s2mu_0*SUM(U(IB1:PP_nVar)*U(IB1:PP_nVar)))
+  p = KappaM1*(U(IRHOE)-0.5*(SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/sum(U(IRHO1:PP_NumComponents)))-s2mu_0*SUM(U(IB1:PP_nVar)*U(IB1:PP_nVar)))
   
 end subroutine Get_Pressure
 !============================================================================================================================
@@ -865,7 +964,7 @@ pure subroutine Get_DensityTimesPressure(U,rhop)
   !-------------------------------------------------
   
   call Get_Pressure(U,p)
-  rhop = U(IRHO1) * p
+  rhop = sum(U(IRHO1:PP_NumComponents)) * p
 end subroutine Get_DensityTimesPressure
 !============================================================================================================================
 !> Get kinetic energy
@@ -877,9 +976,8 @@ end subroutine Get_DensityTimesPressure
     real, intent(out) :: kinen
     !-------------------------------------------------
     
-    kinen = 0.5*SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/U(IRHO1) + s2mu_0*SUM(U(IB1:IB3)*U(IB1:IB3))
+    kinen = 0.5*SUM(U(IRHOU:IRHOW)*U(IRHOU:IRHOW))/sum(U(IRHO1:PP_NumComponents)) + s2mu_0*SUM(U(IB1:IB3)*U(IB1:IB3))
   end subroutine Get_KinPlusMagEnergy
-
 !============================================================================================================================
 !> Get dp/du
 !============================================================================================================================
@@ -890,11 +988,15 @@ end subroutine Get_DensityTimesPressure
     real, intent(out) :: dpdU(PP_nVar)
     !-local-variables---------------------------------
     real :: vel(3)
+#if PP_NumComponents>1
+    REAL             :: KappaM1
     !-------------------------------------------------
+    KappaM1 = totalKappa(U) - 1.0
+#endif /*PP_NumComponents>1*/
     
-    vel = U(IRHOU:IRHOW)/U(IRHO1)
+    vel = U(IRHOU:IRHOW)/sum(U(IRHO1:PP_NumComponents))
     
-    dpdu(IRHO1)         = 0.5*sum(vel**2)
+    dpdu(IRHO1:PP_NumComponents) = 0.5*sum(vel**2)
     dpdu(IRHOU:IRHOW)   = -vel
     dpdu(IRHOE)         = 1.0
     dpdu(IB1:PP_nVar)   = -smu_0*U(IB1:PP_nVar)
@@ -902,5 +1004,44 @@ end subroutine Get_DensityTimesPressure
     dpdu = dpdu*KappaM1
     
   end subroutine Get_dpdU
+  
+!==================================================================================================================================
+!> Transformation from conservative variables U to S = -rho*s/(kappa-1), s=ln(p)-kappa*ln(rho)
+!==================================================================================================================================
+  PURE FUNCTION Get_MathEntropy(cons) RESULT(Entropy)
+    ! MODULES
+    ! IMPLICIT VARIABLE HANDLING
+    IMPLICIT NONE
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! INPUT VARIABLES
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! OUTPUT VARIABLES
+    REAL                                :: entropy !< vector of entropy variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! LOCAL VARIABLES
+
+    REAL                                :: srho,u,v,w,v2s2,rho_sp,s
+#if PP_NumComponents>1
+    REAL                                :: T
+#endif /*PP_NumComponents>1*/
+    !==================================================================================================================================
+    srho   = 1./sum(cons(IRHO1:PP_NumComponents))
+    u      = cons(2)*srho
+    v      = cons(3)*srho
+    w      = cons(4)*srho
+    v2s2   = 0.5*(u*u+v*v+w*w)
+
+#if PP_NumComponents>1
+    T = (cons(IRHOE)-sum(cons(IRHO1:PP_NumComponents))*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))) / (sum(Cvs*cons(IRHO1:PP_NumComponents)))
+    Entropy = -sum(cons(IRHO1:PP_NumComponents) * (Cvs*log(T)-Rs*log(cons(IRHO1:PP_NumComponents))) )
+#else
+    rho_sp = cons(1)/(KappaM1*(cons(5)-cons(1)*v2s2-s2mu_0*SUM(cons(6:PP_nVar)*cons(6:PP_nVar)))) ! pressure includes psi^2 if PP_nVar=9    
+    s      = - LOG(rho_sp*(cons(1)**kappaM1))
+    Entropy = -cons(1)*s*sKappaM1
+#endif /*PP_NumComponents>1*/
+
+    
+  END FUNCTION Get_MathEntropy
   
 END MODULE MOD_Equation_Vars

@@ -76,8 +76,13 @@ CALL prms%CreateRealOption(   "IniAmplitude"   , " For exactfunction: amplitude"
 CALL prms%CreateRealOption(   "IniFrequency"   , " For exactfunction: Frequency","1.0")
 CALL prms%CreateRealOption(   "IniHalfwidth"   , " For exactfunction: Halfwidth","0.1")
 CALL prms%CreateRealOption(   "IniDisturbance" , " For exactfunction: Strength of initial disturbance","0.")
+#if PP_NumComponents==1
 CALL prms%CreateRealOption(   "kappa"          , " Ratio of specific heats","1.6666666666666667")
 CALL prms%CreateRealOption(     'R'            , " Gas constant.","287.058")
+#else
+CALL prms%CreateRealArrayOption(   "kappas"          , " Ratio of specific heats for each component","1.6666666666666667")
+CALL prms%CreateRealArrayOption(     'Rs'            , " Gas constant.","287.058")
+#endif /*PP_NumComponents==1*/
 CALL prms%CreateRealOption(   "mu_0"           , " Magnetic permeability in vacuum","1.0")
 #if PARABOLIC
 CALL prms%CreateRealOption(   "eta"            , " Magnetic resistivity","0.")
@@ -100,18 +105,16 @@ CALL prms%CreateRealArrayOption(   "RefState", "primitive constant reference sta
 CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:\n"&
                                          //"0: Central flux\n"&
                                          //"1: Lax-Friedrichs\n"&
+#if PP_NumComponents==1
                                          //"2: HLLC\n"&
-#if PP_NumComponents==1
                                          //"3: Roe\n"&
-#endif /*PP_NumComponents==1*/
                                          //"4: HLL\n"&
-#if PP_NumComponents==1
                                          //"5: HLLD (only with mu_0=1)\n"&
                                          //"10: LLF entropy stable flux\n"&
 #endif /*PP_NumComponents==1*/
                                          //"11: Derigs et al. entropy conservative flux\n"&
-                                         //"12: FloGor entropy conservative flux\n"&
 #if PP_NumComponents==1
+                                         //"12: FloGor entropy conservative flux\n"&
                                          //"13: FloGor EC+LLF entropy stable flux\n"&
                                          //"14: Derigs EC + 9wave entropy stable flux\n"&
                                          //"15: FloGor EC + 9wave entropy dissipation flux\n"&
@@ -122,9 +125,11 @@ CALL prms%CreateIntOption(     "Riemann",  " Specifies Riemann solver:\n"&
 CALL prms%CreateIntOption(     "VolumeFlux",  " Specifies the two-point flux to be used in the flux of the split-form "//&
                                               "DG volume integral "//&
                                               "0:  Standard DG Flux"//&
-                                              "1:  standard DG Flux with metric dealiasing" //&
-                                              "10: Derigs et al. entropy conservative flux with metric dealiasing" //&
-                                              "12: FloGor entropy conservative flux with metric dealiasing" &
+                                              "1:  standard DG Flux with metric dealiasing" &
+                                            //"10: Derigs et al. entropy conservative flux with metric dealiasing" &
+#if PP_NumComponents==1
+                                            //"12: FloGor entropy conservative flux with metric dealiasing" &
+#endif /*PP_NumComponents==1*/
                             ,"0")
 #ifdef JESSE_MORTAR
 CALL prms%CreateIntOption(     "MortarFlux",  " Specifies the two-point flux to be used in split-form flux on Mortar:"//&
@@ -155,6 +160,7 @@ USE MOD_Equation_Vars
 ! LOCAL VARIABLES
 INTEGER :: i,iSide
 INTEGER :: MaxBCState,locType,locState, nVars
+CHARACTER(len=255)::defaultArray,formatStr
 !==================================================================================================================================
 IF(((.NOT.InterpolationInitIsDone).AND.(.NOT.MeshInitIsDone)).OR.EquationInitIsDone)THEN
    SWRITE(UNIT_StdOut,'(A)') "InitEquation not ready to be called or already called."
@@ -178,6 +184,7 @@ IniDisturbance= GETREAL('IniDisturbance','0.')
 
 
 ! Gas constants
+#if PP_NumComponents==1
 Kappa    =GETREAL('kappa','1.6666666666666667')
 KappaM1  =Kappa-1.
 KappaM2  =Kappa-2.
@@ -185,6 +192,14 @@ sKappaM1 =1./KappaM1
 KappaP1  =Kappa+1.
 sKappaP1 =1./(KappaP1)
 R        =GETREAL('R','287.058')
+#else
+WRITE(formatStr,'(A,I0,A)')'(',PP_NumComponents,'A)'
+write(defaultArray,formatStr) '1.6666666666666667', (',1.6666666666666667',i=2,PP_NumComponents)
+Kappas=GETREALARRAY('kappas',PP_NumComponents,defaultArray)
+write(defaultArray,formatStr) '287.058', (',287.058',i=2,PP_NumComponents)
+Rs    =GETREALARRAY('Rs',PP_NumComponents,defaultArray)
+Cvs   = Rs / (Kappas - 1.0) 
+#endif /*PP_NumComponents==1*/
 !permeability
 mu_0    =GETREAL('mu_0','1.')
 smu_0  = 1./(mu_0)
@@ -342,18 +357,16 @@ CASE(0)
 CASE(1)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Lax-Friedrichs'
   SolveRiemannProblem => RiemannSolverByRusanov
+#if PP_NumComponents==1
 CASE(2)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLC'
   SolveRiemannProblem => RiemannSolverByHLLC
-#if PP_NumComponents==1
 CASE(3)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Roe'
   SolveRiemannProblem => RiemannSolverByRoe
-#endif /*PP_NumComponents==1*/
 CASE(4)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLL'
   SolveRiemannProblem => RiemannSolverByHLL
-#if PP_NumComponents==1
 CASE(5)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: HLLD'
   IF(ABS(mu_0-1.).GT.1.0E-12) &
@@ -372,10 +385,10 @@ CASE(10)
 CASE(11)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: Derigs et al. KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_Derigs
+#if PP_NumComponents==1
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux, no diffusion!'
   SolveRiemannProblem => EntropyAndKinEnergyConservingFlux_FloGor
-#if PP_NumComponents==1
 CASE(13)
   SWRITE(UNIT_stdOut,'(A)') ' Riemann solver: FloGor KEPEC flux +LLF stabilization.'
   VolumeFluxAverage   => EntropyAndKinEnergyConservingFlux_FloGor
@@ -437,10 +450,12 @@ CASE(10)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: Derigs et al. KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_Derigs
   useEntropyProlongToFace=.TRUE.
+#if PP_NumComponents==1
 CASE(12)
   SWRITE(UNIT_stdOut,'(A)') 'Flux Average Volume: FloGor KEPEC with Metrics Dealiasing'
   VolumeFluxAverageVec => EntropyAndKinEnergyConservingFluxVec_FloGor
   useEntropyProlongToFace=.TRUE.
+#endif /*PP_NumComponents==1*/
 CASE DEFAULT
   CALL ABORT(__STAMP__,&
          "volume flux not implemented")
@@ -586,6 +601,9 @@ REAL                            :: r2(1:16),Bphi,dp
 REAL                            :: q0,q1,Lz
 REAL                            :: B_R,r0,B_tor,PsiN,psi_a
 REAL                            :: b0(3),xc(3)
+#if PP_NumComponents>1
+REAL :: Kappa
+#endif /*PP_NumComponents>1*/
 !==================================================================================================================================
 tEval=MERGE(t,tIn,fullBoundaryOrder) ! prevent temporal order degradation, works only for RK3 time integration
 
@@ -606,6 +624,7 @@ CASE(2) ! non-divergence-free magnetic field,diss. Altmann
   Resu(IRHOE)=6.0
   Resu(IB1)=IniAmplitude*EXP(-(SUM(((x(:)-IniCenter(:))/IniHalfwidth)**2)))
   Resu(7:PP_nVar)=0.
+#if PP_NumComponents==1
 CASE(3,301) ! alfven wave , domain [-1,1]^3
   IF(ExactFunction.EQ.301)THEN
     Prim(IP)=RefStatePrim(IniRefState,IP)
@@ -670,7 +689,7 @@ CASE(3001) ! alfven wave , domain [-1,1]^3, rotated
   Resu(IB1) = nx -Resu(IRHOU)*sqr
   Resu(IB2) =    -Resu(IRHOV)*sqr
   Resu(IB3) = ny -Resu(IRHOW)*sqr
-
+#endif /*PP_NumComponents==1*/
 CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from inirefstate
          !IniWavenumber=(k_x,k_yk_z): k_parallel=k_x*e_x+k_y*e_y, k_perp=k_z*e_z
          !IniAmplitude should be small compare to density and pressure (1e-08)
@@ -713,6 +732,7 @@ CASE(31,32,33) ! linear shear alfven wave , linearized MHD,|B|>=1 , p,rho from i
   Resu_t(IB1:IB2)=-Resu_t(IRHOU:IRHOV)*r0*a
 
   END ASSOCIATE !rho_0,p_0
+#if PP_NumComponents==1
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
   a=RefStatePrim(IniRefState,IU)*2.*PP_Pi
@@ -789,6 +809,7 @@ CASE(6) ! case 5 rotated
   Resu_tt(IB1)        = Resu_tt(IRHO1)
   !Resu_tt(IB2)        = 0.
   Resu_tt(IB3)        =-Resu_tt(IRHO1)
+#endif /*PP_NumComponents==1*/
 CASE(7) ! constant density / pressure / velocity, periodic magnetic field
   Omega=PP_Pi*IniFrequency
   Prim=0.
@@ -1259,8 +1280,13 @@ CASE(201) ! blast with spherical inner state and rest outer state. eps~IniAmplit
   CALL PrimToCons(Prim,Resu)
 
 CASE(311) ! Orzsag-Tang vortex
-  prim    = 0.
+  Prim = 0.0
+#if PP_NumComponents>1
+  Kappa = Kappas(1)
+  Prim(IRHO1:PP_NumComponents) = 1./PP_NumComponents
+#else
   Prim(IRHO1) = 1.
+#endif /*PP_NumComponents>1*/
   prim(IU) = -SIN(2.*PP_Pi*x(2))
   prim(IV) =  SIN(2.*PP_Pi*x(1))
   prim(IP) =  1./kappa
@@ -1268,8 +1294,13 @@ CASE(311) ! Orzsag-Tang vortex
   prim(IB2) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
 CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but rescaled so the runtime is shorter)
-  prim    = 0.
-  Prim(IRHO1) =  1.
+  Prim = 0.0
+#if PP_NumComponents>1
+  Kappa = Kappas(1)
+  Prim(IRHO1:PP_NumComponents) = 1./PP_NumComponents
+#else
+  Prim(IRHO1) = 1.
+#endif /*PP_NumComponents>1*/
   prim(IU) = -(1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(2))
   prim(IV) =  (1.+0.2*SIN(2.*PP_Pi*x(3)))*SIN(2.*PP_Pi*x(1))
   prim(IW) =  0.2*SIN(2.*PP_Pi*x(3))
@@ -1278,8 +1309,12 @@ CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but r
   prim(IB2) =  SIN(4.*PP_Pi*x(1))/kappa
   CALL PrimToCons(Prim,Resu)
 CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
-  prim    = 0.
+  Prim = 0.0
+#if PP_NumComponents>1
+  Prim(IRHO1:PP_NumComponents) =  25./(36.*PP_Pi)/PP_NumComponents
+#else
   Prim(IRHO1) =  25./(36.*PP_Pi)
+#endif /*PP_NumComponents>1*/
   prim(IU) = -SIN(2.*PP_Pi*x(2))
   prim(IV) =  SIN(2.*PP_Pi*x(1))
   prim(IP) =  5./(12*PP_Pi)
@@ -1290,7 +1325,11 @@ CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/t
 CASE(333) ! 3D Orszag-Tang vortex from Elizarova and Popov
           ! "Numerical Simulation of Three-Dimensional Quasi-Neutral Gas Flows Based on Smoothed Magnetohydrodynamic Equations"
   prim    = 0.
+#if PP_NumComponents>1
+  Prim(IRHO1:PP_NumComponents) =  25./(36.*PP_Pi)/PP_NumComponents
+#else
   Prim(IRHO1) =  25./(36.*PP_Pi)
+#endif /*PP_NumComponents>1*/
   prim(IU) = -SIN(2.*PP_Pi*x(3))
   prim(IV) =  SIN(2.*PP_Pi*x(1))
   prim(IW) =  SIN(2.*PP_Pi*x(2))
@@ -1506,6 +1545,7 @@ REAL                            :: x,y,z,d1,d2,tau,tau_max,s,radius,h,tol
 LOGICAL                         :: diffCyl
 !==================================================================================================================================
 SELECT CASE (IniExactFunc)
+#if PP_NumComponents==1
 CASE(4) ! navierstokes exact function
   Omega=PP_Pi*IniFrequency
   a=RefStatePrim(IniRefState,IU)*2.*PP_Pi
@@ -1588,7 +1628,7 @@ CASE(6) ! case 5 rotated
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
-
+#endif /*PP_NumComponents==1*/
 
 CASE(102) ! Geophysics plasma flow through cylinder
 
@@ -1777,6 +1817,10 @@ P_L = 0.0
 P_R = 0.0
 P_L(IRHO1)=1.12794
 P_R(IRHO1)=0.94325
+#if PP_NumComponents>1
+P_L(IRHO2:PP_NumComponents) = 1.e-2
+P_R(IRHO2:PP_NumComponents) = 1.e-2
+#endif /*PP_NumComponents>1*/
 P_L(IU:IB3)=(/0.103391,-0.04153,0.097639,74.3605,0.15142,-3.1415,0.5673/)
 P_R(IU:IB3)=(/-0.21058,-0.14351,-0.20958,52.3465,0.32217,-2.0958,-0.243/)
 #ifdef PP_GLM
@@ -1801,8 +1845,12 @@ DO icase=0,nCases
     fluxProc => StandardDGFlux
     fluxName = "StandardDGFlux"
   CASE(1)
+#if PP_NumComponents==1
     fluxProc => RiemannSolverByHLL
     fluxName = "RiemannSolverByHLL"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   CASE(2)
 #if PP_NumComponents==1
     fluxProc => RiemannSolverByRoe
@@ -1811,8 +1859,12 @@ DO icase=0,nCases
     cyclethis = .TRUE.
 #endif /*PP_NumComponents==1*/
   CASE(3)
+#if PP_NumComponents==1
     fluxProc => RiemannSolverByHLLC
     fluxName = "RiemannSolverByHLLC"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   CASE(4)
 #if PP_NumComponents==1
     fluxProc => RiemannSolverByHLLD
@@ -1832,8 +1884,12 @@ DO icase=0,nCases
     cyclethis = .TRUE.
 #endif /*PP_NumComponents==1*/
   CASE(7)
+#if PP_NumComponents==1
     fluxProc => EntropyAndKinEnergyConservingFlux_FloGor
     fluxName = "FloGor EntropyAndKinEnergyConservingFlux"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
 #ifdef PP_GLM
   CASE(8)
 #if PP_NumComponents==1
@@ -1917,6 +1973,7 @@ ELSE
 END IF
 failed_vol=.FALSE.
 DO icase=0,3
+  cyclethis = .FALSE.
   NULLIFY(fluxProc)
   SELECT CASE(icase)
   CASE(0)
@@ -1929,9 +1986,14 @@ DO icase=0,3
     fluxProc => EntropyandKinEnergyConservingFluxVec_Derigs
     fluxName = "Derigs et al. EntropyandKinEnergyConservingFluxVec"
   CASE(3)
+#if PP_NumComponents==1
     fluxProc => EntropyandKinEnergyConservingFluxVec_FloGor
     fluxName = "FloGor EntropyandKinEnergyConservingFluxVec"
+#else
+    cyclethis = .TRUE.
+#endif /*PP_NumComponents==1*/
   END SELECT
+  if (cyclethis) cycle
   !CONSISTENCY
   CALL fluxProc(   UL,UL,ULaux,ULaux,metricL ,metricL ,Fcheck)
   check=1.0e-12

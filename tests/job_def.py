@@ -535,7 +535,7 @@ def job_definition():
    run_opt_entropyCons_multicomponent={'runs/mhd/softBlast/entropyCons_multicomponent':
          {'tags': ['mhd','multicomponent','entropyCons','curved','conforming'] ,
           'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
-                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-11,'err_abs':True} } ,
                       },
          },
       }
