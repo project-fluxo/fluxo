@@ -212,7 +212,9 @@ etasmu_0 = eta*smu_0
 mu        =GETREAL('mu','0.')
 s23      = GETREAL('s23','0.6666666666666667')
 Pr       =GETREAL('Pr','0.72')
+#if PP_NumComponents==1
 KappasPr =Kappa/Pr
+#endif /*PP_NumComponents==1*/
 !heat diffusion coefficients
 #ifdef PP_ANISO_HEAT
   SWRITE(UNIT_StdOut,'(A)') "ANISOTROPIC HEAT COEFFICIENTS ENABLED."
@@ -1311,7 +1313,15 @@ CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but r
 CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
   Prim = 0.0
 #if PP_NumComponents>1
-  Prim(IRHO1:PP_NumComponents) =  25./(36.*PP_Pi)/PP_NumComponents
+  r0 = 0.1
+  Omega = 10.0
+  if (x(2)>0.25) then
+    Prim(IRHO1) =  25./(36.*PP_Pi)*((0.5+(0.5-r0)*tanh(Omega*(x(2)-0.5)))*(0.5-(0.5-r0)*tanh(Omega*(x(2)-1.0))))
+    Prim(IRHO2) =  25./(36.*PP_Pi)*(1.0-(0.5+(0.5-r0)*tanh(Omega*(x(2)-0.5)))*(0.5-(0.5-r0)*tanh(Omega*(x(2)-1.0))))
+  else
+    Prim(IRHO1) =  25./(36.*PP_Pi)*(1.0-r0)*(0.5-(0.5-r0)*tanh(Omega*x(2)))
+    Prim(IRHO2) =  25./(36.*PP_Pi)*(1.0-(1.0-r0)*(0.5-(0.5-r0)*tanh(Omega*x(2))))
+  end if
 #else
   Prim(IRHO1) =  25./(36.*PP_Pi)
 #endif /*PP_NumComponents>1*/

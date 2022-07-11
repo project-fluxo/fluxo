@@ -42,7 +42,9 @@ REAL                :: mu               !< fluid viscosity, NOT mu0 like in Navi
 REAL                :: eta              !< Current resistivity
 REAL                :: etasmu_0         !< =eta/mu0 
 REAL                :: Pr               !< Prandtl number
+#if PP_NumComponents==1
 REAL                :: KappasPr         !< =kappa/Pr
+#endif /*PP_NumComponents==1*/
 REAL                :: s23              !< (=2/3 for Navier stokes) part of stress tensor: mu*((nabla v)+(nabla v)^T-s23*div(v))
 #  ifdef PP_ANISO_HEAT
 REAL                :: kperp            !< perpendicular (to magnetic field) heat diffusion coefficient
@@ -125,7 +127,7 @@ CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNames(PP_nVar)=(/ CHARA
 #endif 
                    /)
 CHARACTER(LEN=255),DIMENSION(PP_nVar),PARAMETER :: StrVarNamesPrim(PP_nVar)=(/ CHARACTER(LEN=255) :: &
-                   'Density',    &
+                   'Density1',    &
 #if PP_NumComponents>1
                    'Density2',   &
 #endif /*PP_NumComponents>1*/

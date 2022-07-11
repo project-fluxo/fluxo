@@ -71,7 +71,10 @@ REAL                         :: buf(3)
 !==================================================================================================================================
 errType=0
 #if PARABOLIC
+#if PP_NumComponents==1
+! For single-component flows, KappasPr is constant in the domain
 muKappasPr_max=mu*MAX(4./3.,KappasPr)
+#endif /*PP_NumComponents==1*/
 diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
@@ -85,6 +88,10 @@ DO iElem=1,nElems
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
+#if PP_NumComponents>1 && PARABOLIC
+        ! For multi-component flows, KappasPr is NOT constant in the domain
+        muKappasPr_max=mu*MAX(4./3.,totalKappa(U(:,i,j,k,iElem))/Pr)
+#endif /*PP_NumComponents>1*/
         ! Convective Eigenvalues
         IF(IEEE_IS_NAN(U(IRHO1,i,j,k,iElem)))THEN
           ERRWRITE(*,'(A,3ES16.7)')'Density NaN, Position= ',Elem_xGP(:,i,j,k,iElem)

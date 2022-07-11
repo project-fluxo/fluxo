@@ -239,6 +239,13 @@ REAL,DIMENSION(IRHOU:PP_nVar) :: f_visc,g_visc,h_visc
 INTEGER             :: i 
 #if PP_NumComponents>1
 REAL                :: KappaM1
+#if PARABOLIC
+REAL                :: sKappaM1
+REAL                :: rhoR     ! Density times total gas constant
+#ifndef PP_ANISO_HEAT
+REAL                :: KappasPr
+#endif /*ndef PP_ANISO_HEAT*/
+#endif /*PARABOLIC*/
 #endif /*PP_NumComponents>1*/
 !==================================================================================================================================
 DO i=1,nTotal_vol
@@ -338,9 +345,21 @@ DO i=1,nTotal_vol
              gradv3z => gradPz_in(IW,i), gradB3z => gradPz_in(IB3,i)  )
 
   divv    = gradv1x+gradv2y+gradv3z
+#if PP_NumComponents==1
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)-srho*p*gradPx_in(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)-srho*p*gradPy_in(IRHO1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)-srho*p*gradPz_in(IRHO1,i)) 
+#else
+  ! In multicomponent flows, we need extra terms since R is not constant in space
+  sKappaM1 = 1.0 / KappaM1
+  rhoR = sum(U_in(IRHO1:PP_NumComponents,i)*Rs)
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)+srho*sum(gradPx_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPx_in(IRHO1:PP_NumComponents,i)*Rs))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x + rho_x*(R-p/rho)-sum(Ri*rhoi_x))
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)+srho*sum(gradPy_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPy_in(IRHO1:PP_NumComponents,i)*Rs)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)+srho*sum(gradPz_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPz_in(IRHO1:PP_NumComponents,i)*Rs)) 
+#ifndef PP_ANISO_HEAT
+  KappasPr = (KappaM1 + 1.0)/Pr
+#endif /*ndef PP_ANISO_HEAT*/
+#endif /*PP_NumComponents==1*/
 
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
@@ -504,6 +523,16 @@ REAL                :: lambda
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
+#if PP_NumComponents>1
+REAL                :: KappaM1
+#if PARABOLIC
+REAL                :: sKappaM1
+REAL                :: rhoR     ! Density times total gas constant
+#ifndef PP_ANISO_HEAT
+REAL                :: KappasPr
+#endif /*ndef PP_ANISO_HEAT*/
+#endif /*PARABOLIC*/
+#endif /*PP_NumComponents>1*/
 !==================================================================================================================================
 DO i=1,nTotal_face
   ! auxiliary variables
@@ -515,6 +544,14 @@ DO i=1,nTotal_face
   v1   = U_Face(IRHOU,i)*srho
   v2   = U_Face(IRHOV,i)*srho
   v3   = U_Face(IRHOW,i)*srho
+#if PP_NumComponents>1
+  KappaM1 = totalKappa(U_Face(:,i)) ! Placeholder for Kappa
+#ifndef PP_ANISO_HEAT
+  KappasPr = KappaM1/Pr
+#endif /*ndef PP_ANISO_HEAT*/
+  KappaM1 = KappaM1 - 1.0
+  sKappaM1 = 1.0 / KappaM1
+#endif /*PP_NumComponents>1*/
   p    = kappaM1*(U_Face(IRHOE,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_Face(IB1:PP_nVar,i)**2) )
 
   ! Viscous part
@@ -530,9 +567,18 @@ ASSOCIATE( gradv1x => gradPx_Face(IU,i),  gradB1x => gradPx_Face(IB1,i), &
            gradv3z => gradPz_Face(IW,i),  gradB3z => gradPz_Face(IB3,i)  )
 
   divv    = gradv1x+gradv2y+gradv3z
+#if PP_NumComponents==1
   cv_gradTx  = sKappaM1*sRho*(gradPx_face(IP,i)-srho*p*gradPx_face(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_face(IP,i)-srho*p*gradPy_face(IRHO1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_face(IP,i)-srho*p*gradPz_face(IRHO1,i)) 
+#else
+  ! In multicomponent flows, we need extra terms since R is not constant in space
+  rhoR = sum(U_Face(IRHO1:PP_NumComponents,i)*Rs)
+  cv_gradTx  = sKappaM1*sRho*(gradPx_face(IP,i)+srho*sum(gradPx_face(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPx_face(IRHO1:PP_NumComponents,i)*Rs))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x + rho_x*(R-p/rho)-sum(Ri*rhoi_x))
+  cv_gradTy  = sKappaM1*sRho*(gradPy_face(IP,i)+srho*sum(gradPy_face(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPy_face(IRHO1:PP_NumComponents,i)*Rs)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_face(IP,i)+srho*sum(gradPz_face(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPz_face(IRHO1:PP_NumComponents,i)*Rs)) 
+#endif /*PP_NumComponents==1*/
+
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   lambda=mu*KappasPr
@@ -631,6 +677,16 @@ REAL                :: lambda
 REAL                :: cv_gradTx,cv_gradTy,cv_gradTz
 REAL                :: Qx,Qy,Qz
 INTEGER             :: i 
+#if PP_NumComponents>1
+REAL                :: KappaM1
+#if PARABOLIC
+REAL                :: sKappaM1
+REAL                :: rhoR     ! Density times total gas constant
+#ifndef PP_ANISO_HEAT
+REAL                :: KappasPr
+#endif /*ndef PP_ANISO_HEAT*/
+#endif /*PARABOLIC*/
+#endif /*PP_NumComponents>1*/
 !==================================================================================================================================
 DO i=1,nTotal_vol
   ! auxiliary variables
@@ -643,7 +699,15 @@ ASSOCIATE( rho   =>sum(U_in(IRHO1:PP_NumComponents,i)), &
   v1   = U_in(IRHOU,i)*srho 
   v2   = U_in(IRHOV,i)*srho 
   v3   = U_in(IRHOW,i)*srho 
-
+  
+#if PP_NumComponents>1
+  KappaM1 = totalKappa(U_in(:,i)) ! Placeholder for Kappa
+#ifndef PP_ANISO_HEAT
+  KappasPr = KappaM1/Pr
+#endif /*ndef PP_ANISO_HEAT*/
+  KappaM1 = KappaM1 - 1.0
+  sKappaM1 = 1.0 / KappaM1
+#endif /*PP_NumComponents>1*/
   p    = kappaM1*(U_in(IRHOE,i) - 0.5*(rho*(v1*v1+v2*v2+v3*v3)) - s2mu_0*SUM(U_in(IB1:PP_nVar,i)**2) )
   ! Viscous part
 ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), & 
@@ -657,9 +721,17 @@ ASSOCIATE( gradv1x => gradPx_in(IU,i), gradB1x => gradPx_in(IB1,i), &
            gradv3z => gradPz_in(IW,i), gradB3z => gradPz_in(IB3,i))
 
   divv    = gradv1x+gradv2y+gradv3z
+#if PP_NumComponents==1
   cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)-srho*p*gradPx_in(IRHO1,i))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x - p/rho*rho_x)
   cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)-srho*p*gradPy_in(IRHO1,i)) 
   cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)-srho*p*gradPz_in(IRHO1,i)) 
+#else
+  ! In multicomponent flows, we need extra terms since R is not constant in space
+  rhoR = sum(U_in(IRHO1:PP_NumComponents,i)*Rs)
+  cv_gradTx  = sKappaM1*sRho*(gradPx_in(IP,i)+srho*sum(gradPx_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPx_in(IRHO1:PP_NumComponents,i)*Rs))  ! cv*T_x = 1/(kappa-1) *1/rho *(p_x + rho_x*(R-p/rho)-sum(Ri*rhoi_x))
+  cv_gradTy  = sKappaM1*sRho*(gradPy_in(IP,i)+srho*sum(gradPy_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPy_in(IRHO1:PP_NumComponents,i)*Rs)) 
+  cv_gradTz  = sKappaM1*sRho*(gradPz_in(IP,i)+srho*sum(gradPz_in(IRHO1:PP_NumComponents,i))*(rhoR-p)-sum(gradPz_in(IRHO1:PP_NumComponents,i)*Rs)) 
+#endif /*PP_NumComponents==1*/
 #ifndef PP_ANISO_HEAT
   !isotropic heat flux
   
