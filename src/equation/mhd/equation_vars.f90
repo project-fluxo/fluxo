@@ -591,11 +591,11 @@ DO i=1,dim2
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
   sRho      = 1./cons(IRHO1,i)
-      u     = cons(2,i)*sRho
+      u     = cons(IRHOU,i)*sRho
       v     = cons(IRHOV,i)*sRho
       w     = cons(IRHOW,i)*sRho
   grad_in1  = gradP(IRHO1,i)
-  gradu     = sRho*(gradP(2,i)-gradP(IRHO1,i)*u)
+  gradu     = sRho*(gradP(IRHOU,i)-gradP(IRHO1,i)*u)
   gradv     = sRho*(gradP(IRHOV,i)-gradP(IRHO1,i)*v)
   gradw     = sRho*(gradP(IRHOW,i)-gradP(IRHO1,i)*w)
   grad_in5  = gradP(IRHOE,i)
@@ -608,7 +608,7 @@ DO i=1,dim2
   gradP(IW,i)  = gradw
   !pressure gradient
   gradP(IP,i)  = KappaM1*(grad_in5                                        & !gradE
-                       -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(2,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)) & !-grad_Ekin
+                       -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(IRHOU,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)) & !-grad_Ekin
                        - smu_0*SUM(cons(IB1:PP_nVar,i)*gradP(IB1:PP_nVar,i))   ) !-grad_Emag
   !gradient of B,psi same in primitive
   !gradP(IB1:PP_nVar,i)=grad_P(IB1:PP_nVar,i) 
@@ -622,22 +622,22 @@ DO i=1,dim2
   !gradient of (p/rho),  (p/rho)_x = -grad_in(IRHOE)
 
   sRho   = 1./cons(IRHO1,i)
-  u      = cons(2,i)*sRho
+  u      = cons(IRHOU,i)*sRho
   v      = cons(IRHOV,i)*sRho
   w      = cons(IRHOW,i)*sRho
-  Ekin   = 0.5*(cons(2,i)*u+cons(IRHOV,i)*v+cons(IRHOW,i)*w)
+  Ekin   = 0.5*(cons(IRHOU,i)*u+cons(IRHOV,i)*v+cons(IRHOW,i)*w)
   p      = KappaM1*(cons(IRHOE,i)-Ekin-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i))) ! includes psi^2 if PP_nVar=9
   rho_sp = cons(IRHO1,i)/p
   p_srho = p * sRho
   
   grad_in1=gradP(IRHO1,i)
-  gradu  = p_sRho * (gradP(2,i) +u*gradP(IRHOE,i))
+  gradu  = p_sRho * (gradP(IRHOU,i) +u*gradP(IRHOE,i))
   gradv  = p_sRho * (gradP(IRHOV,i) +v*gradP(IRHOE,i))
   gradw  = p_sRho * (gradP(IRHOW,i) +w*gradP(IRHOE,i))
   grad_in5=gradP(IRHOE,i)
   
   !density gradient, rho_x = rho*w1_x + (rho/p)_x * (-p/(gamma-1) + 1/2*rho*|v|^2 )  + (rho/p)*(rho*v) . v_x
-  gradP(IRHO1,i)  = cons(IRHO1,i)*grad_in1 - grad_in5*(Ekin -p*sKappaM1) + rho_sp*(cons(2,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)
+  gradP(IRHO1,i)  = cons(IRHO1,i)*grad_in1 - grad_in5*(Ekin -p*sKappaM1) + rho_sp*(cons(IRHOU,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)
   !velocity gradient
   gradP(IU,i)  = gradu
   gradP(IV,i)  = gradv
