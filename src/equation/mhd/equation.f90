@@ -751,8 +751,13 @@ CASE(4) ! navierstokes exact function
   Resu_tt(IRHO1:IRHOW)=-a*a*IniAmplitude*sin(Omega*SUM(x) - a*tEval)
   Resu_tt(IRHOE)=2.*(Resu_t(IRHO1)*Resu_t(IRHO1) + Resu(IRHO1)*Resu_tt(IRHO1))
   Resu_tt(IB1:PP_nVar)=0.
+#endif /*PP_NumComponents==1*/
 CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
+#if PP_NumComponents==1
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
+#else
+  IF(.NOT.(all(kappas.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
+#endif /*PP_NumComponents==1*/
     CALL abort(__STAMP__,&
                'Exactfuntion 5 works only with kappa=2 and mu_0=1 !')
   END IF
@@ -764,6 +769,7 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   Resu(IB1)           = Resu(IRHO1)
   Resu(IB2)           =-Resu(IRHO1)
   Resu(IB3:PP_nVar)   = 0.
+
   ! g'(t)
   Resu_t(IRHO1:IRHOV)       = -IniAmplitude*omega*COS(Omega*(SUM(x) - tEval))
   Resu_t(IRHOW)         = 0.
@@ -778,6 +784,12 @@ CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
   Resu_tt(IB1)        = Resu_tt(IRHO1)
   Resu_tt(IB2)        =-Resu_tt(IRHO1)
   Resu_tt(IB3:PP_nVar)= 0.
+#if PP_NumComponents>1
+  Resu(IRHO1:PP_NumComponents) = Resu(IRHO1:PP_NumComponents)/PP_NumComponents
+  Resu_t(IRHO1:PP_NumComponents) = Resu_t(IRHO1:PP_NumComponents)/PP_NumComponents
+  Resu_tt(IRHO1:PP_NumComponents) = Resu_tt(IRHO1:PP_NumComponents)/PP_NumComponents
+#endif /*PP_NumComponents>1*/
+#if PP_NumComponents==1
 CASE(6) ! case 5 rotated
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
@@ -1584,6 +1596,7 @@ CASE(4) ! navierstokes exact function
     END DO; END DO; END DO ! i,j,k
     !Ut(:,:,:,:,iElem) = Ut(:,:,:,:,iElem)+resu*Amplitude !Original
   END DO ! iElem
+#endif /*PP_NumComponents==1*/
 CASE(5) ! mhd exact function, KAPPA==2!!!
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC
@@ -1596,7 +1609,7 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
       rho    = rho + 2.
       Ut_src = 0.
 !
-      Ut_src(IRHO1)  =  rho_x
+      Ut_src(IRHO1:PP_NumComponents) = rho_x/PP_NumComponents
       Ut_src(IRHOU:IRHOV)  =  rho_x +  4.*rho*rho_x
       Ut_src(IRHOW)  =  4.*rho*rho_x
       Ut_src(IRHOE)  =  rho_x + 12.*rho*rho_x
@@ -1604,13 +1617,14 @@ CASE(5) ! mhd exact function, KAPPA==2!!!
       Ut_src(IB2)  = -rho_x
 #if PARABOLIC
       rho_xx       = -Omega*Omega*(rho - 2.)
-      Ut_src(IRHOE)  =  Ut_src(5) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
+      Ut_src(IRHOE)  =  Ut_src(IRHOE) - tmp(1)*rho_xx - 6.*eta*(rho_x*rho_x+rho*rho_xx)
       Ut_src(IB1)  =  Ut_src(IB1) - 3.*eta*rho_xx
       Ut_src(IB2)  =  Ut_src(IB2) + 3.*eta*rho_xx
 #endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
+#if PP_NumComponents==1
 CASE(6) ! case 5 rotated
   Omega=PP_Pi*IniFrequency
 #if PARABOLIC

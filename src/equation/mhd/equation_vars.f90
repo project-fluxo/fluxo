@@ -607,28 +607,47 @@ REAL  :: sRho,u,v,w,gradu,gradv,gradw
 #elif (PP_Lifting_Var==3) 
 REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho
 #endif /*PP_Lifting_Var*/
+#if (PP_NumComponents>1) && ((PP_Lifting_Var==1) || (PP_Lifting_Var==3))
+REAL                :: Kappa, KappaM1, sCv
+REAL                :: internal_energy
 !==================================================================================================================================
+#endif /*(PP_NumComponents>1) && ((PP_Lifting_Var==1) || (PP_Lifting_Var==3))*/
 
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
-  sRho      = 1./cons(IRHO1)
+  sRho      = 1./sum(cons(IRHO1:PP_NumComponents))
       u     = cons(IRHOU)*sRho
       v     = cons(IRHOV)*sRho
       w     = cons(IRHOW)*sRho
-  gradu     = sRho*(grad_in(IRHOU)-grad_in(IRHO1)*u)
-  gradv     = sRho*(grad_in(IRHOV)-grad_in(IRHO1)*v)
-  gradw     = sRho*(grad_in(IRHOW)-grad_in(IRHO1)*w)
+  gradu     = sRho*(grad_in(IRHOU)-sum(grad_in(IRHO1:PP_NumComponents))*u)
+  gradv     = sRho*(grad_in(IRHOV)-sum(grad_in(IRHO1:PP_NumComponents))*v)
+  gradw     = sRho*(grad_in(IRHOW)-sum(grad_in(IRHO1:PP_NumComponents))*w)
   
   !density gradient
-  gradP(IRHO1)  = grad_in(IRHO1)
+  gradP(IRHO1:PP_NumComponents)  = grad_in(IRHO1:PP_NumComponents)
   !velocity gradient
   gradP(IU)  = gradu
   gradP(IV)  = gradv
   gradP(IW)  = gradw
+  
+#if PP_NumComponents==1
   !pressure gradient
   gradP(IP)  = KappaM1*(grad_in(IRHOE)                                        & !gradE
                        -(0.5*grad_in(IRHO1)*(u*u+v*v+w*w) + (cons(IRHOU)*gradu+cons(IRHOV)*gradv+cons(IRHOW)*gradw)) & !-grad_Ekin
                        - smu_0*SUM(cons(IB1:PP_nVar)*grad_in(IB1:PP_nVar))   ) !-grad_Emag
+#else
+  !For multi-component flows, we need KappaM1's dependency on space
+  sCv = 1.0 / sum(cons(IRHO1:PP_NumComponents)*Cvs)
+  Kappa = sum(cons(IRHO1:PP_NumComponents)*Kappas*Cvs) * sCv
+  KappaM1 = Kappa - 1.0
+  
+  internal_energy = cons(IRHOE)-0.5*(cons(IRHOU)*u+cons(IRHOV)*v+cons(IRHOW)*w)-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))
+  gradP(IP)  = KappaM1*(grad_in(IRHOE) & !gradE * KappaM1
+                       -(0.5*sum(grad_in(IRHO1:PP_NumComponents))*(u*u+v*v+w*w) + (cons(IRHOU)*gradu+cons(IRHOV)*gradv+cons(IRHOW)*gradw)) & !-grad_Ekin * KappaM1
+                       - smu_0*SUM(cons(IB1:PP_nVar)*grad_in(IB1:PP_nVar))   ) & !-grad_Emag * KappaM1
+               + internal_energy * sCv * ( sum(grad_in(IRHO1:PP_NumComponents)*Kappas*Cvs) - Kappa * sum(grad_in(IRHO1:PP_NumComponents)*Cvs) ) ! +grad_Kappa * internal_energy
+#endif /*(PP_NumComponents==1)*/
+  
   !gradient of B,psi same in primitive
   gradP(IB1:PP_nVar)=grad_in(IB1:PP_nVar) 
 #elif (PP_Lifting_Var==2) 
@@ -688,18 +707,22 @@ REAL  :: sRho,u,v,w,gradu,gradv,gradw,grad_in1,grad_in5
 #elif (PP_Lifting_Var==3) 
 REAL  :: sRho,u,v,w,gradu,gradv,gradw,Ekin,p,rho_sp,p_srho,grad_in1,grad_in5
 #endif /*PP_Lifting_Var*/
+#if (PP_NumComponents>1) && ((PP_Lifting_Var==1) || (PP_Lifting_Var==3))
+REAL                :: Kappa, KappaM1, sCv
+REAL                :: internal_energy
 !==================================================================================================================================
+#endif /*(PP_NumComponents>1) && ((PP_Lifting_Var==1) || (PP_Lifting_Var==3))*/
 DO i=1,dim2
 #if (PP_Lifting_Var==1) 
   !grad_in is gradient of conservative variable
-  sRho      = 1./cons(IRHO1,i)
+  sRho      = 1./sum(cons(IRHO1:PP_NumComponents,i))
       u     = cons(IRHOU,i)*sRho
       v     = cons(IRHOV,i)*sRho
       w     = cons(IRHOW,i)*sRho
   grad_in1  = gradP(IRHO1,i)
-  gradu     = sRho*(gradP(IRHOU,i)-gradP(IRHO1,i)*u)
-  gradv     = sRho*(gradP(IRHOV,i)-gradP(IRHO1,i)*v)
-  gradw     = sRho*(gradP(IRHOW,i)-gradP(IRHO1,i)*w)
+  gradu     = sRho*(gradP(IRHOU,i)-sum(gradP(IRHO1:PP_NumComponents,i))*u)
+  gradv     = sRho*(gradP(IRHOV,i)-sum(gradP(IRHO1:PP_NumComponents,i))*v)
+  gradw     = sRho*(gradP(IRHOW,i)-sum(gradP(IRHO1:PP_NumComponents,i))*w)
   grad_in5  = gradP(IRHOE,i)
   
   !density gradient
@@ -708,10 +731,23 @@ DO i=1,dim2
   gradP(IU,i)  = gradu
   gradP(IV,i)  = gradv
   gradP(IW,i)  = gradw
+#if PP_NumComponents==1
   !pressure gradient
   gradP(IP,i)  = KappaM1*(grad_in5                                        & !gradE
                        -(0.5*grad_in1*(u*u+v*v+w*w) + (cons(IRHOU,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)) & !-grad_Ekin
                        - smu_0*SUM(cons(IB1:PP_nVar,i)*gradP(IB1:PP_nVar,i))   ) !-grad_Emag
+#else
+  !For multi-component flows, we need KappaM1's dependency on space
+  sCv = 1.0 / sum(cons(IRHO1:PP_NumComponents,i)*Cvs)
+  Kappa = sum(cons(IRHO1:PP_NumComponents,i)*Kappas*Cvs) * sCv
+  KappaM1 = Kappa - 1.0
+  
+  internal_energy = cons(IRHOE,i)-0.5*(cons(IRHOU,i)*u+cons(IRHOV,i)*v+cons(IRHOW,i)*w)-s2mu_0*SUM(cons(IB1:PP_nVar,i)*cons(IB1:PP_nVar,i))
+  gradP(IP,i)  = KappaM1*(grad_in5 & !gradE * KappaM1
+                       -(0.5*sum(gradP(IRHO1:PP_NumComponents,i))*(u*u+v*v+w*w) + (cons(IRHOU,i)*gradu+cons(IRHOV,i)*gradv+cons(IRHOW,i)*gradw)) & !-grad_Ekin * KappaM1
+                       - smu_0*SUM(cons(IB1:PP_nVar,i)*gradP(IB1:PP_nVar,i))   ) & !-grad_Emag * KappaM1
+                + internal_energy * sCv * ( sum(gradP(IRHO1:PP_NumComponents,i)*Kappas*Cvs) - Kappa * sum(gradP(IRHO1:PP_NumComponents,i)*Cvs) ) ! +grad_Kappa * internal_energy
+#endif /*(PP_NumComponents==1)*/
   !gradient of B,psi same in primitive
   !gradP(IB1:PP_nVar,i)=grad_P(IB1:PP_nVar,i) 
 #elif (PP_Lifting_Var==2) 
