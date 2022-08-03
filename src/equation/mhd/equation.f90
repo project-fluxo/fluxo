@@ -824,6 +824,26 @@ CASE(6) ! case 5 rotated
   !Resu_tt(IB2)        = 0.
   Resu_tt(IB3)        =-Resu_tt(IRHO1)
 #endif /*PP_NumComponents==1*/
+#if PP_NumComponents==2
+CASE(51) ! two-component mhd exact function with variable kappa (kappas=2,4, Rs=1,2., mu_0=1)
+  IF(.NOT.((kappas(1).EQ.2.0).AND.(kappas(2).EQ.4.0).AND.(Rs(1).EQ.1.0).AND.(Rs(2).EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
+    CALL abort(__STAMP__,&
+               'Exactfuntion 51 works only with kappas=2,4, Rs=1,2, mu_0=1 !')
+  END IF
+  Omega=PP_Pi*IniFrequency
+  ! g(t)
+  Resu(IRHO1)           = 1. + 0.4*IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(IRHO2)           = 1. + 0.6*IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(IRHOU:IRHOV)     = 2. + IniAmplitude*SIN(Omega*(SUM(x) - tEval))
+  Resu(IRHOW)           = 0.
+  Resu(IRHOE)           = 2*Resu(IRHOU)*Resu(IRHOU)+Resu(IRHOU)
+  Resu(IB1)             = 0.5*Resu(IRHOU)
+  Resu(IB2)             =-0.25*Resu(IRHOU)
+  Resu(IB3)             =-0.25*Resu(IRHOU)
+#ifdef PP_GLM
+  Resu(IPSI)            = 0.
+#endif /*def PP_GLM*/
+#endif /*PP_NumComponents==2*/
 CASE(7) ! constant density / pressure / velocity, periodic magnetic field
   Omega=PP_Pi*IniFrequency
   Prim=0.
@@ -1654,6 +1674,28 @@ CASE(6) ! case 5 rotated
   END DO ! iElem
 #endif /*PP_NumComponents==1*/
 
+#if PP_NumComponents==2
+CASE(51) ! two-component mhd exact function with variable kappa (kappas=2,4, Rs=1,2., mu_0=1)
+  Omega=PP_Pi*IniFrequency
+  DO iElem=1,nElems
+    DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
+      rho    = IniAmplitude*SIN(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+      rho_x  = IniAmplitude*Omega*COS(Omega*(SUM(Elem_xGP(:,i,j,k,iElem))-tIn))
+  
+      Ut_src(IRHO1)           = (2.0*rho_x)/5.0
+      Ut_src(IRHO2)           = (3.0*rho_x)/5.0
+      Ut_src(IRHOU:IRHOV)     = (4392.*rho_x*rho**3+27225.*rho_x*rho**2+56250.*rho_x*rho+38740.*rho_x)/(576.*rho**2+2400.*rho+2500.)
+      Ut_src(IRHOW)           = (4392.*rho_x*rho**3+26649.*rho_x*rho**2+53850.*rho_x*rho+36240.*rho_x)/(576.*rho**2+2400.*rho+2500.)
+      Ut_src(IRHOE)           = (5544.*rho_x*rho**3+34041.*rho_x*rho**2+69650.*rho_x*rho+47490.*rho_x)/(288.*rho**2+1200.*rho+1250.)
+      Ut_src(IB1)             = 0.5*rho_x
+      Ut_src(IB2:IB3)         =-0.25*rho_x
+#ifdef PP_GLM
+      Ut_src(IPSI)            = 0.
+#endif /*def PP_GLM*/
+      Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
+    END DO; END DO; END DO ! i,j,k
+  END DO ! iElem
+#endif /*PP_NumComponents==2*/
 CASE(102) ! Geophysics plasma flow through cylinder
 
   ! Make cylinder boundaries diffusive?
