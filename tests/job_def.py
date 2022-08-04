@@ -1367,10 +1367,23 @@ def job_definition():
          },
       }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Medium strength blast captured by IDP methods. 
+   #           1) We compare the exact residual to make sure the code does what it should
+   #           2) TODO: It is possible to add a bounds check (should be around machine precision)
+   run_opt_blast_IDP={'runs/navst/softBlast/elemWiseIDP':
+         {'tags': ['navierstokes','blast','curved','conforming','IDP','SC','firstorder'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [2.377717614454E+00,   9.128959719212E-01,   1.004108737347E+00,   5.297099227940E-01,   1.525009773347E+00],
+                                                  'err_tol': 1e-8} } , # err_tol is high because of the high sensitivity of IDP methods to small changes in the solution
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
    jobs['build_navierstokes_type2_nopara_SC_posit']={
           'case': caseID,
-          'tags': [ 'navierstokes','split-form','GL','SC','positivity'],
+          'tags': [ 'navierstokes','split-form','GL','SC','IDP'],
           'build_opts':{**baseopts,
                         'FLUXO_DISCTYPE'         :'2',
                         "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
@@ -1378,10 +1391,12 @@ def job_definition():
                         "FLUXO_SHOCKCAPTURE"     :"ON",
                         "FLUXO_SHOCKCAP_NFVSE"   :"ON",
                         "FLUXO_SHOCK_NFVSE_CORR" :"ON",
+                        "FLUXO_FV_TIMESTEP"      :"ON",   # The strict FV time step is needed to be within bounds
                        },
           'run_opts': {**run_opt_fsp_conf, 
                        **run_opt_fsp_nonconf_coll,
                        **run_opt_shock_posit,
+                       **run_opt_blast_IDP,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
