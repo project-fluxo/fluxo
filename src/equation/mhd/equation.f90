@@ -753,6 +753,9 @@ CASE(4) ! navierstokes exact function
   Resu_tt(IB1:PP_nVar)=0.
 #endif /*PP_NumComponents==1*/
 CASE(5) ! mhd exact function (KAPPA=2., mu_0=1)
+        ! ATTENTION: 1) Parabolic terms can only be tested with isotropic heat conduction
+        !            2) With parabolic terms activated, any mu and any eta can be used
+        !            3) ... But this case only tests the resistive (eta.neq.0) and heat conduction (mu.neq.0) terms, as the velocity gradients (and therefore the Reynolds stresses) are zero!
 #if PP_NumComponents==1
   IF(.NOT.((kappa.EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
 #else
@@ -825,7 +828,10 @@ CASE(6) ! case 5 rotated
   Resu_tt(IB3)        =-Resu_tt(IRHO1)
 #endif /*PP_NumComponents==1*/
 #if PP_NumComponents==2
-CASE(51) ! two-component mhd exact function with variable kappa (kappas=2,4, Rs=1,2., mu_0=1)
+CASE(51) ! two-component mhd exact function with variable kappa (kappas=2,4, Rs=1,2, mu_0=1)
+         ! ATTENTION: 1) Parabolic terms can only be tested with isotropic heat conduction
+         !            2) With parabolic terms activated, any mu and any eta can be used
+         !            3) ... But this case only tests the resistive (eta.neq.0) and heat conduction (mu.neq.0) terms, as the velocity gradients (and therefore the Reynolds stresses) are zero!
   IF(.NOT.((kappas(1).EQ.2.0).AND.(kappas(2).EQ.4.0).AND.(Rs(1).EQ.1.0).AND.(Rs(2).EQ.2.0).AND.(smu_0.EQ.1.0)))THEN
     CALL abort(__STAMP__,&
                'Exactfuntion 51 works only with kappas=2,4, Rs=1,2, mu_0=1 !')
@@ -1567,6 +1573,9 @@ USE MOD_Mesh_Vars,     ONLY:Elem_xGP,nElems,Elem_inCyl
 #ifdef PP_GLM
 use MOD_Basis        , ONLY:ALMOSTEQUAL
 #endif /*def PP_GLM*/
+#if PARABOLIC
+USE MOD_Equation_Vars, ONLY:Pr
+#endif /*PARABOLIC*/
 USE MOD_DG_Vars,       ONLY:U
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1692,6 +1701,17 @@ CASE(51) ! two-component mhd exact function with variable kappa (kappas=2,4, Rs=
 #ifdef PP_GLM
       Ut_src(IPSI)            = 0.
 #endif /*def PP_GLM*/
+#if PARABOLIC
+      Ut_src(IRHOE) = Ut_src(IRHOE) +(  15552.*Pr*eta*Omega**2*rho**5+&
+                                      (225504.*mu+128304.*Pr*eta)*Omega**2*rho**4+ &
+                                    ((1396872.*mu+396900.*Pr*eta)*Omega**2-15552.*Pr*eta*rho_x**2)*rho**3+ &
+                                    ((2881440.*mu+545625.*Pr*eta)*Omega**2-97200.*Pr*eta*rho_x**2)*rho**2+ &
+                                     ((-12528.*mu-202500.*Pr*eta)*rho_x**2+(1979250.*mu+281250.*Pr*eta)*Omega**2)*rho &
+                                     +(-31320.*mu-140625.*Pr*eta)*rho_x**2)/(13824.*Pr*rho**3+86400.*Pr*rho**2+180000.*Pr*rho+125000.*Pr)
+      Ut_src(IB1)   = Ut_src(IB1) + (3.*eta*Omega**2*rho)*0.5
+      Ut_src(IB2)   = Ut_src(IB2) - (3.*eta*Omega**2*rho)*0.25
+      Ut_src(IB3)   = Ut_src(IB3) - (3.*eta*Omega**2*rho)*0.25
+#endif /*PARABOLIC*/
       Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem)+Ut_src(:)
     END DO; END DO; END DO ! i,j,k
   END DO ! iElem
