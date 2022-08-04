@@ -121,10 +121,10 @@ SUBROUTINE Riemann(F,U_L,U_R, &
 #if PARABOLIC
                    gradUx_L,gradUx_R,gradUy_L,gradUy_R,gradUz_L,gradUz_R, &
 #endif /*PARABOLIC*/
-                   nv,t1,t2)
+                   nv,t1,t2,SolveRiemannProblem_in)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
+USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem, i_sub_SolveRiemannProblem
 USE MOD_Flux_Average
 !USE MOD_Analyze_Vars  ,ONLY: wGPSurf ! ECMORTAR
 !USE MOD_Equation_Vars  ,ONLY: ConsToPrim, ConsToEntropy, kappa ! ECMORTAR
@@ -149,6 +149,7 @@ REAL,INTENT(IN) :: gradUz_R(PP_nVar,0:PP_N,0:PP_N) !< right state gradient in z,
 REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
 REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
 REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+procedure(i_sub_SolveRiemannProblem), optional :: SolveRiemannProblem_in
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
@@ -166,7 +167,11 @@ REAL,DIMENSION(PP_nVar,0:PP_N,0:PP_N)         :: g_L,g_R,k_L,k_R,j_L,j_R
 !REAL                                          :: entropy_flux_R, entropy_flux_L ! ECMORTAR
 !==================================================================================================================================
 
-call AdvRiemann(F,U_L,U_R,nv,t1,t2)
+if ( present(SolveRiemannProblem_in) ) then
+  call AdvRiemann(F,U_L,U_R,nv,t1,t2,SolveRiemannProblem_in)
+else
+  call AdvRiemann(F,U_L,U_R,nv,t1,t2,SolveRiemannProblem)
+end if
 
 #if PARABOLIC
 !! Don#t forget the diffusion contribution, my young padawan
@@ -187,11 +192,10 @@ END SUBROUTINE Riemann
 !==================================================================================================================================
 !> Advective Riemann solver
 !==================================================================================================================================
-pure SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2)
+pure SUBROUTINE AdvRiemann(F,U_L,U_R,nv,t1,t2,SolveRiemannProblem)
 ! MODULES
 USE MOD_PreProc
-USE MOD_Equation_Vars   ,ONLY:SolveRiemannProblem
-USE MOD_Flux_Average
+USE MOD_Equation_vars,ONLY: i_sub_SolveRiemannProblem
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -201,6 +205,7 @@ REAL,INTENT(IN) :: U_R(     PP_nVar,0:PP_N,0:PP_N) !< right state on face, not r
 REAL,INTENT(IN) :: nv(            3,0:PP_N,0:PP_N) !< normal vector of face
 REAL,INTENT(IN) :: t1(            3,0:PP_N,0:PP_N) !< 1st tangential vector of face
 REAL,INTENT(IN) :: t2(            3,0:PP_N,0:PP_N) !< 2nd tangential vector of face
+procedure(i_sub_SolveRiemannProblem) :: SolveRiemannProblem
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT):: F(       PP_nVar,0:PP_N,0:PP_N) !< numerical flux on face
