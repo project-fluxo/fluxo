@@ -952,5 +952,36 @@ entropy(5)   =  srho**Kappa
 entropy(6:PP_nVar) =  - cons(6:PP_nVar) *smu_0 * srho**Kappa
 
 END FUNCTION ConsToSpecEntropy
-  
+
+!==================================================================================================================================
+!> Checks if the state is valid
+!==================================================================================================================================
+PURE LOGICAL FUNCTION StateIsValid(cons)
+! MODULES
+! IMPLICIT VARIABLE HANDLING
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT VARIABLES
+REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+!----------------------------------------------------------------------------------------------------------------------------------
+! OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+REAL :: p
+!==================================================================================================================================
+
+IF (cons(1) <= 0.0) then
+  StateIsValid = .FALSE.
+  return
+END IF
+
+CALL Get_Pressure(cons,p)
+
+IF (p <= 0.0) then
+  StateIsValid = .FALSE.
+ELSE
+  StateIsValid = .TRUE.
+END IF
+
+END FUNCTION StateIsValid  
 END MODULE MOD_Equation_Vars

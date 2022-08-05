@@ -1911,6 +1911,7 @@ contains
   subroutine NewtonLoop(Usafe,param,alpha,notInIter,Goal,dGoal_dbeta,InitialCheck,FinalCheck)
     use MOD_IDP_Vars      , only: NEWTON_ABSTOL, NEWTON_RELTOL, IDPMaxIter
     use MOD_IDP_Vars      , only: i_sub_Goal, i_sub_InitialCheck, IDPparam_t
+    use MOD_Equation_Vars , only: StateIsValid
     implicit none
     !-arguments----------------------------------------
     real            , intent(in)    :: Usafe(PP_nVar) ! (safe) low-order solution
@@ -1942,16 +1943,22 @@ contains
     ! Compute current directional update
     Ucurr = Usafe + beta * param % dt * param % F_antidiff
     
-    ! Perform initial check
-    as = Goal(param,Ucurr)
-    if (InitialCheck(param,as)) return ! this node does NOT need a correction
+    ! If the state is valid, perform initial check and return if correction is not needed
+    if (StateIsValid(Ucurr)) then
+      as = Goal(param,Ucurr)
+      if (InitialCheck(param,as)) return
+    end if
     
     ! Perform Newton iterations
     TheNewtonLoop: do iter=1, IDPMaxIter
       beta_old = beta
       
-      ! Evaluate d(goal)/d(beta)
-      dSdbeta = dGoal_dbeta(param,Ucurr)
+      ! If the state is valid, evaluate d(goal)/d(beta)
+      if (StateIsValid(Ucurr)) then
+        dSdbeta = dGoal_dbeta(param,Ucurr)
+      else ! Otherwise, perform a bisection step
+        dSdbeta= 0.0
+      end if
       
       if (dSdbeta /= 0.0) then
         ! Update beta with Newton's method
@@ -1964,6 +1971,13 @@ contains
         beta = 0.5 * (beta_L + beta_R)
         ! Get new U
         Ucurr = Usafe + beta * param % dt * param % F_antidiff
+        
+        ! If the state is invalid, finish bisection step without checking tolerance and iterate further
+        if (.not. StateIsValid(Ucurr)) then
+          beta_R = beta
+          cycle
+        end if
+        
         ! Check if new beta fulfills the condition and update bounds
         as = Goal(param,Ucurr)
         if (InitialCheck(param,as)) then
@@ -1976,10 +1990,16 @@ contains
       else
         ! Get new U
         Ucurr = Usafe + beta * param % dt * param % F_antidiff
+        ! If the state is invalid, redefine right bound without checking tolerance and iterate further
+        if (.not. StateIsValid(Ucurr)) then
+          beta_R = beta
+          cycle
+        end if !debug
+        
         ! Evaluate goal function
         as = Goal(param,Ucurr)
       end if
-
+      
       ! Check relative tolerance
       if ( abs(beta_old-beta)<= NEWTON_RELTOL ) exit TheNewtonLoop
       
