@@ -1085,6 +1085,44 @@ def job_definition():
 
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Subcell limiting tests
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Medium strength blast captured by IDP methods. 
+   #           1) We compare the exact residual to make sure the code does what it should
+   #           2) TODO: It is possible to add a bounds check (should be around machine precision)
+   run_opt_blast_IDPsubcell={'runs/mhd/softBlast/blastIDP':
+         {'tags': ['mhd','blast','curved','conforming','IDP','subcell','SC','secondorder'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [ 1.563285785086E-01,   4.564284291688E-02,   6.049448337164E-02,   5.098184630499E-02,   5.404564398174E-02,   5.897950322099E-02,   4.099814600053E-02,   3.060779823686E-02,   2.152748801230E-02],
+                                                  'err_tol': 1e-10} } ,
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_mhd_type2_nopara_SC_IDPsubcell']={
+          'case': caseID,
+          'tags': [ 'mhd','split-form','GL','SC','IDP','subcell'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        'FLUXO_EQN_GLM'          :'ON',
+                        'FLUXO_EQN_NONCONS'      :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'  :'ON',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                        "FLUXO_SHOCK_NFVSE_CORR" :"ON",
+                        "FLUXO_FV_TIMESTEP"      :"OFF",   # The strict FV time step is not needed since we don't use the bar states
+                        "NFVSE_LOCAL_ALPHA"      :"ON",
+                       },
+          'run_opts': {#**run_opt_fsp_conf, 
+                       #**run_opt_fsp_nonconf_coll,
+                       **run_opt_blast_IDPsubcell,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    
    #============================================================================
    #============================================================================
