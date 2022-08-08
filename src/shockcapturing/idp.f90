@@ -47,12 +47,17 @@ contains
 !   --------------------------
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
-    call prms%CreateLogicalOption( "IDPDensityTVD",  " IDP(TVD) correction on density? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
+    call prms%CreateLogicalOption(   "IDPStateTVD",  " IDP(TVD) correction on state quantities? (to be used in combination with )", "F")
     call prms%CreateLogicalOption("IDPPressureTVD",  " IDP(TVD) correction on pressure? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
 !   Additional options
 !   ------------------
+    ! For IDPStateTVD
+    call prms%CreateIntOption(  "IDPStateTVDVarsNum",  " Number of state variables to impose TVD correction", "1")
+    call prms%CreateIntArrayOption("IDPStateTVDVars",  " Variables to impose TVD correction", "1")
+    
+    
     call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator alpha>IDPalpha_min (and the indicator's alpha is neglected)", "F")
     call prms%CreateRealOption(  "IDPalpha_min"   ,  " Parameter for IDPafterIndicator=T (Default: alpha_min)")
     
@@ -80,12 +85,13 @@ contains
 #if USE_AMR
     use MOD_AMR_Vars           , only: UseAMR
 #endif /*USE_AMR*/
-    use MOD_ReadInTools, only: GETINT, GETREAL, GETLOGICAL
+    use MOD_ReadInTools, only: GETINT, GETREAL, GETLOGICAL,GETINTARRAY
     use MOD_StringTools, only: REALTOSTR
     implicit none
     !-local-variables----------------------------------------
     integer :: i,j,k,eID
     logical :: MeshNonConforming
+    character(len=255) :: VarName
     !--------------------------------------------------------
     SWRITE(UNIT_StdOut,'(132("-"))')
     SWRITE(UNIT_stdOut,'(A)') ' IDP Methods: '
@@ -95,10 +101,14 @@ contains
     
     ! IDP limiters
     IDPPositivity  = GETLOGICAL('IDPPositivity' ,'F')
-    IDPDensityTVD  = GETLOGICAL('IDPDensityTVD' ,'F')
+    IDPStateTVD    = GETLOGICAL('IDPStateTVD' ,'F')
     IDPPressureTVD = GETLOGICAL('IDPPressureTVD' ,'F')
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
+    
+    ! For IDPStateTCD
+    IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
+    IDPStateTVDVars = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
     
     IDPafterIndicator = GETLOGICAL('IDPafterIndicator','F')
     IDPalpha_min      = GETREAL   ('IDPalpha_min',REALTOSTR(alpha_min))
@@ -129,8 +139,8 @@ contains
     MeshNonConforming = UseAMR .or. MeshNonConforming
 #endif /*USE_AMR*/
     
-    if ( MeshNonConforming .and. (IDPDensityTVD .or. IDPPressureTVD .or. IDPMathEntropy .or. IDPSpecEntropy) ) then
-      CALL abort(__STAMP__,'IDPDensityTVD/IDPPressureTVD/IDPMathEntropy/IDPSpecEntropy cannot be used with nonconforming meshes!',999,999.)
+    if ( MeshNonConforming .and. (IDPStateTVD .or. IDPPressureTVD .or. IDPMathEntropy .or. IDPSpecEntropy) ) then
+      CALL abort(__STAMP__,'IDPStateTVD/IDPPressureTVD/IDPMathEntropy/IDPSpecEntropy cannot be used with nonconforming meshes!',999,999.)
       RETURN
     end if
     
@@ -140,7 +150,7 @@ contains
       IDPneedsUsafe     = .TRUE.
     end if
     
-    if (IDPDensityTVD) then
+    if (IDPStateTVD) then
 #if barStates
 #if LOCAL_ALPHA
       IDPneedsUsafe = .TRUE.
@@ -254,11 +264,11 @@ contains
 #endif /*LOCAL_ALPHA*/
     
     ! Bounds containers
-    if (IDPDensityTVD .or. IDPPositivity) then
-      allocate ( rho_min     (0:PP_N,0:PP_N,0:PP_N) )
+    if (IDPStateTVD .or. IDPPositivity) then
+      allocate ( state_min   (PP_nVar,0:PP_N,0:PP_N,0:PP_N) )
     end if
-    if (IDPDensityTVD) then
-      allocate ( rho_max     (0:PP_N,0:PP_N,0:PP_N) )
+    if (IDPStateTVD) then
+      allocate ( state_max   (PP_nVar,0:PP_N,0:PP_N,0:PP_N) )
     end if
     if (IDPSpecEntropy) then
       allocate ( s_min       (0:PP_N,0:PP_N,0:PP_N) )
@@ -302,14 +312,21 @@ contains
     ! Now the analyze bounds
     idp_bounds_num = 0
     
-    if (IDPDensityTVD .or. IDPPositivity) then
-      idp_bounds_num = idp_bounds_num + 1
-      idp_bounds_names(idp_bounds_num) = 'rho_min'
+    if (IDPStateTVD) then
+      do i=1, IDPStateTVDVarsNum
+        write(VarName,'(A,I0)') 'u', IDPStateTVDVars(i)
+        idp_bounds_num = idp_bounds_num + 1
+        idp_bounds_names(idp_bounds_num) = trim(VarName)//'_min'
+        idp_bounds_num = idp_bounds_num + 1
+        idp_bounds_names(idp_bounds_num) = trim(VarName)//'_max'
+      end do
     end if
     
-    if (IDPDensityTVD) then
-      idp_bounds_num = idp_bounds_num + 1
-      idp_bounds_names(idp_bounds_num) = 'rho_max'
+    if (IDPPositivity) then
+      if (.not. any(IDPStateTVDVars==1)) then
+        idp_bounds_num = idp_bounds_num + 1
+        idp_bounds_names(idp_bounds_num) = 'u1_min'
+      end if
     end if
     
     if (IDPSpecEntropy) then
@@ -369,7 +386,7 @@ contains
     use MOD_NFVSE_Vars  , only: ftildeR_DG, gtildeR_DG, htildeR_DG
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPDensityTVD, IDPPressureTVD, IDPPositivity, dalpha
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPStateTVD, IDPPressureTVD, IDPPositivity, dalpha
     use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator, IDPalpha_min
     implicit none
     !-arguments----------------------------------------------
@@ -459,7 +476,7 @@ contains
 !     Call all user-defined limiters to obtain dalpha and set bounds
 !     --------------------------------------------------------------
       if (doIDP) then
-        if (IDPDensityTVD)  call IDP_LimitDensityTVD (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
+        if (IDPStateTVD)    call IDP_LimitStateTVD   (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
@@ -541,18 +558,18 @@ contains
   subroutine ResetBounds
     use MOD_Preproc
     use MOD_Globals
-    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max
-    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
     implicit none
     !-arguments------------------------------------------------------------
     !----------------------------------------------------------------------
     
-    if (IDPDensityTVD .or. IDPPositivity) then
-      rho_min =0.0
+    if (IDPStateTVD .or. IDPPositivity) then
+      state_min =-huge(1.0)
     end if
       
-    if (IDPDensityTVD) then
-      rho_max = huge(1.0)
+    if (IDPStateTVD) then
+      state_max = huge(1.0)
     end if
     
     if (IDPSpecEntropy) then
@@ -578,8 +595,9 @@ contains
   subroutine CheckBounds(U,eID)
     use MOD_Preproc
     use MOD_Globals
-    use MOD_IDP_Vars      , only: rho_min, rho_max, s_min, s_max, p_min, p_max, idp_bounds_delta
-    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max, idp_bounds_delta
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: IDPStateTVDVars, IDPStateTVDVarsNum
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
@@ -590,22 +608,29 @@ contains
     real   , intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N)
     integer, intent(in) :: eID
     !-local-variables------------------------------------------------------
-    integer :: i,j,k,counter
+    integer :: i,j,k,counter,var
     real    :: p
     !----------------------------------------------------------------------
     
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       counter=0
-      if (IDPDensityTVD .or. IDPPositivity) then
-        counter=counter+1
-        if (IDPForce2D) rho_min(i,j,k) = rho_min(i,j,0)
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter), rho_min(i,j,k) - U(1,i,j,k))
+      if (IDPStateTVD) then
+        do var=1, IDPStateTVDVarsNum
+          counter=counter+1
+          if (IDPForce2D) state_min(IDPStateTVDVars(var),i,j,k) = state_min(IDPStateTVDVars(var),i,j,0)
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPStateTVDVars(var),i,j,k) - U(IDPStateTVDVars(var),i,j,k))
+          counter=counter+1
+          if (IDPForce2D) state_max(IDPStateTVDVars(var),i,j,k) = state_max(IDPStateTVDVars(var),i,j,0)  
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), U(IDPStateTVDVars(var),i,j,k) - state_max(IDPStateTVDVars(var),i,j,k))
+        end do
       end if
         
-      if (IDPDensityTVD) then
-        counter=counter+1
-        if (IDPForce2D) rho_max(i,j,k) = rho_max(i,j,0)  
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter), U(1,i,j,k) - rho_max(i,j,k))
+      if (IDPPositivity) then
+        if (.not. any(IDPStateTVDVars==1)) then
+          counter=counter+1
+          if (IDPForce2D) state_min(1,i,j,k) = state_min(1,i,j,0)
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(1,i,j,k) - U(1,i,j,k))
+        end if
       end if
       
       if (IDPSpecEntropy) then
@@ -639,7 +664,7 @@ contains
 !===================================================================================================================================
 !> Get the IDP variables in the right position to perform limiting
 !> ATTENTION: 1) U_master and U_slave need to have the previous solution!
-!>            2) If the bar states are *deactivated* and IDPDensityTVD, U_master and U_slave contain the safe solution when this 
+!>            2) If the bar states are *deactivated* and IDPneedsUsafe_ext, U_master and U_slave contain the safe solution when this 
 !>               subroutine returns
 !===================================================================================================================================
   subroutine Get_IDP_Variables(U,dt,tIn)
@@ -657,7 +682,7 @@ contains
     use MOD_ProlongToFace , only: ProlongToFace
     use MOD_IDP_Vars      , only: Usafe_ext
     use MOD_Mesh_Vars     , only: nSides, firstSlaveSide, lastSlaveSide
-    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
 #if MPI
     use MOD_MPI_Vars      , only: MPIRequest_U, DataSizeSide, nNbProcs
     use MOD_NFVSE_Vars    , only: MPIRequest_Umaster
@@ -828,7 +853,7 @@ contains
 !===================================================================================================================================
 !> Density TVD correction
 !===================================================================================================================================
-  subroutine IDP_LimitDensityTVD(U,Ut,dt,sdt,eID)
+  subroutine IDP_LimitStateTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
@@ -851,7 +876,7 @@ contains
     use MOD_IDP_Vars      , only: Usafe
 #endif /*!(LOCAL_ALPHA)*/
 #endif /*barStates*/
-    use MOD_IDP_Vars      , only: FFV_m_FDG, rho_min, rho_max
+    use MOD_IDP_Vars      , only: FFV_m_FDG, state_min, state_max, IDPStateTVDVarsNum, IDPStateTVDVars
     use MOD_DG_Vars       , only: Source
     implicit none
     !-arguments----------------------------------------------
@@ -862,65 +887,67 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha1
-    real    :: rho_safe
-    real    :: a   ! a  = PositCorrFactor * rho_safe - rho
+    real    :: u_safe
+    real    :: a   ! a  = PositCorrFactor * u_safe - rho
     real    :: Qp, Qm, Pp, Pm
-    integer :: i,j,k,l
+    integer :: i,j,k,l,var
     !--------------------------------------------------------
     
-!       Compute correction factors
-!       --------------------------
+!   Compute bounds and correction factors for each variable
+!   -------------------------------------------------------
+    do var=1, IDPStateTVDVarsNum
+      associate (ivar => IDPStateTVDVars(var))
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
           
         ! Get the limit states
         !*********************
-        rho_min(i,j,k) =  huge(1.0)
-        rho_max(i,j,k) = -huge(1.0)
+        state_min(ivar,i,j,k) =  huge(1.0)
+        state_max(ivar,i,j,k) = -huge(1.0)
         
 #if barStates
         ! Previous sol
-        rho_min(i,j,k) = min(rho_min(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
-        rho_max(i,j,k) = max(rho_max(i,j,k), Uprev  (1,i  ,j  ,k  ,eID))
+        state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID))
+        state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID))
         
         ! Source term
-        rho_min(i,j,k) = min(rho_min(i,j,k), Uprev  (1,i  ,j  ,k  ,eID) + 2.0 * dt * Source(1, i, j, k, eID))
-        rho_max(i,j,k) = max(rho_max(i,j,k), Uprev  (1,i  ,j  ,k  ,eID) + 2.0 * dt * Source(1, i, j, k, eID))
+        state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
+        state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
         
         !xi
         do l=i-1, i !min(i-1,0), max(i,PP_N-1)
-          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_xi  (1,l  ,j  ,k  ,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_xi  (1,l  ,j  ,k  ,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
         end do
         !eta
         do l=j-1, j !l=max(j-1,0), min(j,PP_N-1)
-          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_eta (1,i  ,l  ,k  ,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_eta (ivar,i  ,l  ,k  ,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_eta (ivar,i  ,l  ,k  ,eID))
         end do
         if (.not. IDPForce2D) then
         !zeta
         do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
-          rho_min(i,j,k) = min(rho_min(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Ubar_zeta(1,i  ,j  ,l  ,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
         end do
         end if
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,l,j,k,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,l,j,k,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,l,j,k,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,l,j,k,eID))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,i,l,k,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,i,l,k,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,i,l,k,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,i,l,k,eID))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          rho_min(i,j,k) = min(rho_min(i,j,k), Usafe(1,i,j,l,eID))
-          rho_max(i,j,k) = max(rho_max(i,j,k), Usafe(1,i,j,l,eID))
+          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,i,j,l,eID))
+          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,i,j,l,eID))
         end do
 #endif /*barStates*/
         
@@ -933,55 +960,55 @@ contains
         !****************************************************************************************************************
         
         ! Upper/lower bounds for admissible increments
-        Qp = max(0.0,(rho_max(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
-        Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
+        Qp = max(0.0,(state_max(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
+        Qm = min(0.0,(state_min(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
         
         ! Positive contributions
         Pp = 0.0
-        Pp = Pp + max(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
-        Pp = Pp + max(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+        Pp = Pp + max(0.0, sWGP(i) * ftilde_DG(ivar,i-1,j  ,k  ,eID))
+        Pp = Pp + max(0.0, sWGP(j) * gtilde_DG(ivar,i  ,j-1,k  ,eID))
 #if NONCONS
-        Pp = Pp + max(0.0,-sWGP(i) * ftildeR_DG(1,i  ,j  ,k  ,eID))
-        Pp = Pp + max(0.0,-sWGP(j) * gtildeR_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(i) * ftildeR_DG(ivar,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(j) * gtildeR_DG(ivar,i  ,j  ,k  ,eID))
 #else
-        Pp = Pp + max(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
-        Pp = Pp + max(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(i) * ftilde_DG(ivar,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(j) * gtilde_DG(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         if (.not. IDPForce2D) then
-        Pp = Pp + max(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+        Pp = Pp + max(0.0, sWGP(k) * htilde_DG(ivar,i  ,j  ,k-1,eID))
 #if NONCONS
-        Pp = Pp + max(0.0,-sWGP(k) * htildeR_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(k) * htildeR_DG(ivar,i  ,j  ,k  ,eID))
 #else
-        Pp = Pp + max(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+        Pp = Pp + max(0.0,-sWGP(k) * htilde_DG(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         end if
         Pp = Pp*sJ(i,j,k,eID)
         
         ! Negative contributions
         Pm = 0.0
-        Pm = Pm + min(0.0, sWGP(i) * ftilde_DG(1,i-1,j  ,k  ,eID))
-        Pm = Pm + min(0.0, sWGP(j) * gtilde_DG(1,i  ,j-1,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(i) * ftilde_DG(ivar,i-1,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(j) * gtilde_DG(ivar,i  ,j-1,k  ,eID))
 #if NONCONS
-        Pm = Pm + min(0.0,-sWGP(i) * ftildeR_DG(1,i  ,j  ,k  ,eID))
-        Pm = Pm + min(0.0,-sWGP(j) * gtildeR_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(i) * ftildeR_DG(ivar,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtildeR_DG(ivar,i  ,j  ,k  ,eID))
 #else
-        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(1,i  ,j  ,k  ,eID))
-        Pm = Pm + min(0.0,-sWGP(j) * gtilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(i) * ftilde_DG(ivar,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * gtilde_DG(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         if (.not. IDPForce2D) then
-        Pm = Pm + min(0.0, sWGP(k) * htilde_DG(1,i  ,j  ,k-1,eID))
+        Pm = Pm + min(0.0, sWGP(k) * htilde_DG(ivar,i  ,j  ,k-1,eID))
 #if NONCONS
-        Pm = Pm + min(0.0,-sWGP(k) * htildeR_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(k) * htildeR_DG(ivar,i  ,j  ,k  ,eID))
 #else
-        Pm = Pm + min(0.0,-sWGP(k) * htilde_DG(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(k) * htilde_DG(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
         ! Compute blending coefficient avoiding division by zero
         ! (as in paper of [Guermond, Nazarov, Popov, Thomas] (4.8))
-        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*rho_max(i,j,k))
-        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*rho_max(i,j,k))
+        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k)))
+        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k)))
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
         dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
@@ -992,19 +1019,19 @@ contains
 #else
         ! Simple element-wise limiter
         !****************************
-        if ( U(1,i,j,k) < rho_min(i,j,k)) then
-          rho_safe = rho_min(i,j,k)
-        elseif (U(1,i,j,k) > rho_max(i,j,k)) then
-          rho_safe = rho_max(i,j,k)
+        if ( U(ivar,i,j,k) < state_min(ivar,i,j,k)) then
+          u_safe = state_min(ivar,i,j,k)
+        elseif (U(ivar,i,j,k) > state_max(ivar,i,j,k)) then
+          u_safe = state_max(ivar,i,j,k)
         else
           cycle !nothing to do here!
         end if
         
-        if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
+        if ( abs(FFV_m_FDG(ivar,i,j,k,eID)) == 0.0) cycle !nothing to do here!
         
         ! Density correction
-        a = (rho_safe - U(1,i,j,k))
-        dalpha1 = a*sdt / FFV_m_FDG(1,i,j,k,eID)
+        a = (u_safe - U(ivar,i,j,k))
+        dalpha1 = a*sdt / FFV_m_FDG(ivar,i,j,k,eID)
         
         ! Change inconsistent alphas
         if ( (alpha(eID)+dalpha1 > alpha_maxIDP) .or. isnan(dalpha1)) then
@@ -1015,8 +1042,9 @@ contains
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
-      
-  end subroutine IDP_LimitDensityTVD
+      end associate
+    end do !var  
+  end subroutine IDP_LimitStateTVD
 !===================================================================================================================================
 !> Pressure TVD correction
 !===================================================================================================================================
@@ -1563,7 +1591,7 @@ contains
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: Usafe, p_safe, rho_min, p_min, IDPDensityTVD, IDPPressureTVD, IDPForce2D
+    use MOD_IDP_Vars      , only: Usafe, p_safe, state_min, p_min, IDPStateTVD, IDPStateTVDVars, IDPPressureTVD, IDPForce2D
     use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t, IDPMaxIter
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
@@ -1575,7 +1603,7 @@ contains
     integer,intent(in) :: eID
     !-local-variables----------------------------------------
     real    :: dalpha1
-    real    :: a      ! a  = PositCorrFactor * rho_safe - rho
+    real    :: a      ! a  = PositCorrFactor * state_safe - rho
     real    :: Qm, Pm ! Zalesak's limiter's variables
     integer :: i,j,k, iter
     logical :: NotInIter
@@ -1592,8 +1620,13 @@ contains
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
         ! Compute density bound
-        !**********************
-        rho_min(i,j,k) = merge (max(rho_min(i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID)), PositCorrFactor * Usafe(1,i,j,k,eID), IDPDensityTVD) ! This writes the more restrictive bound into rho_min
+        !********************** 
+        ! This writes the more restrictive bound into state_min
+        if (IDPStateTVD .and. any(IDPStateTVDVars==1)) then
+          state_min(1,i,j,k) = max(state_min(1,i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID))
+        else
+          state_min(1,i,j,k) = PositCorrFactor * Usafe(1,i,j,k,eID)
+        end if
 #if LOCAL_ALPHA
         ! Real one-sided Zalesak-type limiter
         ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
@@ -1603,7 +1636,7 @@ contains
         !****************************************************************************************************************
         
         ! Upper/lower bounds for admissible increments
-        Qm = min(0.0,(rho_min(i,j,k)-Usafe(1,i,j,k,eID))*sdt)
+        Qm = min(0.0,(state_min(1,i,j,k)-Usafe(1,i,j,k,eID))*sdt)
         
         ! Negative contributions
         Pm = 0.0
@@ -1637,7 +1670,7 @@ contains
         dalpha = max(dalpha,dalpha1)
         
 #else
-        a = (rho_min(i,j,k) - U(1,i,j,k)) * sdt
+        a = (state_min(1,i,j,k) - U(1,i,j,k)) * sdt
         if (a > 0.) then ! This DOF needs a correction
           if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
           dalpha1 = a / FFV_m_FDG(1,i,j,k,eID)
@@ -2152,8 +2185,8 @@ contains
     SDEALLOCATE ( dalpha_loc )
 #endif /*LOCAL_ALPHA*/
     
-    SDEALLOCATE ( rho_min )
-    SDEALLOCATE ( rho_max )
+    SDEALLOCATE ( state_min )
+    SDEALLOCATE ( state_max )
     SDEALLOCATE ( s_min )
     SDEALLOCATE ( s_max )
     SDEALLOCATE ( p_min )

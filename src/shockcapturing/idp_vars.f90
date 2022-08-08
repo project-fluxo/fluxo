@@ -7,7 +7,7 @@ module MOD_IDP_Vars
   logical           :: IDPMathEntropy = .FALSE.
   logical           :: IDPSpecEntropy = .FALSE.
   logical           :: IDPPositivity  = .FALSE.
-  logical           :: IDPDensityTVD  = .FALSE.
+  logical           :: IDPStateTVD    = .FALSE.
   logical           :: IDPPressureTVD = .FALSE.
   
   ! Additional options
@@ -20,6 +20,9 @@ module MOD_IDP_Vars
   logical :: IDPneedsUsafe     = .FALSE.
   logical :: IDPneedsUsafe_ext = .FALSE.
   logical :: IDPneedsUprev     = .FALSE.
+  
+  integer :: IDPStateTVDVarsNum
+  integer, allocatable :: IDPStateTVDVars(:)
   
   logical :: IDPafterIndicator = .FALSE.
   real    :: IDPalpha_min                 ! Minimum alpha to use IDP methods
@@ -34,10 +37,10 @@ module MOD_IDP_Vars
   real, parameter :: NEWTON_ABSTOL = 1.e-14 ! Absolute tolerance (with respect to the value of the entropy goal, tol = NEWTON_ABSTOL*s_goal)
   real            :: IDPgamma               ! User-defined: Constant for the subcell limiting of convex (nonlinear) constraints (must be IDPgamma>=2*d, where d is the number of dimensions of the problem)
   
-  ! Variables for analyze bounds
+  ! Variables for analyze bounds (initialized to a maximum of 20)
   integer             :: idp_bounds_num
-  character(len=255)  :: idp_bounds_names(6)
-  real                :: idp_bounds_delta(6)
+  character(len=255)  :: idp_bounds_names(20)
+  real                :: idp_bounds_delta(20)
 
   ! Containers
   real,allocatable    :: FFV_m_FDG(:,:,:,:,:)
@@ -62,8 +65,8 @@ module MOD_IDP_Vars
 #endif /*LOCAL_ALPHA*/
 
   ! Bounds
-  real,allocatable    :: rho_min    (:,:,:)
-  real,allocatable    :: rho_max    (:,:,:)
+  real,allocatable    :: state_min  (:,:,:,:)
+  real,allocatable    :: state_max  (:,:,:,:)
   real,allocatable    :: s_min      (:,:,:)
   real,allocatable    :: s_max      (:,:,:)
   real,allocatable    :: p_min      (:,:,:)

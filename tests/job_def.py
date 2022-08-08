@@ -1117,8 +1117,8 @@ def job_definition():
                         "FLUXO_FV_TIMESTEP"      :"OFF",   # The strict FV time step is not needed since we don't use the bar states
                         "NFVSE_LOCAL_ALPHA"      :"ON",
                        },
-          'run_opts': {#**run_opt_fsp_conf, 
-                       #**run_opt_fsp_nonconf_coll,
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
                        **run_opt_blast_IDPsubcell,
                       }
          }
