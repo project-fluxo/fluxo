@@ -11,8 +11,13 @@
 ! You should have received a copy of the GNU General Public License along with FLUXO. If not, see <http://www.gnu.org/licenses/>.
 !==================================================================================================================================
 #include "defines.h"
+! Use bar states by default, except if the equation has non-conservative terms
 !TODO: define  barstates in another manner!!!
+#if NONCONS
+#define barStates 0
+#else
 #define barStates 1
+#endif /*NONCONS*/
 module MOD_NFVSE
 #if SHOCK_NFVSE
   use MOD_NFVSE_Vars
@@ -117,7 +122,7 @@ contains
 #endif /*USE_AMR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
-    use MOD_IDP_Vars           , only: IDPneedsUprev_ext, IDPDensityTVD
+    use MOD_IDP_Vars           , only: IDPneedsUprev_ext, IDPneedsUsafe_ext
 #endif /*MPI*/
 #if NFVSE_CORR
     use MOD_IDP, only: Init_IDP
@@ -246,7 +251,7 @@ contains
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPDensityTVD) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPneedsUsafe_ext) then
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -488,18 +493,7 @@ contains
       allocate( Ubar_zeta    (PP_nVar, 0:PP_N  , 0:PP_N  ,-1:PP_N  ,nElems) )
     end if
 #else
-    ! Containers for previous entropy (with external DOFs)
-    if (IDPMathEntropy .or. IDPSpecEntropy) then
-      SDEALLOCATE(EntPrev)
-      SDEALLOCATE(EntPrev_master)
-      SDEALLOCATE(EntPrev_slave)
-      SDEALLOCATE(EntPrev_ext)
-      allocate( EntPrev       (     1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-      allocate( EntPrev_master(     1, 0:PP_N  , 0:PP_N            ,nSides) )
-      allocate( EntPrev_slave (     1, 0:PP_N  , 0:PP_N            ,firstSlaveSide:LastSlaveSide) )
-      allocate( EntPrev_ext   (     1, 0:PP_N  , 0:PP_N          ,6,nElems) )
-    end if
-    if (IDPDensityTVD .or. IDPPressureTVD) then
+    if (IDPneedsUsafe_ext) then
       SDEALLOCATE(Usafe_ext)
       allocate( Usafe_ext    (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
     end if
@@ -549,7 +543,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPDensityTVD) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPneedsUsafe_ext) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if

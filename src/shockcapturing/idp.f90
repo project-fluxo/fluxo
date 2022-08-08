@@ -16,7 +16,13 @@
 !   LLF CFL condition... Eq (40) of Pazner (2020) "Sparse Invariant Domain Preserving Discontinuous Galerkin Methods With Subcell Convex Limiting".
 !==================================================================================================================================
 #include "defines.h"
+! Use bar states by default, except if the equation has non-conservative terms
+!TODO: define  barstates in another manner!!!
+#if NONCONS
+#define barStates 0
+#else
 #define barStates 1
+#endif /*NONCONS*/
 ! A switch to define if the output variable alpha_old contains a cumulative alpha (1), or the instant alpha before limiting (0). Must be changed in src/analyze/analyze.f90 as well!
 #define cumulativeAlphaOld 1
 module MOD_IDP
@@ -144,6 +150,7 @@ contains
       IDPneedsUprev_ext = .TRUE.
 #else
       IDPneedsUsafe = .TRUE.
+      IDPneedsUsafe_ext = .TRUE.
 #endif /*barStates*/
     end if
     
@@ -157,24 +164,29 @@ contains
       IDPneedsUprev_ext = .TRUE.
 #else
       IDPneedsUsafe = .TRUE.
+      IDPneedsUsafe_ext = .TRUE.
 #endif /*barStates*/
     end if
     
     if (IDPMathEntropy) then
-      IDPneedsUprev     = .TRUE.
       IDPneedsUsafe     = .TRUE.
 #if barStates
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
+      IDPneedsUprev     = .TRUE.
+#else
+      IDPneedsUsafe_ext = .TRUE.
 #endif /*barStates*/
     end if
     
     if (IDPSpecEntropy) then
-      IDPneedsUprev     = .TRUE.
       IDPneedsUsafe     = .TRUE.
 #if barStates
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
+      IDPneedsUprev     = .TRUE.
+#else
+      IDPneedsUsafe_ext = .TRUE.
 #endif /*barStates*/
     end if
        
@@ -216,14 +228,7 @@ contains
       allocate( Ubar_zeta    (PP_nVar, 0:PP_N  , 0:PP_N  ,-1:PP_N  ,nElems) )
     end if
 #else
-    ! Containers for previous entropy (with external DOFs)
-    if (IDPMathEntropy .or. IDPSpecEntropy) then
-      allocate( EntPrev       (     1,-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
-      allocate( EntPrev_master(     1, 0:PP_N  , 0:PP_N            ,nSides) )
-      allocate( EntPrev_slave (     1, 0:PP_N  , 0:PP_N            ,firstSlaveSide:LastSlaveSide) )
-      allocate( EntPrev_ext   (     1, 0:PP_N  , 0:PP_N          ,6,nElems) )
-    end if
-    if (IDPDensityTVD .or. IDPPressureTVD) then
+    if (IDPneedsUsafe_ext) then
       allocate( Usafe_ext    (PP_nVar, 0:PP_N  , 0:PP_N          ,6,nElems) )
     end if
 #endif /*barStates*/
@@ -640,7 +645,7 @@ contains
   subroutine Get_IDP_Variables(U,dt,tIn)
     use MOD_NFVSE_Vars, only: alpha
     use MOD_PreProc
-    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe, IDPalpha_min, IDPafterIndicator
+    use MOD_IDP_Vars      , only: IDPneedsUprev_ext, IDPneedsUsafe, IDPneedsUsafe_ext, IDPalpha_min, IDPafterIndicator
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: Uprev_ext,Uprev
     use MOD_IDP_Vars      , only: Usafe, p_safe
@@ -652,7 +657,7 @@ contains
     use MOD_ProlongToFace , only: ProlongToFace
     use MOD_IDP_Vars      , only: Usafe_ext
     use MOD_Mesh_Vars     , only: nSides, firstSlaveSide, lastSlaveSide
-    use MOD_IDP_Vars      , only: EntPrev, EntPrev_master, EntPrev_slave, EntPrev_ext, IDPDensityTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
+    use MOD_IDP_Vars      , only: IDPDensityTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
 #if MPI
     use MOD_MPI_Vars      , only: MPIRequest_U, DataSizeSide, nNbProcs
     use MOD_NFVSE_Vars    , only: MPIRequest_Umaster
@@ -738,61 +743,6 @@ contains
       end if
 #endif /*FV_TIMESTEP*/
     end if
-#else
-!   Otherwise get the previous entropy if needed
-!   ********************************************
-    ! Mathematical entropy
-    if (IDPMathEntropy) then
-      do eID=1, nElems
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          EntPrev(1,i,j,k,eID) = Get_MathEntropy(Uprev(:,i,j,k,eID))
-        end do       ; end do       ; end do ! i,j,k
-      end do !eID
-      do sideID=1, nSides
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_master(1,i,j,sideID) = Get_MathEntropy(U_master(:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-      do sideID=firstSlaveSide, LastSlaveSide
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_slave (1,i,j,sideID) = Get_MathEntropy(U_slave (:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-    ! Specific entropy
-    elseif (IDPSpecEntropy) then
-      do eID=1, nElems
-        do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          EntPrev(1,i,j,k,eID) = Get_SpecEntropy(Uprev(:,i,j,k,eID))
-        end do       ; end do       ; end do ! i,j,k
-      end do !eID
-      do sideID=1, nSides
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_master(1,i,j,sideID) = Get_SpecEntropy(U_master(:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-      do sideID=firstSlaveSide, LastSlaveSide
-        do j=0, PP_N ; do i=0, PP_N
-          EntPrev_slave (1,i,j,sideID) = Get_SpecEntropy(U_slave (:,i,j,sideID))
-        end do       ; end do ! i,j
-      end do !sideID
-    end if
-    
-    if (IDPMathEntropy .or. IDPSpecEntropy) then
-      ! Get neighbor info
-      ! *****************
-    
-      ! Gather the external math entropy in the right location
-      call Get_externalU(1,EntPrev_ext,EntPrev(:,0:PP_N,0:PP_N,0:PP_N,:),EntPrev_master,EntPrev_slave,tIn)
-      ! FIll EntPrev with info
-      do eID=1, nElems
-        EntPrev(1,    -1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,5,eID)
-        EntPrev(1,PP_N+1,0:PP_N,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,3,eID)
-        EntPrev(1,0:PP_N,    -1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,2,eID)
-        EntPrev(1,0:PP_N,PP_N+1,0:PP_N,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,4,eID)
-        EntPrev(1,0:PP_N,0:PP_N,    -1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,1,eID)
-        EntPrev(1,0:PP_N,0:PP_N,PP_N+1,eID) = EntPrev_ext(1,0:PP_N,0:PP_N,6,eID)
-      end do !eID
-    end if
 #endif /*barStates*/
     
 !   Get Usafe for each point and check validity
@@ -823,7 +773,7 @@ contains
     end if
     
 #if !(barStates)
-    if (IDPDensityTVD .or. IDPPressureTVD) then
+    if (IDPneedsUsafe_ext) then
 !     Get the safe (FV) solution in place (if not using bar states)
 !     * This overwrites U_master and U_slave (TODO: Change this?)
 !     * The MPI communication here is blocking!!
@@ -872,9 +822,8 @@ contains
         Usafe(:,0:PP_N,0:PP_N,    -1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,1,eID)
         Usafe(:,0:PP_N,0:PP_N,PP_N+1,eID) = Usafe_ext(:,0:PP_N,0:PP_N,6,eID)
       end do !eID
-    end if !IDPDensityTVD .or. IDPPressureTVD
+    end if !IDPneedsUsafe_ext
 #endif /*!(barStates)*/
-    
   end subroutine Get_IDP_Variables
 !===================================================================================================================================
 !> Density TVD correction
@@ -1292,8 +1241,6 @@ contains
     use MOD_Equation_Vars , only: Get_SpecEntropy
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
-#else
-    use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: IDPMaxIter, s_min
@@ -1348,17 +1295,17 @@ contains
         ! check stencil in xi
 !#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,l,j,k,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,l,j,k,eID)))
         end do
         ! check stencil in eta
 !#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,i,l,k,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,i,l,k,eID)))
         end do
         ! check stencil in zeta
 !#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_min(i,j,k) = min(s_min(i,j,k), EntPrev(1,i,j,l,eID))
+          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,i,j,l,eID)))
         end do
 #endif /*barStates*/
         
@@ -1453,8 +1400,6 @@ contains
     use MOD_Equation_Vars , only: Get_MathEntropy, ConsToEntropy
 #if barStates
     use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta, Uprev
-#else
-    use MOD_IDP_Vars      , only: EntPrev
 #endif /*barStates*/
     use MOD_IDP_Vars      , only: FFV_m_FDG
     use MOD_IDP_Vars      , only: IDPMaxIter, s_max
@@ -1508,17 +1453,17 @@ contains
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,l,j,k,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,l,j,k,eID)))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,i,l,k,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,i,l,k,eID)))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_max(i,j,k) = max(s_max(i,j,k), EntPrev(1,i,j,l,eID))
+          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,i,j,l,eID)))
         end do
 #endif /*barStates*/
         
@@ -2188,13 +2133,8 @@ contains
     SDEALLOCATE (p_safe)
     SDEALLOCATE (UPrev)
     
-    SDEALLOCATE (EntPrev)
-    
     SDEALLOCATE( Usafe_ext )
     SDEALLOCATE( Uprev_ext )
-    SDEALLOCATE( EntPrev_master)
-    SDEALLOCATE( EntPrev_slave )
-    SDEALLOCATE( EntPrev_ext   )
     SDEALLOCATE( Ubar_xi  )
     SDEALLOCATE( Ubar_eta  )
     SDEALLOCATE( Ubar_zeta  )

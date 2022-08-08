@@ -18,6 +18,7 @@ module MOD_IDP_Vars
   logical :: IDPneedsUprev_ext = .FALSE.
   logical :: IDPneedsUbar      = .FALSE.
   logical :: IDPneedsUsafe     = .FALSE.
+  logical :: IDPneedsUsafe_ext = .FALSE.
   logical :: IDPneedsUprev     = .FALSE.
   
   logical :: IDPafterIndicator = .FALSE.
@@ -48,11 +49,6 @@ module MOD_IDP_Vars
   real,allocatable    :: Usafe         (:,:,:,:,:)
   real,allocatable    :: p_safe          (:,:,:,:)
   real,allocatable    :: Usafe_ext     (:,:,:,:,:)
-  
-  real,allocatable    :: EntPrev       (:,:,:,:,:)
-  real,allocatable    :: EntPrev_master(:,:,:,:)
-  real,allocatable    :: EntPrev_slave (:,:,:,:)
-  real,allocatable    :: EntPrev_ext   (:,:,:,:,:)
   
   real,allocatable    :: Ubar_xi       (:,:,:,:,:)
   real,allocatable    :: Ubar_eta      (:,:,:,:,:)
