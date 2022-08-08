@@ -57,7 +57,7 @@ USE MOD_FillMortar         ,ONLY: U_Mortar
 USE MOD_Equation           ,ONLY: ExactFunc,SetRiemannSolver
 USE MOD_Equation_Vars      ,ONLY: nBCByType,BCSideID,BCdata
 USE MOD_Equation_Vars      ,ONLY: ConsToPrimVec,PrimToConsVec
-USE MOD_Equation_Vars      ,ONLY: StrVarNames,whichRiemannSolver
+USE MOD_Equation_Vars      ,ONLY: StrVarNames,whichRiemannSolver,SolveRiemannProblem
 USE MOD_Restart_Vars       ,ONLY: DoRestart
 USE MOD_Mesh_Vars          ,ONLY: MeshFile
 USE MOD_Mesh_Vars          ,ONLY: nBCSides,nBCs,BoundaryType
@@ -229,13 +229,13 @@ dt_Min=CALCTIMESTEP(errType)
 
 IF(EquilibriumRiemann .NE. -1) THEN
   SWRITE(UNIT_StdOut,'(A,3E21.13)')' change Riemann for Ut_eq to:'
-  CALL SetRiemannSolver(EquilibriumRiemann)
+  CALL SetRiemannSolver(EquilibriumRiemann,SolveRiemannProblem)
 END IF
 
 CALL DGTimeDerivative(0.)
 
 IF(EquilibriumRiemann .NE. -1) THEN
-  CALL SetRiemannSolver(WhichRiemannSolver)
+  CALL SetRiemannSolver(WhichRiemannSolver,SolveRiemannProblem)
 END IF
 
 !store time derivative of Ueq
