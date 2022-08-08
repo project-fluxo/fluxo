@@ -1370,18 +1370,18 @@ def job_definition():
    # New test: Medium strength blast captured by IDP methods. 
    #           1) We compare the exact residual to make sure the code does what it should
    #           2) TODO: It is possible to add a bounds check (should be around machine precision)
-   run_opt_blast_IDP={'runs/navst/softBlast/elemWiseIDP':
+   run_opt_blast_IDP={'runs/navst/softBlast/blastIDP':
          {'tags': ['navierstokes','blast','curved','conforming','IDP','SC','firstorder'] ,
           'test_opts':{'max|Ut|':{'func': check_error ,
                                   'f_kwargs': {'whichError':'max|Ut| ',
                                                     'to_be': [2.377717614454E+00,   9.128959719212E-01,   1.004108737347E+00,   5.297099227940E-01,   1.525009773347E+00],
-                                                  'err_tol': 1e-8} } , # err_tol is high because of the high sensitivity of IDP methods to small changes in the solution
+                                                  'err_tol': 1e-8} } , # err_tol is high because of the high sensitivity of element-wise IDP methods to small changes in the solution
                       },
          },
       }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    caseID=caseID+1
-   jobs['build_navierstokes_type2_nopara_SC_posit']={
+   jobs['build_navierstokes_type2_nopara_SC_IDPelem']={
           'case': caseID,
           'tags': [ 'navierstokes','split-form','GL','SC','IDP'],
           'build_opts':{**baseopts,
@@ -1609,6 +1609,42 @@ def job_definition():
                        # #**run_opt_fsp_p4est,     # TODO: This is failing with L_inf = 3.417000016270E-11 > 1.e-11 (is this problematic?)
                        **run_opt_entropyCons_AMR,
                        **run_opt_entropyStab_AMR,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Subcell limiting tests
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Medium strength blast captured by IDP methods. 
+   #           1) We compare the exact residual to make sure the code does what it should
+   #           2) TODO: It is possible to add a bounds check (should be around machine precision)
+   run_opt_blast_IDPsubcell={'runs/navst/softBlast/blastIDP':
+         {'tags': ['navierstokes','blast','curved','conforming','IDP','subcell','SC','firstorder'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [5.567014876425E+00,   3.083629446339E+00,   1.323410274887E+00,   1.206830325084E+00,   4.096616372196E+00],
+                                                  'err_tol': 1e-10} } ,
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   caseID=caseID+1
+   jobs['build_navierstokes_type2_nopara_SC_IDPsubcell']={
+          'case': caseID,
+          'tags': [ 'navierstokes','split-form','GL','SC','IDP','subcell'],
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'         :'2',
+                        "FLUXO_DISC_NODETYPE"    :"GAUSS-LOBATTO",
+                        "FLUXO_PARABOLIC"        :"OFF",
+                        "FLUXO_SHOCKCAPTURE"     :"ON",
+                        "FLUXO_SHOCKCAP_NFVSE"   :"ON",
+                        "FLUXO_SHOCK_NFVSE_CORR" :"ON",
+                        "FLUXO_FV_TIMESTEP"      :"ON",   # The strict FV time step is needed to be within bounds
+                        "NFVSE_LOCAL_ALPHA"      :"ON",
+                       },
+          'run_opts': {**run_opt_fsp_conf, 
+                       **run_opt_fsp_nonconf_coll,
+                       **run_opt_shock_posit,
+                       **run_opt_blast_IDPsubcell,
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
