@@ -406,9 +406,9 @@ contains
     USE MOD_Globals
     use MOD_NFVSE_Vars         , only: SubCellMetrics, alpha, alpha_Master, alpha_Slave, TimeRelFactor, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef
     use MOD_Mesh_Vars          , only: nElems,nSides,firstSlaveSide,LastSlaveSide,firstMortarInnerSide
+    use MOD_IDP_Vars
 #if NFVSE_CORR
     use MOD_NFVSE_Vars         , only: alpha_old
-    use MOD_IDP_Vars
 #endif /*NFVSE_CORR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
