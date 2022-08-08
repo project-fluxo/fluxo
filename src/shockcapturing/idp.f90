@@ -825,7 +825,7 @@ contains
 #if !(barStates)
     if (IDPDensityTVD .or. IDPPressureTVD) then
 !     Get the safe (FV) solution in place (if not using bar states)
-!     * This overwrites U_master and U_slave
+!     * This overwrites U_master and U_slave (TODO: Change this?)
 !     * The MPI communication here is blocking!!
 !     *************************************************************
 #if MPI
@@ -1029,17 +1029,10 @@ contains
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
-        if (Pp==0.0) then
-          Qp = 1.0
-        else
-          Qp = Qp/Pp
-        end if
-        
-        if (Pm==0.0) then
-          Qm = 1.0
-        else
-          Qm = Qm/Pm
-        end if
+        ! Compute blending coefficient avoiding division by zero
+        ! (as in paper of [Guermond, Nazarov, Popov, Thomas] (4.8))
+        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*rho_max(i,j,k))
+        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*rho_max(i,j,k))
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
         dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
@@ -1237,17 +1230,10 @@ contains
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
-        if (Pp==0.0) then
-          Qp = 1.0
-        else
-          Qp = Qp/Pp
-        end if
-        
-        if (Pm==0.0) then
-          Qm = 1.0
-        else
-          Qm = Qm/Pm
-        end if
+        ! Compute blending coefficient avoiding division by zero
+        ! (as in paper of [Guermond, Nazarov, Popov, Thomas] (4.8))
+        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*p_max(i,j,k))
+        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*p_max(i,j,k))
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
         dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
@@ -1695,11 +1681,9 @@ contains
         end if
         Pm = Pm*sJ(i,j,k,eID)
         
-        if (Pm<0.0) then
-          Qm = min(1.0,Qm/Pm)
-        else
-          Qm = 1.0
-        end if
+        ! Compute blending coefficient avoiding division by zero
+        ! (modification of technique of [Guermond, Nazarov, Popov, Thomas] (4.8))
+        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.)
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - Qm) - alpha_loc(i,j,k,eID)
         dalpha1 = (1.0 - Qm) - alpha_loc(i,j,k,eID)
