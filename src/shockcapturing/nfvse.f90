@@ -117,7 +117,7 @@ contains
 #endif /*USE_AMR*/
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
-    use MOD_IDP_Vars           , only: IDPneedsUprev, IDPDensityTVD
+    use MOD_IDP_Vars           , only: IDPneedsUprev_ext, IDPDensityTVD
 #endif /*MPI*/
 #if NFVSE_CORR
     use MOD_IDP, only: Init_IDP
@@ -246,7 +246,7 @@ contains
 #if MPI
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. IDPDensityTVD) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPDensityTVD) then
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
 #endif
@@ -413,7 +413,6 @@ contains
 #if MPI
     use MOD_MPI_Vars           , only: nNbProcs
     use MOD_NFVSE_Vars         , only: MPIRequest_alpha, MPIRequest_Umaster, ReconsBoundaries, RECONS_NEIGHBOR
-    use MOD_IDP_Vars           , only: IDPneedsUprev, IDPDensityTVD
 #endif /*MPI*/
     implicit none
     !-arguments-----------------------------------
@@ -550,7 +549,7 @@ contains
     SDEALLOCATE(MPIRequest_alpha)
     allocate(MPIRequest_alpha(nNbProcs,4)    ) ! 1: send slave, 2: send master, 3: receive slave, 4, receive master
     
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev .or. IDPDensityTVD) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext .or. IDPDensityTVD) then
       SDEALLOCATE(MPIRequest_Umaster)
       allocate(MPIRequest_Umaster(nNbProcs,2)) ! 1: send master, 2: receive master
     end if
@@ -566,7 +565,7 @@ contains
     use MOD_DG_Vars            , only: U, U_master, U_slave
     use MOD_Mesh_Vars          , only: nElems, sJ
     use MOD_NFVSE_Vars         , only: SubCellMetrics, sWGP, Compute_FVFluxes, ReconsBoundaries, SpacePropSweeps, RECONS_NEIGHBOR, alpha, U_ext
-    use MOD_IDP_Vars           , only: IDPneedsUprev, Uprev
+    use MOD_IDP_Vars           , only: IDPneedsUprev, IDPneedsUprev_ext, Uprev
 #if NFVSE_CORR
     use MOD_IDP_Vars           , only: FFV_m_FDG, IDPafterIndicator, IDPPositivity
 #if LOCAL_ALPHA
@@ -603,7 +602,7 @@ contains
     !===============================================================================================================================
     
     !if reconstruction:
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext) then
 #if MPI
       call FinishExchangeMPIData(2*nNbProcs,MPIRequest_Umaster) 
 #endif /*MPI*/
@@ -620,13 +619,12 @@ contains
       end do
     end if
     
-    ! Use IDP correction with previous step density:
 #if NFVSE_CORR
-    if (IDPneedsUprev) then
+    if (IDPneedsUprev) then ! IDP correction needs the solution at the previous step:
       Uprev(1:PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems) = U
     end if
 #if LOCAL_ALPHA
-    do iElem=1, nElems
+    do iElem=1, nElems ! Store alpha in local array
       alpha_loc(:,:,:,iElem) = alpha(iElem)
     end do
 #endif /*LOCAL_ALPHA*/
@@ -1671,7 +1669,7 @@ contains
     USE MOD_MPI_Vars
     use MOD_DG_Vars            , only: U_master
 #endif /*MPI*/
-    use MOD_IDP_Vars , only: IDPneedsUprev
+    use MOD_IDP_Vars , only: IDPneedsUprev_ext
     implicit none
     ! Arguments
     !---------------------------------------------------------------------------------------------------------------------------------
@@ -1685,7 +1683,7 @@ contains
 ! If we do reconstruction on boundaries, we need to send the U_master
 ! -------------------------------------------------------------------
 #if MPI
-    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev) then
+    if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext) then
       ! receive the master
       call StartReceiveMPIData(U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
