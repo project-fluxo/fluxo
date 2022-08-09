@@ -502,6 +502,13 @@ def job_definition():
                       },
          },
       }
+   run_opt_fsp_conf_multicomponent={'runs/mhd/freestream/conforming_multicomponent':
+         {'tags': ['mhd','multicomponent','freestream','curved','conforming'] ,
+          'test_opts':{'err_Linf':{'func': check_error ,
+                                   'f_kwargs': {'whichError':'L_inf ','err_tol': 1e-11} } ,
+                      },
+         },
+      }
    run_opt_fsp_nonconf_proj={'runs/mhd/freestream/nonconforming_projmortar':
          {'tags': ['mhd','freestream','curved','nonconforming','projection-mortar'] ,
           'test_opts':{'err_Linf':{'func': check_error ,
@@ -519,6 +526,14 @@ def job_definition():
    # Entropy conservation test with EC flux (with and without shock-capturing)
    run_opt_entropyCons={'runs/mhd/softBlast/entropyCons':
          {'tags': ['mhd','entropyCons','curved','conforming'] ,
+          'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
+                                       'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
+                      },
+         },
+      }
+   # Entropy conservation test with EC flux for multi-component MHD (with and without shock-capturing)
+   run_opt_entropyCons_multicomponent={'runs/mhd/softBlast/entropyCons_multicomponent':
+         {'tags': ['mhd','multicomponent','entropyCons','curved','conforming'] ,
           'test_opts':{'abs(dSdU*Ut)':{'func': check_all_errors ,
                                        'f_kwargs': {'whichError':'dSdU*Ut','err_tol': 1e-13,'err_abs':True} } ,
                       },
@@ -1123,7 +1138,78 @@ def job_definition():
                       }
          }
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   
+   # Multi-component MHD tests
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Split-form DG
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_br1entr_ecvolflux']={
+          'case': caseID ,
+          'tags': ['mhd','multicomponent','split-form','br1','GL','GLM','NONCONS','ECflux'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'             :'2',
+                        'FLUXO_EQN_NUM_COMPONENTS'   :'2',
+                        'FLUXO_DISC_NODETYPE'        :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'              :'ON',
+                        'FLUXO_EQN_NONCONS'          :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'      :'ON',
+                        'FLUXO_PARABOLIC'            :'ON',
+                        'FLUXO_PARABOLIC_LIFTING'    :'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var', # set to to prim_var instead of ent_var for testing... We only test entropy cons and not entropy stab...
+                        'FLUXO_EQN_VOLFLUX'          :'10',
+                       },
+          'run_opts': {**run_opt_fsp_conf_multicomponent, 
+                       #**run_opt_fsp_nonconf_coll,
+                       **run_opt_entropyCons_multicomponent,
+                       #**run_opt_entropyStab,
+                      }
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Split-form DG and shock capturing
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_nopara_SC']={
+          'case': caseID ,
+          'tags': ['mhd','multicomponent','split-form','SC','GL','GLM','NONCONS'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'          :'2',
+                        'FLUXO_EQN_NUM_COMPONENTS':'2',
+                        'FLUXO_DISC_NODETYPE'     :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'           :'ON',
+                        'FLUXO_EQN_NONCONS'       :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'   :'ON',
+                        'FLUXO_PARABOLIC'         :'OFF',
+                        'FLUXO_SHOCKCAPTURE'      :'ON',
+                        'FLUXO_SHOCKCAP_NFVSE'    :'ON',
+                        'FLUXO_SHOCKINDICATOR'    :'custom',
+                       },
+          'run_opts': {
+                       **run_opt_fsp_conf_multicomponent,
+                       #**run_opt_fsp_nonconf_coll,
+                       #**run_opt_fsp_SC_first,
+                       **run_opt_entropyCons_multicomponent,
+                       #**run_opt_entropyStab,
+                       #**run_opt_entropyStab_FloGor9waves,
+                      },
+
+         }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Standard DG
+   caseID=caseID+1
+   jobs['mhd_type1_br1_cons_GL']={
+          'case': caseID ,
+          'tags': ['mhd','multicomponent','standardDG','br1','GL','GLM'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'             :'1',
+                        'FLUXO_EQN_NUM_COMPONENTS'   :'2',
+                        'FLUXO_DISC_NODETYPE'        :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'              :'ON',
+                        'FLUXO_PARABOLIC'            :'ON',
+                        'FLUXO_PARABOLIC_LIFTING'    :'br1',
+                        'FLUXO_PARABOLIC_LIFTING_VAR':'prim_var',
+                       },
+          'run_opts': {**run_opt_fsp_conf_multicomponent, 
+                       #**run_opt_fsp_nonconf_proj,
+                      }
+         }
    #============================================================================
    #============================================================================
    #fourth group, Navierstokes, 400 < caseID <500

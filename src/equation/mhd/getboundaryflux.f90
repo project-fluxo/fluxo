@@ -198,16 +198,7 @@ USE MOD_DG_Vars      ,ONLY: U_master
 USE MOD_Mesh_Vars    ,ONLY: nSides,nBCSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,TangVec1,TangVec2,SurfElem,Face_xGP
 USE MOD_Equation     ,ONLY: ExactFunc
-USE MOD_Equation_Vars,ONLY: RefStateCons, SolveRiemannProblem_BC
-USE MOD_Equation_Vars,ONLY: IniExactFunc
-USE MOD_Equation_Vars,ONLY: s2mu_0
-USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
-USE MOD_Equation_Vars,ONLY: FastestWave1D
-USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
-USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
-#ifdef PP_GLM
-USE MOD_Equation_Vars,ONLY: GLM_ch 
-#endif /*PP_GLM*/
+USE MOD_Equation_Vars
 #if NONCONS
 USE MOD_Riemann,         ONLY: AddNonConsFlux
 #endif /*NONCONS*/
@@ -229,7 +220,7 @@ INTEGER                              :: BCType,BCState,nBCLoc
 REAL                                 :: U_Face_loc(PP_nVar,0:PP_N,0:PP_N)
 REAL                                 :: PrimL(1:PP_nVar),lambda_max
 #ifdef NONCONS
-REAL                                 :: phi_L(2:8) 
+REAL                                 :: phi_L(IRHOU:IB3) 
 #endif
 !==================================================================================================================================
 DO iBC=1,nBCs
@@ -395,25 +386,25 @@ DO iBC=1,nBCs
           ASSOCIATE(nvec =>NormVec(:,p,q,SideID),t1vec=>TangVec1(:,p,q,SideID),t2vec=>TangVec2(:,p,q,SideID))
           CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
           !rotate to normal system
-          PrimL(2:4)=(/SUM(PrimL(2:4)*nvec(:)),SUM(PrimL(2:4)*t1vec(:)),SUM(PrimL(2:4)*t2vec(:))/)
-          PrimL(6:8)=(/SUM(PrimL(6:8)*nvec(:)),SUM(PrimL(6:8)*t1vec(:)),SUM(PrimL(6:8)*t2vec(:))/)
+          PrimL(IU:IW)=(/SUM(PrimL(IU:IW)*nvec(:)),SUM(PrimL(IU:IW)*t1vec(:)),SUM(PrimL(IU:IW)*t2vec(:))/)
+          PrimL(IB1:IB3)=(/SUM(PrimL(IB1:IB3)*nvec(:)),SUM(PrimL(IB1:IB3)*t1vec(:)),SUM(PrimL(IB1:IB3)*t2vec(:))/)
           CALL FastestWave1D(PrimL(:),lambda_max) !=c_f
-          lambda_max=ABS(PrimL(2))+lambda_max
-          Flux(1,  p,q,SideID) = 0. !no mass flux
-          Flux(5,  p,q,SideID) = 0. ! no energy flux
+          lambda_max=ABS(PrimL(IU))+lambda_max
+          Flux(IRHO1,  p,q,SideID) = 0. !no mass flux
+          Flux(IRHOE,  p,q,SideID) = 0. ! no energy flux
                                  !p* = p + rho vn( vn+lambda_max) + 1/(2 mu_0) |B|^2 - 1/mu_0 B_n^2 
-          Flux(2:4,p,q,SideID) = (PrimL(5)+PrimL(1)*PrimL(2)*(PrimL(2)+lambda_max)  &
-                                  + s2mu_0*(PrimL(7)**2+PrimL(8)**2-PrimL(6)**2)    ) *nvec(:)
-          Flux(6:8,p,q,SideID) = lambda_max*PrimL(6)*nvec(:)  ! lambda_max*B_n n
+          Flux(IRHOU:IRHOW,p,q,SideID) = (PrimL(IP)+PrimL(IRHO1)*PrimL(IU)*(PrimL(IU)+lambda_max)  &
+                                  + s2mu_0*(PrimL(IB2)**2+PrimL(IB3)**2-PrimL(IB1)**2)    ) *nvec(:)
+          Flux(IB1:IB3,p,q,SideID) = lambda_max*PrimL(IB1)*nvec(:)  ! lambda_max*B_n n
 
           !! EC TEST: 
           !! set numerical flux to physical flux, entropy contribution should be zero!
-          !Flux(2:4,p,q,SideID) = (PrimL(5) + s2mu_0*SUM(PrimL(6:8)**2) ) *nvec(:)
-          !Flux(6:8,p,q,SideID) = 0. 
+          !Flux(IRHOU:IRHOW,p,q,SideID) = (PrimL(IP) + s2mu_0*SUM(PrimL(IB1:IB3)**2) ) *nvec(:)
+          !Flux(IB1:IB3,p,q,SideID) = 0. 
       
 #ifdef PP_GLM
-          Flux(6:8,p,q,SideID) = Flux(6:8,p,q,SideID)+ GLM_ch*PrimL(9)*nvec(:)
-          Flux(  9,p,q,SideID) = 0.
+          Flux(IB1:IB3,p,q,SideID) = Flux(IB1:IB3,p,q,SideID)+ GLM_ch*PrimL(IPSI)*nvec(:)
+          Flux(   IPSI,p,q,SideID) = 0.
 #endif /*PP_GLM*/
           
           END ASSOCIATE !nvec,t1vec,t2vec
@@ -478,17 +469,7 @@ USE MOD_Mesh_Vars    ,ONLY: nBCSides,nBCs,BoundaryType
 USE MOD_Mesh_Vars    ,ONLY: NormVec,SurfElem,Face_xGP
 USE MOD_DG_Vars      ,ONLY: U_master,nTotal_face
 USE MOD_Equation     ,ONLY: ExactFunc
-USE MOD_Equation_Vars,ONLY: RefStateCons
-USE MOD_Equation_Vars,ONLY: IniExactFunc
-USE MOD_Equation_Vars,ONLY: ConsToPrim,PrimToCons
-USE MOD_Equation_Vars,ONLY: FastestWave1D
-USE MOD_Equation_Vars,ONLY: FastestWave1D_Roe
-USE MOD_Equation_Vars,ONLY: nBCByType,BCSideID,BCData
-#if PP_Lifting_Var==2
-USE MOD_Equation_Vars,ONLY: ConsToPrimVec
-#elif PP_Lifting_Var==3
-USE MOD_Equation_Vars,ONLY: ConsToEntropyVec
-#endif /*PP_Lifting_Var**/
+USE MOD_Equation_Vars
 USE MOD_Testcase_GetBoundaryFlux, ONLY: TestcaseLiftingGetBoundaryFlux
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -584,8 +565,8 @@ DO iBC=1,nBCs
           ASSOCIATE(nvec =>NormVec(:,p,q,SideID))
           CALL ConsToPrim(PrimL(:),U_master(:,p,q,SideID))
           PrimR(  :)=PrimL(:)
-          PrimR(2:4)=PrimL(2:4) - SUM(PrimL(2:4)*nvec(:))*nvec(:) !only tangential velocities
-          PrimR(6:8)=PrimL(6:8) - SUM(PrimL(6:8)*nvec(:))*nvec(:) !only tangential magn. field
+          PrimR(IU:IW)=PrimL(IU:IW) - SUM(PrimL(IU:IW)*nvec(:))*nvec(:) !only tangential velocities
+          PrimR(IB1:IB3)=PrimL(IB1:IB3) - SUM(PrimL(IB1:IB3)*nvec(:))*nvec(:) !only tangential magn. field
           CALL PrimToCons(PrimR(:),Flux(:,p,q,SideID))
           END ASSOCIATE !nvec
         END DO ! p

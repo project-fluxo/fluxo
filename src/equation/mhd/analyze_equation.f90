@@ -268,6 +268,7 @@ SUBROUTINE CalcDivergence(totalDivB,maxDivB,maxDivB_t,maxJumpB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
+USE MOD_Equation_Vars
 USE MOD_Mesh_Vars      ,ONLY: nElems
 USE MOD_Mesh_Vars      ,ONLY: sJ,metrics_ftilde,metrics_gtilde,metrics_htilde,NormVec,TangVec1,TangVec2
 USE MOD_Mesh_Vars      ,ONLY: ElemToSide,firstInnerSide,LastMPISide_MINE
@@ -293,9 +294,9 @@ REAL                            :: box(5)
   maxDivB_t=-1.0e20
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
-      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
-      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*Ut(6:8,i,j,k,iElem))
+      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem))
+      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem))
+      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem))
     END DO; END DO; END DO ! i,j,k
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       divB_loc=0.
@@ -313,9 +314,9 @@ REAL                            :: box(5)
   totalDivB=0.0
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
-      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
-      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*U(6:8,i,j,k,iElem))
+      Btilde(1,i,j,k)=SUM(Metrics_ftilde(:,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))
+      Btilde(2,i,j,k)=SUM(Metrics_gtilde(:,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))
+      Btilde(3,i,j,k)=SUM(Metrics_htilde(:,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))
     END DO; END DO; END DO ! i,j,k
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       divB_loc=0.
@@ -336,17 +337,17 @@ REAL                            :: box(5)
   maxJumpB=-1.0e20
   DO SideID=firstInnerSide,LastMPISide_MINE
     maxJumpB(1)=MAX(maxJumpB(1),  &
-                 MAXVAL(ABS( NormVec(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
-                            +NormVec(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
-                            +NormVec(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+                 MAXVAL(ABS( NormVec(1,:,:,SideID)*(U_slave(IB1,:,:,SideID)-U_master(IB1,:,:,SideID)) &
+                            +NormVec(2,:,:,SideID)*(U_slave(IB2,:,:,SideID)-U_master(IB2,:,:,SideID)) &
+                            +NormVec(3,:,:,SideID)*(U_slave(IB3,:,:,SideID)-U_master(IB3,:,:,SideID)) )) )
     maxJumpB(2)=MAX(maxJumpB(2),  &
-                 MAXVAL(ABS( TangVec1(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
-                            +TangVec1(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
-                            +TangVec1(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+                 MAXVAL(ABS( TangVec1(1,:,:,SideID)*(U_slave(IB1,:,:,SideID)-U_master(IB1,:,:,SideID)) &
+                            +TangVec1(2,:,:,SideID)*(U_slave(IB2,:,:,SideID)-U_master(IB2,:,:,SideID)) &
+                            +TangVec1(3,:,:,SideID)*(U_slave(IB3,:,:,SideID)-U_master(IB3,:,:,SideID)) )) )
     maxJumpB(3)=MAX(maxJumpB(3),  &
-                 MAXVAL(ABS( TangVec2(1,:,:,SideID)*(U_slave(6,:,:,SideID)-U_master(6,:,:,SideID)) &
-                            +TangVec2(2,:,:,SideID)*(U_slave(7,:,:,SideID)-U_master(7,:,:,SideID)) &
-                            +TangVec2(3,:,:,SideID)*(U_slave(8,:,:,SideID)-U_master(8,:,:,SideID)) )) )
+                 MAXVAL(ABS( TangVec2(1,:,:,SideID)*(U_slave(IB1,:,:,SideID)-U_master(IB1,:,:,SideID)) &
+                            +TangVec2(2,:,:,SideID)*(U_slave(IB2,:,:,SideID)-U_master(IB2,:,:,SideID)) &
+                            +TangVec2(3,:,:,SideID)*(U_slave(IB3,:,:,SideID)-U_master(IB3,:,:,SideID)) )) )
   END DO !SideID
 #if MPI
   Box=(/maxDivB,maxDivB_t,maxJumpB/)
@@ -375,7 +376,7 @@ USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol,Vol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U
-USE MOD_Equation_Vars,      ONLY: s2mu_0
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -391,9 +392,9 @@ Energy=0.
 DO iElem=1,nElems
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     IntegrationWeight=wGPVol(i,j,k)/sJ(i,j,k,iElem)
-    Energy(1)  = Energy(1)+SUM(U(2:4,i,j,k,iElem)**2)/U(1,i,j,k,iElem)*IntegrationWeight
-    Energy(2)  = Energy(2)+SUM(U(6:8,i,j,k,iElem)**2)*IntegrationWeight
-    Energy(3)  = Energy(3)+U(5,i,j,k,iElem)*IntegrationWeight
+    Energy(1)  = Energy(1)+SUM(U(IRHOU:IRHOW,i,j,k,iElem)**2)/sum(U(IRHO1:PP_NumComponents,i,j,k,iElem))*IntegrationWeight
+    Energy(2)  = Energy(2)+SUM(U(IB1:IB3,i,j,k,iElem)**2)*IntegrationWeight
+    Energy(3)  = Energy(3)+U(IRHOE,i,j,k,iElem)*IntegrationWeight
 #ifdef PP_GLM
     Energy(4)  = Energy(4)+U(PP_nVar,i,j,k,iElem)**2*IntegrationWeight
 #endif
@@ -425,7 +426,7 @@ USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U,Ut
-USE MOD_Equation_Vars,      ONLY: kappa,sKappaM1,ConsToPrim,ConsToEntropy
+USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -439,14 +440,13 @@ INTEGER                      :: iElem,i,j,k
 REAL                         :: ent_loc,prim(PP_nVar),dSdU(PP_nVar)
 #if MPI
 REAL                         :: box(2)
-#endif 
+#endif
 !==================================================================================================================================
   Entropy=0.
   dSdU_Ut=0.
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      CALL ConsToPrim(prim,U(:,i,j,k,iElem))
-      ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
+      ent_loc = Get_MathEntropy(U(:,i,j,k,iElem))
       Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
       dSdU     = ConsToEntropy(U(:,i,j,k,iElem))
       ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
@@ -465,8 +465,6 @@ REAL                         :: box(2)
     CALL MPI_REDUCE(box         ,0  ,2,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
   END IF
 #endif /*MPI*/
-  Entropy=Entropy*sKappaM1
-
 
 END SUBROUTINE CalcEntropy
 
@@ -480,6 +478,7 @@ SUBROUTINE CalcCrossHelicity(CH,CH_t,maxabs_vB)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
+USE MOD_Equation_Vars
 USE MOD_Analyze_Vars,       ONLY: wGPVol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U,Ut
@@ -504,11 +503,11 @@ REAL                         :: box(2)
   maxAbs_vB=-1.0e-10
   DO iElem=1,nElems
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
-      srho=1./U(1,i,j,k,iElem)
-      vB  =SUM(U(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))*srho
+      srho=1./sum(U(IRHO1:PP_NumComponents,i,j,k,iElem))
+      vB  =SUM(U(IRHOU:IRHOW,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))*srho
       maxAbs_vB=MAX(maxAbs_vB,ABS(vB))
       CH  = CH+(vB)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
-      vB_t =srho*(SUM(U(2:4,i,j,k,iElem)*Ut(6:8,i,j,k,iElem) + Ut(2:4,i,j,k,iElem)*U(6:8,i,j,k,iElem))-Ut(1,i,j,k,iElem)*vB)
+      vB_t =srho*(SUM(U(IRHOU:IRHOW,i,j,k,iElem)*Ut(IB1:IB3,i,j,k,iElem) + Ut(IRHOU:IRHOW,i,j,k,iElem)*U(IB1:IB3,i,j,k,iElem))-sum(Ut(IRHO1:PP_NumComponents,i,j,k,iElem))*vB)
       CH_t =CH_t+(vB_t)*wGPVol(i,j,k)/sJ(i,j,k,iElem)
     END DO; END DO; END DO !i,j,k
   END DO ! iElem

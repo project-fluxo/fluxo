@@ -39,22 +39,14 @@ FUNCTION CALCTIMESTEP(errType)
 ! MODULES
 USE MOD_Globals
 USE MOD_PreProc
+USE MOD_Equation_Vars
 #ifndef GNU
 USE, INTRINSIC :: IEEE_ARITHMETIC,ONLY:IEEE_IS_NAN
 #endif
 USE MOD_DG_Vars,ONLY:U
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,Elem_xGP,nElems
-USE MOD_Equation_Vars,ONLY: ConsToPrim
-USE MOD_Equation_Vars,ONLY: FastestWave3D
-#ifdef PP_GLM
-USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1,GLM_ch,GLM_scale
-#endif /*PP_GLM*/
 #if PARABOLIC
-USE MOD_Equation_Vars,ONLY:mu,KappasPr,etasmu_0
 USE MOD_TimeDisc_Vars,ONLY:DFLScale
-#ifdef PP_ANISO_HEAT
-USE MOD_Equation_Vars,ONLY:KappaM1,kperp,kpar
-#endif /*PP_ANISO_HEAT*/
 #endif /*PARABOLIC*/
 USE MOD_TimeDisc_Vars,ONLY:CFLScale,CFLScale_usr,ViscousTimeStep,dtElem, FVTimeStep
 #if FV_TIMESTEP
@@ -88,7 +80,10 @@ REAL                         :: buf(4)
 !==================================================================================================================================
 errType=0
 #if PARABOLIC
+#if PP_NumComponents==1
+! For single-component flows, KappasPr is constant in the domain
 muKappasPr_max=mu*MAX(4./3.,KappasPr)
+#endif /*PP_NumComponents==1*/
 diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
@@ -106,19 +101,23 @@ DO iElem=1,nElems
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
+#if PP_NumComponents>1 && PARABOLIC
+        ! For multi-component flows, KappasPr is NOT constant in the domain
+        muKappasPr_max=mu*MAX(4./3.,totalKappa(U(:,i,j,k,iElem))/Pr)
+#endif /*PP_NumComponents>1*/
         ! Convective Eigenvalues
-        IF(IEEE_IS_NAN(U(1,i,j,k,iElem)))THEN
+        IF(IEEE_IS_NAN(U(IRHO1,i,j,k,iElem)))THEN
           ERRWRITE(*,'(A,3ES16.7)')'Density NaN, Position= ',Elem_xGP(:,i,j,k,iElem)
           errType=1
         END IF
-        sRho=1./U(1,i,j,k,iElem)
+        sRho=1./U(IRHO1,i,j,k,iElem)
         CALL ConsToPrim(Prim,U(:,i,j,k,iElem))
-        IF(prim(5).LE.0.)THEN
+        IF(prim(IP).LE.0.)THEN
           ERRWRITE(*,'(A,3ES16.7)')'Pressure Negative, Position= ',Elem_xGP(:,i,j,k,iElem)
           errType=2
         END IF
         CALL FastestWave3D(Prim,cf)
-        v(:)=Prim(2:4) 
+        v(:)=Prim(IU:IW) 
         Lambda(1) = sJ(i,j,k,iElem)*(ABS(SUM(Metrics_fTilde(:,i,j,k,iElem)*v)) + &
                         cf*SQRT(SUM(Metrics_fTilde(:,i,j,k,iElem)*Metrics_fTilde(:,i,j,k,iElem))))
         Max_Lambda(1)=MAX(Max_Lambda(1),Lambda(1))
@@ -143,7 +142,7 @@ DO iElem=1,nElems
         Max_Lambda_v=MAX(Max_Lambda_v,sRho*KappaM1*kperp*SUM(lambda_v(:)))
         !anisotropic part: (Bn Bn^T)(kpar-kperp)
         !compute contravariant components of BnCon and ^2
-        ASSOCIATE(bvec=> U(6:8,i,j,k,iElem))
+        ASSOCIATE(bvec=> U(IB1:IB3,i,j,k,iElem))
         !bvec(:)=bvec(:)/SQRT(SUM(bvec(:)*bvec(:))) !normalization, ^2 added below
         Lambda_v(1)=(SUM(bvec(:)*Metrics_fTilde(:,i,j,k,iElem))*sJ(i,j,k,iElem))**2
         Lambda_v(2)=(SUM(bvec(:)*Metrics_gTilde(:,i,j,k,iElem))*sJ(i,j,k,iElem))**2
