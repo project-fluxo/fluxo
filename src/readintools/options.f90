@@ -120,9 +120,9 @@ MODULE MOD_Options
 !================================================
 !> String Array Option
 !================================================
-  !TYPE,PUBLIC,EXTENDS(OPTION) :: StringArrayOption
-    !CHARACTER(LEN=255),ALLOCATABLE  :: value(:)
-  !END TYPE StringArrayOption
+  TYPE,PUBLIC,EXTENDS(OPTION) :: StringArrayOption
+    CHARACTER(LEN=255),ALLOCATABLE  :: value(:)
+  END TYPE StringArrayOption
 
   INTERFACE GETSTRLENREAL
     MODULE PROCEDURE GETSTRLENREAL
@@ -219,13 +219,13 @@ IF ((this%isSet).OR.(this%hasDefault)) THEN
     END DO
     GETVALUELEN = GETVALUELEN + 2*(SIZE(this%value)-1) ! ', ' between array elements
     GETVALUELEN = GETVALUELEN + 3 ! ' /)'
-  !CLASS IS (StringArrayOption)
-    !GETVALUELEN = 3 ! '(/ '
-    !DO i=1,SIZE(this%value)
-      !GETVALUELEN = GETVALUELEN + LEN_TRIM(this%value(i))
-    !END DO
-    !GETVALUELEN = GETVALUELEN + 2*(SIZE(this%value)-1) ! ', ' between array elements
-    !GETVALUELEN = GETVALUELEN + 3 ! ' /)'
+  CLASS IS (StringArrayOption)
+    GETVALUELEN = 3 ! '(/ '
+    DO i=1,SIZE(this%value)
+      GETVALUELEN = GETVALUELEN + LEN_TRIM(this%value(i))
+    END DO
+    GETVALUELEN = GETVALUELEN + 2*(SIZE(this%value)-1) ! ', ' between array elements
+    GETVALUELEN = GETVALUELEN + 3 ! ' /)'
   CLASS DEFAULT 
     STOP 'Unknown TYPE'
   END SELECT
@@ -477,21 +477,21 @@ CLASS IS (RealArrayOption)
 !###
 ! TODO: Causes internal compiler error with GNU 6+ due to compiler bug (older GNU and Intel,Cray work). Uncomment as unused.
 !###
-!CLASS IS (StringArrayOption)
-  !length=this%GETVALUELEN()
-  !IF (maxValueLen - length.GT.0) THEN
-    !WRITE(fmtValue,*) (maxValueLen - length)
-    !SWRITE(UNIT_stdOut,'('//fmtValue//'(" "))',ADVANCE='NO')
-  !END IF
-  !SWRITE(UNIT_StdOut,"(A3)",ADVANCE='NO') "(/ "
-  !DO i=1,SIZE(this%value)
-    !WRITE(fmtValue,*) LEN_TRIM(this%value(i))
-    !SWRITE(UNIT_StdOut,"(A"//fmtValue//")",ADVANCE='NO') this%value(i)
-    !IF (i.NE.SIZE(this%value)) THEN
-      !SWRITE(UNIT_StdOut,"(A2)",ADVANCE='NO') ", "
-    !END IF
-  !END DO
-  !SWRITE(UNIT_StdOut,"(A3)",ADVANCE='NO') " /)"
+CLASS IS (StringArrayOption)
+  length=this%GETVALUELEN()
+  IF (maxValueLen - length.GT.0) THEN
+    WRITE(fmtValue,*) (maxValueLen - length)
+    SWRITE(UNIT_stdOut,'('//fmtValue//'(" "))',ADVANCE='NO')
+  END IF
+  SWRITE(UNIT_StdOut,"(A3)",ADVANCE='NO') "(/ "
+  DO i=1,SIZE(this%value)
+    WRITE(fmtValue,*) LEN_TRIM(this%value(i))
+    SWRITE(UNIT_StdOut,"(A"//fmtValue//")",ADVANCE='NO') this%value(i)
+    IF (i.NE.SIZE(this%value)) THEN
+      SWRITE(UNIT_StdOut,"(A2)",ADVANCE='NO') ", "
+    END IF
+  END DO
+  SWRITE(UNIT_StdOut,"(A3)",ADVANCE='NO') " /)"
 CLASS DEFAULT 
   STOP
 END SELECT
@@ -516,7 +516,7 @@ INTEGER             :: count,i,stat
 INTEGER,ALLOCATABLE :: inttmp(:)
 LOGICAL,ALLOCATABLE :: logtmp(:)
 REAL,ALLOCATABLE    :: realtmp(:)
-!CHARACTER(LEN=255),ALLOCATABLE :: strtmp(:)
+CHARACTER(LEN=255),ALLOCATABLE :: strtmp(:)
 !==================================================================================================================================
 stat=0
 ! Replace brackets
@@ -627,34 +627,34 @@ CLASS IS (RealArrayOption)
 
     IF (i.EQ.0) EXIT
   END DO
-!CLASS IS (StringArrayOption)
-  !! comments see IntArrayOption!
-  !tmp2 = TRIM(ADJUSTL(rest))
-  !IF (ALLOCATED(this%value)) DEALLOCATE(this%value)
-  !count = 0
-  !ALLOCATE(this%value(count))
-  !DO ! loop until no more entry 
-    !i = index(TRIM(tmp2), ',')
-    !! store text of tmp2 until next , in tmp
-    !IF (i.GT.0) THEN
-      !tmp = tmp2(1:i-1)
-    !ELSE 
-      !tmp = tmp2
-    !END IF
-    !! remove entry and trim the result
-    !tmp2 = tmp2(i+1:)
-    !tmp2 = TRIM(ADJUSTL(tmp2))
-    !! increase the number of entries
-    !count = count + 1
-    !! allocate temporary array and copy content of this%value to the first entries
-    !! aftwards use MOVE_ALLOC to move it back to this%value (this deallocates the temporary array)
-    !ALLOCATE(strtmp(count))
-    !strtmp(:size(this%value)) = this%value
-    !CALL MOVE_ALLOC(strtmp, this%value) ! strtmp gets deallocated
-    !! finally this%value has the correct size and we can readin the entry
-    !READ(tmp, *,IOSTAT=stat) this%value(count)
-    !IF (i.EQ.0) EXIT
-  !END DO
+CLASS IS (StringArrayOption)
+  ! comments see IntArrayOption!
+  tmp2 = TRIM(ADJUSTL(rest))
+  IF (ALLOCATED(this%value)) DEALLOCATE(this%value)
+  count = 0
+  ALLOCATE(this%value(count))
+  DO ! loop until no more entry 
+    i = index(TRIM(tmp2), ',')
+    ! store text of tmp2 until next , in tmp
+    IF (i.GT.0) THEN
+      tmp = tmp2(1:i-1)
+    ELSE 
+      tmp = tmp2
+    END IF
+    ! remove entry and trim the result
+    tmp2 = tmp2(i+1:)
+    tmp2 = TRIM(ADJUSTL(tmp2))
+    ! increase the number of entries
+    count = count + 1
+    ! allocate temporary array and copy content of this%value to the first entries
+    ! aftwards use MOVE_ALLOC to move it back to this%value (this deallocates the temporary array)
+    ALLOCATE(strtmp(count))
+    strtmp(:size(this%value)) = this%value
+    CALL MOVE_ALLOC(strtmp, this%value) ! strtmp gets deallocated
+    ! finally this%value has the correct size and we can readin the entry
+    READ(tmp, *,IOSTAT=stat) this%value(count)
+    IF (i.EQ.0) EXIT
+  END DO
 CLASS DEFAULT 
   STOP
 END SELECT

@@ -27,9 +27,11 @@ SAVE
 !-----------------------------------------------------------------------------------------------------------------------------------
 LOGICAL           :: ShockCapturingInitIsDone=.FALSE. !< marks whether the shock capturing init routine is complete
 integer           :: ShockIndicator                   !< Identifier for the shock indicator
-character(len=255):: ShockIndicatorQuantity           !< Shock indicator quantity to be used
+integer           :: ShockIndicatorNum                !< Number of indicators
+
+character(len=255)            , allocatable :: ShockIndicatorQuantity(:)           !< Shock indicator quantity to be used
 ! The shock indicator itself:
-type(Indicator_PerssonPeraire) :: Shock_Indicator
+type(Indicator_PerssonPeraire), allocatable :: Shock_Indicator(:)
 
 !===================================================================================================================================
 

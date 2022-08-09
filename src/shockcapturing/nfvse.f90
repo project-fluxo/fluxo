@@ -1654,7 +1654,7 @@ contains
     use MOD_Mesh_Vars          , only: nElems
     use MOD_NFVSE_MPI          , only: ProlongBlendingCoeffToFaces, PropagateBlendingCoeff
     use MOD_NFVSE_Vars         , only: SpacePropSweeps, TimeRelFactor, alpha, alpha_max, alpha_min, ComputeAlpha, ShockBlendCoef, sharpness, threshold
-    use MOD_ShockCapturing_Vars, only: Shock_Indicator
+    use MOD_ShockCapturing_Vars, only: Shock_Indicator, ShockIndicatorNum
     ! For reconstruction on boundaries
 #if MPI
     use MOD_Mesh_Vars          , only: nSides
@@ -1670,8 +1670,8 @@ contains
     real,dimension(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems), intent(in)  :: U
     !---------------------------------------------------------------------------------------------------------------------------------
     ! Local variables
-    real ::  eta(nElems)
-    integer :: eID
+    real ::  eta(nElems), eta0(nElems)
+    integer :: eID, ind
     !---------------------------------------------------------------------------------------------------------------------------------
     
 ! If we do reconstruction on boundaries, we need to send the U_master
@@ -1692,8 +1692,16 @@ contains
 !   ---------------------------------
     select case (ComputeAlpha)
       case(1)   ! Persson-Peraire indicator
-        ! Shock indicator
-        eta = Shock_Indicator % compute(U)
+        ! Compute first shock indicator
+        eta = Shock_Indicator(1) % compute(U)
+        
+        ! Compute other shock indicators
+        do ind=2, ShockIndicatorNum
+          eta0 = Shock_Indicator(ind) % compute(U)
+          do eID=1, nElems
+            eta(eID) = max(eta(eID), eta0(eID) )
+          end do
+        end do
         
         ! Compute alpha
         do eID=1, nElems

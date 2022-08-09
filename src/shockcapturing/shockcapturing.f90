@@ -58,17 +58,18 @@ character(len=255) :: IndicatorQuantities,fmt
 !==================================================================================================================================
 CALL prms%SetSection("ShockCapturing")
 
-CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be used as shock-indicator:\n"//&
+CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be used as shock indicator:\n"//&
                                               "   1: Persson-Peraire indicator\n"&
                                              ,"1")
+
+CALL prms%CreateIntOption(  "ShockIndicatorNum",  " Number of shock indicators","1")
 
 write(fmt,'(A,I0,A)') '(',nIndVar,'A)'
 write(IndicatorQuantities,fmt) ('  * '//trim(IndicatorQuantityNames(i))//'\n', i=1, nIndVar)
 
-CALL prms%CreateStringOption("ShockIndicatorQuantity",  " Specifies the quantity to be used for the shock indicator. One of the following:\n"//&
+CALL prms%CreateStringArrayOption("ShockIndicatorQuantity",  " Specifies the quantities to be used for the shock indicator. One or several of the following:\n"//&
                                               trim(IndicatorQuantities)&
                                              ,"DensityTimesPressure")
-
 #if SHOCK_NFVSE
 call DefineParametersNFVSE()
 #endif /*SHOCK_NFVSE*/
@@ -94,6 +95,7 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+integer :: ind
 !============================================================================================================================
 
 IF (ShockCapturingInitIsDone.OR.(.NOT.InterpolationInitIsDone)) THEN
@@ -109,14 +111,20 @@ SWRITE(UNIT_StdOut,'(132("-"))')
 SWRITE(UNIT_stdOut,'(A)') ' INIT SHOCKCAPTURING...'
 
 ShockIndicator         = GETINT('ShockIndicator','1')
-ShockIndicatorQuantity = GETSTR('ShockIndicatorQuantity','DensityTimesPressure')
+ShockIndicatorNum      = GETINT('ShockIndicatorNum','1')
+ShockIndicatorQuantity = GETSTRARRAY('ShockIndicatorQuantity',ShockIndicatorNum,'DensityTimesPressure')
+
+if (ShockIndicatorNum<1) CALL abort(__STAMP__,'Number of shock inticadors must be greater or equal to 1',999,999.)
 
 #if SHOCK_NFVSE
 call InitNFVSE()
 #endif /*SHOCK_NFVSE*/
 
 if (ShockIndicator==1) then
-  call Shock_Indicator % construct(ShockIndicatorQuantity)
+  allocate (Shock_Indicator(ShockIndicatorNum))
+  do ind=1, ShockIndicatorNum
+    call Shock_Indicator(ind) % construct(ShockIndicatorQuantity(ind))
+  end do
 else
   CALL abort(__STAMP__,'Shock indicator not defined!',999,999.)
   RETURN
@@ -174,13 +182,17 @@ IMPLICIT NONE
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
+integer :: ind
 !============================================================================================================================
 IF (.NOT.ShockCapturingInitIsDone) THEN
   WRITE(UNIT_stdOut,*) "InitShockCapturing was not called before."
   RETURN
 END IF
 ShockCapturingInitIsDone = .FALSE.
-call Shock_Indicator % destruct
+do ind=1, ShockIndicatorNum
+    call Shock_Indicator(ind) % destruct
+end do
+SDEALLOCATE(Shock_Indicator) 
 #if SHOCK_NFVSE
 call FinalizeNFVSE()
 #endif /*SHOCK_NFVSE*/

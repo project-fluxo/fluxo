@@ -74,7 +74,7 @@ CONTAINS
   PROCEDURE :: CreateIntArrayOption       !< routine to generate an integer array option
   PROCEDURE :: CreateLogicalArrayOption   !< routine to generate an logical array option 
   PROCEDURE :: CreateRealArrayOption      !< routine to generate an real array option
-  !PROCEDURE :: CreateStringArrayOption    !< routine to generate an string array option
+  PROCEDURE :: CreateStringArrayOption    !< routine to generate an string array option
   PROCEDURE :: CountOption_               !< function to count the number of options of a given name
   PROCEDURE :: read_options               !< routine that loops over the lines of a parameter files 
                                           !< and calls read_option for every option. Outputs all unknow options
@@ -205,7 +205,6 @@ opt%hasDefault = PRESENT(value)
 IF (opt%hasDefault) THEN
   CALL opt%parse(value)
 END IF
-
 opt%multiple   = .FALSE.
 IF (PRESENT(multiple)) opt%multiple = multiple
 IF (opt%multiple.AND.opt%hasDefault) THEN
@@ -377,20 +376,20 @@ END SUBROUTINE CreateRealArrayOption
 !==================================================================================================================================
 !> Create a new string array option. Only calls the general prms\%createoption routine.
 !==================================================================================================================================
-!SUBROUTINE CreateStringArrayOption(this, name, description, value, multiple) 
-!! INPUT/OUTPUT VARIABLES
-!CLASS(Parameters),INTENT(INOUT)      :: this           !< CLASS(Parameters)
-!CHARACTER(LEN=*),INTENT(IN)          :: name           !< option name
-!CHARACTER(LEN=*),INTENT(IN)          :: description    !< option description
-!CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: value          !< option value
-!LOGICAL,INTENT(IN),OPTIONAL          :: multiple       !< marker if multiple option
-!!----------------------------------------------------------------------------------------------------------------------------------
-!! LOCAL VARIABLES 
-!CLASS(StringArrayOption),ALLOCATABLE,TARGET :: stringopt
-!!==================================================================================================================================
-!ALLOCATE(stringopt)
-!CALL this%CreateOption(stringopt, name, description, value=value, multiple=multiple)
-!END SUBROUTINE CreateStringArrayOption
+SUBROUTINE CreateStringArrayOption(this, name, description, value, multiple) 
+! INPUT/OUTPUT VARIABLES
+CLASS(Parameters),INTENT(INOUT)      :: this           !< CLASS(Parameters)
+CHARACTER(LEN=*),INTENT(IN)          :: name           !< option name
+CHARACTER(LEN=*),INTENT(IN)          :: description    !< option description
+CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: value          !< option value
+LOGICAL,INTENT(IN),OPTIONAL          :: multiple       !< marker if multiple option
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES 
+CLASS(StringArrayOption),ALLOCATABLE,TARGET :: stringopt
+!==================================================================================================================================
+ALLOCATE(stringopt)
+CALL this%CreateOption(stringopt, name, description, value=value, multiple=multiple)
+END SUBROUTINE CreateStringArrayOption
 
 !==================================================================================================================================
 !> Count number of occurrence of option with given name.
@@ -933,7 +932,7 @@ CLASS(*)                             :: value(no) !< parameter value
 CLASS(link),POINTER   :: current
 CLASS(Option),POINTER :: opt
 CHARACTER(LEN=255)    :: proposal_loc
-!INTEGER               :: i
+INTEGER               :: i
 !==================================================================================================================================
 
 ! iterate over all options
@@ -974,14 +973,14 @@ DO WHILE (associated(current))
       TYPE IS (LOGICAL)
         value = opt%value
       END SELECT
-    !CLASS IS (StringArrayOption)
-      !IF (SIZE(opt%value).NE.no) CALL Abort(__STAMP__,"Array size of option '"//TRIM(name)//"' is not correct!")
-      !SELECT TYPE(value)
-      !TYPE IS (STR255)
-        !DO i=1,no
-          !value(i)%chars = opt%value(i)
-        !END DO
-      !END SELECT
+    CLASS IS (StringArrayOption)
+      IF (SIZE(opt%value).NE.no) CALL Abort(__STAMP__,"Array size of option '"//TRIM(name)//"' is not correct!")
+      SELECT TYPE(value)
+      TYPE IS (STR255)
+        DO i=1,no
+          value(i)%chars = opt%value(i)
+        END DO
+      END SELECT
     END SELECT
     ! print option and value to stdout
     CALL opt%print(prms%maxNameLen, prms%maxValueLen, mode=0)

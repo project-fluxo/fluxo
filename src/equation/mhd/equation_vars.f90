@@ -955,6 +955,10 @@ subroutine SetIndicatorFunction(ind_id,IndicatorFunc)
     case('Pressure')             ; IndicatorFunc => Get_Pressure
     case('DensityTimesPressure') ; IndicatorFunc => Get_DensityTimesPressure
     case('KinPlusMagEnergy')     ; IndicatorFunc => Get_KinPlusMagEnergy
+#if PP_NumComponents>1
+    case('Density1')             ; IndicatorFunc => Get_Density1
+    case('Density2')             ; IndicatorFunc => Get_Density2
+#endif /*PP_NumComponents>1*/
     case default
       CALL abort(__STAMP__,'Indicator quantity "'//trim(ind_id)//'" is not defined for this equation!',999,999.)
       RETURN
@@ -974,6 +978,32 @@ pure subroutine Get_Density(U,rho)
   
   rho = sum(U(IRHO1:PP_NumComponents))
 end subroutine Get_Density
+#if PP_NumComponents>1
+!===================================================================================================================================
+!> Returns the density1
+!===================================================================================================================================
+pure subroutine Get_Density1(U,rho)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: rho
+  !-------------------------------------------------
+  
+  rho = U(IRHO1)
+end subroutine Get_Density1
+!===================================================================================================================================
+!> Returns the density1
+!===================================================================================================================================
+pure subroutine Get_Density2(U,rho)
+  implicit none
+  !-arguments---------------------------------------
+  real,intent(in)  :: U(PP_nVar)
+  real,intent(out) :: rho
+  !-------------------------------------------------
+  
+  rho = U(IRHO2)
+end subroutine Get_Density2
+#endif /*PP_NumComponents>1*/
 !===================================================================================================================================
 !> Returns the pressure
 !===================================================================================================================================
