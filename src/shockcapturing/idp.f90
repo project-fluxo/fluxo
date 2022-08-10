@@ -47,14 +47,15 @@ contains
 !   --------------------------
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
-    call prms%CreateLogicalOption(   "IDPStateTVD",  " IDP(TVD) correction on state quantities? (to be used in combination with )", "F")
+    call prms%CreateLogicalOption(   "IDPStateTVD",  " IDP(TVD) correction on state quantities? (to be used in combination with IDPStateTVDVarsNum, IDPStateTVDVars, and IDPStateTVDeqWise)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
 !   Additional options
 !   ------------------
     ! For IDPStateTVD
-    call prms%CreateIntOption(  "IDPStateTVDVarsNum",  " Number of state variables to impose TVD correction", "1")
-    call prms%CreateIntArrayOption("IDPStateTVDVars",  " Variables to impose TVD correction", "1")
+    call prms%CreateIntOption(   "IDPStateTVDVarsNum",  " Number of state variables to impose TVD correction", "1")
+    call prms%CreateIntArrayOption( "IDPStateTVDVars",  " Variables to impose TVD correction", "1")
+    call prms%CreateLogicalOption("IDPStateTVDeqWise",  " Perform IDP(TVD) correction equation-wise?", "F")
     
     
     call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator alpha>IDPalpha_min (and the indicator's alpha is neglected)", "F")
@@ -104,9 +105,10 @@ contains
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
     
-    ! For IDPStateTCD
+    ! For IDPStateTVD
+    IDPStateTVDeqWise  = GETLOGICAL('IDPStateTVDeqWise' ,'F')
     IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
-    IDPStateTVDVars = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
+    IDPStateTVDVars    = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
     
     IDPafterIndicator = GETLOGICAL('IDPafterIndicator','F')
     IDPalpha_min      = GETREAL   ('IDPalpha_min',REALTOSTR(alpha_min))
@@ -822,7 +824,7 @@ contains
   subroutine IDP_LimitStateTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
-    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
+    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP, IDPStateTVDeqWise
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
@@ -856,8 +858,19 @@ contains
     real    :: u_safe
     real    :: a   ! a  = PositCorrFactor * u_safe - rho
     real    :: Qp, Qm, Pp, Pm
+#if LOCAL_ALPHA
+    real    :: dalpha_locState(-1:PP_N+1,-1:PP_N+1,-1:PP_N+1)  ! Local copy of dalpha_loc
+    real    :: alpha_locState(0:PP_N,0:PP_N,0:PP_N)   ! Local copy of alpha_loc
+#endif /*LOCAL_ALPHA*/
+    real    :: dalphaState                            ! Local copy of dalpha
+    real    :: alphaState                             ! Local copy of alpha
     integer :: i,j,k,l,var
     !--------------------------------------------------------
+    
+#if LOCAL_ALPHA
+    dalpha_locState = dalpha_loc
+#endif /*LOCAL_ALPHA*/
+    dalphaState = dalpha
     
 !   Compute bounds and correction factors for each variable
 !   -------------------------------------------------------
@@ -979,8 +992,8 @@ contains
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
         dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
         
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
-        dalpha = max(dalpha,dalpha1)
+        dalpha_locState(i,j,k) = max(dalpha_locState(i,j,k),dalpha1)
+        dalphaState = max(dalphaState,dalpha1)
         
 #else
         ! Simple element-wise limiter
@@ -1001,15 +1014,66 @@ contains
         
         ! Change inconsistent alphas
         if ( (alpha(eID)+dalpha1 > alpha_maxIDP) .or. isnan(dalpha1)) then
-          dalpha  = alpha_maxIDP - alpha(eID)
+          dalphaState  = alpha_maxIDP - alpha(eID)
         else
-          dalpha = max(dalpha,dalpha1)
+          dalphaState = max(dalphaState,dalpha1)
         end if
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
+      
+      ! Perform correction equation wise if needed
+      if (IDPStateTVDeqWise) then
+        if ( dalphaState>0.0 .or. isnan(dalphaState) &
+#if LOCAL_ALPHA
+                             .or. any(isnan(dalpha_locState))   &
+#endif /*LOCAL_ALPHA*/
+                        ) then
+          
+          ! Fill in containers for alpha and alpha_loc
+          alphaState = alpha(eID)
+          alpha_locState = alpha_loc(:,:,:,eID)
+          
+          ! Perform correction
+          call PerformCorrection(U,Ut,dalphaState    ,alphaState    , &
+#if LOCAL_ALPHA 
+                                      dalpha_locState,alpha_locState, &
+#endif /*LOCAL_ALPHA*/
+                                      dt,sdt,eID,ivar,ivar)
+          
+          ! Recompute antidiffusive fluxes
+#if LOCAL_ALPHA 
+          do i=0, PP_N-1 ! i goes through the inner interfaces
+            do k=0, PP_N  ; do j=0, PP_N ! j and k go through DOFs
+              f_antidiff(ivar,i,j,k,eID) = (1.0 - max(dalpha_locState(i,j,k),dalpha_locState(i+1,j,k))) * f_antidiff(ivar,i,j,k,eID)
+              g_antidiff(ivar,j,i,k,eID) = (1.0 - max(dalpha_locState(j,i,k),dalpha_locState(j,i+1,k))) * g_antidiff(ivar,j,i,k,eID)
+              h_antidiff(ivar,j,k,i,eID) = (1.0 - max(dalpha_locState(j,k,i),dalpha_locState(j,k,i+1))) * h_antidiff(ivar,j,k,i,eID)
+#if NONCONS
+              f_antidiffR(ivar,i,j,k,eID) = (1.0 - max(dalpha_locState(i,j,k),dalpha_locState(i+1,j,k))) * f_antidiffR(ivar,i,j,k,eID)
+              g_antidiffR(ivar,j,i,k,eID) = (1.0 - max(dalpha_locState(j,i,k),dalpha_locState(j,i+1,k))) * g_antidiffR(ivar,j,i,k,eID)
+              h_antidiffR(ivar,j,k,i,eID) = (1.0 - max(dalpha_locState(j,k,i),dalpha_locState(j,k,i+1))) * h_antidiffR(ivar,j,k,i,eID)
+#endif /*NONCONS*/
+            end do        ; end do
+          end do
+#else
+          stop 'Not yer for elem-wise blending'
+#endif /*LOCAL_ALPHA*/
+          
+          ! Restore dalphaState and dalpha_locState
+#if LOCAL_ALPHA
+          dalpha_locState = dalpha_loc
+#endif /*LOCAL_ALPHA*/
+          dalphaState = dalpha
+        end if
+      end if
+      
       end associate
-    end do !var  
+    end do !var 
+    
+    ! Modify variables for element
+    dalpha_loc = dalpha_locState
+    dalpha = dalphaState
+     
   end subroutine IDP_LimitStateTVD
 !===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
@@ -1758,7 +1822,7 @@ contains
 #if LOCAL_ALPHA
                                          dalpha_loc,alpha_loc, &
 #endif /*LOCAL_ALPHA*/
-                                                             dt,sdt,eID)
+                                                             dt,sdt,eID,vs_in,ve_in)
     use MOD_PreProc
     use MOD_IDP_Vars  , only: alpha_maxIDP
 #if LOCAL_ALPHA
@@ -1784,12 +1848,22 @@ contains
 #endif /*LOCAL_ALPHA*/
     real, intent(in)    :: dt,sdt                          ! time step and inverse
     integer, intent(in) :: eID
+    integer, intent(in), optional :: vs_in,ve_in           ! Start and end variables to perform correction
     !-local-variables--------------------------------
     real :: alphacont_loc ! A local container
     real :: alphacont     ! An element-wise container
     real :: my_corr(PP_nVar)
     integer :: i,j,k
+    integer :: vs, ve
     !------------------------------------------------
+    
+    if ( present(vs_in) .and. present(ve_in)) then
+      vs = vs_in
+      ve = ve_in
+    else
+      vs = 1
+      ve = PP_nVar
+    end if
     
     ! Change the alpha for output
     alphacont  = alpha
@@ -1817,58 +1891,58 @@ contains
       ! xi correction
       ! -------------
       ! left
-      my_corr=-max(dalpha_loc(i-1,j  ,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(i) * (f_antidiff(:,i-1,j,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      my_corr(vs:ve)=-max(dalpha_loc(i-1,j  ,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(i) * (f_antidiff(vs:ve,i-1,j,k,eID))*sJ(i,j,k,eID)
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
       
       ! right
 #if NONCONS
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (f_antidiffR(:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (f_antidiffR(vs:ve,i  ,j,k,eID))*sJ(i,j,k,eID)
 #else
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (f_antidiff (:,i  ,j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i+1,j  ,k  )) * sWGP(i) * (f_antidiff (vs:ve,i  ,j,k,eID))*sJ(i,j,k,eID)
 #endif /*NONCONS*/
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
       
       ! eta correction
       ! --------------
       ! left
-      my_corr=-max(dalpha_loc(i  ,j-1,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(j) * (g_antidiff(:,i,j-1,k,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      my_corr(vs:ve)=-max(dalpha_loc(i  ,j-1,k  ),dalpha_loc(i  ,j  ,k  )) * sWGP(j) * (g_antidiff(vs:ve,i,j-1,k,eID))*sJ(i,j,k,eID)
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
       
       ! right
 #if NONCONS
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (g_antidiffR(:,i,  j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (g_antidiffR(vs:ve,i,  j,k,eID))*sJ(i,j,k,eID)
 #else
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (g_antidiff (:,i,  j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j+1,k  )) * sWGP(j) * (g_antidiff (vs:ve,i,  j,k,eID))*sJ(i,j,k,eID)
 #endif /*NONCONS*/
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
       
       ! zeta correction
       ! ---------------
       ! left
-      my_corr=-max(dalpha_loc(i  ,j  ,k-1),dalpha_loc(i  ,j  ,k  )) * sWGP(k) * (h_antidiff(:,i,j,k-1,eID))*sJ(i,j,k,eID)
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      my_corr(vs:ve)=-max(dalpha_loc(i  ,j  ,k-1),dalpha_loc(i  ,j  ,k  )) * sWGP(k) * (h_antidiff(vs:ve,i,j,k-1,eID))*sJ(i,j,k,eID)
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
       
       ! right
 #if NONCONS
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (h_antidiffR(:,i,  j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (h_antidiffR(vs:ve,i,  j,k,eID))*sJ(i,j,k,eID)
 #else
-      my_corr=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (h_antidiff (:,i,  j,k,eID))*sJ(i,j,k,eID)
+      my_corr(vs:ve)=max(dalpha_loc(i  ,j  ,k  ),dalpha_loc(i  ,j  ,k+1)) * sWGP(k) * (h_antidiff (vs:ve,i,  j,k,eID))*sJ(i,j,k,eID)
 #endif /*NONCONS*/
-      U (:,i,j,k) = U (:,i,j,k) + my_corr * dt
-      Ut(:,i,j,k) = Ut(:,i,j,k) + my_corr
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + my_corr(vs:ve) * dt
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + my_corr(vs:ve)
     end do       ; end do       ; enddo
 #else
     ! Element-wise correction!
     do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
       ! Correct U
-      U (:,i,j,k) = U (:,i,j,k) + dalpha * dt * FFV_m_FDG(:,i,j,k,eID)
+      U (vs:ve,i,j,k) = U (vs:ve,i,j,k) + dalpha * dt * FFV_m_FDG(vs:ve,i,j,k,eID)
       ! Correct Ut
-      Ut(:,i,j,k) = Ut(:,i,j,k) + dalpha * FFV_m_FDG(:,i,j,k,eID)
+      Ut(vs:ve,i,j,k) = Ut(vs:ve,i,j,k) + dalpha * FFV_m_FDG(vs:ve,i,j,k,eID)
     end do       ; end do       ; enddo
 #endif /*LOCAL_ALPHA*/
   end subroutine PerformCorrection

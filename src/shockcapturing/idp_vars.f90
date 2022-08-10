@@ -20,6 +20,8 @@ module MOD_IDP_Vars
   logical :: IDPneedsUsafe_ext = .FALSE.
   logical :: IDPneedsUprev     = .FALSE.
   
+  ! Specifications for IDPStateTVD
+  logical :: IDPStateTVDeqWise = .FALSE.
   integer :: IDPStateTVDVarsNum
   integer, allocatable :: IDPStateTVDVars(:)
   
