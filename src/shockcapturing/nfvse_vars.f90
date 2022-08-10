@@ -30,9 +30,9 @@ module MOD_NFVSE_Vars
   public :: maximum_alpha, amount_alpha, amount_alpha_steps
 #endif /*NFVSE_CORR*/
 #if LOCAL_ALPHA
-  public :: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
+  public :: alpha_loc, f_antidiff, g_antidiff, h_antidiff
 #if NONCONS
-  public :: ftildeR_DG, gtildeR_DG, htildeR_DG
+  public :: f_antidiffR, g_antidiffR, h_antidiffR
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   public :: sdxR, sdxL, rL, rR, U_ext 
@@ -75,14 +75,16 @@ module MOD_NFVSE_Vars
 ! -------
   integer                             :: ComputeAlpha     !< Method to compute alpha
 #if LOCAL_ALPHA
-  real, target          , allocatable :: alpha_loc(:,:,:,:) !< subcell-wise blending function
-  real                  , allocatable :: ftilde_DG(:,:,:,:,:)
-  real                  , allocatable :: gtilde_DG(:,:,:,:,:)
-  real                  , allocatable :: htilde_DG(:,:,:,:,:)
+  real, target          , allocatable :: alpha_loc(:,:,:,:)   !< subcell-wise blending function
+  ! Antidiffusive fluxes
+  real                  , allocatable :: f_antidiff(:,:,:,:,:)
+  real                  , allocatable :: g_antidiff(:,:,:,:,:)
+  real                  , allocatable :: h_antidiff(:,:,:,:,:)
 #if NONCONS
-  real                  , allocatable :: ftildeR_DG(:,:,:,:,:)
-  real                  , allocatable :: gtildeR_DG(:,:,:,:,:)
-  real                  , allocatable :: htildeR_DG(:,:,:,:,:)
+  ! Antidiffusive fluxes on the right
+  real                  , allocatable :: f_antidiffR(:,:,:,:,:)
+  real                  , allocatable :: g_antidiffR(:,:,:,:,:)
+  real                  , allocatable :: h_antidiffR(:,:,:,:,:)
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   real, target          , allocatable :: alpha(:)         !< Element-wise blending function (modified every time Ut is computed)

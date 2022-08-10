@@ -501,25 +501,25 @@ contains
     
     ! Variables for local alpha
 #if LOCAL_ALPHA
-    SDEALLOCATE(ftilde_DG)
-    SDEALLOCATE(gtilde_DG)
-    SDEALLOCATE(htilde_DG)
-    allocate ( ftilde_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
-    allocate ( gtilde_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
-    allocate ( htilde_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
-    ftilde_DG = 0.0
-    gtilde_DG = 0.0
-    htilde_DG = 0.0
+    SDEALLOCATE(f_antidiff)
+    SDEALLOCATE(g_antidiff)
+    SDEALLOCATE(h_antidiff)
+    allocate ( f_antidiff(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
+    allocate ( g_antidiff(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
+    allocate ( h_antidiff(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
+    f_antidiff = 0.0
+    g_antidiff = 0.0
+    h_antidiff = 0.0
 #if NONCONS
-    SDEALLOCATE(ftildeR_DG)
-    SDEALLOCATE(gtildeR_DG)
-    SDEALLOCATE(htildeR_DG)
-    allocate ( ftildeR_DG(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
-    allocate ( gtildeR_DG(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
-    allocate ( htildeR_DG(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
-    ftildeR_DG = 0.0
-    gtildeR_DG = 0.0
-    htildeR_DG = 0.0
+    SDEALLOCATE(f_antidiffR)
+    SDEALLOCATE(g_antidiffR)
+    SDEALLOCATE(h_antidiffR)
+    allocate ( f_antidiffR(PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N,nElems) )
+    allocate ( g_antidiffR(PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N,nElems) )
+    allocate ( h_antidiffR(PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N,nElems) )
+    f_antidiffR = 0.0
+    g_antidiffR = 0.0
+    h_antidiffR = 0.0
 #endif /*NONCONS*/
     SDEALLOCATE(dalpha_loc)
     allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
@@ -563,9 +563,9 @@ contains
 #if NFVSE_CORR
     use MOD_IDP_Vars           , only: FFV_m_FDG, IDPafterIndicator, IDPPositivity
 #if LOCAL_ALPHA
-    use MOD_NFVSE_Vars         , only: alpha_loc, ftilde_DG, gtilde_DG, htilde_DG
+    use MOD_NFVSE_Vars         , only: alpha_loc, f_antidiff, g_antidiff, h_antidiff
 #if NONCONS
-    use MOD_NFVSE_Vars         , only: ftildeR_DG, gtildeR_DG, htildeR_DG
+    use MOD_NFVSE_Vars         , only: f_antidiffR, g_antidiffR, h_antidiffR
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
 #endif /*NFVSE_CORR*/
@@ -641,13 +641,13 @@ contains
                                                SubCellMetrics(iElem), iElem )
 !     Compute antidiffusive fluxes in the case of local alpha
 #if LOCAL_ALPHA
-      ftilde_DG(:,:,:,:,iElem) = ftilde_DG(:,:,:,:,iElem) - ftilde
-      gtilde_DG(:,:,:,:,iElem) = gtilde_DG(:,:,:,:,iElem) - gtilde
-      htilde_DG(:,:,:,:,iElem) = htilde_DG(:,:,:,:,iElem) - htilde
+      f_antidiff(:,:,:,:,iElem) = f_antidiff(:,:,:,:,iElem) - ftilde
+      g_antidiff(:,:,:,:,iElem) = g_antidiff(:,:,:,:,iElem) - gtilde
+      h_antidiff(:,:,:,:,iElem) = h_antidiff(:,:,:,:,iElem) - htilde
 #if NONCONS
-      ftildeR_DG(:,:,:,:,iElem) = ftildeR_DG(:,:,:,:,iElem) - ftildeR
-      gtildeR_DG(:,:,:,:,iElem) = gtildeR_DG(:,:,:,:,iElem) - gtildeR
-      htildeR_DG(:,:,:,:,iElem) = htildeR_DG(:,:,:,:,iElem) - htildeR
+      f_antidiffR(:,:,:,:,iElem) = f_antidiffR(:,:,:,:,iElem) - ftildeR
+      g_antidiffR(:,:,:,:,iElem) = g_antidiffR(:,:,:,:,iElem) - gtildeR
+      h_antidiffR(:,:,:,:,iElem) = h_antidiffR(:,:,:,:,iElem) - htildeR
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
 !     Update Ut

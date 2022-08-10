@@ -119,7 +119,7 @@ SUBROUTINE VolInt_adv(Ut)
 USE MOD_PreProc
 USE MOD_DG_Vars   ,ONLY:D_hat_T,U
 #if LOCAL_ALPHA
-use MOD_NFVSE_Vars,only: ftilde_DG, gtilde_DG, htilde_DG
+use MOD_NFVSE_Vars,only: f_antidiff, g_antidiff, h_antidiff
 use MOD_Interpolation_Vars , only: wGP
 USE MOD_DG_Vars   ,ONLY:D_T
 #endif /*LOCAL_ALPHA*/
@@ -147,14 +147,14 @@ DO iElem=1,nElems
 #if LOCAL_ALPHA
     
     do i=0, PP_N-1
-      ftilde_DG(:,i,:,:,iElem) = 0.
-      gtilde_DG(:,:,i,:,iElem) = 0.
-      htilde_DG(:,:,:,i,iElem) = 0.
+      f_antidiff(:,i,:,:,iElem) = 0.
+      g_antidiff(:,:,i,:,iElem) = 0.
+      h_antidiff(:,:,:,i,iElem) = 0.
       do l=0, i
         do j=0, PP_N
-          ftilde_DG(:,i,:,:,iElem) = ftilde_DG(:,i,:,:,iElem) - wGP(j)*D_T(l,j)*ftilde(:,j,:,:)
-          gtilde_DG(:,:,i,:,iElem) = gtilde_DG(:,:,i,:,iElem) - wGP(j)*D_T(l,j)*gtilde(:,:,j,:)
-          htilde_DG(:,:,:,i,iElem) = htilde_DG(:,:,:,i,iElem) - wGP(j)*D_T(l,j)*htilde(:,:,:,j)
+          f_antidiff(:,i,:,:,iElem) = f_antidiff(:,i,:,:,iElem) - wGP(j)*D_T(l,j)*ftilde(:,j,:,:)
+          g_antidiff(:,:,i,:,iElem) = g_antidiff(:,:,i,:,iElem) - wGP(j)*D_T(l,j)*gtilde(:,:,j,:)
+          h_antidiff(:,:,:,i,iElem) = h_antidiff(:,:,:,i,iElem) - wGP(j)*D_T(l,j)*htilde(:,:,:,j)
         end do
       end do
     end do
@@ -201,9 +201,9 @@ USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D
 #if LOCAL_ALPHA
 #if NONCONS
 USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D_separate
-use MOD_NFVSE_Vars,         only: ftildeR_DG, gtildeR_DG, htildeR_DG
+use MOD_NFVSE_Vars,         only: f_antidiffR, g_antidiffR, h_antidiffR
 #endif NONCONS
-use MOD_NFVSE_Vars,         only: ftilde_DG, gtilde_DG, htilde_DG, sWGP
+use MOD_NFVSE_Vars,         only: f_antidiff, g_antidiff, h_antidiff, sWGP
 use MOD_Interpolation_Vars, only: wGP
 #endif /*LOCAL_ALPHA*/
 ! IMPLICIT VARIABLE HANDLING
@@ -234,9 +234,9 @@ real :: Ut_dbg(PP_nVar) ! Debug!!
 INTEGER                                           :: i,j,k,l,m,iElem,term
 !==================================================================================================================================
 #if LOCAL_ALPHA
-ftilde_DG=0.0
-htilde_DG=0.0
-gtilde_DG=0.0
+f_antidiff=0.0
+h_antidiff=0.0
+g_antidiff=0.0
 #if NONCONS
 phi_tildex=0.0
 phi_tildey=0.0
@@ -269,12 +269,13 @@ DO iElem=1,nElems
 #endif /*LOCAL_ALPHA && NONCONS*/
 
 #if LOCAL_ALPHA
-    ! Conservative part of high-order "staggered" fluxes:
-    ! ***************************************************
+    ! Store the high-order "staggered" fluxes in the containers for the antidiffusive fluxes
+    !   (first only the conservative part)
+    ! **************************************************************************************
     do j=0, PP_N-1
-      ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j-1,:,:,iElem)
-      gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j-1,:,iElem)
-      htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j-1,iElem)
+      f_antidiff(:,j,:,:,iElem) = f_antidiff(:,j-1,:,:,iElem)
+      g_antidiff(:,:,j,:,iElem) = g_antidiff(:,:,j-1,:,iElem)
+      h_antidiff(:,:,:,j,iElem) = h_antidiff(:,:,:,j-1,iElem)
 #if NONCONS
       phi_tildex(:,j,:,:) = phi_tildex(:,j-1,:,:)
       phi_tildey(:,:,j,:) = phi_tildey(:,:,j-1,:)
@@ -282,9 +283,9 @@ DO iElem=1,nElems
 #endif /*NONCONS*/
       
       do i=0, PP_N
-        ftilde_DG(:,j,:,:,iElem) = ftilde_DG(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
-        gtilde_DG(:,:,j,:,iElem) = gtilde_DG(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
-        htilde_DG(:,:,:,j,iElem) = htilde_DG(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
+        f_antidiff(:,j,:,:,iElem) = f_antidiff(:,j,:,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*ftilde(:,i,j,:,:)
+        g_antidiff(:,:,j,:,iElem) = g_antidiff(:,:,j,:,iElem) + wGP(j)*Dvolsurf_T(i,j)*gtilde(:,i,:,j,:)
+        h_antidiff(:,:,:,j,iElem) = h_antidiff(:,:,:,j,iElem) + wGP(j)*Dvolsurf_T(i,j)*htilde(:,i,:,:,j)
 #if NONCONS
         phi_tildex(:,j,:,:) = phi_tildex(:,j,:,:) + wGP(j)*Dvolsurf_T(i,j)*f_noncons(:,i,j,:,:)
         phi_tildey(:,:,j,:) = phi_tildey(:,:,j,:) + wGP(j)*Dvolsurf_T(i,j)*g_noncons(:,i,:,j,:)
@@ -294,38 +295,38 @@ DO iElem=1,nElems
     end do
 #if NONCONS
     ! Copy conservative part into the right non-conservative fluxes
-    ftildeR_DG(:,:,:,:,iElem) = ftilde_DG(:,:,:,:,iElem)
-    gtildeR_DG(:,:,:,:,iElem) = gtilde_DG(:,:,:,:,iElem)
-    htildeR_DG(:,:,:,:,iElem) = htilde_DG(:,:,:,:,iElem)
+    f_antidiffR(:,:,:,:,iElem) = f_antidiff(:,:,:,:,iElem)
+    g_antidiffR(:,:,:,:,iElem) = g_antidiff(:,:,:,:,iElem)
+    h_antidiffR(:,:,:,:,iElem) = h_antidiff(:,:,:,:,iElem)
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
   
-  !only euler
   ! Update the time derivative with the spatial derivatives of the transformed fluxes
   DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
     
 #if LOCAL_ALPHA
 #if NONCONS
-    ! Add nonconservative part to fluxes
+    ! Add nonconservative part to staggered fluxes
+    ! --------------------------------------------
     do term=1,nnonc
       ! Fluxes on the left
-      ftilde_DG(:,i-1,j,k,iElem) = ftilde_DG(:,i-1,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i-1,j,k)
-      gtilde_DG(:,i,j-1,k,iElem) = gtilde_DG(:,i,j-1,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j-1,k)
-      htilde_DG(:,i,j,k-1,iElem) = htilde_DG(:,i,j,k-1,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k-1)
+      f_antidiff(:,i-1,j,k,iElem) = f_antidiff(:,i-1,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i-1,j,k)
+      g_antidiff(:,i,j-1,k,iElem) = g_antidiff(:,i,j-1,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j-1,k)
+      h_antidiff(:,i,j,k-1,iElem) = h_antidiff(:,i,j,k-1,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k-1)
       ! Fluxes on the right
-      ftildeR_DG(:,i,j,k,iElem) = ftildeR_DG(:,i,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i,j,k)
-      gtildeR_DG(:,i,j,k,iElem) = gtildeR_DG(:,i,j,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j,k)
-      htildeR_DG(:,i,j,k,iElem) = htildeR_DG(:,i,j,k,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k)
+      f_antidiffR(:,i,j,k,iElem) = f_antidiffR(:,i,j,k,iElem) + phi(:,1,term,i,j,k) * phi_tildex(term,i,j,k)
+      g_antidiffR(:,i,j,k,iElem) = g_antidiffR(:,i,j,k,iElem) + phi(:,2,term,i,j,k) * phi_tildey(term,i,j,k)
+      h_antidiffR(:,i,j,k,iElem) = h_antidiffR(:,i,j,k,iElem) + phi(:,3,term,i,j,k) * phi_tildez(term,i,j,k)
     end do
     ! Use flux differencing formula to get Ut
-    Ut(:,i,j,k,iElem) =  sWGP(i) * ( ftildeR_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j  ,k  ,iElem) ) &
-                       + sWGP(j) * ( gtildeR_DG(:,i,j,k,iElem) - gtilde_DG(:,i  ,j-1,k  ,iElem) ) &
-                       + sWGP(k) * ( htildeR_DG(:,i,j,k,iElem) - htilde_DG(:,i  ,j  ,k-1,iElem) )
+    Ut(:,i,j,k,iElem) =  sWGP(i) * ( f_antidiffR(:,i,j,k,iElem) - f_antidiff(:,i-1,j  ,k  ,iElem) ) &
+                       + sWGP(j) * ( g_antidiffR(:,i,j,k,iElem) - g_antidiff(:,i  ,j-1,k  ,iElem) ) &
+                       + sWGP(k) * ( h_antidiffR(:,i,j,k,iElem) - h_antidiff(:,i  ,j  ,k-1,iElem) )
 #else /*NONCONS*/
     ! Use flux differencing formula to get Ut
-    Ut(:,i,j,k,iElem) =  sWGP(i) * ( ftilde_DG(:,i,j,k,iElem) - ftilde_DG(:,i-1,j  ,k  ,iElem) ) &
-                       + sWGP(j) * ( gtilde_DG(:,i,j,k,iElem) - gtilde_DG(:,i  ,j-1,k  ,iElem) ) &
-                       + sWGP(k) * ( htilde_DG(:,i,j,k,iElem) - htilde_DG(:,i  ,j  ,k-1,iElem) )
+    Ut(:,i,j,k,iElem) =  sWGP(i) * ( f_antidiff(:,i,j,k,iElem) - f_antidiff(:,i-1,j  ,k  ,iElem) ) &
+                       + sWGP(j) * ( g_antidiff(:,i,j,k,iElem) - g_antidiff(:,i  ,j-1,k  ,iElem) ) &
+                       + sWGP(k) * ( h_antidiff(:,i,j,k,iElem) - h_antidiff(:,i  ,j  ,k-1,iElem) )
 #endif /*NONCONS*/
 #else /*LOCAL_ALPHA*/
     DO l=0,PP_N
