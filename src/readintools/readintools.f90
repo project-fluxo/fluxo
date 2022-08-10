@@ -976,9 +976,13 @@ DO WHILE (associated(current))
     CLASS IS (StringArrayOption)
       IF (SIZE(opt%value).NE.no) CALL Abort(__STAMP__,"Array size of option '"//TRIM(name)//"' is not correct!")
       SELECT TYPE(value)
-      TYPE IS (STR255)
+!~      TYPE IS (STR255)
+!~        DO i=1,no
+!~          value(i)%chars = opt%value(i)
+!~        END DO
+      TYPE IS (CHARACTER(len=*))
         DO i=1,no
-          value(i)%chars = opt%value(i)
+          value(i) = trim(opt%value(i))
         END DO
       END SELECT
     END SELECT
@@ -1102,13 +1106,15 @@ INTEGER,INTENT(IN)                   :: no        !< size of array
 CHARACTER(LEN=*),INTENT(IN),OPTIONAL :: proposal  !< reference value 
 CHARACTER(LEN=255)                   :: value(no) !< array of strings
 ! LOCAL VARIABLES
-TYPE(STR255) :: tmp(no) ! compiler bug workaround (gfortran 4.8.4)
+!~TYPE(STR255) :: tmp(no) ! compiler bug workaround (gfortran 4.8.4)
 INTEGER      :: i
 !==================================================================================================================================
-CALL GetGeneralArrayOption(tmp, name, no, proposal)
-DO i = 1, no
-  value(i)=tmp(i)%chars
-END DO ! i = 1, no
+! We use call GetGeneralArrayOption directly with an array of characters. This might trigger a compiler bug for gfortran 4.8.4.
+! However, the TYPE(STR255) strategy triggers a compiler bug for GNU 6+...
+CALL GetGeneralArrayOption(value, name, no, proposal)
+!~DO i = 1, no
+!~  value(i)=tmp(i)%chars
+!~END DO ! i = 1, no
 END FUNCTION GETSTRARRAY
 
 !==================================================================================================================================
