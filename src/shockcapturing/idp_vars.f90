@@ -8,7 +8,6 @@ module MOD_IDP_Vars
   logical           :: IDPSpecEntropy = .FALSE.
   logical           :: IDPPositivity  = .FALSE.
   logical           :: IDPStateTVD    = .FALSE.
-  logical           :: IDPPressureTVD = .FALSE.
   
   ! Additional options
   logical           :: IDPForce2D

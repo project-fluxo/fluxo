@@ -48,7 +48,6 @@ contains
     call prms%CreateLogicalOption("IDPMathEntropy",  " IDP correction on mathematical entropy?", "F")
     call prms%CreateLogicalOption("IDPSpecEntropy",  " IDP correction on specific entropy?", "F")
     call prms%CreateLogicalOption(   "IDPStateTVD",  " IDP(TVD) correction on state quantities? (to be used in combination with )", "F")
-    call prms%CreateLogicalOption("IDPPressureTVD",  " IDP(TVD) correction on pressure? (uses a Zalesak limiter with LOCAL_ALPHA=ON)", "F")
     call prms%CreateLogicalOption( "IDPPositivity",  " IDP correction for positivity of density and pressure?", "F")
     
 !   Additional options
@@ -102,7 +101,6 @@ contains
     ! IDP limiters
     IDPPositivity  = GETLOGICAL('IDPPositivity' ,'F')
     IDPStateTVD    = GETLOGICAL('IDPStateTVD' ,'F')
-    IDPPressureTVD = GETLOGICAL('IDPPressureTVD' ,'F')
     IDPMathEntropy = GETLOGICAL('IDPMathEntropy','F')
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
     
@@ -139,8 +137,8 @@ contains
     MeshNonConforming = UseAMR .or. MeshNonConforming
 #endif /*USE_AMR*/
     
-    if ( MeshNonConforming .and. (IDPStateTVD .or. IDPPressureTVD .or. IDPMathEntropy .or. IDPSpecEntropy) ) then
-      CALL abort(__STAMP__,'IDPStateTVD/IDPPressureTVD/IDPMathEntropy/IDPSpecEntropy cannot be used with nonconforming meshes!',999,999.)
+    if ( MeshNonConforming .and. (IDPStateTVD .or. IDPMathEntropy .or. IDPSpecEntropy) ) then
+      CALL abort(__STAMP__,'IDPStateTVD/IDPMathEntropy/IDPSpecEntropy cannot be used with nonconforming meshes!',999,999.)
       RETURN
     end if
     
@@ -157,20 +155,6 @@ contains
 #endif /*LOCAL_ALPHA*/
       IDPneedsUbar      = .TRUE.
       IDPneedsUprev     = .TRUE.
-      IDPneedsUprev_ext = .TRUE.
-#else
-      IDPneedsUsafe = .TRUE.
-      IDPneedsUsafe_ext = .TRUE.
-#endif /*barStates*/
-    end if
-    
-    if (IDPPressureTVD) then
-      IDPneedsUprev     = .TRUE.
-#if barStates
-#if LOCAL_ALPHA
-      IDPneedsUsafe = .TRUE.
-#endif /*LOCAL_ALPHA*/
-      IDPneedsUbar      = .TRUE.
       IDPneedsUprev_ext = .TRUE.
 #else
       IDPneedsUsafe = .TRUE.
@@ -276,11 +260,8 @@ contains
     if (IDPMathEntropy) then
       allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N) )
     end if
-    if (IDPPositivity .or. IDPPressureTVD) then
+    if (IDPPositivity) then
       allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N) )
-    end if
-    if (IDPPressureTVD) then
-      allocate ( p_max       (0:PP_N,0:PP_N,0:PP_N) )
     end if
     ! Stencil for bounds
     ! ------------------
@@ -339,15 +320,11 @@ contains
       idp_bounds_names(idp_bounds_num) = 'ent_max'
     end if
     
-    if (IDPPositivity .or. IDPPressureTVD) then
+    if (IDPPositivity) then
       idp_bounds_num = idp_bounds_num + 1
       idp_bounds_names(idp_bounds_num) = 'p_min'
     end if
     
-    if (IDPPressureTVD) then
-      idp_bounds_num = idp_bounds_num + 1
-      idp_bounds_names(idp_bounds_num) = 'p_max'
-    end if
     idp_bounds_delta = 0.0
     
 !   Finally enforce 2D condition
@@ -386,7 +363,7 @@ contains
     use MOD_NFVSE_Vars  , only: ftildeR_DG, gtildeR_DG, htildeR_DG
 #endif /*NONCONS*/
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPStateTVD, IDPPressureTVD, IDPPositivity, dalpha
+    use MOD_IDP_Vars    , only: IDPSpecEntropy, IDPMathEntropy, IDPStateTVD, IDPPositivity, dalpha
     use MOD_IDP_Vars    , only: IDPForce2D, FFV_m_FDG, IDPafterIndicator, IDPalpha_min
     implicit none
     !-arguments----------------------------------------------
@@ -477,7 +454,6 @@ contains
 !     --------------------------------------------------------------
       if (doIDP) then
         if (IDPStateTVD)    call IDP_LimitStateTVD   (U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
-        if (IDPPressureTVD) call IDP_LimitPressureTVD(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPSpecEntropy) call IDP_LimitSpecEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
         if (IDPMathEntropy) call IDP_LimitMathEntropy(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dt,sdt,eID)
       end if
@@ -559,7 +535,7 @@ contains
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max
-    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
     implicit none
     !-arguments------------------------------------------------------------
     !----------------------------------------------------------------------
@@ -580,12 +556,8 @@ contains
       s_max = huge(1.0)
     end if
     
-    if (IDPPositivity .or. IDPPressureTVD) then
+    if (IDPPositivity) then
       p_min =0.0
-    end if
-
-    if (IDPPressureTVD) then
-      p_max = huge(1.0)
     end if
   
   end subroutine ResetBounds
@@ -596,7 +568,7 @@ contains
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max, idp_bounds_delta
-    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D, IDPPressureTVD
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
     use MOD_IDP_Vars      , only: IDPStateTVDVars, IDPStateTVDVarsNum
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     use MOD_NFVSE_Vars    , only: alpha
@@ -645,19 +617,13 @@ contains
         idp_bounds_delta(counter) = max(idp_bounds_delta(counter),Get_MathEntropy(U(:,i,j,k)) - s_max(i,j,k))
       end if
       
-      if (IDPPositivity .or. IDPPressureTVD) then
+      if (IDPPositivity) then
         counter=counter+1
         if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
         call Get_Pressure(U(:,i,j,k),p)
         idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p_min(i,j,k) - p)
       end if
-
-      if (IDPPressureTVD) then
-        counter=counter+1
-        if (IDPForce2D) p_max(i,j,k) = p_max(i,j,0)
-        call Get_Pressure(U(:,i,j,k),p)
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p - p_max(i,j,k))
-      end if
+      
     end do       ; end do       ; end do ! i,j,k
   
   end subroutine CheckBounds
@@ -682,7 +648,7 @@ contains
     use MOD_ProlongToFace , only: ProlongToFace
     use MOD_IDP_Vars      , only: Usafe_ext
     use MOD_Mesh_Vars     , only: nSides, firstSlaveSide, lastSlaveSide
-    use MOD_IDP_Vars      , only: IDPStateTVD, IDPPressureTVD, IDPMathEntropy, IDPSpecEntropy
+    use MOD_IDP_Vars      , only: IDPStateTVD, IDPMathEntropy, IDPSpecEntropy
 #if MPI
     use MOD_MPI_Vars      , only: MPIRequest_U, DataSizeSide, nNbProcs
     use MOD_NFVSE_Vars    , only: MPIRequest_Umaster
@@ -1046,213 +1012,6 @@ contains
     end do !var  
   end subroutine IDP_LimitStateTVD
 !===================================================================================================================================
-!> Pressure TVD correction
-!===================================================================================================================================
-  subroutine IDP_LimitPressureTVD(U,Ut,dt,sdt,eID)
-    use MOD_PreProc
-    use MOD_NFVSE_Vars    , only: alpha
-    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP
-    use MOD_Mesh_Vars     , only: nElems
-    use MOD_Equation_Vars , only: Get_Pressure, KappaM1
-#if LOCAL_ALPHA
-    use MOD_NFVSE_Vars    , only: alpha_loc
-    use MOD_NFVSE_Vars    , only: ftilde_DG, gtilde_DG, htilde_DG
-#if NONCONS
-    use MOD_NFVSE_Vars    , only: ftildeR_DG, gtildeR_DG, htildeR_DG
-#endif /*NONCONS*/
-    use MOD_NFVSE_Vars    , only: sWGP
-    use MOD_Mesh_Vars     , only: sJ
-    use MOD_IDP_Vars      , only: Usafe, dalpha_loc
-#endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: IDPForce2D
-#if barStates
-    use MOD_IDP_Vars      , only: Ubar_xi, Ubar_eta, Ubar_zeta
-#else
-#if !(LOCAL_ALPHA)
-    use MOD_IDP_Vars      , only: Usafe
-#endif /*!(LOCAL_ALPHA)*/
-#endif /*barStates*/
-    use MOD_IDP_Vars      , only: FFV_m_FDG, p_min, p_max, p_safe
-    use MOD_IDP_Vars      , only: Uprev
-    use MOD_DG_Vars       , only: Source
-    implicit none
-    !-arguments----------------------------------------------
-    real,intent(inout) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current solution (in RK stage)
-    real,intent(inout) :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N) !< Current Ut (in RK stage)
-    real,intent(in)    :: dt                                        !< Current RK time-step size (in RK stage)
-    real,intent(in)    :: sdt                                       !< Inverse of current RK time-step size (in RK stage)
-    integer,intent(in) :: eID
-    !-local-variables----------------------------------------
-    real    :: dalpha1
-    real    :: p_goal, p
-    real    :: a   ! a  = PositCorrFactor * p_safe - p
-    real    :: Qp, Qm, Pp, Pm
-    real    :: fp_xi_plus
-    real    :: fp_xi_minus
-    real    :: fp_eta_plus
-    real    :: fp_eta_minus
-    real    :: fp_zeta_plus
-    real    :: fp_zeta_minus
-    real    :: vel(3), v2s2
-    real    :: FFV_m_FDG_p
-    integer :: i,j,k,l
-    !--------------------------------------------------------
-    
-!       Compute correction factors
-!       --------------------------
-      do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-          
-        ! Get the limit states
-        !*********************
-        p_min(i,j,k) =  huge(1.0)
-        p_max(i,j,k) = -huge(1.0)
-        
-#if barStates
-        ! Previous sol
-        call Get_Pressure(Uprev  (:,i  ,j  ,k  ,eID),p)
-        p_min(i,j,k) = min(p_min(i,j,k), p)
-        p_max(i,j,k) = max(p_max(i,j,k), p)
-        
-        ! Source term
-        call Get_Pressure(Uprev  (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID),p)
-        p_min(i,j,k) = min(p_min(i,j,k), p)
-        p_max(i,j,k) = max(p_max(i,j,k), p)
-        
-        !xi
-        do l=i-1, i !min(i-1,0), max(i,PP_N-1)
-          call Get_Pressure(Ubar_xi  (:,l  ,j  ,k  ,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-        !eta
-        do l=j-1, j !l=max(j-1,0), min(j,PP_N-1)
-          call Get_Pressure(Ubar_eta (:,i  ,l  ,k  ,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-        if (.not. IDPForce2D) then
-        !zeta
-        do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
-          call Get_Pressure(Ubar_zeta(:,i  ,j  ,l  ,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-        end if
-#else
-        ! check stencil in xi
-!          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
-        do l = i-1, i+1
-          call Get_Pressure(Usafe(:,l,j,k,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-        ! check stencil in eta
-!          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
-        do l = j-1, j+1
-          call Get_Pressure(Usafe(:,i,l,k,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-        ! check stencil in zeta
-!          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
-        do l = k-1, k+1
-          call Get_Pressure(Usafe(:,i,j,l,eID),p)
-          p_min(i,j,k) = min(p_min(i,j,k), p)
-          p_max(i,j,k) = max(p_max(i,j,k), p)
-        end do
-#endif /*barStates*/
-        
-#if LOCAL_ALPHA
-        ! Real Zalesak type limiter
-        ! * Zalesak (1979). "Fully multidimensional flux-corrected transport algorithms for fluids"
-        ! * Kuzmin et al. (2010). "Failsafe flux limiting and constrained data projections for equations of gas dynamics"
-        ! ATTENTION: 1) The Zalesak limiter has to be computed, even if the state is valid, because the correction is 
-        !               for each interface, not each node
-        !****************************************************************************************************************
-        
-        ! Upper/lower bounds for admissible increments
-        Qp = max(0.0,(p_max(i,j,k)-p_safe(i,j,k,eID)*sdt))
-        Qm = min(0.0,(p_min(i,j,k)-p_safe(i,j,k,eID)*sdt))
-        
-        ! Compute pressure antidiffusive fluxes
-        vel = Uprev(2:4,i,j,k,eID)/Uprev(1,i,j,k,eID)
-        v2s2 = 0.5 * sum(vel**2)
-        fp_xi_minus  = KappaM1 * (ftilde_DG(5,i-1,j  ,k  ,eID) + v2s2 * ftilde_DG(1,i-1,j  ,k  ,eID) - sum(vel*ftilde_DG(2:4,i-1,j  ,k  ,eID)) )
-        fp_xi_plus   = KappaM1 * (ftilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * ftilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*ftilde_DG(2:4,i  ,j  ,k  ,eID)) )
-        fp_eta_minus = KappaM1 * (gtilde_DG(5,i  ,j-1,k  ,eID) + v2s2 * gtilde_DG(1,i  ,j-1,k  ,eID) - sum(vel*gtilde_DG(2:4,i  ,j-1,k  ,eID)) )
-        fp_eta_plus  = KappaM1 * (gtilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * gtilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*gtilde_DG(2:4,i  ,j  ,k  ,eID)) )
-        fp_zeta_minus= KappaM1 * (htilde_DG(5,i  ,j  ,k-1,eID) + v2s2 * htilde_DG(1,i  ,j  ,k-1,eID) - sum(vel*htilde_DG(2:4,i  ,j  ,k-1,eID)) )
-        fp_zeta_plus = KappaM1 * (htilde_DG(5,i  ,j  ,k  ,eID) + v2s2 * htilde_DG(1,i  ,j  ,k  ,eID) - sum(vel*htilde_DG(2:4,i  ,j  ,k  ,eID)) )
-        ! Positive contributions
-        Pp = 0.0
-        Pp = Pp + max(0.0, sWGP(i) * fp_xi_minus  )
-        Pp = Pp + max(0.0,-sWGP(i) * fp_xi_plus   )
-        Pp = Pp + max(0.0, sWGP(j) * fp_eta_minus )
-        Pp = Pp + max(0.0,-sWGP(j) * fp_eta_plus  )
-        if (.not. IDPForce2D) then   
-        Pp = Pp + max(0.0, sWGP(k) * fp_zeta_minus)
-        Pp = Pp + max(0.0,-sWGP(k) * fp_zeta_plus )
-        end if
-        Pp = Pp*sJ(i,j,k,eID)
-        
-        ! Negative contributions
-        Pm = 0.0
-        Pm = Pm + min(0.0, sWGP(i) * fp_xi_minus  )
-        Pm = Pm + min(0.0,-sWGP(i) * fp_xi_plus   )
-        Pm = Pm + min(0.0, sWGP(j) * fp_eta_minus )
-        Pm = Pm + min(0.0,-sWGP(j) * fp_eta_plus  )
-        if (.not. IDPForce2D) then   
-        Pm = Pm + min(0.0, sWGP(k) * fp_zeta_minus)
-        Pm = Pm + min(0.0,-sWGP(k) * fp_zeta_plus )
-        end if
-        Pm = Pm*sJ(i,j,k,eID)
-        
-        ! Compute blending coefficient avoiding division by zero
-        ! (as in paper of [Guermond, Nazarov, Popov, Thomas] (4.8))
-        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*p_max(i,j,k))
-        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*p_max(i,j,k))
-        
-        ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
-        dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
-        
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
-        dalpha = max(dalpha,dalpha1)
-        
-#else
-        call Get_Pressure(U(:,i,j,k),p)
-        ! Simple element-wise limiter
-        !****************************
-        if ( p < p_min(i,j,k)) then
-          p_goal = p_min(i,j,k)
-        elseif (p > p_max(i,j,k)) then
-          p_goal = p_max(i,j,k)
-        else
-          cycle !nothing to do here!
-        end if
-        
-        ! Get pressure correcting flux 
-        vel = Uprev(2:4,i,j,k,eID)/Uprev(1,i,j,k,eID)
-        v2s2 = 0.5 * sum(vel**2)
-        FFV_m_FDG_p = KappaM1 * (FFV_m_FDG(5,i,j,k,eID) + v2s2 * FFV_m_FDG(1,i,j,k,eID) - sum(vel*FFV_m_FDG(2:4,i,j,k,eID)) )
-        if ( abs(FFV_m_FDG_p) == 0.0) cycle !nothing to do here!
-        
-        ! Density correction
-        a = (p_goal - p)
-        dalpha1 = a*sdt / FFV_m_FDG_p
-        
-        ! Change inconsistent alphas
-        if ( (alpha(eID)+dalpha1 > alpha_maxIDP) .or. isnan(dalpha1)) then
-          dalpha  = alpha_maxIDP - alpha(eID)
-        else
-          dalpha = max(dalpha,dalpha1)
-        end if
-        
-#endif /*LOCAL_ALPHA*/
-        
-      end do       ; end do       ; end do ! i,j,k
-      
-  end subroutine IDP_LimitPressureTVD
-!===================================================================================================================================
 !> Specific entropy correction (discrete local minimum principle)
 !===================================================================================================================================
   subroutine IDP_LimitSpecEntropy(U,Ut,dt,sdt,eID)
@@ -1447,7 +1206,6 @@ contains
     real             :: new_alpha
     !--------------------------------------------------------
       
-      
 !     Compute correction factors
 !     --------------------------
       notInIter = .FALSE.
@@ -1591,7 +1349,7 @@ contains
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
 #endif /*LOCAL_ALPHA*/
-    use MOD_IDP_Vars      , only: Usafe, p_safe, state_min, p_min, IDPStateTVD, IDPStateTVDVars, IDPPressureTVD, IDPForce2D
+    use MOD_IDP_Vars      , only: Usafe, p_safe, state_min, p_min, IDPStateTVD, IDPStateTVDVars, IDPForce2D
     use MOD_IDP_Vars      , only: FFV_m_FDG, IDPparam_t, IDPMaxIter
     use MOD_Equation_Vars , only: Get_Pressure, Get_dpdU
     implicit none
@@ -1693,7 +1451,6 @@ contains
         ! Compute bound
         ! *************
         p_min(i,j,k) = PositCorrFactor * p_safe(i,j,k,eID)
-        p_min(i,j,k) = merge (max(p_min(i,j,k), PositCorrFactor * p_safe(i,j,k,eID)), PositCorrFactor * p_safe(i,j,k,eID), IDPPressureTVD) ! This writes the more restrictive bound into p_min
         
         ! Compute the needed blending coefficient with a Newton's method
         ! TODO: Check if an asymmetric tolerance is really needed
