@@ -1032,7 +1032,9 @@ contains
           
           ! Fill in containers for alpha and alpha_loc
           alphaState = alpha(eID)
+#if LOCAL_ALPHA
           alpha_locState = alpha_loc(:,:,:,eID)
+#endif /*LOCAL_ALPHA*/
           
           ! Perform correction
           call PerformCorrection(U,Ut,dalphaState    ,alphaState    , &
@@ -1056,7 +1058,7 @@ contains
             end do        ; end do
           end do
 #else
-          stop 'Not yer for elem-wise blending'
+          FFV_m_FDG(ivar,:,:,:,eID) = (1.0 - dalphaState) * FFV_m_FDG(ivar,:,:,:,eID)
 #endif /*LOCAL_ALPHA*/
           
           ! Restore dalphaState and dalpha_locState
@@ -1071,7 +1073,9 @@ contains
     end do !var 
     
     ! Modify variables for element
+#if LOCAL_ALPHA
     dalpha_loc = dalpha_locState
+#endif /*LOCAL_ALPHA*/
     dalpha = dalphaState
      
   end subroutine IDP_LimitStateTVD
