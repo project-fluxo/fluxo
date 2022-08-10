@@ -25,12 +25,19 @@ module MOD_IDP_Vars
   integer :: IDPStateTVDVarsNum
   integer, allocatable :: IDPStateTVDVars(:)
   
+  ! Specifications for IDPMathEntropy and IDPMathEntropy
+  logical :: IDPNonlinearIfState = .FALSE.
+  
+  ! Other user params
   logical :: IDPafterIndicator = .FALSE.
   real    :: IDPalpha_min                 ! Minimum alpha to use IDP methods
   
   ! Variables to modify the local stencil where the bounds are computed
   integer, allocatable :: idx_p1(:)
   integer, allocatable :: idx_m1(:)
+  
+  ! IDPStateTVD was active?
+  logical :: IDPStateTVDactive
   
   ! Parameters:
   real, parameter :: alpha_maxIDP  = 1.0

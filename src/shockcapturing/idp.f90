@@ -57,6 +57,8 @@ contains
     call prms%CreateIntArrayOption( "IDPStateTVDVars",  " Variables to impose TVD correction", "1")
     call prms%CreateLogicalOption("IDPStateTVDeqWise",  " Perform IDP(TVD) correction equation-wise?", "F")
     
+    ! For IDPMathEntropy and IDPSpecEntropy
+    call prms%CreateLogicalOption("IDPNonlinearIfState",  " Do IDP correction on nonlinear quantities only if there was limiting on state quantities?", "F")
     
     call prms%CreateLogicalOption( "IDPafterIndicator"," If true, the IDP limiters (except for IDPPositivity) are only used where shock indicator alpha>IDPalpha_min (and the indicator's alpha is neglected)", "F")
     call prms%CreateRealOption(  "IDPalpha_min"   ,  " Parameter for IDPafterIndicator=T (Default: alpha_min)")
@@ -109,6 +111,9 @@ contains
     IDPStateTVDeqWise  = GETLOGICAL('IDPStateTVDeqWise' ,'F')
     IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
     IDPStateTVDVars    = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
+    
+    ! Specifications for IDPMathEntropy and IDPMathEntropy
+    IDPNonlinearIfState = GETLOGICAL('IDPNonlinearIfState','F')
     
     IDPafterIndicator = GETLOGICAL('IDPafterIndicator','F')
     IDPalpha_min      = GETREAL   ('IDPalpha_min',REALTOSTR(alpha_min))
@@ -824,7 +829,7 @@ contains
   subroutine IDP_LimitStateTVD(U,Ut,dt,sdt,eID)
     use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
-    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP, IDPStateTVDeqWise
+    use MOD_IDP_Vars      , only: dalpha, alpha_maxIDP, IDPStateTVDeqWise, IDPStateTVDactive
     use MOD_Mesh_Vars     , only: nElems
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
@@ -866,6 +871,8 @@ contains
     real    :: alphaState                             ! Local copy of alpha
     integer :: i,j,k,l,var
     !--------------------------------------------------------
+    
+    IDPStateTVDactive = .FALSE.
     
 #if LOCAL_ALPHA
     dalpha_locState = dalpha_loc
@@ -1022,6 +1029,9 @@ contains
         
       end do       ; end do       ; end do ! i,j,k
       
+      ! Check if TVD limiter had to act
+      if (dalphaState > 0.0) IDPStateTVDactive = .TRUE.
+      
       ! Perform correction equation wise if needed
       if (IDPStateTVDeqWise) then
         if ( dalphaState>0.0 .or. isnan(dalphaState) &
@@ -1086,6 +1096,7 @@ contains
     use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha
+    use MOD_IDP_Vars      , only: IDPNonlinearIfState, IDPStateTVDactive
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
@@ -1113,7 +1124,9 @@ contains
     type(IDPparam_t) :: param ! Parameters for Newton's method
     real             :: new_alpha
     !--------------------------------------------------------
-      
+    
+    if (IDPNonlinearIfState .and. (.not. IDPStateTVDactive) ) return
+    
 !     Compute correction factors
 !     --------------------------
       notInIter = .FALSE.
@@ -1246,6 +1259,7 @@ contains
     use MOD_PreProc
     use MOD_NFVSE_Vars    , only: alpha
     use MOD_IDP_Vars      , only: dalpha
+    use MOD_IDP_Vars      , only: IDPNonlinearIfState, IDPStateTVDactive
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
@@ -1273,7 +1287,9 @@ contains
     type(IDPparam_t) :: param ! Parameters for Newton's method
     real             :: new_alpha
     !--------------------------------------------------------
-      
+    
+    if (IDPNonlinearIfState .and. (.not. IDPStateTVDactive) ) return
+    
 !     Compute correction factors
 !     --------------------------
       notInIter = .FALSE.
