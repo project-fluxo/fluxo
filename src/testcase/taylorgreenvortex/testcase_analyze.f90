@@ -52,6 +52,7 @@ IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("AnalyzeTestcase")
 CALL prms%CreateLogicalOption('doTCanalyze', "switch off/on TC_analyze" , '.FALSE.')
+CALL prms%CreateLogicalOption('doPlotGrads', "switch off/on grad(dens) and vorticity plots" , '.FALSE.')
 END SUBROUTINE DefineParametersAnalyzeTestcase
 
 
@@ -61,8 +62,10 @@ END SUBROUTINE DefineParametersAnalyzeTestcase
 SUBROUTINE InitAnalyzeTestcase()
 ! MODULES
 USE MOD_Globals
+USE MOD_Preproc
+USE MOD_Mesh_Vars,        ONLY: nElems
 USE MOD_Analyze_Vars,     ONLY: doAnalyzeToFile,A2F_iVar,A2F_VarNames
-USE MOD_Testcase_Vars,    ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
+USE MOD_Testcase_Vars,    ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp,doPlotGrads,grad2plot
 USE MOD_ReadInTools,      ONLY: GETLOGICAL
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -75,6 +78,7 @@ IMPLICIT NONE
 !prepare AnalyzeToFile
 
 doTCanalyze   = GETLOGICAL('doTCanalyze','.TRUE.')
+doPlotGrads   = GETLOGICAL('doPlotGrads','.FALSE.')
 
 last_Ekin_comp = 0.
 last_Emag_comp = 0.
@@ -117,6 +121,12 @@ IF(MPIroot.AND.doAnalyzeToFile) THEN
   A2F_iVar=A2F_iVar+1
   A2F_VarNames(A2F_iVar)='"Magnetic Enstrophy"'
 END IF !MPIroot & doAnalyzeToFile
+
+! Variables to plot
+if (doPlotGrads) then
+  ALLOCATE( grad2plot    (7,0:PP_N ,0:PP_N ,0:PP_N ,nElems) )
+end if
+
 END SUBROUTINE InitAnalyzeTestcase
 
 
@@ -136,10 +146,13 @@ USE MOD_Analyze_Vars,   ONLY: wGPVol,Vol
 USE MOD_Analyze_Vars,   ONLY: A2F_iVar,A2F_Data
 USE MOD_Analyze_Vars,   ONLY: doAnalyzeToFile,Analyze_dt
 USE MOD_Restart_Vars,   ONLY: RestartTime
-USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp
+USE MOD_Testcase_Vars,  ONLY: doTCanalyze,last_Ekin_comp,last_Emag_comp, doPlotGrads, grad2plot
 USE MOD_Mesh_Vars,      ONLY: sJ,nElems
-USE MOD_Equation_Vars,  ONLY: R,KappaM1,sKappaM1,Kappa
-USE MOD_Equation_Vars,  ONLY: mu_0,s2mu_0
+USE MOD_Equation_Vars
+USE MOD_TimeDisc_Vars,  ONLY: doWriteData
+USE MOD_Mesh_Vars,      ONLY: Elem_xGP
+USE MOD_Output,         ONLY: VisualizeAny
+USE MOD_Restart_Vars   ,ONLY: DoRestart,RestartTime
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -167,8 +180,14 @@ REAL                            :: Ekin_comp,Enstrophy_comp,Entropy_comp,Emag_co
 REAL                            :: DR_u,DR_S,DR_Sd,DR_p          !< Contributions to dissipation rate
 REAL                            :: Pressure,rho0,negdEkindt,negdEmagdt
 #ifdef MPI
-REAL                            :: buf(13)
+REAL                            :: buf(11)
 #endif
+#if PP_NumComponents>1
+REAL :: Kappa
+#endif /*PP_NumComponents>1*/
+CHARACTER(LEN=255)            :: FileTypeStr
+CHARACTER(LEN=255)            :: VarNamesIn(7)
+LOGICAL :: doPlot
 !===================================================================================================================================
 IF(.NOT.doTCanalyze)RETURN
 Ekin=0.
@@ -187,29 +206,31 @@ DO iElem=1,nElems
   DO k=0,PP_N
     DO j=0,PP_N
       DO i=0,PP_N
-        rho=U(1,i,j,k,iElem)
+        rho=sum(U(IRHO1:PP_NumComponents,i,j,k,iElem))
         srho=1./rho
         ! compute primitive gradients (of u,v,w) at each GP
-        Vel(1:3)    =U(2:4,i,j,k,iElem)*srho
-        BField(1:3) =U(6:8,i,j,k,iElem)
+        Vel(1:3)    =U(IRHOU:IRHOW,i,j,k,iElem)*srho
+        BField(1:3) =U(IB1:IB3,i,j,k,iElem)
 #if PARABOLIC
-        GradVel(:,1)=GradPx(2:4,i,j,k,iElem)
-        GradVel(:,2)=GradPy(2:4,i,j,k,iElem)
-        GradVel(:,3)=GradPz(2:4,i,j,k,iElem)
-        GradB(:,1)=GradPx(6:8,i,j,k,iElem)
-        GradB(:,2)=GradPy(6:8,i,j,k,iElem)
-        GradB(:,3)=GradPz(6:8,i,j,k,iElem)
+        GradVel(:,1)=GradPx(IU:IW,i,j,k,iElem)
+        GradVel(:,2)=GradPy(IU:IW,i,j,k,iElem)
+        GradVel(:,3)=GradPz(IU:IW,i,j,k,iElem)
+        GradB(:,1)=GradPx(IB1:IB3,i,j,k,iElem)
+        GradB(:,2)=GradPy(IB1:IB3,i,j,k,iElem)
+        GradB(:,3)=GradPz(IB1:IB3,i,j,k,iElem)
+        if (doPlotGrads) then
+          grad2plot(1,i,j,k,iElem) = sum(GradPx(IRHO1:PP_NumComponents,i,j,k,iElem))
+          grad2plot(2,i,j,k,iElem) = sum(GradPy(IRHO1:PP_NumComponents,i,j,k,iElem))
+          grad2plot(3,i,j,k,iElem) = sum(GradPz(IRHO1:PP_NumComponents,i,j,k,iElem))
+        end if
 #else
         GradVel=0.
         GradB=0.
+        if (doPlotGrads) grad2plot=0.
 #endif
         ! Pressure
-#ifdef PP_GLM
-        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*(SUM(BField(1:3)*BField(1:3))&
-                          +U(9,i,j,k,iElem)*U(9,i,j,k,iElem)))
-#else
-        Pressure=KappaM1*(U(5,i,j,k,iElem)-0.5*SUM(U(2:4,i,j,k,iElem)*Vel(1:3))-s2mu_0*SUM(BField(1:3)*BField(1:3)))
-#endif /*PP_GLM*/
+        call Get_Pressure(U(:,i,j,k,iElem),Pressure)
+        
         ! compute divergence of velocity
         divU=GradVel(1,1)+GradVel(2,2)+GradVel(3,3)
         ! compute tensor of velocity gradients
@@ -230,6 +251,16 @@ DO iElem=1,nElems
         Vorticity(2)=GradVel(1,3) - GradVel(3,1)
         Vorticity(3)=GradVel(2,1) - GradVel(1,2)
         max_Vorticity=MAX(max_Vorticity,SQRT(SUM(Vorticity(:)*Vorticity(:))))
+        ! Store variable to plot
+        if (doPlotGrads) then
+          grad2plot(4:6,i,j,k,iElem) = Vorticity
+          
+#if PP_NumComponents>1
+          Kappa = totalKappa(U(:,i,j,k,iElem))
+#endif /*PP_NumComponents>1*/
+          grad2plot(7,i,j,k,iElem) = sqrt(sum(Vel**2))/sqrt(Kappa*Pressure*srho)
+        end if
+        
         ! compute enstrophy integrand
         ens=0.5*rho*SUM(Vorticity(1:3)*Vorticity(1:3))
         ! compute curl(B) (the current) and max(current)
@@ -240,7 +271,7 @@ DO iElem=1,nElems
         ! compute magnetic enstrophy integrand
         mag_ens=s2mu_0*SUM(curlB(1:3)*curlB(1:3))
         ! compute the entropy integrand
-        ent=-rho*(LOG(Pressure) - kappa*LOG(rho))/kappaM1
+        ent=Get_MathEntropy(U(:,i,j,k,iElem))
         ! compute integrand for epsilon3, pressure contribution to dissipation (compressiblity effect)
         eps3=Pressure*divU
         ! Matrix : Matrix product for velocity gradient tensor, S:S and Sd:Sd
@@ -275,11 +306,7 @@ DO iElem=1,nElems
           ! dissipation rate epsilon 3 from pressure times div u (compressible)
         DR_p=DR_p+eps3*Intfactor
           ! compute mean temperature
-#ifdef PP_GLM
-Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho-s2mu_0*U(9,i,j,k,iElem)*U(9,i,j,k,iElem))
-#else
-        Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho)
-#endif /*PP_GLM*/
+        Temperature=Get_Temperature(U(:,i,j,k,iElem))
         mean_temperature=mean_temperature+Temperature*Intfactor       
       END DO
     END DO
@@ -287,37 +314,45 @@ Temperature=KappaM1/R*(U(5,i,j,k,iElem)*srho-kE-mag_comp*srho-s2mu_0*U(9,i,j,k,i
 END DO
 
 #ifdef MPI
+! Communicate quantities to be maximized
 buf( 1) = max_Vorticity
-buf( 2) = DR_u
-buf( 3) = DR_S
-buf( 4) = DR_Sd
-buf( 5) = DR_p
-buf( 6) = Ekin
-buf( 7) = Ekin_comp
-buf( 8) = Enstrophy_comp
-buf( 9) = Entropy_comp
-buf(10) = mean_temperature
-buf(11) = Emag_comp
-buf(12) = max_Current
-buf(13) = Mag_Enstrophy
+buf( 2) = max_Current
 IF(MPIRoot)THEN
-  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(MPI_IN_PLACE,buf,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
 ELSE
-  CALL MPI_REDUCE(buf  ,0           ,14,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+  CALL MPI_REDUCE(buf  ,0         ,2,MPI_DOUBLE_PRECISION,MPI_MAX,0,MPI_COMM_WORLD,iError)
 END IF
 max_Vorticity    = buf( 1)
-DR_u             = buf( 2)
-DR_S             = buf( 3)
-DR_Sd            = buf( 4)
-DR_p             = buf( 5)
-Ekin             = buf( 6)
-Ekin_comp        = buf( 7)
-Enstrophy_comp   = buf( 8)
-Entropy_comp     = buf( 9)
-mean_temperature = buf(10)
-Emag_comp        = buf(11)
-max_Current      = buf(12)
-Mag_Enstrophy    = buf(13)
+max_Current      = buf( 2)
+
+! Communicate quantities to be summed
+buf( 1) = DR_u
+buf( 2) = DR_S
+buf( 3) = DR_Sd
+buf( 4) = DR_p
+buf( 5) = Ekin
+buf( 6) = Ekin_comp
+buf( 7) = Enstrophy_comp
+buf( 8) = Entropy_comp
+buf( 9) = mean_temperature
+buf(10) = Emag_comp
+buf(11) = Mag_Enstrophy
+IF(MPIRoot)THEN
+  CALL MPI_REDUCE(MPI_IN_PLACE,buf  ,11,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+ELSE
+  CALL MPI_REDUCE(buf  ,0           ,11,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,iError)
+END IF
+DR_u             = buf( 1)
+DR_S             = buf( 2)
+DR_Sd            = buf( 3)
+DR_p             = buf( 4)
+Ekin             = buf( 5)
+Ekin_comp        = buf( 6)
+Enstrophy_comp   = buf( 7)
+Entropy_comp     = buf( 8)
+mean_temperature = buf( 9)
+Emag_comp        = buf(10)
+Mag_Enstrophy    = buf(11)
 #endif /*MPI*/
 IF(MPIroot)THEN
   ! some turbulent quantities
@@ -398,7 +433,25 @@ IF(MPIroot)THEN
   END IF !doAnalyzeToFile
 END IF !MPIroot
 
+! Plot variables
+! --------------
+IF (.NOT. doPlotGrads) RETURN
+! check if we need to plot
+doPlot = .FALSE.
+IF(.NOT.DoRestart)THEN
+  doPlot = (Time==0.0)
+ELSE
+  doPlot = (Time==RestartTime)
+END IF
+IF(.NOT.doPlot) doPlot = doWriteData
+
+! Plot
+FileTypeStr='Gradients'
+VarNamesIn=(/'DensGradX','DensGradY','DensGradZ','VorticityX','VorticityY','VorticityZ','Mach'/)    
+IF(doPlot) CALL VisualizeAny(Time,7,PP_N,.TRUE.,Elem_xGP,grad2plot,FileTypeStr,VarNamesIn)
+
 END SUBROUTINE AnalyzeTestCase
 
+!TODO: FinalizeAnalyzeTestCase
 
 END MODULE MOD_Testcase_Analyze

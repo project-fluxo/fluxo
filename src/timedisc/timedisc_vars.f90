@@ -57,7 +57,7 @@ LOGICAL          :: fullBoundaryOrder=.FALSE. !< temporal order degradation, occ
 LOGICAL          :: ViscousTimeStep=.FALSE.   !< Info wether we have a viscous dominated timestep
 LOGICAL          :: FVTimeStep=.FALSE.        !< Info wether we have a FV dominated timestep
 LOGICAL          :: TimediscInitIsDone=.FALSE.!< Indicate wheter InitTimeDisc routine has been run
-
+LOGICAL          :: doWriteData=.FALSE.
 !----------------------------------------------------------------------------------------------------------------------------------
 ! TIME INTEGRATION: RUNGE_KUTTA COEFFICIENTS AND STABILITY NUMBERS
 !----------------------------------------------------------------------------------------------------------------------------------

@@ -1200,6 +1200,38 @@ entropy(IB1:PP_nVar) = -srho*cons(IB1:PP_nVar)*sT
 END FUNCTION ConsToSpecEntropy
 
 !==================================================================================================================================
+!> Get temperature
+!==================================================================================================================================
+  PURE FUNCTION Get_Temperature(cons) RESULT(T)
+    ! MODULES
+    ! IMPLICIT VARIABLE HANDLING
+    IMPLICIT NONE
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! INPUT VARIABLES
+    REAL,DIMENSION(PP_nVar),INTENT(IN)  :: cons    !< vector of conservative variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! OUTPUT VARIABLES
+    REAL                                :: T !< vector of entropy variables
+    !----------------------------------------------------------------------------------------------------------------------------------
+    ! LOCAL VARIABLES
+    REAL                                :: srho,u,v,w,v2s2,rho_sp
+    !==================================================================================================================================
+    srho   = 1./sum(cons(IRHO1:PP_NumComponents))
+    u      = cons(IRHOU)*srho
+    v      = cons(IRHOV)*srho
+    w      = cons(IRHOW)*srho
+    v2s2   = 0.5*(u*u+v*v+w*w)
+
+#if PP_NumComponents>1
+    T = (cons(IRHOE)-sum(cons(IRHO1:PP_NumComponents))*v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)*cons(IB1:PP_nVar))) / (sum(Cvs*cons(IRHO1:PP_NumComponents)))
+#else
+    T=KappaM1/R*(cons(IRHOE)*srho-v2s2-s2mu_0*SUM(cons(IB1:PP_nVar)**2))
+#endif /*PP_NumComponents>1*/
+
+    
+  END FUNCTION Get_Temperature
+
+!==================================================================================================================================
 !> Checks if the state is valid
 !==================================================================================================================================
 PURE LOGICAL FUNCTION StateIsValid(cons)

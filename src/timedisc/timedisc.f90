@@ -365,8 +365,10 @@ CALL MakeSolutionPositive(U)
   
     ! Visualize data and write solution
     writeCounter=writeCounter+1
+    doWriteData = .FALSE.
     IF(nWriteData.GT.0) THEN
       IF((writeCounter.EQ.nWriteData).OR.doFinalize)THEN
+        doWriteData = .TRUE.
         ! Visualize data
         CALL Visualize(t,U)
         ! Write state to file
