@@ -587,7 +587,6 @@ DO i=1,dim2
 END DO!i
 END SUBROUTINE ConsToEntropyVec
 
-
 #if PARABOLIC
 !==================================================================================================================================
 !> transform gradient from conservative / primitive or entropy variables to primitive variables 
@@ -1196,7 +1195,7 @@ entropy(IRHOU) = -srho * u * sT
 entropy(IRHOV) = -srho * v * sT
 entropy(IRHOW) = -srho * w * sT
 entropy(IRHOE) =  srho * sT
-entropy(IB1:PP_nVar) =  cons(IB1:PP_nVar)*sT
+entropy(IB1:PP_nVar) = -srho*cons(IB1:PP_nVar)*sT
 #endif /*PP_NumComponents==1*/
 END FUNCTION ConsToSpecEntropy
 
