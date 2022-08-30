@@ -327,11 +327,12 @@ contains
     
     if (IDPPositivity) then
       do i=1, IDPPositiveVarsNum
-        if (.not. any(IDPStateTVDVars==IDPPositiveVars(i))) then
-          write(VarName,'(A,I0)') 'u', IDPPositiveVars(i)
-          idp_bounds_num = idp_bounds_num + 1
-          idp_bounds_names(idp_bounds_num) = trim(VarName)//'_min'
+        if (IDPStateTVD) then
+          if (any(IDPStateTVDVars==IDPPositiveVars(i))) cycle
         end if
+        write(VarName,'(A,I0)') 'u', IDPPositiveVars(i)
+        idp_bounds_num = idp_bounds_num + 1
+        idp_bounds_names(idp_bounds_num) = trim(VarName)//'_min'
       end do
     end if
     
@@ -624,11 +625,12 @@ contains
         
       if (IDPPositivity) then
         do var=1, IDPPositiveVarsNum
-          if (.not. any(IDPStateTVDVars==IDPPositiveVars(var))) then
-            counter=counter+1
-            if (IDPForce2D) state_min(IDPPositiveVars(var),i,j,k) = state_min(IDPPositiveVars(var),i,j,0)
-            idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPPositiveVars(var),i,j,k) - U(IDPPositiveVars(var),i,j,k))
+          if (IDPStateTVD) then
+            if (any(IDPStateTVDVars==IDPPositiveVars(var))) cycle
           end if
+          counter=counter+1
+          if (IDPForce2D) state_min(IDPPositiveVars(var),i,j,k) = state_min(IDPPositiveVars(var),i,j,0)
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPPositiveVars(var),i,j,k) - U(IDPPositiveVars(var),i,j,k))          
         end do
       end if
       
@@ -1488,8 +1490,12 @@ contains
         ! Compute density bound
         !********************** 
         ! This writes the more restrictive bound into state_min
-        if (IDPStateTVD .and. any(IDPStateTVDVars==ivar)) then
-          state_min(ivar,i,j,k) = max(state_min(ivar,i,j,k), PositCorrFactor * Usafe(ivar,i,j,k,eID))
+        if (IDPStateTVD) then
+          if (any(IDPStateTVDVars==ivar)) then
+            state_min(ivar,i,j,k) = max(state_min(ivar,i,j,k), PositCorrFactor * Usafe(ivar,i,j,k,eID))
+          else
+            state_min(ivar,i,j,k) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
+          end if
         else
           state_min(ivar,i,j,k) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
         end if
