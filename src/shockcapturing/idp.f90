@@ -57,6 +57,10 @@ contains
     call prms%CreateIntArrayOption( "IDPStateTVDVars",  " Variables to impose TVD correction", "1")
     call prms%CreateLogicalOption("IDPStateTVDeqWise",  " Perform IDP(TVD) correction equation-wise?", "F")
     
+    ! For IDPPositivity
+    call prms%CreateIntOption(   "IDPPositiveVarsNum",  " Number of state variables to impose positivity correction", "1")
+    call prms%CreateIntArrayOption( "IDPPositiveVars",  " Variables to impose positivity correction", "1")
+    
     ! For IDPMathEntropy and IDPSpecEntropy
     call prms%CreateLogicalOption("IDPNonlinearIfState",  " Do IDP correction on nonlinear quantities only if there was limiting on state quantities?", "F")
     
@@ -108,9 +112,17 @@ contains
     IDPSpecEntropy = GETLOGICAL('IDPSpecEntropy','F')
     
     ! For IDPStateTVD
-    IDPStateTVDeqWise  = GETLOGICAL('IDPStateTVDeqWise' ,'F')
-    IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
-    IDPStateTVDVars    = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
+    if (IDPStateTVD) then
+      IDPStateTVDeqWise  = GETLOGICAL('IDPStateTVDeqWise' ,'F')
+      IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
+      IDPStateTVDVars    = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
+    end if
+    
+    ! For IDPPositivity
+    if (IDPPositivity) then
+      IDPPositiveVarsNum = GETINT('IDPPositiveVarsNum','1')
+      IDPPositiveVars    = GETINTARRAY('IDPPositiveVars',IDPPositiveVarsNum,'1')
+    end if
     
     ! Specifications for IDPMathEntropy and IDPMathEntropy
     IDPNonlinearIfState = GETLOGICAL('IDPNonlinearIfState','F')
@@ -311,10 +323,13 @@ contains
     end if
     
     if (IDPPositivity) then
-      if (.not. any(IDPStateTVDVars==1)) then
-        idp_bounds_num = idp_bounds_num + 1
-        idp_bounds_names(idp_bounds_num) = 'u1_min'
-      end if
+      do i=1, IDPPositiveVarsNum
+        if (.not. any(IDPStateTVDVars==IDPPositiveVars(i))) then
+          write(VarName,'(A,I0)') 'u', IDPPositiveVars(i)
+          idp_bounds_num = idp_bounds_num + 1
+          idp_bounds_names(idp_bounds_num) = trim(VarName)//'_min'
+        end if
+      end do
     end if
     
     if (IDPSpecEntropy) then
@@ -576,7 +591,7 @@ contains
     use MOD_Globals
     use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max, idp_bounds_delta
     use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
-    use MOD_IDP_Vars      , only: IDPStateTVDVars, IDPStateTVDVarsNum
+    use MOD_IDP_Vars      , only: IDPStateTVDVars, IDPStateTVDVarsNum, IDPPositiveVars, IDPPositiveVarsNum
     use MOD_Equation_Vars , only: Get_SpecEntropy, Get_MathEntropy, Get_Pressure
     use MOD_NFVSE_Vars    , only: alpha
 #if LOCAL_ALPHA
@@ -605,11 +620,13 @@ contains
       end if
         
       if (IDPPositivity) then
-        if (.not. any(IDPStateTVDVars==1)) then
-          counter=counter+1
-          if (IDPForce2D) state_min(1,i,j,k) = state_min(1,i,j,0)
-          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(1,i,j,k) - U(1,i,j,k))
-        end if
+        do var=1, IDPPositiveVarsNum
+          if (.not. any(IDPStateTVDVars==IDPPositiveVars(var))) then
+            counter=counter+1
+            if (IDPForce2D) state_min(IDPPositiveVars(var),i,j,k) = state_min(IDPPositiveVars(var),i,j,0)
+            idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPPositiveVars(var),i,j,k) - U(IDPPositiveVars(var),i,j,k))
+          end if
+        end do
       end if
       
       if (IDPSpecEntropy) then
@@ -1423,6 +1440,7 @@ contains
     use MOD_NFVSE_Vars    , only: alpha, PositCorrFactor
     use MOD_Mesh_Vars     , only: nElems
     use MOD_IDP_Vars      , only: dalpha
+    use MOD_IDP_Vars      , only: IDPPositiveVars, IDPPositiveVarsNum
 #if LOCAL_ALPHA
     use MOD_NFVSE_Vars    , only: alpha_loc
     use MOD_IDP_Vars      , only: dalpha_loc
@@ -1451,6 +1469,7 @@ contains
     logical :: NotInIter
     type(IDPparam_t) :: param ! Parameters for Newton's method
     real             :: new_alpha
+    integer :: var
     !--------------------------------------------------------
       
 !     ---------------
@@ -1459,15 +1478,17 @@ contains
         
 !     Compute correction factors
 !     --------------------------
+    do var=1, IDPPositiveVarsNum
+      associate (ivar => IDPPositiveVars(var))
       do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
         
         ! Compute density bound
         !********************** 
         ! This writes the more restrictive bound into state_min
-        if (IDPStateTVD .and. any(IDPStateTVDVars==1)) then
-          state_min(1,i,j,k) = max(state_min(1,i,j,k), PositCorrFactor * Usafe(1,i,j,k,eID))
+        if (IDPStateTVD .and. any(IDPStateTVDVars==ivar)) then
+          state_min(ivar,i,j,k) = max(state_min(ivar,i,j,k), PositCorrFactor * Usafe(ivar,i,j,k,eID))
         else
-          state_min(1,i,j,k) = PositCorrFactor * Usafe(1,i,j,k,eID)
+          state_min(ivar,i,j,k) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
         end if
 #if LOCAL_ALPHA
         ! Real one-sided Zalesak-type limiter
@@ -1478,25 +1499,25 @@ contains
         !****************************************************************************************************************
         
         ! Upper/lower bounds for admissible increments
-        Qm = min(0.0,(state_min(1,i,j,k)-Usafe(1,i,j,k,eID))*sdt)
+        Qm = min(0.0,(state_min(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
         
         ! Negative contributions
         Pm = 0.0
-        Pm = Pm + min(0.0, sWGP(i) * f_antidiff(1,i-1,j  ,k  ,eID))
-        Pm = Pm + min(0.0, sWGP(j) * g_antidiff(1,i  ,j-1,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(i) * f_antidiff(ivar,i-1,j  ,k  ,eID))
+        Pm = Pm + min(0.0, sWGP(j) * g_antidiff(ivar,i  ,j-1,k  ,eID))
 #if NONCONS
-        Pm = Pm + min(0.0,-sWGP(i) * f_antidiffR(1,i  ,j  ,k  ,eID))
-        Pm = Pm + min(0.0,-sWGP(j) * g_antidiffR(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(i) * f_antidiffR(ivar,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * g_antidiffR(ivar,i  ,j  ,k  ,eID))
 #else
-        Pm = Pm + min(0.0,-sWGP(i) * f_antidiff(1,i  ,j  ,k  ,eID))
-        Pm = Pm + min(0.0,-sWGP(j) * g_antidiff(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(i) * f_antidiff(ivar,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(j) * g_antidiff(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         if (.not. IDPForce2D) then
-        Pm = Pm + min(0.0, sWGP(k) * h_antidiff(1,i  ,j  ,k-1,eID))
+        Pm = Pm + min(0.0, sWGP(k) * h_antidiff(ivar,i  ,j  ,k-1,eID))
 #if NONCONS
-        Pm = Pm + min(0.0,-sWGP(k) * h_antidiffR(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(k) * h_antidiffR(ivar,i  ,j  ,k  ,eID))
 #else
-        Pm = Pm + min(0.0,-sWGP(k) * h_antidiff(1,i  ,j  ,k  ,eID))
+        Pm = Pm + min(0.0,-sWGP(k) * h_antidiff(ivar,i  ,j  ,k  ,eID))
 #endif /*NONCONS*/
         end if
         Pm = Pm*sJ(i,j,k,eID)
@@ -1512,17 +1533,18 @@ contains
         dalpha = max(dalpha,dalpha1)
         
 #else
-        a = (state_min(1,i,j,k) - U(1,i,j,k)) * sdt
+        a = (state_min(ivar,i,j,k) - U(ivar,i,j,k)) * sdt
         if (a > 0.) then ! This DOF needs a correction
-          if ( abs(FFV_m_FDG(1,i,j,k,eID)) == 0.0) cycle !nothing to do here!
-          dalpha1 = a / FFV_m_FDG(1,i,j,k,eID)
+          if ( abs(FFV_m_FDG(ivar,i,j,k,eID)) == 0.0) cycle !nothing to do here!
+          dalpha1 = a / FFV_m_FDG(ivar,i,j,k,eID)
           dalpha = max(dalpha,dalpha1)
         end if
 
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; end do ! i,j,k
-      
+      end associate
+    end do
 !     ---------------
 !     Correct pressure
 !     ---------------

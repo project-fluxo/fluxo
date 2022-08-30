@@ -25,6 +25,10 @@ module MOD_IDP_Vars
   integer :: IDPStateTVDVarsNum
   integer, allocatable :: IDPStateTVDVars(:)
   
+  ! Specifications for IDPPositivity
+  integer :: IDPPositiveVarsNum
+  integer, allocatable :: IDPPositiveVars(:)
+  
   ! Specifications for IDPMathEntropy and IDPMathEntropy
   logical :: IDPNonlinearIfState = .FALSE.
   
