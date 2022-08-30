@@ -1357,14 +1357,37 @@ CASE(312) ! 3D perturbation of Orszag-Tang vortex taken from Baetz thesis (but r
 CASE(322) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
   Prim = 0.0
 #if PP_NumComponents>1
-  r0 = 0.1
-  Omega = 10.0
+  r0 = IniAmplitude ! 0.01
+  Omega = IniFrequency ! 100
   if (x(2)>0.25) then
     Prim(IRHO1) =  25./(36.*PP_Pi)*((0.5+(0.5-r0)*tanh(Omega*(x(2)-0.5)))*(0.5-(0.5-r0)*tanh(Omega*(x(2)-1.0))))
     Prim(IRHO2) =  25./(36.*PP_Pi)*(1.0-(0.5+(0.5-r0)*tanh(Omega*(x(2)-0.5)))*(0.5-(0.5-r0)*tanh(Omega*(x(2)-1.0))))
   else
     Prim(IRHO1) =  25./(36.*PP_Pi)*(1.0-r0)*(0.5-(0.5-r0)*tanh(Omega*x(2)))
     Prim(IRHO2) =  25./(36.*PP_Pi)*(1.0-(1.0-r0)*(0.5-(0.5-r0)*tanh(Omega*x(2))))
+  end if
+#else
+  Prim(IRHO1) =  25./(36.*PP_Pi)
+#endif /*PP_NumComponents>1*/
+  prim(IU) = -SIN(2.*PP_Pi*x(2))
+  prim(IV) =  SIN(2.*PP_Pi*x(1))
+  prim(IP) =  5./(12*PP_Pi)
+  prim(IB1) = -SIN(2.*PP_Pi*x(2))/SQRT(4.*PP_Pi)
+  prim(IB2) =  SIN(4.*PP_Pi*x(1))/SQRT(4.*PP_Pi)
+  CALL PrimToCons(Prim,Resu)
+  
+CASE(3221) ! 2D Orszag-Tang from https://www.astro.princeton.edu/~jstone/Athena/tests/orszag-tang/pagesource.html
+          ! With sharp interface
+  Prim = 0.0
+#if PP_NumComponents>1
+  r0 = 0.1
+  Omega = 10.0
+  if (x(2)>0.5) then
+    Prim(IRHO1) =  25./(36.*PP_Pi) - 1.e-8
+    Prim(IRHO2) =  1.e-8
+  else
+    Prim(IRHO1) =  1.e-8
+    Prim(IRHO2) =  25./(36.*PP_Pi) - 1.e-8
   end if
 #else
   Prim(IRHO1) =  25./(36.*PP_Pi)
@@ -1544,6 +1567,40 @@ case(12345) ! Geospace Environmental Modeling (GEM) reconnection challenge
   prim(IB2) = 0.1*(2.*PP_Pi/25.6)*sin(2.*PP_Pi*x(1)/25.6)*cos(   PP_Pi*x(2)/12.8)
 
   CALL PrimToCons(Prim,Resu)
+#if PP_NumComponents==2
+case(848873) ! Shock-Bubble interaction after Gouasmi (quantities in SI system... CHANGE?!?)
+             ! IniAmplitude = delta (0.03 ein Gouasmi's paper)
+             ! Kappas = [1.4, 1.647]
+             ! Rs = [287.0, 1578.0]
+  prim = 0.
+  r0 = sqrt(sum(x(1:2)**2))
+  
+  if (x(1) > 0.05) then
+    ! Region III
+    prim(IRHO1)  = 1.6861 - IniAmplitude
+    prim(IRHO2)  = IniAmplitude
+    prim(IU)     = -113.5243 ! Gouasmi
+    prim(IP) = 159060
+    
+!~    prim(IU)     = -156.26 ! Marquina
+!~    prim(IP)     = 250638.
+    
+!~    prim(IRHOU) = -282.4348788160184
+!~    prim(IP) = 64546.439036819975
+  elseif(r0 < 0.025) then
+    ! Region I (Bubble)
+    prim(IRHO1)  = IniAmplitude
+    prim(IRHO2)  = 1.225 * Rs(1)/Rs(2) - IniAmplitude
+    prim(IP)     = 101325.
+  else
+    ! Region II
+    prim(IRHO1)  = 1.225-IniAmplitude
+    prim(IRHO2)  = IniAmplitude    
+    prim(IP)     = 101325.
+  end if
+  prim(IB1:IB3) = IniCenter
+  CALL PrimToCons(Prim,Resu)
+#endif /*PP_NumComponents>1*/
 END SELECT ! ExactFunction
 
 ! For O3 LS 3-stage RK, we have to define proper time dependent BC
