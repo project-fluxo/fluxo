@@ -1210,6 +1210,43 @@ def job_definition():
                        #**run_opt_fsp_nonconf_proj,
                       }
          }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # New test: Soft blast with shock capturing, AMR and BR1
+   run_opt_blastIDP_multicomponent={'runs/mhd/softBlast/blastIDP_multicomponent':
+         {'tags': ['mhd','multicomponent','blast','SC','IDP','subcell'] ,
+          'test_opts':{'max|Ut|':{'func': check_error ,
+                                  'f_kwargs': {'whichError':'max|Ut| ',
+                                                    'to_be': [2.828842975899E-01,   6.445870772504E-01,   1.692263669246E-01,   1.686566947305E-01,   2.259283341916E-01,   3.713263282246E-01,   1.209916036691E-01,   1.449644911197E-01,   1.882834334278E-01,   3.730673453534E-02],
+                                                  'err_tol': 1e-11} } , # err_tol is limited by the precision of the output..
+                      },
+         },
+      }
+   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   # Split-form DG, shock capturing and local IDP
+   caseID=caseID+1
+   jobs['mhd_split_glm_noncons_nopara_SC']={
+          'case': caseID ,
+          'tags': ['mhd','multicomponent','split-form','SC','IDP','subcell','GL','GLM','NONCONS'] ,
+          'build_opts':{**baseopts,
+                        'FLUXO_DISCTYPE'          :'2',
+                        'FLUXO_EQN_NUM_COMPONENTS':'2',
+                        'FLUXO_DISC_NODETYPE'     :'GAUSS-LOBATTO',
+                        'FLUXO_EQN_GLM'           :'ON',
+                        'FLUXO_EQN_NONCONS'       :'ON',
+                        'FLUXO_EQN_NONCONS_GLM'   :'ON',
+                        'FLUXO_PARABOLIC'         :'OFF',
+                        'FLUXO_SHOCKCAPTURE'      :'ON',
+                        'FLUXO_SHOCKCAP_NFVSE'    :'ON',
+                        "FLUXO_SHOCK_NFVSE_CORR"  :"ON",
+                        "NFVSE_LOCAL_ALPHA"       :"ON",
+                       },
+          'run_opts': {
+                       **run_opt_fsp_conf_multicomponent,
+                       **run_opt_entropyCons_multicomponent,
+                       **run_opt_blastIDP_multicomponent,
+                      },
+
+         }
    #============================================================================
    #============================================================================
    #fourth group, Navierstokes, 400 < caseID <500

@@ -163,6 +163,9 @@ contains
     
 !   Internal definitions (all are .FALSE. by default)
 !   -------------------------------------------------
+    ! IDPneedsUprev made .TRUE. by default, such that the analyze step can compute dSdt after IDP. To avoid additional allocations, make false.
+    IDPneedsUprev     = .TRUE.
+    
     if (IDPPositivity ) then
       IDPneedsUsafe     = .TRUE.
     end if

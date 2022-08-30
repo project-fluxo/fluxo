@@ -554,6 +554,9 @@ USE MOD_Analyze_Vars,       ONLY: wGPVol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U,Ut
 USE MOD_Equation_Vars,      ONLY: kappa,sKappaM1,ConsToPrim,ConsToEntropy
+#if NFVSE_CORR
+USE MOD_IDP_Vars,           ONLY: Uprev
+#endif /*NFVSE_CORR*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
@@ -576,7 +579,11 @@ DO iElem=1,nElems
     CALL ConsToPrim(prim,U(:,i,j,k,iElem))
     ent_loc  = -prim(1)*(LOG(prim(5))-kappa*LOG(prim(1)))
     Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+#if NFVSE_CORR
+    dSdU     = ConsToEntropy(Uprev(:,i,j,k,iElem))
+#else
     dSdU(:)  = ConsToEntropy(U(:,i,j,k,iElem))
+#endif /*NFVSE_CORR*/
     ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
     dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
   END DO; END DO; END DO !i,j,k

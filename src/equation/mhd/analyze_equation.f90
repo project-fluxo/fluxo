@@ -426,6 +426,9 @@ USE MOD_PreProc
 USE MOD_Analyze_Vars,       ONLY: wGPVol
 USE MOD_Mesh_Vars,          ONLY: sJ,nElems
 USE MOD_DG_Vars,            ONLY: U,Ut
+#if NFVSE_CORR
+USE MOD_IDP_Vars,           ONLY: Uprev
+#endif /*NFVSE_CORR*/
 USE MOD_Equation_Vars
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -448,7 +451,11 @@ REAL                         :: box(2)
     DO k=0,PP_N; DO j=0,PP_N; DO i=0,PP_N
       ent_loc = Get_MathEntropy(U(:,i,j,k,iElem))
       Entropy  = Entropy+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
+#if NFVSE_CORR
+      dSdU     = ConsToEntropy(Uprev(:,i,j,k,iElem))
+#else
       dSdU     = ConsToEntropy(U(:,i,j,k,iElem))
+#endif /*NFVSE_CORR*/
       ent_loc  = SUM(dSdU(:)*Ut(:,i,j,k,iElem))
       dSdU_Ut  = dSdU_Ut+ent_loc*wGPVol(i,j,k)/sJ(i,j,k,iElem)
     END DO; END DO; END DO !i,j,k
