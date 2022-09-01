@@ -447,7 +447,7 @@ IF(.NOT.doPlot) doPlot = doWriteData
 
 ! Plot
 FileTypeStr='Gradients'
-VarNamesIn=(/'DensGradX','DensGradY','DensGradZ','VorticityX','VorticityY','VorticityZ','Mach'/)    
+VarNamesIn=(/CHARACTER(LEN=255) :: 'DensGradX','DensGradY','DensGradZ','VorticityX','VorticityY','VorticityZ','Mach'/)    
 IF(doPlot) CALL VisualizeAny(Time,7,PP_N,.TRUE.,Elem_xGP,grad2plot,FileTypeStr,VarNamesIn)
 
 END SUBROUTINE AnalyzeTestCase
