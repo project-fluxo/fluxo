@@ -50,6 +50,7 @@ CONTAINS
 SUBROUTINE DefineParametersTimeDisc()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms
+use MOD_StringTools, only: REALTOSTR
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("TimeDisc")
@@ -60,8 +61,9 @@ CALL prms%CreateStringOption('TimeDiscMethod', "Specifies the type of time-discr
                                                "  * ketchesonrk4-20\n  * ketchesonrk4-18\n * ssprk3-3 * ssprk4-5",&
                                                 value='CarpenterRK4-5')
 CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mandatory).")
-CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0 (mandatory)")
-CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0 (mandatory)")
+CALL prms%CreateRealOption(  'dt_fixed',       "Fixed time-step size (if given, CFLScale and DFLScale are ignored)", "-1.0")
+CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0", REALTOSTR(huge(1.0)))
+CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0", REALTOSTR(huge(1.0)))
 CALL prms%CreateIntOption(   'maxIter',        "Stop simulation when specified number of timesteps has been performed.", value='-1')
 CALL prms%CreateIntOption(   'maxWCT',        " maximum wall-clock time in seconds, only checked after maxIter is reached! \n"//&
                                               " Then if WCT<maxWCT, maxIter is set such that  maxWCT is reached.", value ='-1')
@@ -80,6 +82,7 @@ USE MOD_ReadInTools    ,ONLY:GETREAL,GETINT,GETSTR
 USE MOD_StringTools    ,ONLY:LowCase,StripSpaces
 USE MOD_Mesh_Vars      ,ONLY:nElems
 USE MOD_IO_HDF5        ,ONLY:AddToElemData
+use MOD_StringTools    ,only: REALTOSTR
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -112,13 +115,20 @@ SWRITE(UNIT_stdOut,'(A)') ' INIT TIMEDISC...'
 ! Read the end time TEnd from ini file
 TEnd     = GETREAL('TEnd')
 ! Read the normalized CFL number
-CFLScale = GETREAL('CFLScale')
-CFLScale_usr = CFLScale
+dt_fixed = GETREAL('dt_fixed','-1.0')
+if (dt_fixed < 0.0) then
+  UsingCFL = .TRUE.
+  CFLScale = GETREAL('CFLScale',REALTOSTR(huge(1.0)))
+  CFLScale_usr = CFLScale
 #if PARABOLIC
-! Read the normalized DFL number
-DFLScale = GETREAL('DFLScale')
+  ! Read the normalized DFL number
+  DFLScale = GETREAL('DFLScale',REALTOSTR(huge(1.0)))
 #endif /*PARABOLIC*/
-CALL fillCFL_DFL(PP_N)
+  CALL fillCFL_DFL(PP_N)
+else
+  UsingCFL = .FALSE.
+end if
+
 ! Set timestep to a large number
 dt=HUGE(1.)
 ! Read max number of iterations to perform
@@ -152,7 +162,7 @@ USE MOD_Analyze             ,ONLY: Analyze
 USE MOD_Testcase_vars       ,ONLY: doTCpreTimeStep
 USE MOD_Testcase_Pre        ,ONLY: CalcPreTimeStep
 USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
-USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
+USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep, InitTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
@@ -208,8 +218,16 @@ tAnalyze=MIN(t+Analyze_dt,tEnd)
 CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 
+! Initialize time-step calculation routines
+if (UsingCFL) then
+  CALL InitTimeStep()
+  dt_Min=CALCTIMESTEP(errType)
+else
+  dt_Min=dt_fixed
+  CALL InitTimeStep(dt_fixed)
+end if
+
 ! Do first evaluation of the time derivative to fill gradients
-dt_Min=CALCTIMESTEP(errType)
 CALL DGTimeDerivative(t)
 
 ! Impose initial AMR refinement
@@ -247,11 +265,15 @@ writeCounter=0
 doAnalyze=.FALSE.
 doFinalize=.FALSE.
 ! compute initial timestep
-dt=CALCTIMESTEP(errType)
-nCalcTimestep=0
-dt_MinOld=-999.
-IF(errType.NE.0) CALL abort(__STAMP__,&
-  'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN. Type/time:',errType,t)
+if (UsingCFL) then
+  dt=CALCTIMESTEP(errType)
+  nCalcTimestep=0
+  dt_MinOld=-999.
+  IF(errType.NE.0) CALL abort(__STAMP__,&
+    'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN. Type/time:',errType,t)
+else
+  dt=dt_fixed
+end if
 
 ! Run initial analyze
 SWRITE(UNIT_StdOut,'(132("-"))')
@@ -276,34 +298,38 @@ iter = 0
 DO
 
 #if USE_AMR
-IF (UseAMR) THEN
-  doAMR = doAMR + 1;
-  IF (doAMR .EQ. nDoAMR) THEN
-    doAMR = 0;
-    call PerformAMR()
+  IF (UseAMR) THEN
+    doAMR = doAMR + 1;
+    IF (doAMR .EQ. nDoAMR) THEN
+      doAMR = 0;
+      call PerformAMR()
+    ENDIF
   ENDIF
-ENDIF
 #if POSITIVITYPRES
-CALL MakeSolutionPositive(U)
+  CALL MakeSolutionPositive(U)
 #endif /*POSITIVITYPRES*/
 #endif /*USE_AMR*/
-
-  IF(nCalcTimestepMax.EQ.1)THEN
-    dt_Min=CALCTIMESTEP(errType)
-  ELSE
-    ! be careful, this is using an estimator, when to recompute the timestep
-    IF(nCalcTimestep.LT.1)THEN
+  
+  if (UsingCFL) then
+    IF(nCalcTimestepMax.EQ.1)THEN
       dt_Min=CALCTIMESTEP(errType)
-      nCalcTimestep=nCalcTimeStepMax
-      dt_MinOld=dt_Min
+    ELSE
+      ! be careful, this is using an estimator, when to recompute the timestep
+      IF(nCalcTimestep.LT.1)THEN
+        dt_Min=CALCTIMESTEP(errType)
+        nCalcTimestep=nCalcTimeStepMax
+        dt_MinOld=dt_Min
+      END IF
+      nCalcTimestep=nCalcTimestep-1
+    END IF !nCalcTimeStepMax <>1
+    IF(errType.NE.0)THEN !error in time step computation
+      CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
+      CALL abort(__STAMP__,&
+     'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN.',errType,t)
     END IF
-    nCalcTimestep=nCalcTimestep-1
-  END IF !nCalcTimeStepMax <>1
-  IF(errType.NE.0)THEN !error in time step computation
-    CALL WriteState(OutputTime=t, FutureTime=tWriteData,isErrorFile=.TRUE.)
-    CALL abort(__STAMP__,&
-   'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN.',errType,t)
-  END IF
+  else
+    dt=dt_fixed
+  end if
 
   dt=dt_Min
   dtAnalyze=HUGE(1.)

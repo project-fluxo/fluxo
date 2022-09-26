@@ -27,7 +27,7 @@ INTERFACE CALCTIMESTEP
 END INTERFACE
 
 
-PUBLIC :: CALCTIMESTEP
+PUBLIC :: CALCTIMESTEP, InitTimeStep
 !==================================================================================================================================
 
 CONTAINS
@@ -87,9 +87,7 @@ muKappasPr_max=mu*MAX(4./3.,KappasPr)
 diffC_max=etasmu_0
 Max_Lambda_v=0.  ! Viscous
 #endif /*PARABOLIC*/
-#ifdef PP_GLM
-IF(.NOT.GLM_init) CALL InitTimeStep_GLM() !called only once!
-#endif /*PP_GLM*/
+
 TimeStepConv=HUGE(1.)
 TimeStepVisc=HUGE(1.)
 TimeStepFV  =HUGE(1.)
@@ -214,24 +212,27 @@ GLM_ch=GLM_scale*(GLM_dtch1/CalcTimeStep) ! dt~1/ch -> dt/dtch1 = 1/ch -> ch=dtc
 
 END FUNCTION CALCTIMESTEP
 
-#ifdef PP_GLM
+
 !==================================================================================================================================
 !> Calculate the time step for the GLM wave system, assuming ch=1. 
 !> This is computed only once, then ch is computed frm the current timestep:
 !> dt~1/ch -> dt/dtch1 = 1/ch -> ch=dtch1/dt
 !==================================================================================================================================
-SUBROUTINE InitTimeStep_GLM()
+SUBROUTINE InitTimeStep(dt)
 USE MOD_Globals
 USE MOD_PreProc
 USE MOD_Mesh_Vars,ONLY:sJ,Metrics_fTilde,Metrics_gTilde,Metrics_hTilde,nElems
 USE MOD_TimeDisc_Vars,ONLY:CFLScale, CFLScale_usr
-USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1
+#ifdef PP_GLM
+USE MOD_Equation_Vars,  ONLY: GLM_init,GLM_dtch1,GLM_scale,GLM_ch
+#endif /*def PP_GLM*/
 #if FV_TIMESTEP
 USE MOD_NFVSE_Vars   ,ONLY:sWGP
 #endif /*FV_TIMESTEP*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
+REAL, OPTIONAL :: dt
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -242,6 +243,8 @@ REAL                         :: Max_Lambda(3), Lambda(3)
 REAL                         :: TimeStepFVElem
 #endif /*FV_TIMESTEP*/
 !==================================================================================================================================
+
+#ifdef PP_GLM
 GLM_dtch1=HUGE(1.)
 DO iElem=1,nElems
   Max_Lambda=0.
@@ -271,7 +274,12 @@ SWRITE(UNIT_StdOut,'(A,ES16.7)')'  GLM correction speed from timestep, (GLM_ch=G
 
 GLM_init=.TRUE.
 
-END SUBROUTINE InitTimeStep_GLM
+if (present(dt)) then
+  GLM_ch=GLM_scale*(GLM_dtch1/dt) ! dt~1/ch -> dt/dtch1 = 1/ch -> ch=dtch1/dt
+end if
 #endif /*PP_GLM*/
+
+END SUBROUTINE InitTimeStep
+
 
 END MODULE MOD_CalcTimeStep

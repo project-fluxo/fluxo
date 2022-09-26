@@ -39,6 +39,7 @@ END INTERFACE
 !----------------------------------------------------------------------------------------------------------------------------------
 REAL             :: t=0.                      !< current physical time
 REAL             :: dt                        !< current timestep
+REAL             :: dt_fixed                  !< Fixed timestep size
 REAL             :: TEnd                      !< End time of simulation
 REAL             :: TAnalyze                  !< Analyze time intervall
 REAL             :: CFLScale                  !< Convective CFL number (gets scaled with the explicit method's parameters)
@@ -58,6 +59,7 @@ LOGICAL          :: ViscousTimeStep=.FALSE.   !< Info wether we have a viscous d
 LOGICAL          :: FVTimeStep=.FALSE.        !< Info wether we have a FV dominated timestep
 LOGICAL          :: TimediscInitIsDone=.FALSE.!< Indicate wheter InitTimeDisc routine has been run
 LOGICAL          :: doWriteData=.FALSE.
+LOGICAL          :: UsingCFL=.TRUE.
 !----------------------------------------------------------------------------------------------------------------------------------
 ! TIME INTEGRATION: RUNGE_KUTTA COEFFICIENTS AND STABILITY NUMBERS
 !----------------------------------------------------------------------------------------------------------------------------------
