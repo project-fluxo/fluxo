@@ -370,6 +370,8 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   use MOD_ShockCapturing,     only: InitShockCapturingAfterAdapt1, InitShockCapturingAfterAdapt2
 #endif /*SHOCKCAPTURE*/
   use MOD_Equation,           only: InitEquationAfterAdapt
+  USE MOD_TimeDisc_Vars, ONLY: dt_fixed, UsingCFL
+  USE MOD_CalcTimeStep ,ONLY: InitTimeStep
   USE, INTRINSIC :: ISO_C_BINDING
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! ARGUMENTS
@@ -810,11 +812,17 @@ SUBROUTINE RunAMR(ElemToRefineAndCoarse)
   call InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
   call InitEquationAfterAdapt()
+  CALL FinalizeBC()
+  CALL InitBC()
+  ! Re-initialize time-stepping
+  if (UsingCFL) then
+    CALL InitTimeStep()
+  else
+    CALL InitTimeStep(dt_fixed)
+  end if
 ! =========
 ! Finish up
 ! =========  
-  CALL FinalizeBC()
-  CALL InitBC()
   call free_data_memory(DataPtr)
   DEALLOCATE(ChangeElem)
   SDEALLOCATE(ElemWasCoarsened)

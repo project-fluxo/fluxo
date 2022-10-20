@@ -83,6 +83,7 @@ USE MOD_StringTools    ,ONLY:LowCase,StripSpaces
 USE MOD_Mesh_Vars      ,ONLY:nElems
 USE MOD_IO_HDF5        ,ONLY:AddToElemData
 use MOD_StringTools    ,only: REALTOSTR
+USE MOD_CalcTimeStep   ,ONLY: InitTimeStep
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -125,8 +126,10 @@ if (dt_fixed < 0.0) then
   DFLScale = GETREAL('DFLScale',REALTOSTR(huge(1.0)))
 #endif /*PARABOLIC*/
   CALL fillCFL_DFL(PP_N)
+  CALL InitTimeStep()
 else
   UsingCFL = .FALSE.
+  CALL InitTimeStep(dt_fixed)
 end if
 
 ! Set timestep to a large number
@@ -147,8 +150,6 @@ SWRITE(UNIT_stdOut,'(A)')' INIT TIMEDISC DONE!'
 SWRITE(UNIT_StdOut,'(132("-"))')
 END SUBROUTINE InitTimeDisc
 
-
-
 !==================================================================================================================================
 !> GTS Temporal discretization
 !==================================================================================================================================
@@ -162,7 +163,7 @@ USE MOD_Analyze             ,ONLY: Analyze
 USE MOD_Testcase_vars       ,ONLY: doTCpreTimeStep
 USE MOD_Testcase_Pre        ,ONLY: CalcPreTimeStep
 USE MOD_Restart_Vars        ,ONLY: DoRestart,RestartTime
-USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep, InitTimeStep
+USE MOD_CalcTimeStep        ,ONLY: CalcTimeStep
 USE MOD_Output              ,ONLY: Visualize,PrintStatusLine
 USE MOD_HDF5_Output         ,ONLY: WriteState
 USE MOD_Mesh_Vars           ,ONLY: nGlobalElems
@@ -220,11 +221,9 @@ CALL MakeSolutionPositive(U)
 
 ! Initialize time-step calculation routines
 if (UsingCFL) then
-  CALL InitTimeStep()
   dt_Min=CALCTIMESTEP(errType)
 else
   dt_Min=dt_fixed
-  CALL InitTimeStep(dt_fixed)
 end if
 
 ! Do first evaluation of the time derivative to fill gradients
@@ -328,7 +327,7 @@ DO
      'Error: (1) density, (2) pressure, (3) convective / (4) viscous / (5) FV timestep is NaN.',errType,t)
     END IF
   else
-    dt=dt_fixed
+    dt_Min=dt_fixed
   end if
 
   dt=dt_Min
