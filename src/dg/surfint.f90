@@ -72,6 +72,10 @@ use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
 USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
+#if SHOCK_NFVSE & (PP_NodeType==1)
+use MOD_NFVSE_Vars         ,only: Ut_FVGauss
+use MOD_NFVSE_Vars         , only: sWGP
+#endif /*SHOCK_NFVSE & (PP_NodeType==1)*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -174,6 +178,14 @@ DO SideID=firstSideID,lastSideID
                                                                         )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
+#if SHOCK_NFVSE 
+    !For Gauss shock capturing, fill the Ut_FVGauss array with the surface contribution in a Gauss-Lobatto-like manner
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,flip,locSide)
+      Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID) &
+                                              + Flux_master(:,p,q,SideID)*sWGP(0)
+    END DO; END DO !p,q=0,PP_N
+#endif /*SHOCK_NFVSE*/  
 #elif (PP_NodeType==2)
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N
@@ -250,6 +262,14 @@ DO SideID=firstSideID,lastSideID
                                                                        )*L_hatMinus(l)
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
+#if SHOCK_NFVSE 
+    !For Gauss shock capturing, fill the Ut_FVGauss array with the surface contribution in a Gauss-Lobatto-like manner
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
+      Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
+                                                - Flux_slave(:,p,q,SideID)*sWGP(0)
+    END DO; END DO !p,q=0,PP_N
+#endif /*SHOCK_NFVSE*/    
 #elif (PP_NodeType==2)
     !gauss-lobatto nodes
     DO q=0,PP_N; DO p=0,PP_N

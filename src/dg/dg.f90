@@ -396,9 +396,9 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_
 #endif
 
 ! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
-#if SHOCK_NFVSE
+#if (SHOCK_NFVSE & (PP_NodeType==2))
 call VolInt_NFVSE(Ut,tIn)
-#endif /*SHOCK_NFVSE*/
+#endif /*(SHOCK_NFVSE & (PP_NodeType==2))*/
 
 #if PARABOLIC
 ! Lifting 
@@ -459,6 +459,10 @@ CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.)
 CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
 
+! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
+#if (SHOCK_NFVSE & (PP_NodeType==1))
+call VolInt_NFVSE(Ut,tIn)
+#endif /*(SHOCK_NFVSE & (PP_NodeType==1))*/
 
 ! We have to take the inverse of the Jacobians into account and directly swap the sign
 CALL V2D_M_V1D(PP_nVar,nTotal_IP,Ut,(-sJ)) !Ut(:,i)=-Ut(:,i)*sJ(i)

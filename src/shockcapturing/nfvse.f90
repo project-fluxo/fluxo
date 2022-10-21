@@ -244,6 +244,11 @@ contains
       end do
     end if
     
+    ! For Gauss shock capturing, we initialize an array to store the surface contribution of the FV part
+#if (PP_NodeType==1)
+    allocate( Ut_FVGauss(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
+#endif /*(PP_NodeType==1)*/
+    
 #if NFVSE_CORR
     call Init_IDP()
 #endif /*NFVSE_CORR*/
@@ -577,6 +582,9 @@ contains
     use MOD_MPI_Vars           , only: nNbProcs
 #endif /*MPI*/
     use MOD_NFVSE_MPI          , only: Get_externalU
+#if (PP_NodeType==1)
+    use MOD_NFVSE_Vars         ,only: Ut_FVGauss
+#endif /*(PP_NodeType==1)*/
     implicit none
     !-arguments---------------------------------------------------------------------------------------------------------------------
     real,intent(inout)                              :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
@@ -663,7 +671,12 @@ contains
                + sWGP(j) * ( gtilde(:,i,j,k) - gtilde(:,i  ,j-1,k  ) ) &
                + sWGP(k) * ( htilde(:,i,j,k) - htilde(:,i  ,j  ,k-1) )
 #endif /*NONCONS*/
-               
+        
+#if (PP_NodeType==1)
+        ! For Gauss shock capturing, add the surface contribution
+        F_FV = F_FV + Ut_FVGauss(:,i,j,k,iElem)
+#endif /*(PP_NodeType==1)*/
+        
 #if NFVSE_CORR
         FFV_m_FDG(:,i,j,k,iElem) = (F_FV - Ut(:,i,j,k,iElem)) * (-sJ(i,j,k,iElem)) ! Account for the sign change and the Jacobian division
 #endif /*NFVSE_CORR*/
@@ -1664,6 +1677,9 @@ contains
     use MOD_DG_Vars            , only: U_master
 #endif /*MPI*/
     use MOD_IDP_Vars , only: IDPneedsUprev_ext
+#if (PP_NodeType==1)
+    use MOD_NFVSE_Vars         , only: Ut_FVGauss
+#endif /*(PP_NodeType==1)*/
     implicit none
     ! Arguments
     !---------------------------------------------------------------------------------------------------------------------------------
@@ -1731,6 +1747,11 @@ contains
       alpha = alpha_max
     end where
     
+!   For Gauss shock capturing, we reset the Ut_FVGauss array
+!   --------------------------------------------------------
+#if (PP_NodeType==1)
+    Ut_FVGauss = 0.0
+#endif /*(PP_NodeType==1)*/
     
 !   Start first space propagation sweep (MPI-optimized)
 !   ---------------------------------------------------

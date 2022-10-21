@@ -41,6 +41,7 @@ module MOD_NFVSE_Vars
   public :: RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
   public :: SpacePropFactor, SpacePropSweeps, TimeRelFactor
   public :: TanDirs1, TanDirs2
+  public :: Ut_FVGauss
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -74,6 +75,7 @@ module MOD_NFVSE_Vars
 ! General
 ! -------
   integer                             :: ComputeAlpha     !< Method to compute alpha
+  real, allocatable :: Ut_FVGauss(:,:,:,:,:)
 #if LOCAL_ALPHA
   real, target          , allocatable :: alpha_loc(:,:,:,:)   !< subcell-wise blending function
   ! Antidiffusive fluxes
