@@ -38,10 +38,9 @@ CONTAINS
 !===================================================================================================================================
 !>Fills the inner and the mpi sides fluxes, BC fluxes are separately called in dg
 !===================================================================================================================================
-SUBROUTINE FillFlux(Flux_master,Flux_slave,doMPISides)
+SUBROUTINE FillFlux(Flux_master,Flux_slave,U_Master,U_Slave,doMPISides)
 ! MODULES
 USE MOD_PreProc
-USE MOD_DG_Vars,         ONLY: U_Master,U_Slave
 USE MOD_Mesh_Vars,       ONLY: NormVec,TangVec1,TangVec2,SurfElem
 USE MOD_Mesh_Vars,       ONLY: nSides
 USE MOD_Mesh_Vars,       ONLY: firstInnerSide,lastInnerSide,firstMPISide_MINE,lastMPISide_MINE
@@ -63,6 +62,8 @@ LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only MINE MPISides are filled, =.FAL
 ! OUTPUT VARIABLES
 REAL,INTENT(OUT)   :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
 REAL,INTENT(OUT)   :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+REAL,INTENT(IN)    :: U_Master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
+REAL,INTENT(IN)    :: U_Slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! LOCAL VARIABLES
 INTEGER            :: SideID,p,q,firstSideID,lastSideID

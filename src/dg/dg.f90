@@ -330,6 +330,12 @@ USE MOD_Mesh_Vars           ,ONLY: firstSlaveSide,LastSlaveSide
 USE MOD_Mesh_Vars           ,ONLY: nElems
 USE MOD_IDP_Vars            ,ONLY: IDPForce2D
 #endif /*NFVSE_CORR*/
+#if FV_BLENDSURFACE
+USE MOD_NFVSE_Vars          ,ONLY: Flux_master_FV,Flux_slave_FV,U_master_FV,U_slave_FV
+#if MPI
+USE MOD_NFVSE_Vars          ,ONLY: MPIRequest_U_FV,MPIRequest_Flux_FV
+#endif /*MPI*/
+#endif /*FV_BLENDSURFACE*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -362,12 +368,20 @@ IF(useEntropyProlongToFace) call ConsToEntropyVec(nTotal_IP,V,U)
 ! start off with the receive command
 CALL StartReceiveMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                          MPIRequest_U(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
+#if FV_BLENDSURFACE
+CALL StartReceiveMPIData(U_slave_FV,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                         MPIRequest_U_FV(:,SEND),SendID=2) ! Receive MINE (sendID=2) 
+#endif /*FV_BLENDSURFACE*/
 ! prolong MPI sides and do the mortar on the MPI sides
 CALL ProlongToFace_U(doMPISides=.TRUE.)
 CALL U_Mortar_Eqn(U_master,U_slave,doMPISides=.TRUE.)
 ! start the sending command
 CALL StartSendMPIData(U_slave,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
                       MPIRequest_U(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
+#if FV_BLENDSURFACE
+CALL StartSendMPIData(U_slave_FV,DataSizeSide,FirstSlaveSide,LastSlaveSide, &
+                      MPIRequest_U_FV(:,RECV),SendID=2) ! SEND YOUR (sendID=2) 
+#endif /*FV_BLENDSURFACE*/
 #endif /* MPI */
 
 CALL ProlongToFace_U(doMPISides=.FALSE.)
@@ -393,6 +407,9 @@ CALL VolInt_adv(Ut)
 #if MPI
 !complete send / receive of side data (WAIT...)
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
+#if FV_BLENDSURFACE
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_U_FV)  ! U_slave: MPI_YOUR -> MPI_MINE (_slave)
+#endif /*FV_BLENDSURFACE*/
 #endif
 
 ! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
@@ -426,17 +443,29 @@ CALL FinishExchangeMPIData(6*nNbProcs,MPIRequest_Lifting) ! gradUx,y,z: MPI_YOUR
 #if MPI
 ! start off with the receive command
 CALL StartReceiveMPIData(Flux_slave, DataSizeSide,firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+#if FV_BLENDSURFACE
+CALL StartReceiveMPIData(Flux_slave_FV, DataSizeSide,firstSlaveSide,lastSlaveSide,MPIRequest_Flux_FV( :,SEND),SendID=1) ! Receive YOUR  (sendID=1) 
+#endif /*FV_BLENDSURFACE*/
 ! since mortar solutions are already there, we can directly fill the fluxes for all MPI sides 
-CALL FillFlux(Flux_master,Flux_slave,doMPISides=.TRUE.)
+CALL FillFlux(Flux_master,Flux_slave,U_master,U_slave,doMPISides=.TRUE.)
+#if FV_BLENDSURFACE
+CALL FillFlux(Flux_master_FV,Flux_slave_FV,U_master_FV,U_slave_FV,doMPISides=.TRUE.)
+#endif /*FV_BLENDSURFACE*/
 
 ! start the sending command
 CALL StartSendMPIData(Flux_slave, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+#if FV_BLENDSURFACE
+CALL StartSendMPIData(Flux_slave_FV, DataSizeSide, firstSlaveSide,lastSlaveSide,MPIRequest_Flux_FV( :,RECV),SendID=1) ! Send MINE (SendID=1) 
+#endif /*FV_BLENDSURFACE*/
 #endif /* MPI*/
 
 
 ! fill physical BC, inner side Flux and inner side Mortars (buffer for latency of flux communication)
 CALL GetBoundaryFlux(tIn,Flux_master)
-CALL FillFlux(Flux_master,Flux_slave,doMPISides=.FALSE.)
+CALL FillFlux(Flux_master,Flux_slave,U_master,U_slave,doMPISides=.FALSE.)
+#if FV_BLENDSURFACE
+CALL FillFlux(Flux_master_FV,Flux_slave_FV,U_master_FV,U_slave_FV,doMPISides=.FALSE.)
+#endif /*FV_BLENDSURFACE*/
 
 #ifdef JESSE_MORTAR
 CALL  fill_delta_flux_jesse() !must be called before Flux_mortar!
@@ -451,6 +480,9 @@ CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
 #if MPI
 ! Complete send / receive for  Flux array
 CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux )  ! Flux, MPI_MINE -> MPI_YOUR 
+#if FV_BLENDSURFACE
+CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux_FV )  ! Flux, MPI_MINE -> MPI_YOUR 
+#endif /*FV_BLENDSURFACE*/
 
 ! finally also collect all small side fluxes of MPI sides to big side fluxes
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
@@ -492,6 +524,10 @@ USE MOD_DG_Vars             ,ONLY: V, nTotal_face, V_master, V_slave
 USE MOD_Equation_Vars       ,ONLY: ConsToEntropyVec, EntropyToConsVec,useEntropyProlongToFace
 #endif /*((PP_NodeType==1) & (PP_DiscType==2) & defined(PP_entropy_vars_exist))*/
 USE MOD_DG_Vars             ,ONLY: U
+#if FV_BLENDSURFACE
+USE MOD_NFVSE_Vars          ,ONLY: U_master_FV, U_slave_FV
+USE MOD_ProlongToFace       ,ONLY: ProlongToFace_LGL
+#endif /*FV_BLENDSURFACE*/
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT/OUTPUT VARIABLES
@@ -504,6 +540,7 @@ integer :: sideID,firstSideID,lastSideID,ElemID,nbElemID
 IF(useEntropyProlongToFace)THEN
   ! Prolong the entropy variables
   CALL ProlongToFace(PP_nVar,V,V_master,V_slave,doMPISides=doMPISides)
+  
   ! Transform back to conservative variables
   IF(doMPISides)THEN
     firstSideID = firstMPISide_YOUR
@@ -531,6 +568,10 @@ END IF
 #else
 CALL ProlongToFace(PP_nVar,U,U_master,U_slave,doMPISides=doMPISides)
 #endif /*((PP_NodeType==1) & (PP_DiscType==2)) & defined(PP_entropy_vars_exist)*/
+
+#if FV_BLENDSURFACE
+CALL ProlongToFace_LGL(PP_nVar,U,U_master_FV,U_slave_FV,doMPISides=doMPISides)
+#endif /*FV_BLENDSURFACE*/
 
 END SUBROUTINE ProlongToFace_U
 

@@ -26,6 +26,7 @@ INTERFACE ProlongToFace
 END INTERFACE
 
 PUBLIC::ProlongToFace
+PUBLIC::ProlongToFace_LGL
 
 CONTAINS
 
@@ -130,6 +131,68 @@ DO SideID=firstSideID,lastSideID
 END DO !SideID=firstSideID,lastSideID
 
 END SUBROUTINE ProlongToFace
+
+!==================================================================================================================================
+!> Interpolates the interior volume element data to surface data assuming Gauss-Lobatto nodes
+!==================================================================================================================================
+SUBROUTINE ProlongToFace_LGL(nVars,Uvol,Uface_master,Uface_slave,doMPISides)
+! MODULES
+USE MOD_Preproc          
+USE MOD_Mesh_Vars,          ONLY: nElems
+USE MOD_Mesh_Vars,          ONLY: SideToElem
+USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR, lastMPISide_MINE, nSides
+USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
+USE MOD_Mesh_Vars,          ONLY: S2V  !magic mapping of side to volume
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+integer,intent(in)    :: nVars
+LOGICAL,INTENT(IN)    :: doMPISides  !< either fill MPI sides (=.true.) or local sides (=.false.)
+REAL,INTENT(IN)       :: Uvol (nVars,0:PP_N,0:PP_N,0:PP_N,1:nElems) !< input volume data
+REAL,INTENT(INOUT)    :: Uface_master(nVars,0:PP_N,0:PP_N,1:nSides)!< output master side data
+REAL,INTENT(INOUT)    :: Uface_slave( nVars,0:PP_N,0:PP_N,FirstSlaveSide:LastSlaveSide)!< output slave side data
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER               :: ijk(3),p,q,firstSideID,lastSideID
+INTEGER               :: ElemID,locSide,SideID,flip
+INTEGER               :: nbElemID,nblocSide,nbFlip
+!==================================================================================================================================
+IF(doMPISides)THEN
+  firstSideID = firstMPISide_YOUR
+   lastSideID = nSides
+ELSE
+  firstSideID = 1
+   lastSideID =  lastMPISide_MINE
+END IF
+
+DO SideID=firstSideID,lastSideID
+  ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+
+  !master sides(ElemID,locSide and flip =-1 if not existing)
+  IF(ElemID.NE.-1)THEN ! element belonging to master side is on this processor
+    locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+    flip=0
+    !gauss-lobatto nodes
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,flip,locSide)
+      Uface_master(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),ElemID)
+    END DO; END DO !p,q=0,PP_N
+  END IF !master ElemID > 0
+
+  nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+  !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+  IF(nbElemID.NE.-1)THEN! element belonging to slave side is on this processor
+    nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
+    nbFlip      = SideToElem(S2E_FLIP,SideID)
+    !gauss-lobatto nodes
+    DO q=0,PP_N; DO p=0,PP_N
+      ijk(:)=S2V(:,0,p,q,nbFlip,nblocSide)
+      Uface_slave(:,p,q,SideID)=Uvol(:,ijk(1),ijk(2),ijk(3),nbElemID)
+    END DO; END DO !p,q=0,PP_N
+  END IF !slave nbElemID > 0
+END DO !SideID=firstSideID,lastSideID
+
+END SUBROUTINE ProlongToFace_LGL
 
 
 END MODULE MOD_ProlongToFace

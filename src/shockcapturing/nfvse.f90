@@ -246,7 +246,24 @@ contains
     
     ! For Gauss shock capturing, we initialize an array to store the surface contribution of the FV part
 #if (PP_NodeType==1)
+    allocate( Ut_DGGauss(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
+#if FV_BLENDSURFACE
+    if (MeshNonConforming) then
+      CALL abort(__STAMP__,'Gauss shock capturing with FV_BLENDSURFACE cannot be used with nonconforming meshes!',999,999.)
+      RETURN
+    end if
     allocate( Ut_FVGauss(PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
+    allocate ( U_master_FV(PP_nVar,0:PP_N,0:PP_N,1:nSides) )
+    allocate ( U_slave_FV (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide) )
+    allocate (Flux_master_FV(PP_nVar,0:PP_N,0:PP_N,1:nSides))
+    allocate (Flux_slave_FV (PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide))
+#if MPI
+    ALLOCATE(MPIRequest_U_FV(nNbProcs,2)    )
+    ALLOCATE(MPIRequest_Flux_FV(nNbProcs,2)    )
+    MPIRequest_U_FV      = MPI_REQUEST_NULL
+    MPIRequest_Flux_FV   = MPI_REQUEST_NULL
+#endif /*MPI*/
+#endif /*FV_BLENDSURFACE*/
 #endif /*(PP_NodeType==1)*/
     
 #if NFVSE_CORR
@@ -583,7 +600,10 @@ contains
 #endif /*MPI*/
     use MOD_NFVSE_MPI          , only: Get_externalU
 #if (PP_NodeType==1)
-    use MOD_NFVSE_Vars         ,only: Ut_FVGauss
+    use MOD_NFVSE_Vars         , only: Ut_DGGauss
+#if FV_BLENDSURFACE
+    use MOD_NFVSE_Vars         , only: Ut_FVGauss
+#endif /*FV_BLENDSURFACE*/
 #endif /*(PP_NodeType==1)*/
     implicit none
     !-arguments---------------------------------------------------------------------------------------------------------------------
@@ -674,7 +694,15 @@ contains
         
 #if (PP_NodeType==1)
         ! For Gauss shock capturing, add the surface contribution
+        ! -------------------------------------------------------
+#if FV_BLENDSURFACE
+        ! If FV_BLENDSURFACE is active, use the FV surface contribution (temprary)
         F_FV = F_FV + Ut_FVGauss(:,i,j,k,iElem)
+        Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) - Ut_DGGauss(:,i,j,k,iElem) + Ut_FVGauss(:,i,j,k,iElem)
+#else
+        ! use the DG contribution for the FV method as well
+        F_FV = F_FV + Ut_DGGauss(:,i,j,k,iElem)
+#endif
 #endif /*(PP_NodeType==1)*/
         
 #if NFVSE_CORR
@@ -1678,7 +1706,10 @@ contains
 #endif /*MPI*/
     use MOD_IDP_Vars , only: IDPneedsUprev_ext
 #if (PP_NodeType==1)
+    use MOD_NFVSE_Vars         , only: Ut_DGGauss
+#if FV_BLENDSURFACE
     use MOD_NFVSE_Vars         , only: Ut_FVGauss
+#endif /*FV_BLENDSURFACE*/
 #endif /*(PP_NodeType==1)*/
     implicit none
     ! Arguments
@@ -1747,10 +1778,13 @@ contains
       alpha = alpha_max
     end where
     
-!   For Gauss shock capturing, we reset the Ut_FVGauss array
-!   --------------------------------------------------------
+!   For Gauss shock capturing, we reset the Ut_DGGauss and Ut_FVGauss array
+!   -----------------------------------------------------------------------
 #if (PP_NodeType==1)
+    Ut_DGGauss = 0.0
+#if FV_BLENDSURFACE
     Ut_FVGauss = 0.0
+#endif /*FV_BLENDSURFACE*/
 #endif /*(PP_NodeType==1)*/
     
 !   Start first space propagation sweep (MPI-optimized)
@@ -1794,6 +1828,21 @@ contains
     SDEALLOCATE ( rR    )
     SDEALLOCATE ( rL    )
     
+    ! Gauss methods
+#if (PP_NodeType==1)
+    SDEALLOCATE (Ut_DGGauss)
+#if FV_BLENDSURFACE
+    SDEALLOCATE (Ut_FVGauss)
+    SDEALLOCATE (U_master_FV)
+    SDEALLOCATE (U_slave_FV)
+    SDEALLOCATE (Flux_master_FV)
+    SDEALLOCATE (Flux_slave_FV)
+#if MPI
+    SDEALLOCATE (MPIRequest_U_FV)
+    SDEALLOCATE (MPIRequest_Flux_FV)
+#endif /*MPI*/
+#endif /*FV_BLENDSURFACE*/
+#endif /*(PP_NodeType==1)*/
     
   end subroutine FinalizeNFVSE
 #endif /*SHOCK_NFVSE*/

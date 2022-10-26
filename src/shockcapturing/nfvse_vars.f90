@@ -41,7 +41,16 @@ module MOD_NFVSE_Vars
   public :: RECONS_CENTRAL, RECONS_NONE, RECONS_NEIGHBOR
   public :: SpacePropFactor, SpacePropSweeps, TimeRelFactor
   public :: TanDirs1, TanDirs2
+  public :: Ut_DGGauss
+#if FV_BLENDSURFACE
   public :: Ut_FVGauss
+  public :: U_master_FV, U_slave_FV
+  public :: Flux_master_FV, Flux_slave_FV
+#if MPI
+  public :: MPIRequest_U_FV
+  public :: MPIRequest_Flux_FV
+#endif /*MPI*/
+#endif /*FV_BLENDSURFACE*/
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! New types
 !-----------------------------------------------------------------------------------------------------------------------------------
@@ -75,7 +84,18 @@ module MOD_NFVSE_Vars
 ! General
 ! -------
   integer                             :: ComputeAlpha     !< Method to compute alpha
+  real, allocatable :: Ut_DGGauss(:,:,:,:,:)
+#if FV_BLENDSURFACE
   real, allocatable :: Ut_FVGauss(:,:,:,:,:)
+  real, allocatable :: U_master_FV(:,:,:,:)
+  real, allocatable :: U_slave_FV (:,:,:,:)
+  real, allocatable :: Flux_master_FV(:,:,:,:)
+  real, allocatable :: Flux_slave_FV (:,:,:,:)
+#if MPI
+  integer, allocatable :: MPIRequest_U_FV(:,:)
+  integer, allocatable :: MPIRequest_Flux_FV(:,:)
+#endif /*MPI*/
+#endif /*FV_BLENDSURFACE*/
 #if LOCAL_ALPHA
   real, target          , allocatable :: alpha_loc(:,:,:,:)   !< subcell-wise blending function
   ! Antidiffusive fluxes
