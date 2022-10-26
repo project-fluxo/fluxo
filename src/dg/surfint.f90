@@ -45,7 +45,7 @@ CONTAINS
 !> * xi_plus side:  (p,q) -> (j,k) depending on the flip and l=0,1,...N -> i=N,N-1,...0
 !> Note for Gauss: one can use the interpolation of the basis functions L_Minus(l), since the node distribution is symmetric
 !==================================================================================================================================
-SUBROUTINE SurfInt(Flux_master,Flux_slave,Ut,doMPISides)
+SUBROUTINE SurfInt(Ut,doMPISides)
 !----------------------------------------------------------------------------------------------------------------------------------
 ! MODULES
 USE MOD_Globals
@@ -72,20 +72,20 @@ use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
 USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
 USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
+use MOD_DG_Vars            ,only: Flux_master, Flux_slave
 #if SHOCK_NFVSE & (PP_NodeType==1)
 use MOD_NFVSE_Vars         ,only: Ut_DGGauss
 use MOD_NFVSE_Vars         ,only: sWGP
 #if FV_BLENDSURFACE
 use MOD_NFVSE_Vars         ,only: Ut_FVGauss
+use MOD_NFVSE_Vars         ,only: Flux_master_FV, Flux_slave_FV
 #endif /*FV_BLENDSURFACE*/
 #endif /*SHOCK_NFVSE & (PP_NodeType==1)*/
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! INPUT VARIABLES
-LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only YOUR MPISides are filled, =.FALSE. BCSides+InnerSides+MPISides MINE  
-REAL,INTENT(IN)    :: Flux_master(1:PP_nVar,0:PP_N,0:PP_N,1:nSides)
-REAL,INTENT(IN)    :: Flux_slave(1:PP_nVar,0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+LOGICAL,INTENT(IN) :: doMPISides  != .TRUE. only YOUR MPISides are filled, =.FALSE. BCSides+InnerSides+MPISides MINE
 !----------------------------------------------------------------------------------------------------------------------------------
 ! OUTPUT VARIABLES
 REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
@@ -182,14 +182,14 @@ DO SideID=firstSideID,lastSideID
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #if SHOCK_NFVSE 
-    !For Gauss shock capturing, fill the Ut_DGGauss array with the surface contribution in a Gauss-Lobatto-like manner
+    !For Gauss shock capturing, fill the Ut_DGGauss and Ut_FVGauss arrays with the surface contribution in a Gauss-Lobatto-like manner
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,flip,locSide)
       Ut_DGGauss(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut_DGGauss(:,ijk(1),ijk(2),ijk(3),ElemID) &
                                               + Flux_master(:,p,q,SideID)*sWGP(0)
 #if FV_BLENDSURFACE
       Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                              + Flux_master(:,p,q,SideID)*sWGP(0)
+                                              + Flux_master_FV(:,p,q,SideID)*sWGP(0)
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
 #endif /*SHOCK_NFVSE*/  
@@ -270,14 +270,14 @@ DO SideID=firstSideID,lastSideID
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #if SHOCK_NFVSE 
-    !For Gauss shock capturing, fill the Ut_FVGauss array with the surface contribution in a Gauss-Lobatto-like manner
+    !For Gauss shock capturing, fill the Ut_DGGauss and Ut_FVGauss arrays with the surface contribution in a Gauss-Lobatto-like manner
     DO q=0,PP_N; DO p=0,PP_N
       ijk(:)=S2V(:,0,p,q,nbflip,nblocSide)
       Ut_DGGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut_DGGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
                                                 - Flux_slave(:,p,q,SideID)*sWGP(0)
 #if FV_BLENDSURFACE
       Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
-                                                - Flux_slave(:,p,q,SideID)*sWGP(0)
+                                                - Flux_slave_FV(:,p,q,SideID)*sWGP(0)
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
 #endif /*SHOCK_NFVSE*/    

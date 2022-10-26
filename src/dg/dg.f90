@@ -475,7 +475,7 @@ CALL  fill_delta_flux_jesse() !must be called before Flux_mortar!
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.FALSE.,weak=.TRUE.)
 
 ! add inner and BC side surface contibutions to time derivative 
-CALL SurfInt(Flux_master,Flux_slave,Ut,doMPISides=.FALSE.)
+CALL SurfInt(Ut,doMPISides=.FALSE.)
 
 #if MPI
 ! Complete send / receive for  Flux array
@@ -488,7 +488,7 @@ CALL FinishExchangeMPIData(2*nNbProcs,MPIRequest_Flux_FV )  ! Flux, MPI_MINE -> 
 CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.) 
 
 ! update time derivative with contribution of MPI sides 
-CALL SurfInt(Flux_master,Flux_slave,Ut,doMPIsides=.TRUE.)
+CALL SurfInt(Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
 
 ! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
