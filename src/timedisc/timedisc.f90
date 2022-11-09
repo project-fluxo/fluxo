@@ -118,6 +118,7 @@ dt_fixed = GETREAL('dt_fixed','-1.0')
 if (dt_fixed < 0.0) then
   UsingCFL = .TRUE.
   CFLScale = GETREAL('CFLScale')
+  CFLScale_usr = CFLScale
 #if PARABOLIC
   ! Read the normalized DFL number
   DFLScale = GETREAL('DFLScale')
@@ -127,12 +128,12 @@ if (dt_fixed < 0.0) then
 else
   UsingCFL = .FALSE.
   CFLscale=HUGE(1.0) !for safety
+  CFLScale_usr=HUGE(1.0) !for safety
 #if PARABOLIC
   DFLscale=HUGE(1.0) !for safety
 #endif /*PARABOLIC*/
   CALL InitTimeStep(dt_fixed)
 end if
-CFLScale_usr = CFLScale
 
 ! Set timestep to a large number
 dt=HUGE(1.)
