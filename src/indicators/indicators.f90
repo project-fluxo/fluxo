@@ -17,7 +17,7 @@
 !> This module only initializes the equation specific parameters and computes analytical functions and the evaluation of the source
 !==================================================================================================================================
 module MOD_Indicators
-  use MOD_Equation_Vars, only: i_indicatorFunction
+  use MOD_Indicators_vars, only: Indicator_Generic
   implicit none
   
   private
@@ -27,16 +27,11 @@ module MOD_Indicators
 !> Class for the modal shock sensor of Persson and Peraire
 !> Persson, P. O.; Peraire, J. (2006). "Sub-cell shock capturing for discontinuous Galerkin methods". In 44th AIAA Aerospace Sciences Meeting and Exhibit (p. 112).
 !============================================================================================================================
-  type Indicator_PerssonPeraire
-    logical            :: InitIsDone =.FALSE. ! True if indicator has been initialized
-    logical            :: ReturnLog =.FALSE.  ! True if the
-    character(len=255) :: IndicatorQuantity   ! Name of the indicator quantity
-    procedure(i_indicatorFunction), nopass, pointer :: GetIndicatorQuantity => null()
+  type, extends(Indicator_Generic) :: Indicator_PerssonPeraire
     contains
       procedure :: construct  => PerssonPeraire_Construct
       procedure :: compute    => PerssonPeraire_Compute
       procedure :: destruct   => PerssonPeraire_Destruct
-      procedure, private :: GetIndicator_3D  => PerssonPeraire_GetIndicator_3D
   end type Indicator_PerssonPeraire
 
 contains
@@ -59,10 +54,14 @@ contains
     !============================================================================================================================
     
     ! Initial checks
-    IF (this % InitIsDone .OR. (.NOT.InterpolationInitIsDone)) THEN
-      SWRITE(*,*) "InitIndicator not ready to be called or already called."
+    IF (.NOT.InterpolationInitIsDone) THEN
+      SWRITE(*,*) "PerssonPeraire_Construct not ready to be called."
       RETURN
     END IF
+    
+    ! Do generic initialization
+    call this % Indicator_Generic % construct (IndicatorQuantity,ReturnLog)
+    
     IF (PP_N.LT.2) THEN
       CALL abort(__STAMP__,'Polynomial Degree too small for Indicator!',999,999.)
       RETURN
@@ -70,13 +69,6 @@ contains
     
     ! Compute Vandermonde matrix to change basis
     CALL InitBasisTrans(PP_N,xGP)
-    
-    ! Set ReturnLog if necessary
-    if ( present(ReturnLog) ) this % ReturnLog = ReturnLog
-    
-    ! Assign indicator quantity
-    this % IndicatorQuantity = IndicatorQuantity
-    call SetIndicatorFunction(IndicatorQuantity,this % GetIndicatorQuantity)
     
     ! All is done
     this % InitIsDone = .TRUE.
@@ -93,13 +85,14 @@ contains
     
     if (.not. this % InitIsDone) return
     
+    ! Call generic destructor
+    call this % Indicator_Generic % destruct()
+    
     NumberOfPerssonInd = NumberOfPerssonInd-1
     if (NumberOfPerssonInd<1) deallocate(sVdm_Leg)
     
-    this % GetIndicatorQuantity => null()
     this % InitIsDone =.FALSE.
-    this % ReturnLog =.FALSE.
-    this % IndicatorQuantity = ''
+    
   end subroutine PerssonPeraire_Destruct
     
 !============================================================================================================================
@@ -147,26 +140,6 @@ contains
     if (this % ReturnLog) eta = log10(eta)
     
   end function PerssonPeraire_Compute
-
-  
-!============================================================================================================================
-!> Get the shock indicator quantity for all degrees of freedom of an element
-!============================================================================================================================
-  pure subroutine PerssonPeraire_GetIndicator_3D(this,Uind,U)
-    use MOD_PreProc
-    implicit none
-    !-arguments-------------------------------------------
-    class(Indicator_PerssonPeraire), intent(in) :: this
-    real, intent(in)  :: U(PP_nVar,0:PP_N,0:PP_N,0:PP_N)
-    real, intent(out) :: Uind (1:1,0:PP_N,0:PP_N,0:PP_N)
-    !-local-variables-------------------------------------
-    integer :: i,j,k
-    !-----------------------------------------------------
-    
-    do k=0, PP_N ; do j=0, PP_N ; do i=0, PP_N
-      call this % GetIndicatorQuantity(U(:,i,j,k),Uind(1,i,j,k))
-    end do       ; end do       ; end do
-  end subroutine PerssonPeraire_GetIndicator_3D
   
 !===================================================================================================================================
 !> Initialize Vandermodematrix for basis transformation
