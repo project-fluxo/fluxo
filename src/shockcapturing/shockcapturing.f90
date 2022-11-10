@@ -59,7 +59,8 @@ character(len=255) :: IndicatorQuantities,fmt
 CALL prms%SetSection("ShockCapturing")
 
 CALL prms%CreateIntOption(     "ShockIndicator",  " Specifies the quantity to be used as shock indicator:\n"//&
-                                              "   1: Persson-Peraire indicator\n"&
+                                              "   1: Persson-Peraire indicator\n"//&
+                                              "   2: Löhner indicator\n"&
                                              ,"1")
 
 CALL prms%CreateIntOption(  "ShockIndicatorNum",  " Number of shock indicators","1")
@@ -87,6 +88,8 @@ USE MOD_Interpolation_Vars,ONLY:InterpolationInitIsDone
 #if SHOCK_NFVSE
 use MOD_NFVSE             , only: InitNFVSE
 #endif /*SHOCK_NFVSE*/
+use MOD_Indicator_PerssonPeraire, only: Indicator_PerssonPeraire
+use MOD_Indicator_Loehner       , only: Indicator_Loehner
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------
@@ -116,19 +119,25 @@ ShockIndicatorQuantity = GETSTRARRAY('ShockIndicatorQuantity',ShockIndicatorNum,
 
 if (ShockIndicatorNum<1) CALL abort(__STAMP__,'Number of shock inticadors must be greater or equal to 1',999,999.)
 
+select case(ShockIndicator)
+case(1)
+  allocate (Indicator_PerssonPeraire :: Shock_Indicator(ShockIndicatorNum))
+  SWRITE(UNIT_stdOut,'(A)') 'Shock indicator: Persson-Peraire'
+case(2)
+  allocate (Indicator_Loehner :: Shock_Indicator(ShockIndicatorNum))
+  SWRITE(UNIT_stdOut,'(A)') 'Shock indicator: Löhner'
+case default
+  CALL abort(__STAMP__,'Shock indicator not defined!',999,999.)
+  RETURN
+end select
+
+do ind=1, ShockIndicatorNum
+  call Shock_Indicator(ind) % construct(ShockIndicatorQuantity(ind))
+end do
+
 #if SHOCK_NFVSE
 call InitNFVSE()
 #endif /*SHOCK_NFVSE*/
-
-if (ShockIndicator==1) then
-  allocate (Shock_Indicator(ShockIndicatorNum))
-  do ind=1, ShockIndicatorNum
-    call Shock_Indicator(ind) % construct(ShockIndicatorQuantity(ind))
-  end do
-else
-  CALL abort(__STAMP__,'Shock indicator not defined!',999,999.)
-  RETURN
-end if
 
 ShockCapturingInitIsDone = .TRUE.
 SWRITE(UNIT_stdOut,'(A)')' INIT SHOCKCAPTURING DONE!'

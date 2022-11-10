@@ -80,14 +80,15 @@ contains
                                              ,"1")
                                              
     call prms%CreateIntOption     (  "ComputeAlpha",  " Specifies how to compute the blending coefficient:\n"//&
-                                              "   1: Use the shock indicator\n"//&
+                                              "   1: Use the shock indicator with heuristic mapping of Hennemann et al. \n"//&
+                                              "  11: Use the shock indicator capped in interval [0,1] \n"//&
                                               "   2: Randomly assign the blending coef.,changes over time\n"//&
                                               "   20: Randomly assign the blending coef.0<alpha<alpha_max, fixed over time\n"//&
                                               "   3: Fixed blending coef. (alpha=ShockBlendCoef)"&
                                              ,"1")
     call prms%CreateRealOption(   "ShockBlendCoef",  " Fixed blending coefficient to be used with ComputeAlpha=3", "0.0")
 
-    call prms%CreateIntOption(     "ModalThreshold",  " Threshold function to be used for the indicator "//&
+    call prms%CreateIntOption(     "ModalThreshold",  " Threshold function to be used for the indicator (for ComputeAlpha=1) "//&
                                                   "  1: 0.5 * 10.0 ** (-1.8 * (PP_N+1)**0.25)"//&
                                                   "  2: 0.5 * 10.0 ** (-1.8 * PP_N**0.25)"&
                                                  ,"1")
@@ -1691,7 +1692,7 @@ contains
 !   Compute the blending coefficients
 !   ---------------------------------
     select case (ComputeAlpha)
-      case(1)   ! Persson-Peraire indicator
+      case(1)   ! Shock indicator with heuristic mapping of Hennemann
         ! Compute first shock indicator
         eta = Shock_Indicator(1) % compute(U)
         
@@ -1706,6 +1707,23 @@ contains
         ! Compute alpha
         do eID=1, nElems
           alpha(eID) = max(TimeRelFactor*alpha(eID), 1.0 / (1.0 + exp(-sharpness * (eta(eID) - threshold)/threshold )) )
+        end do
+        
+      case(11)   ! Shock indicator capped in interval [0,1]
+        ! Compute first shock indicator
+        eta = Shock_Indicator(1) % compute(U)
+        
+        ! Compute other shock indicators
+        do ind=2, ShockIndicatorNum
+          eta0 = Shock_Indicator(ind) % compute(U)
+          do eID=1, nElems
+            eta(eID) = max(eta(eID), eta0(eID) )
+          end do
+        end do
+        
+        ! Compute alpha
+        do eID=1, nElems
+          alpha(eID) = max(TimeRelFactor*alpha(eID), 0.0, min(eta(eID), 1.0) )
         end do
         
       case(2)   ! Random indicator

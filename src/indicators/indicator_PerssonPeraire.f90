@@ -16,7 +16,7 @@
 !==================================================================================================================================
 !> This module only initializes the equation specific parameters and computes analytical functions and the evaluation of the source
 !==================================================================================================================================
-module MOD_Indicators
+module MOD_Indicator_PerssonPeraire
   use MOD_Indicators_vars, only: Indicator_Generic
   implicit none
   
@@ -168,4 +168,4 @@ contains
     call BuildLegendreVdm(N_in,xGP,Vdm_Leg,sVdm_Leg)
   end subroutine InitBasisTrans
 
-end module MOD_Indicators
+end module MOD_Indicator_PerssonPeraire
