@@ -18,7 +18,7 @@ MODULE MOD_AMR_Vars
 !===================================================================================================================================
 ! MODULES
 USE,INTRINSIC :: ISO_C_BINDING
-use MOD_Indicators, only: Indicator_PerssonPeraire
+use MOD_Indicators_vars         , only: Indicator_Generic
 ! IMPLICIT VARIABLE HANDLING
 IMPLICIT NONE
 PUBLIC
@@ -38,6 +38,7 @@ INTEGER                     :: nDoAMR               ! Time-step interval to do A
 INTEGER                     :: nDoAMRShift          ! Initial shift fot time-step interval to do AMR
 integer                     :: InitialRefinement    ! Initial refinement switch
 integer                     :: N_2                  ! Half of polynomial degree (interpolation operators)
+integer                     :: AMRIndicator
 real                        :: IniHalfwidthAMR
 #if SHOCK_NFVSE
 real                        :: AMRalpha_min         ! Minimum alpha (shock capturing) to activate refinement
@@ -50,7 +51,7 @@ real, allocatable           :: M_0_1(:,:),M_0_2(:,:)  ! 1D Interpolation from bi
 real, allocatable           :: M_1_0(:,:),M_2_0(:,:)  ! 1D L2 Projection matrix for small to big [-1,0]/[0,1] to [-1,1]  
 TYPE(C_PTR)                 :: P4EST_PTR              ! c pointers to p4est structures
 TYPE(C_PTR)                 :: connectivity_ptr       ! c pointer to p4est connectivity 
-type(Indicator_PerssonPeraire) :: AMR_Indicator
+class(Indicator_Generic),allocatable :: AMR_Indicator
 
 TYPE p4est_save_data
     INTEGER ::  nGlobalSides

@@ -50,7 +50,6 @@ CONTAINS
 SUBROUTINE DefineParametersTimeDisc()
 ! MODULES
 USE MOD_ReadInTools ,ONLY: prms
-use MOD_StringTools, only: REALTOSTR
 IMPLICIT NONE
 !==================================================================================================================================
 CALL prms%SetSection("TimeDisc")
@@ -62,8 +61,8 @@ CALL prms%CreateStringOption('TimeDiscMethod', "Specifies the type of time-discr
                                                 value='CarpenterRK4-5')
 CALL prms%CreateRealOption(  'TEnd',           "End time of the simulation (mandatory).")
 CALL prms%CreateRealOption(  'dt_fixed',       "Fixed time-step size (if given, CFLScale and DFLScale are ignored)", "-1.0")
-CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0", REALTOSTR(huge(1.0)))
-CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0", REALTOSTR(huge(1.0)))
+CALL prms%CreateRealOption(  'CFLScale',       "Scaling factor for the theoretical CFL number, typical range 0.1..1.0")
+CALL prms%CreateRealOption(  'DFLScale',       "Scaling factor for the theoretical DFL number, typical range 0.1..1.0")
 CALL prms%CreateIntOption(   'maxIter',        "Stop simulation when specified number of timesteps has been performed.", value='-1')
 CALL prms%CreateIntOption(   'maxWCT',        " maximum wall-clock time in seconds, only checked after maxIter is reached! \n"//&
                                               " Then if WCT<maxWCT, maxIter is set such that  maxWCT is reached.", value ='-1')
@@ -82,7 +81,6 @@ USE MOD_ReadInTools    ,ONLY:GETREAL,GETINT,GETSTR
 USE MOD_StringTools    ,ONLY:LowCase,StripSpaces
 USE MOD_Mesh_Vars      ,ONLY:nElems
 USE MOD_IO_HDF5        ,ONLY:AddToElemData
-use MOD_StringTools    ,only: REALTOSTR
 USE MOD_CalcTimeStep   ,ONLY: InitTimeStep
 IMPLICIT NONE
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -119,16 +117,21 @@ TEnd     = GETREAL('TEnd')
 dt_fixed = GETREAL('dt_fixed','-1.0')
 if (dt_fixed < 0.0) then
   UsingCFL = .TRUE.
-  CFLScale = GETREAL('CFLScale',REALTOSTR(huge(1.0)))
+  CFLScale = GETREAL('CFLScale')
   CFLScale_usr = CFLScale
 #if PARABOLIC
   ! Read the normalized DFL number
-  DFLScale = GETREAL('DFLScale',REALTOSTR(huge(1.0)))
+  DFLScale = GETREAL('DFLScale')
 #endif /*PARABOLIC*/
   CALL fillCFL_DFL(PP_N)
   CALL InitTimeStep()
 else
   UsingCFL = .FALSE.
+  CFLscale=HUGE(1.0) !for safety
+  CFLScale_usr=HUGE(1.0) !for safety
+#if PARABOLIC
+  DFLscale=HUGE(1.0) !for safety
+#endif /*PARABOLIC*/
   CALL InitTimeStep(dt_fixed)
 end if
 

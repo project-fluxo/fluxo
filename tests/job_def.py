@@ -32,6 +32,12 @@ def find_all_occurences(findstr,stdout_filepath="std.out",**kwargs):
          linesWithStr.append(line)
    return linesWithStr
 
+#==========================================================================
+# join floats to formatted string 
+#==========================================================================
+def flts2str(flts,fmtstr="%21.12e"):
+   str=("").join([((fmtstr) % (f)) for f in flts])
+   return str
 
 ###########################################################################
 #  ROUTINES FOR `test_opts`: 
@@ -40,6 +46,7 @@ def find_all_occurences(findstr,stdout_filepath="std.out",**kwargs):
 #    * MUST return status (True/False) and message
 #    * ASSUMES current directory is the one where the code was executed!
 ###########################################################################
+
 
 #==========================================================================
 # find the line of the string `whichError` and check all entries after :  to_be < err_tol
@@ -56,7 +63,9 @@ def check_error(whichError='L_inf ', err_tol=1.0e-12,err_abs=True, to_be=[0.0],*
    if err_abs:
      errors_ref = [abs(e) for e in errors_ref]
    check=all([e < err_tol for e in errors_ref])
-   msg=('check_error: "%s" - to_be < %e = %s' % (line.strip(),err_tol,check))
+   #msg=('check_error: "%s" -to_be < %e = %s' % (line.strip(),err_tol,check))
+   wsp=' '*(19+len(line.strip().split(":")[0]))
+   msg=(('check_error: "%s" \n'+wsp+'- to_be:[%s]\n'+wsp+'=> diff:[%s] < %e = %s') % (line.strip(),flts2str(to_be),flts2str(errors_ref),err_tol,check))
    return check,msg
    
 #==========================================================================

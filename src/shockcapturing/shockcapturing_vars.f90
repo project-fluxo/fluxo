@@ -18,7 +18,7 @@
 MODULE MOD_ShockCapturing_Vars
 !===================================================================================================================================
 ! MODULES
-use MOD_Indicators, only: Indicator_PerssonPeraire
+use MOD_Indicators_vars, only: Indicator_Generic
 IMPLICIT NONE
 PUBLIC
 SAVE
@@ -31,7 +31,7 @@ integer           :: ShockIndicatorNum                !< Number of indicators
 
 character(len=255)            , allocatable :: ShockIndicatorQuantity(:)           !< Shock indicator quantity to be used
 ! The shock indicator itself:
-type(Indicator_PerssonPeraire), allocatable :: Shock_Indicator(:)
+class(Indicator_Generic), allocatable :: Shock_Indicator(:)
 
 !===================================================================================================================================
 

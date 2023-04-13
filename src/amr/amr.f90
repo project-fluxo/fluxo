@@ -81,6 +81,11 @@ SUBROUTINE DefineParametersAMR()
                                                       '.FALSE.')
   CALL prms%CreateStringOption('p4estFile',             " Path to p4est's connectivity file (mandatory).")
   
+  CALL prms%CreateIntOption(     "AMRIndicator",  " Specifies the quantity to be used as shock-indicator:\n"//&
+                                                  "   1: Persson-Peraire indicator\n"//&
+                                                  "   2: Löhner indicator\n"&
+                                                  ,"1")
+  
   write(fmt,'(A,I0,A)') '(',nIndVar,'A)'
   write(IndicatorQuantities,fmt) ('  * '//trim(IndicatorQuantityNames(i))//'\n', i=1, nIndVar)
 
@@ -129,6 +134,8 @@ SUBROUTINE InitAMR()
     use MOD_Basis               ,only: InitializeVandermonde
     use MOD_Interpolation       ,only: GetNodesAndWeights
     use MOD_Mortar_vars         ,only: MortarBasis_BigToSmall,MortarBasis_SmallToBig_projection
+    use MOD_Indicator_PerssonPeraire, only: Indicator_PerssonPeraire
+    use MOD_Indicator_Loehner       , only: Indicator_Loehner
     USE, INTRINSIC :: ISO_C_BINDING
     IMPLICIT NONE
     !----------------------------------------------------------------------------------------------------------------------------------
@@ -165,7 +172,20 @@ SUBROUTINE InitAMR()
     nDoAMRShift = GetINT('nDoAMRShift',"0")
     InitialRefinement = GETINT('InitialRefinement','0')
     IniHalfwidthAMR   = GetREal('IniHalfwidthAMR',"0.1")
+    AMRIndicator = GetINT('AMRIndicator',"1")
     AMRIndicatorQuantity = GETSTR('AMRIndicatorQuantity','DensityTimesPressure')
+    
+    ! Construct AMR indicator
+    select case(AMRIndicator)
+    case(1) 
+      allocate(Indicator_PerssonPeraire :: AMR_Indicator)
+      SWRITE(UNIT_stdOut,'(A)') 'AMR indicator: Persson-Peraire'
+      call AMR_Indicator % construct(AMRIndicatorQuantity,.TRUE.)
+    case(2) 
+      allocate(Indicator_Loehner :: AMR_Indicator)
+      SWRITE(UNIT_stdOut,'(A)') 'AMR indicator: Löhner'
+      call AMR_Indicator % construct(AMRIndicatorQuantity)
+    end select
     
 #if SHOCK_NFVSE
     AMRalpha_min = GetREal('AMRalpha_min',"0.1")
@@ -184,9 +204,6 @@ SUBROUTINE InitAMR()
       CALL CollectiveStop(__STAMP__,&
           'AMR: RefineVal must be greater than or equal to MaxLevel.')
     end if
-    
-    ! Construct AMR indicator
-    call AMR_Indicator % construct(AMRIndicatorQuantity,.TRUE.)
     
 #if MPI 
     RET=P4EST_INIT(MPI_COMM_WORLD); 
@@ -1322,7 +1339,6 @@ SUBROUTINE FinalizeAMR()
 ! MODULES
 USE MOD_AMR_Vars
 USE MOD_P4EST
-use MOD_Indicators
 IMPLICIT NONE
 !============================================================================================================================
 ! Deallocate global variables, needs to go somewhere else later
