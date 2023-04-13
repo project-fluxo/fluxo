@@ -491,7 +491,8 @@ CALL Flux_Mortar(Flux_master,Flux_slave,doMPISides=.TRUE.,weak=.TRUE.)
 CALL SurfInt(Ut,doMPIsides=.TRUE.)
 #endif /*MPI*/
 
-! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside)
+! Compute the NFV volumetric contribution (the FinishExchangeMPIData for the blending coefs is done inside) 
+! ATTENTION: This is only working for inviscid discretizations!
 #if (SHOCK_NFVSE & (PP_NodeType==1))
 call VolInt_NFVSE(Ut,tIn)
 #endif /*(SHOCK_NFVSE & (PP_NodeType==1))*/
