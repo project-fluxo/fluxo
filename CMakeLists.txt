@@ -352,9 +352,11 @@ IF (FLUXO_SHOCKCAPTURE)
       OPTION(NFVSE_LOCAL_ALPHA "Use a node-local alpha? (subcell-wise blending)" OFF)
       IF(NFVSE_LOCAL_ALPHA)
         ADD_DEFINITIONS(-DLOCAL_ALPHA=1)
-        # Local alpha only available for Gauss-Lobatto!
+        # Local alpha available for Gauss-Lobatto and for Gauss WITH FLUXO_FV_BLENDSURFACE!
         IF(FLUXO_DISC_NODETYPE STREQUAL "GAUSS")
-          MESSAGE(SEND_ERROR " The local alpha is (currently) only available for Gauss-Lobatto nodes!")
+          IF(NOT FLUXO_FV_BLENDSURFACE)
+            MESSAGE(SEND_ERROR " The local alpha is only available for Gauss nodes when FLUXO_FV_BLENDSURFACE is active!")
+          ENDIF()
         ENDIF()
       ENDIF()
     ELSE()

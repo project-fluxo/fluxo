@@ -99,6 +99,7 @@ INTEGER,ALLOCATABLE :: FS2M(:,:,:,:)     !< flip slave side to master and revers
 INTEGER,ALLOCATABLE :: V2S(:,:,:,:,:,:)  !< volume to side mapping
 INTEGER,ALLOCATABLE :: V2S2(:,:,:,:,:)   !< volume to side mapping 2
 INTEGER,ALLOCATABLE :: S2V(:,:,:,:,:,:)  !< side to volume
+INTEGER,ALLOCATABLE :: S2Vst(:,:,:,:,:,:)!< side to volume for staggered fluxes
 INTEGER,ALLOCATABLE :: S2V2(:,:,:,:,:)   !< side to volume 2
 INTEGER,ALLOCATABLE :: S2V3(:,:,:,:,:)   !< side to volume 3
 INTEGER,ALLOCATABLE :: CS2V2(:,:,:,:)    !< CGNS side to volume 2

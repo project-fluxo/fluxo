@@ -69,7 +69,7 @@ USE MOD_Equation_Vars,      ONLY: nAuxVar
 use MOD_Flux_Average,       ONLY: AddNonConsFluxVec
 #endif /*NONCONS*/
 #endif /*(PP_DiscType==2 & PP_NodeType==1)*/
-USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V
+USE MOD_Mesh_Vars,          ONLY: SideToElem,nElems,S2V,S2Vst
 USE MOD_Mesh_Vars,          ONLY: firstMPISide_YOUR,nSides,lastMPISide_MINE 
 USE MOD_Mesh_Vars,          ONLY: firstSlaveSide,LastSlaveSide
 use MOD_DG_Vars            ,only: Flux_master, Flux_slave
@@ -79,6 +79,9 @@ use MOD_NFVSE_Vars         ,only: sWGP
 #if FV_BLENDSURFACE
 use MOD_NFVSE_Vars         ,only: Ut_FVGauss
 use MOD_NFVSE_Vars         ,only: Flux_master_FV, Flux_slave_FV
+#if LOCAL_ALPHA
+use MOD_NFVSE_Vars         ,only: f_antidiff, g_antidiff, h_antidiff
+#endif /*LOCAL_ALPHA*/
 #endif /*FV_BLENDSURFACE*/
 #endif /*SHOCK_NFVSE & (PP_NodeType==1)*/
 ! IMPLICIT VARIABLE HANDLING
@@ -93,12 +96,17 @@ REAL,INTENT(INOUT)   :: Ut(PP_nVar,0:PP_N,0:PP_N,0:PP_N,1:nElems)
 ! LOCAL VARIABLES
 #if (PP_NodeType==1)
 INTEGER                         :: l
+REAL                            :: surfIntTerm(PP_nVar)
 #if (PP_DiscType==2)
 REAL                            :: FluxB(PP_nVar,0:PP_N),FluxB_sum(PP_nVar), FluxB_cont(PP_nVar)
 #ifdef PP_u_aux_exist
 REAL                            :: UauxB(nAuxVar)
 #endif
 real, pointer                   :: metrics(:,:,:,:)
+#if LOCAL_ALPHA
+real, pointer                   :: antidiff(:,:,:,:)            ! Pointer to the right antidiffusive flux
+real                            :: antidiff_cumulative(PP_nVar) ! Cumulative additional terms of antidiffusive flux for flux-differencing formula of Gauss DGSEM
+#endif /*LOCAL_ALPHA*/
 #endif /*(PP_DiscType==2)*/
 #endif /*PP_NodeType*/ 
 INTEGER                         :: ijk(3),p,q,firstSideID,lastSideID
@@ -125,11 +133,19 @@ DO SideID=firstSideID,lastSideID
 #if (PP_DiscType==2)
     ! Get the right metric terms
     select case(locSide)
-      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
-      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
-      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
+      case(XI_MINUS,XI_PLUS)     ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
     end select
 #endif /*(PP_DiscType==2)*/
+#if LOCAL_ALPHA
+    ! Get the right antidiffusive flux
+    select case(locSide)
+      case(XI_MINUS,XI_PLUS)     ; antidiff(1:PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) => f_antidiff(:,:,:,:,ElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; antidiff(1:PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) => g_antidiff(:,:,:,:,ElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; antidiff(1:PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) => h_antidiff(:,:,:,:,ElemID)
+    end select
+#endif /*LOCAL_ALPHA*/
     DO q=0,PP_N; DO p=0,PP_N
 #if (PP_DiscType==2)
       ! Evaluate the auxiliar variables the boundary
@@ -170,15 +186,29 @@ DO SideID=firstSideID,lastSideID
 #endif /*NONCONS*/
         
       END DO !l=0,PP_N
+#if LOCAL_ALPHA
+      ! Compute first DG staggered flux and save it in *_antidiff (FV contribution will be subtracted later)
+      ! Attention: We correct the sign with NormalSigns(locSide) to have the right-pointing fluxes
+      ijk(:)=S2Vst(:,-1,p,q,flip,locSide) !0: flip=0
+      antidiff_cumulative = Flux_master(:,p,q,SideID) * (NormalSigns(locSide))
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) + antidiff_cumulative
+#endif /*LOCAL_ALPHA*/
 #endif /*PP_DiscType==2*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,flip,locSide) !0: flip=0
-        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) &
-                                          + (Flux_master(:,p,q,SideID) & 
+        surfIntTerm = + (Flux_master(:,p,q,SideID) & 
 #if (PP_DiscType==2)
-                                             - (FluxB_sum -FluxB(:,l))*NormalSigns(locSide) &
+                         - (FluxB_sum -FluxB(:,l))*NormalSigns(locSide) &
 #endif /*(PP_DiscType==2)*/
-                                                                        )*L_hatMinus(l)
+                         )
+        Ut(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut(:,ijk(1),ijk(2),ijk(3),ElemID) + surfIntTerm * L_hatMinus(l)
+#if LOCAL_ALPHA
+        ! Compute the other DG staggered fluxes and save them in *_antidiff (FV contribution will be subtracted later)
+        ! Attention: We correct the sign with NormalSigns(locSide) to have the right-pointing fluxes
+        ijk(:)=S2Vst(:,l,p,q,flip,locSide) !0: flip=0
+        antidiff_cumulative = antidiff_cumulative + surfIntTerm  * L_Minus(l) * (-NormalSigns(locSide))
+        antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) + antidiff_cumulative
+#endif /*LOCAL_ALPHA*/
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #if SHOCK_NFVSE 
@@ -190,6 +220,7 @@ DO SideID=firstSideID,lastSideID
 #if FV_BLENDSURFACE
       Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID) &
                                               + Flux_master_FV(:,p,q,SideID)*sWGP(0)
+      ! TODO: Subtract the FV terms from the surface fluxes already!
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
 #endif /*SHOCK_NFVSE*/  
@@ -213,12 +244,20 @@ DO SideID=firstSideID,lastSideID
     !gauss nodes
 #if (PP_DiscType==2)
     ! Get the right metric terms
-    select case(nblocSide)
-      case(3,5) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,nbElemID)
-      case(2,4) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,nbElemID)
-      case(1,6) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,nbElemID)
+    select case(locSide)
+      case(XI_MINUS,XI_PLUS)     ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
     end select
 #endif /*(PP_DiscType==2)*/
+#if LOCAL_ALPHA
+    ! Get the right antidiffusive flux
+    select case(locSide)
+      case(XI_MINUS,XI_PLUS)     ; antidiff(1:PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) => f_antidiff(:,:,:,:,ElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; antidiff(1:PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) => g_antidiff(:,:,:,:,ElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; antidiff(1:PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) => h_antidiff(:,:,:,:,ElemID)
+    end select
+#endif /*LOCAL_ALPHA*/
     DO q=0,PP_N; DO p=0,PP_N
 #if (PP_DiscType==2)
       ! Evaluate the auxiliar variables the boundary
@@ -259,14 +298,28 @@ DO SideID=firstSideID,lastSideID
 #endif /*NONCONS*/
       END DO !l=0,PP_N
 #endif /*PP_DiscType==2*/
+#if LOCAL_ALPHA
+      ! Compute first DG staggered flux and save it in *_antidiff (FV contribution will be subtracted later)
+      ! Attention: We correct the sign with NormalSigns(nblocSide) to have the right-pointing fluxes
+      ijk(:)=S2Vst(:,-1,p,q,nbFlip,nblocSide)
+      antidiff_cumulative = -Flux_slave(:,p,q,SideID) * (NormalSigns(nblocSide))
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) + antidiff_cumulative
+#endif /*LOCAL_ALPHA*/
       DO l=0,PP_N
         ijk(:)=S2V(:,l,p,q,nbFlip,nblocSide) 
-        Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) &
-                                          - (Flux_slave(:,p,q,SideID) &
+        surfIntTerm = - (Flux_slave(:,p,q,SideID) &
 #if (PP_DiscType==2)
-                                             + (FluxB_sum -FluxB(:,l))*NormalSigns(nblocSide) &
+                         + (FluxB_sum -FluxB(:,l))*NormalSigns(nblocSide) &
 #endif /*(PP_DiscType==2)*/
-                                                                       )*L_hatMinus(l)
+                         )
+        Ut(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut(:,ijk(1),ijk(2),ijk(3),nbElemID) + surfIntTerm * L_hatMinus(l)
+#if LOCAL_ALPHA
+        ! Compute the other DG staggered fluxes and save them in *_antidiff (FV contribution will be subtracted later)
+        ! Attention: We correct the sign with NormalSigns(nblocSide) to have the right-pointing fluxes
+        ijk(:)=S2Vst(:,l,p,q,nbFlip,nblocSide)
+        antidiff_cumulative = antidiff_cumulative + surfIntTerm * L_Minus(l) * (-NormalSigns(nblocSide))
+        antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) + antidiff_cumulative
+#endif /*LOCAL_ALPHA*/
       END DO !l=0,PP_N
     END DO; END DO !p,q=0,PP_N
 #if SHOCK_NFVSE 

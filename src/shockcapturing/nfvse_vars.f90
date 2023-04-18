@@ -99,9 +99,9 @@ module MOD_NFVSE_Vars
 #if LOCAL_ALPHA
   real, target          , allocatable :: alpha_loc(:,:,:,:)   !< subcell-wise blending function
   ! Antidiffusive fluxes
-  real                  , allocatable :: f_antidiff(:,:,:,:,:)
-  real                  , allocatable :: g_antidiff(:,:,:,:,:)
-  real                  , allocatable :: h_antidiff(:,:,:,:,:)
+  real, target          , allocatable :: f_antidiff(:,:,:,:,:)
+  real, target          , allocatable :: g_antidiff(:,:,:,:,:)
+  real, target          , allocatable :: h_antidiff(:,:,:,:,:)
 #if NONCONS
   ! Antidiffusive fluxes on the right
   real                  , allocatable :: f_antidiffR(:,:,:,:,:)

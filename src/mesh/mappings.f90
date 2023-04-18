@@ -90,7 +90,7 @@ CONTAINS
 !==================================================================================================================================
 !> Routine which prebuilds mappings for a specific polynomial degree and allocates and stores them in given mapping arrays.
 !==================================================================================================================================
-SUBROUTINE buildMappings(Nloc,V2S,V2S2,CV2S,S2V,S2V2,S2V3,CS2V2,FS2M)
+SUBROUTINE buildMappings(Nloc,V2S,V2S2,CV2S,S2V,S2Vst,S2V2,S2V3,CS2V2,FS2M)
 ! MODULES
 USE MOD_Globals,           ONLY:CollectiveStop
 IMPLICIT NONE
@@ -100,6 +100,7 @@ INTEGER,INTENT(IN)                       :: Nloc              !< Polynomial degr
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: V2S(:,:,:,:,:,:)  !< VolumeToSide mapping
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: V2S2(:,:,:,:,:)   !< VolumeToSide2 mapping
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: S2V(:,:,:,:,:,:)  !< SideToVolume mapping
+INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: S2Vst(:,:,:,:,:,:)!< SideToVolume mapping for staggered fluxes
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: CV2S(:,:,:,:,:)   !< CGNS VolumeToSide mappping
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: S2V2(:,:,:,:,:)   !< SideToVolume2 mapping
 INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: S2V3(:,:,:,:,:)   !< SideToVolume3 mapping
@@ -110,6 +111,7 @@ INTEGER,ALLOCATABLE,INTENT(OUT),OPTIONAL :: FS2M(:,:,:,:)     !< FlipSlaveToMast
 INTEGER             :: i,j,k,p,q,f,s,ijk(3),pq(3)
 INTEGER,ALLOCATABLE :: V2S_check(:,:,:,:,:,:)
 INTEGER,ALLOCATABLE :: S2V_check(:,:,:,:,:,:)
+INTEGER,ALLOCATABLE :: S2Vst_check(:,:,:,:,:,:)
 INTEGER,ALLOCATABLE :: S2V2_check(:,:,:,:,:)
 LOGICAL             :: correct
 !==================================================================================================================================
@@ -164,6 +166,18 @@ END DO; END DO; END DO
 IF(PRESENT(S2V))THEN
   ALLOCATE(S2V(3,0:Nloc,0:Nloc,0:Nloc,0:4,1:6))
   S2V = S2V_check
+END IF
+
+! SideToVol for staggered fluxes
+IF(PRESENT(S2Vst))THEN
+  ALLOCATE(S2Vst(3,-1:Nloc,0:Nloc,0:Nloc,0:4,1:6)) ! used for sanity check
+  DO k=0,Nloc; DO j=0,Nloc; DO i=-1,Nloc
+    DO f=0,4
+      DO s=1,6
+        S2Vst(:,i,j,k,f,s) = SideToVolst(Nloc,i,j,k,f,s)
+      END DO
+    END DO
+  END DO; END DO; END DO
 END IF
 
 ! SideToVol2
@@ -368,6 +382,39 @@ SELECT CASE(locSideID)
 END SELECT
 END FUNCTION CGNS_SideToVol
 
+!==================================================================================================================================
+!> Transforms RHS-Coordinates of Side (CGNS-Notation for side orientation) into Volume-Coordinates of staggered fluxes
+!> input: l, p,q, locSideID
+!>   where: p,q are in Master-RHS;
+!>          l is the xi-,eta- or zeta-index in -1:Nloc corresponding to locSideID
+!> output: volume-indices
+!==================================================================================================================================
+FUNCTION CGNS_SideToVolst(Nloc, l, p, q, locSideID)
+! MODULES
+IMPLICIT NONE
+!----------------------------------------------------------------------------------------------------------------------------------
+! INPUT/OUTPUT VARIABLES
+INTEGER,INTENT(IN) :: l,p,q,locSideID,Nloc
+INTEGER,DIMENSION(3) :: CGNS_SideToVolst
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+!==================================================================================================================================
+SELECT CASE(locSideID)
+  CASE(XI_MINUS)
+    CGNS_SideToVolst = (/l,q,p/)
+  CASE(XI_PLUS)
+    CGNS_SideToVolst = (/Nloc-l-1,p,q/)
+  CASE(ETA_MINUS)
+    CGNS_SideToVolst = (/p,l,q/)
+  CASE(ETA_PLUS)
+    CGNS_SideToVolst = (/Nloc-p,Nloc-l-1,q/)
+  CASE(ZETA_MINUS)
+    CGNS_SideToVolst = (/q,p,l/)
+  CASE(ZETA_PLUS)
+    CGNS_SideToVolst = (/p,q,Nloc-l-1/)
+END SELECT
+END FUNCTION CGNS_SideToVolst
+
 
 !==================================================================================================================================
 !> Transforms RHS-Coordinates of Side (CGNS-Notation for side orientation) into side-local tensor product Volume-Coordinates
@@ -470,6 +517,28 @@ INTEGER,DIMENSION(2) :: pq
 pq = Flip_M2S(Nloc,p,q,flip)
 SideToVol = CGNS_SideToVol(Nloc,l,pq(1),pq(2),locSideID)
 END FUNCTION SideToVol
+
+!==================================================================================================================================
+!> Transform RHS-Coordinates of Master to Volume-Coordinates for staggered fluxes. This is: SideToVol = CGNS_SideToVol(Flip_M2S(...))
+!> input: l, p,q, flip, locSideID
+!>     where: p,q are in Master-RHS;
+!>            l is the xi-,eta- or zeta-index in -1:Nloc corresponding to locSideID
+!> output: volume-indices
+!==================================================================================================================================
+FUNCTION SideToVolst(Nloc, l, p, q, flip, locSideID)
+! MODULES
+IMPLICIT NONE
+! INPUT/OUTPUT VARIABLES
+!----------------------------------------------------------------------------------------------------------------------------------
+INTEGER,INTENT(IN)   :: l,p,q,flip,locSideID,Nloc
+INTEGER,DIMENSION(3) :: SideToVolst
+!----------------------------------------------------------------------------------------------------------------------------------
+! LOCAL VARIABLES
+INTEGER,DIMENSION(2) :: pq
+!==================================================================================================================================
+pq = Flip_M2S(Nloc,p,q,flip)
+SideToVolst = CGNS_SideToVolst(Nloc,l,pq(1),pq(2),locSideID)
+END FUNCTION SideToVolst
 
 !==================================================================================================================================
 !> Transform RHS-Coordinates of Master to Volume-Coordinates. This is: SideToVol2 = CGNS_SideToVol2(Flip_M2S(...))
