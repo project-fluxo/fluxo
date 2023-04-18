@@ -55,7 +55,9 @@ contains
     ! For IDPStateTVD
     call prms%CreateIntOption(   "IDPStateTVDVarsNum",  " Number of state variables to impose TVD correction", "1")
     call prms%CreateIntArrayOption( "IDPStateTVDVars",  " Variables to impose TVD correction", "1")
+#if (PP_NodeType==2)
     call prms%CreateLogicalOption("IDPStateTVDeqWise",  " Perform IDP(TVD) correction equation-wise?", "F")
+#endif /*(PP_NodeType==2)*/
     
     ! For IDPPositivity
     call prms%CreateIntOption(   "IDPPositiveVarsNum",  " Number of state variables to impose positivity correction", "1")
@@ -113,7 +115,9 @@ contains
     
     ! For IDPStateTVD
     if (IDPStateTVD) then
+#if (PP_NodeType==2)
       IDPStateTVDeqWise  = GETLOGICAL('IDPStateTVDeqWise' ,'F')
+#endif /*(PP_NodeType==2)*/
       IDPStateTVDVarsNum = GETINT('IDPStateTVDVarsNum','1')
       IDPStateTVDVars    = GETINTARRAY('IDPStateTVDVars',IDPStateTVDVarsNum,'1')
     end if
@@ -266,24 +270,27 @@ contains
     g_antidiffR = 0.0
     h_antidiffR = 0.0
 #endif /*NONCONS*/
-    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
+    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
 #endif /*LOCAL_ALPHA*/
+    
+    ! Allocate dalpha
+    allocate ( dalpha(nElems) )
     
     ! Bounds containers
     if (IDPStateTVD .or. IDPPositivity) then
-      allocate ( state_min   (PP_nVar,0:PP_N,0:PP_N,0:PP_N) )
+      allocate ( state_min   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
     end if
     if (IDPStateTVD) then
-      allocate ( state_max   (PP_nVar,0:PP_N,0:PP_N,0:PP_N) )
+      allocate ( state_max   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
     end if
     if (IDPSpecEntropy) then
-      allocate ( s_min       (0:PP_N,0:PP_N,0:PP_N) )
+      allocate ( s_min       (0:PP_N,0:PP_N,0:PP_N,nElems) )
     end if
     if (IDPMathEntropy) then
-      allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N) )
+      allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N,nElems) )
     end if
     if (IDPPositivity) then
-      allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N) )
+      allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N,nElems) )
     end if
     ! Stencil for bounds
     ! ------------------
@@ -424,16 +431,16 @@ contains
 !   ----------------------------------------------------
     call Get_IDP_Variables(U,dt,tIn)
     
-!   Perform limiting!
-!   -----------------
+!   Compute limiting factors!
+!   -------------------------
     do eID=1, nElems
 !     Initialize dalpha
 !     -----------------
-      dalpha = 0.0
+      dalpha(eID) = 0.0
 #if LOCAL_ALPHA
-      dalpha_loc = 0.0
+      dalpha_loc(:,:,:,eID) = 0.0
 #endif /*LOCAL_ALPHA*/
-      call ResetBounds()
+      call ResetBounds(eID)
 !     Enforce 2D condition
 !     --------------------
       if (IDPForce2D) then
@@ -493,20 +500,23 @@ contains
         do k=1, PP_N ; do j=0, PP_N ; do i=0, PP_N
           U(:,i,j,k,eID) = U(:,i,j,0,eID)
           Ut(:,i,j,k,eID) = Ut(:,i,j,0,eID)
-          dalpha_loc(i,j,k) = maxval(dalpha_loc(i,j,:))
+          dalpha_loc(i,j,k,eID) = maxval(dalpha_loc(i,j,:,eID))
         end do       ; end do       ; end do
 #endif /*LOCAL_ALPHA*/  
       end if
-!     Perform limiting
-!     ----------------
-      if ( dalpha>0.0 .or. isnan(dalpha) &
+    end do
+    
+!   Perform limiting!
+!   -----------------
+    do eID=1, nElems
+      if ( dalpha(eID)>0.0 .or. isnan(dalpha(eID)) &
 #if LOCAL_ALPHA
-           .or. any(isnan(dalpha_loc))   &
+           .or. any(isnan(dalpha_loc(:,:,:,eID)))   &
 #endif /*LOCAL_ALPHA*/
                        ) then
-        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha    ,alpha(eID)          , &
+        call PerformCorrection(U(:,:,:,:,eID),Ut(:,:,:,:,eID),dalpha(eID),alpha(eID)          , &
 #if LOCAL_ALPHA
-                                                              dalpha_loc,alpha_loc(:,:,:,eID), &
+                                                    dalpha_loc(:,:,:,eID),alpha_loc(:,:,:,eID), &
 #endif /*LOCAL_ALPHA*/
                                                                          dt,sdt,eID)
       end if
@@ -557,33 +567,34 @@ contains
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
-  subroutine ResetBounds
+  subroutine ResetBounds(eID)
     use MOD_Preproc
     use MOD_Globals
     use MOD_IDP_Vars      , only: state_min, state_max, s_min, s_max, p_min, p_max
     use MOD_IDP_Vars      , only: IDPStateTVD, IDPSpecEntropy, IDPMathEntropy, IDPPositivity, IDPForce2D
     implicit none
     !-arguments------------------------------------------------------------
+    integer, intent(in) :: eID
     !----------------------------------------------------------------------
     
     if (IDPStateTVD .or. IDPPositivity) then
-      state_min =-huge(1.0)
+      state_min(:,:,:,:,eID) =-huge(1.0)
     end if
       
     if (IDPStateTVD) then
-      state_max = huge(1.0)
+      state_max(:,:,:,:,eID) = huge(1.0)
     end if
     
     if (IDPSpecEntropy) then
-      s_min =-huge(1.0)
+      s_min(:,:,:,eID) =-huge(1.0)
     end if
     
     if (IDPMathEntropy) then
-      s_max = huge(1.0)
+      s_max(:,:,:,eID) = huge(1.0)
     end if
     
     if (IDPPositivity) then
-      p_min =0.0
+      p_min(:,:,:,eID) =0.0
     end if
   
   end subroutine ResetBounds
@@ -615,11 +626,11 @@ contains
       if (IDPStateTVD) then
         do var=1, IDPStateTVDVarsNum
           counter=counter+1
-          if (IDPForce2D) state_min(IDPStateTVDVars(var),i,j,k) = state_min(IDPStateTVDVars(var),i,j,0)
-          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPStateTVDVars(var),i,j,k) - U(IDPStateTVDVars(var),i,j,k))
+          if (IDPForce2D) state_min(IDPStateTVDVars(var),i,j,k,eID) = state_min(IDPStateTVDVars(var),i,j,0,eID)
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPStateTVDVars(var),i,j,k,eID) - U(IDPStateTVDVars(var),i,j,k))
           counter=counter+1
-          if (IDPForce2D) state_max(IDPStateTVDVars(var),i,j,k) = state_max(IDPStateTVDVars(var),i,j,0)  
-          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), U(IDPStateTVDVars(var),i,j,k) - state_max(IDPStateTVDVars(var),i,j,k))
+          if (IDPForce2D) state_max(IDPStateTVDVars(var),i,j,k,eID) = state_max(IDPStateTVDVars(var),i,j,0,eID)  
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), U(IDPStateTVDVars(var),i,j,k) - state_max(IDPStateTVDVars(var),i,j,k,eID))
         end do
       end if
         
@@ -629,28 +640,28 @@ contains
             if (any(IDPStateTVDVars==IDPPositiveVars(var))) cycle
           end if
           counter=counter+1
-          if (IDPForce2D) state_min(IDPPositiveVars(var),i,j,k) = state_min(IDPPositiveVars(var),i,j,0)
-          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPPositiveVars(var),i,j,k) - U(IDPPositiveVars(var),i,j,k))          
+          if (IDPForce2D) state_min(IDPPositiveVars(var),i,j,k,eID) = state_min(IDPPositiveVars(var),i,j,0,eID)
+          idp_bounds_delta(counter) = max(idp_bounds_delta(counter), state_min(IDPPositiveVars(var),i,j,k,eID) - U(IDPPositiveVars(var),i,j,k))          
         end do
       end if
       
       if (IDPSpecEntropy) then
         counter=counter+1
-        if (IDPForce2D) s_min(i,j,k) = s_min(i,j,0)
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),s_min(i,j,k) - Get_SpecEntropy(U(:,i,j,k)))
+        if (IDPForce2D) s_min(i,j,k,eID) = s_min(i,j,0,eID)
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),s_min(i,j,k,eID) - Get_SpecEntropy(U(:,i,j,k)))
       end if
       
       if (IDPMathEntropy) then
         counter=counter+1
-        if (IDPForce2D) s_max(i,j,k) = s_max(i,j,0)
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),Get_MathEntropy(U(:,i,j,k)) - s_max(i,j,k))
+        if (IDPForce2D) s_max(i,j,k,eID) = s_max(i,j,0,eID)
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),Get_MathEntropy(U(:,i,j,k)) - s_max(i,j,k,eID))
       end if
       
       if (IDPPositivity) then
         counter=counter+1
-        if (IDPForce2D) p_min(i,j,k) = p_min(i,j,0)
+        if (IDPForce2D) p_min(i,j,k,eID) = p_min(i,j,0,eID)
         call Get_Pressure(U(:,i,j,k),p)
-        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p_min(i,j,k) - p)
+        idp_bounds_delta(counter) = max(idp_bounds_delta(counter),p_min(i,j,k,eID) - p)
       end if
       
     end do       ; end do       ; end do ! i,j,k
@@ -907,9 +918,9 @@ contains
     IDPStateTVDactive = .FALSE.
     
 #if LOCAL_ALPHA
-    dalpha_locState = dalpha_loc
+    dalpha_locState = dalpha_loc(:,:,:,eID)
 #endif /*LOCAL_ALPHA*/
-    dalphaState = dalpha
+    dalphaState = dalpha(eID)
     
 !   Compute bounds and correction factors for each variable
 !   -------------------------------------------------------
@@ -919,53 +930,53 @@ contains
           
         ! Get the limit states
         !*********************
-        state_min(ivar,i,j,k) =  huge(1.0)
-        state_max(ivar,i,j,k) = -huge(1.0)
+        state_min(ivar,i,j,k,eID) =  huge(1.0)
+        state_max(ivar,i,j,k,eID) = -huge(1.0)
         
 #if barStates
         ! Previous sol
-        state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID))
-        state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID))
+        state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Uprev  (ivar,i  ,j  ,k  ,eID))
+        state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Uprev  (ivar,i  ,j  ,k  ,eID))
         
         ! Source term
-        state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
-        state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
+        state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
+        state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Uprev  (ivar,i  ,j  ,k  ,eID) + 2.0 * dt * Source(ivar, i, j, k, eID))
         
         !xi
         do l=i-1, i !min(i-1,0), max(i,PP_N-1)
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Ubar_xi  (ivar,l  ,j  ,k  ,eID))
         end do
         !eta
         do l=j-1, j !l=max(j-1,0), min(j,PP_N-1)
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_eta (ivar,i  ,l  ,k  ,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_eta (ivar,i  ,l  ,k  ,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Ubar_eta (ivar,i  ,l  ,k  ,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Ubar_eta (ivar,i  ,l  ,k  ,eID))
         end do
         if (.not. IDPForce2D) then
         !zeta
         do l=k-1, k !l=max(k-1,0), min(k,PP_N-1)
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Ubar_zeta(ivar,i  ,j  ,l  ,eID))
         end do
         end if
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,l,j,k,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,l,j,k,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Usafe(ivar,l,j,k,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Usafe(ivar,l,j,k,eID))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,i,l,k,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,i,l,k,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Usafe(ivar,i,l,k,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Usafe(ivar,i,l,k,eID))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          state_min(ivar,i,j,k) = min(state_min(ivar,i,j,k), Usafe(ivar,i,j,l,eID))
-          state_max(ivar,i,j,k) = max(state_max(ivar,i,j,k), Usafe(ivar,i,j,l,eID))
+          state_min(ivar,i,j,k,eID) = min(state_min(ivar,i,j,k,eID), Usafe(ivar,i,j,l,eID))
+          state_max(ivar,i,j,k,eID) = max(state_max(ivar,i,j,k,eID), Usafe(ivar,i,j,l,eID))
         end do
 #endif /*barStates*/
         
@@ -978,8 +989,8 @@ contains
         !****************************************************************************************************************
         
         ! Upper/lower bounds for admissible increments
-        Qp = max(0.0,(state_max(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
-        Qm = min(0.0,(state_min(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
+        Qp = max(0.0,(state_max(ivar,i,j,k,eID)-Usafe(ivar,i,j,k,eID))*sdt)
+        Qm = min(0.0,(state_min(ivar,i,j,k,eID)-Usafe(ivar,i,j,k,eID))*sdt)
         
         ! Positive contributions
         Pp = 0.0
@@ -1025,8 +1036,8 @@ contains
         
         ! Compute blending coefficient avoiding division by zero
         ! (as in paper of [Guermond, Nazarov, Popov, Thomas] (4.8))
-        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k)))
-        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k)))
+        Qp = (abs(Qp))/(abs(Pp) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k,eID)))
+        Qm = (abs(Qm))/(abs(Pm) + epsilon(1.0)*100.*abs(state_max(ivar,i,j,k,eID)))
         
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - min(1.0,Qp,Qm)) - alpha_loc(i,j,k,eID)
         dalpha1 = 1.0 - min(1.0,Qp,Qm) - alpha_loc(i,j,k,eID)
@@ -1064,7 +1075,8 @@ contains
       ! Check if TVD limiter had to act
       if (dalphaState > 0.0) IDPStateTVDactive = .TRUE.
       
-      ! Perform correction equation wise if needed
+#if (PP_NodeType==2)
+      ! Perform correction equation-wise if needed
       if (IDPStateTVDeqWise) then
         if ( dalphaState>0.0 .or. isnan(dalphaState) &
 #if LOCAL_ALPHA
@@ -1105,20 +1117,20 @@ contains
           
           ! Restore dalphaState and dalpha_locState
 #if LOCAL_ALPHA
-          dalpha_locState = dalpha_loc
+          dalpha_locState = dalpha_loc(:,:,:,eID)
 #endif /*LOCAL_ALPHA*/
-          dalphaState = dalpha
+          dalphaState = dalpha(eID)
         end if
       end if
-      
+#endif /*(PP_NodeType==2)*/
       end associate
     end do !var 
     
     ! Modify variables for element
 #if LOCAL_ALPHA
-    dalpha_loc = dalpha_locState
+    dalpha_loc(:,:,:,eID) = dalpha_locState
 #endif /*LOCAL_ALPHA*/
-    dalpha = dalphaState
+    dalpha(eID) = dalphaState
      
   end subroutine IDP_LimitStateTVD
 !===================================================================================================================================
@@ -1167,45 +1179,45 @@ contains
         
         ! Get the limit states
         !*********************
-        s_min(i,j,k) = huge(1.0)
+        s_min(i,j,k,eID) = huge(1.0)
         
 #if barStates
         ! Previous entropy of the node (ubar_ii)
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID)))
         
         ! Source term
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)) )
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Uprev    (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)) )
         
         ! TODO: Compute them for all interfaces before...
         !xi+
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
         !xi-
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
         !eta+
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
         !eta-
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
         if (.not. IDPForce2D) then
         !zeta+
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
         !zeta-
-        s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+        s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
         end if
 #else
         ! check stencil in xi
 !#          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,l,j,k,eID)))
+          s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Usafe(:,l,j,k,eID)))
         end do
         ! check stencil in eta
 !#          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,i,l,k,eID)))
+          s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Usafe(:,i,l,k,eID)))
         end do
         ! check stencil in zeta
 !#          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_min(i,j,k) = min(s_min(i,j,k), Get_SpecEntropy(Usafe(:,i,j,l,eID)))
+          s_min(i,j,k,eID) = min(s_min(i,j,k,eID), Get_SpecEntropy(Usafe(:,i,j,l,eID)))
         end do
 #endif /*barStates*/
         
@@ -1214,25 +1226,25 @@ contains
         
         ! Initialization
         param % dt    = dt
-        param % bound = s_min(i,j,k)
+        param % bound = s_min(i,j,k,eID)
         
 #if LOCAL_ALPHA
         ! Get the current alpha
-        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k,eID)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
-        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
+        dalpha_loc(i,j,k,eID) = max(dalpha_loc(i,j,k,eID), new_alpha - alpha_loc(i,j,k,eID))
+        dalpha(eID) = max(dalpha(eID),dalpha_loc(i,j,k,eID)) 
 #else
         ! Get the current alpha
-        new_alpha = alpha(eID) + dalpha
+        new_alpha = alpha(eID) + dalpha(eID)
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
         call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,SpecEntropy_Goal,SpecEntropy_dGoal_dbeta,SpecEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha
-        dalpha = max(dalpha,new_alpha-alpha(eID)) 
+        dalpha(eID) = max(dalpha(eID),new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; enddo !i,j,k
@@ -1329,43 +1341,43 @@ contains
         
         ! Get the limit states
         !*********************
-        s_max(i,j,k) = -huge(1.0)
+        s_max(i,j,k,eID) = -huge(1.0)
         
 #if barStates
         ! Previous entropy of the node (ubar_ii)
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID)))
         
         ! Source term
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Uprev  (:,i  ,j  ,k  ,eID) + 2.0 * dt * Source(:, i, j, k, eID)))
         
         ! TODO: Compute for all interfaces before the loop!
         !xi+
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_xi  (:,i  ,j  ,k  ,eID)))
         !xi-
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_xi  (:,i-1,j  ,k  ,eID)))
         !eta+
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_eta (:,i  ,j  ,k  ,eID)))
         !eta-
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_eta (:,i  ,j-1,k  ,eID)))
         !zeta+
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k  ,eID)))
         !zeta-
-        s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
+        s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Ubar_zeta(:,i  ,j  ,k-1,eID)))
 #else
         ! check stencil in xi
 !          do l = i+idx_m1(i), i+idx_p1(i) !no neighbor
         do l = i-1, i+1
-          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,l,j,k,eID)))
+          s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Usafe(:,l,j,k,eID)))
         end do
         ! check stencil in eta
 !          do l = j+idx_m1(j), j+idx_p1(j) !no neighbor
         do l = j-1, j+1
-          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,i,l,k,eID)))
+          s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Usafe(:,i,l,k,eID)))
         end do
         ! check stencil in zeta
 !          do l = k+idx_m1(k), k+idx_p1(k) !no neighbor
         do l = k-1, k+1
-          s_max(i,j,k) = max(s_max(i,j,k), Get_MathEntropy(Usafe(:,i,j,l,eID)))
+          s_max(i,j,k,eID) = max(s_max(i,j,k,eID), Get_MathEntropy(Usafe(:,i,j,l,eID)))
         end do
 #endif /*barStates*/
         
@@ -1374,25 +1386,25 @@ contains
         
         ! Initialization
         param % dt    = dt
-        param % bound = s_max(i,j,k)
+        param % bound = s_max(i,j,k,eID)
         
 #if LOCAL_ALPHA
         ! Get the current alpha
-        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k,eID)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
-        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
+        dalpha_loc(i,j,k,eID) = max(dalpha_loc(i,j,k,eID), new_alpha - alpha_loc(i,j,k,eID))
+        dalpha(eID) = max(dalpha(eID),dalpha_loc(i,j,k,eID)) 
 #else
         ! Get the current alpha
-        new_alpha = alpha(eID) + dalpha
+        new_alpha = alpha(eID) + dalpha(eID)
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
         call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,MathEntropy_Goal,MathEntropy_dGoal_dbeta,MathEntropy_InitialCheck,Standard_FinalCheck)
         ! Update dalpha
-        dalpha = max(dalpha,new_alpha-alpha(eID)) 
+        dalpha(eID) = max(dalpha(eID),new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; enddo !i,j,k
@@ -1502,12 +1514,12 @@ contains
         ! This writes the more restrictive bound into state_min
         if (IDPStateTVD) then
           if (any(IDPStateTVDVars==ivar)) then
-            state_min(ivar,i,j,k) = max(state_min(ivar,i,j,k), PositCorrFactor * Usafe(ivar,i,j,k,eID))
+            state_min(ivar,i,j,k,eID) = max(state_min(ivar,i,j,k,eID), PositCorrFactor * Usafe(ivar,i,j,k,eID))
           else
-            state_min(ivar,i,j,k) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
+            state_min(ivar,i,j,k,eID) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
           end if
         else
-          state_min(ivar,i,j,k) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
+          state_min(ivar,i,j,k,eID) = PositCorrFactor * Usafe(ivar,i,j,k,eID)
         end if
 #if LOCAL_ALPHA
         ! Real one-sided Zalesak-type limiter
@@ -1518,7 +1530,7 @@ contains
         !****************************************************************************************************************
         
         ! Upper/lower bounds for admissible increments
-        Qm = min(0.0,(state_min(ivar,i,j,k)-Usafe(ivar,i,j,k,eID))*sdt)
+        Qm = min(0.0,(state_min(ivar,i,j,k,eID)-Usafe(ivar,i,j,k,eID))*sdt)
         
         ! Negative contributions
         Pm = 0.0
@@ -1548,15 +1560,15 @@ contains
         ! Compute correction as: (needed_alpha) - current_alpha = (1.0 - Qm) - alpha_loc(i,j,k,eID)
         dalpha1 = (1.0 - Qm) - alpha_loc(i,j,k,eID)
         
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k),dalpha1)
-        dalpha = max(dalpha,dalpha1)
+        dalpha_loc(i,j,k,eID) = max(dalpha_loc(i,j,k,eID),dalpha1)
+        dalpha(eID) = max(dalpha(eID),dalpha1)
         
 #else
         a = (state_min(ivar,i,j,k) - U(ivar,i,j,k)) * sdt
         if (a > 0.) then ! This DOF needs a correction
           if ( abs(FFV_m_FDG(ivar,i,j,k,eID)) == 0.0) cycle !nothing to do here!
           dalpha1 = a / FFV_m_FDG(ivar,i,j,k,eID)
-          dalpha = max(dalpha,dalpha1)
+          dalpha(eID) = max(dalpha(eID),dalpha1)
         end if
 
 #endif /*LOCAL_ALPHA*/
@@ -1575,7 +1587,7 @@ contains
         
         ! Compute bound
         ! *************
-        p_min(i,j,k) = PositCorrFactor * p_safe(i,j,k,eID)
+        p_min(i,j,k,eID) = PositCorrFactor * p_safe(i,j,k,eID)
         
         ! Compute the needed blending coefficient with a Newton's method
         ! TODO: Check if an asymmetric tolerance is really needed
@@ -1583,25 +1595,25 @@ contains
         
         ! Initialization
         param % dt    = dt
-        param % bound = p_min(i,j,k)
+        param % bound = p_min(i,j,k,eID)
         
 #if LOCAL_ALPHA
         ! Get the current alpha
-        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k)
+        new_alpha = alpha_loc(i,j,k,eID) + dalpha_loc(i,j,k,eID)
         ! Perform Newton's method to find the new alpha (the antidiffusive fluxes are specified therein)
         call NewtonLoops_LocalAlpha(param,i,j,k,eID,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck,Pressure_FinalCheck)
         ! Update dalpha_loc and dalpha
-        dalpha_loc(i,j,k) = max(dalpha_loc(i,j,k), new_alpha - alpha_loc(i,j,k,eID))
-        dalpha = max(dalpha,dalpha_loc(i,j,k)) 
+        dalpha_loc(i,j,k,eID) = max(dalpha_loc(i,j,k,eID), new_alpha - alpha_loc(i,j,k,eID))
+        dalpha(eID) = max(dalpha(eID),dalpha_loc(i,j,k,eID)) 
 #else
         ! Get the current alpha
-        new_alpha = alpha(eID) + dalpha
+        new_alpha = alpha(eID) + dalpha(eID)
         ! Specify the antidiffusive flux
         param % F_antidiff = -FFV_m_FDG(:,i,j,k,eID)
         ! Perform Newton's method to find the new alpha
         call NewtonLoop(Usafe(:,i,j,k,eID),param,new_alpha,notInIter,Pressure_Goal,Pressure_dGoal_dbeta,Pressure_InitialCheck,Pressure_FinalCheck)
         ! Update dalpha
-        dalpha = max(dalpha,new_alpha-alpha(eID)) 
+        dalpha(eID) = max(dalpha(eID),new_alpha-alpha(eID)) 
 #endif /*LOCAL_ALPHA*/
         
       end do       ; end do       ; enddo !i,j,k
@@ -2076,6 +2088,8 @@ contains
 #endif /*NONCONS*/
     SDEALLOCATE ( dalpha_loc )
 #endif /*LOCAL_ALPHA*/
+    
+    SDEALLOCATE ( dalpha )
     
     SDEALLOCATE ( state_min )
     SDEALLOCATE ( state_max )

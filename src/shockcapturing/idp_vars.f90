@@ -71,18 +71,18 @@ module MOD_IDP_Vars
   
   real                :: maxdt_IDP = huge(1.0)
   
-  real                :: dalpha
+  real,allocatable    :: dalpha(:)
 #if LOCAL_ALPHA
-  real,allocatable    :: dalpha_loc    (:,:,:)    ! Node-wise alpha correction for an element
+  real,allocatable    :: dalpha_loc    (:,:,:,:)  ! Node-wise alpha correction for an element
 #endif /*LOCAL_ALPHA*/
 
   ! Bounds
-  real,allocatable    :: state_min  (:,:,:,:)
-  real,allocatable    :: state_max  (:,:,:,:)
-  real,allocatable    :: s_min      (:,:,:)
-  real,allocatable    :: s_max      (:,:,:)
-  real,allocatable    :: p_min      (:,:,:)
-  real,allocatable    :: p_max      (:,:,:)
+  real,allocatable    :: state_min  (:,:,:,:,:)
+  real,allocatable    :: state_max  (:,:,:,:,:)
+  real,allocatable    :: s_min      (:,:,:,:)
+  real,allocatable    :: s_max      (:,:,:,:)
+  real,allocatable    :: p_min      (:,:,:,:)
+  real,allocatable    :: p_max      (:,:,:,:)
   
   ! Type to store parameters for newton iterations
   type IDPparam_t

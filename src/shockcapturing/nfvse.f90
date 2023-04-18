@@ -545,9 +545,32 @@ contains
     h_antidiffR = 0.0
 #endif /*NONCONS*/
     SDEALLOCATE(dalpha_loc)
-    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1) )
+    allocate ( dalpha_loc     (-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems) )
 #endif /*LOCAL_ALPHA*/
-      
+    SDEALLOCATE(dalpha)
+    allocate ( dalpha(nElems) )
+    
+    ! Bounds containers
+    if (IDPStateTVD .or. IDPPositivity) then
+      SDEALLOCATE(state_min)
+      allocate ( state_min   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
+    end if
+    if (IDPStateTVD) then
+      SDEALLOCATE(state_max)
+      allocate ( state_max   (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems) )
+    end if
+    if (IDPSpecEntropy) then
+      SDEALLOCATE(s_min)
+      allocate ( s_min       (0:PP_N,0:PP_N,0:PP_N,nElems) )
+    end if
+    if (IDPMathEntropy) then
+      SDEALLOCATE(s_max)
+      allocate ( s_max       (0:PP_N,0:PP_N,0:PP_N,nElems) )
+    end if
+    if (IDPPositivity) then
+      SDEALLOCATE(p_min)
+      allocate ( p_min       (0:PP_N,0:PP_N,0:PP_N,nElems) )
+    end if
 #endif /*NFVSE_CORR*/
     end if
     
