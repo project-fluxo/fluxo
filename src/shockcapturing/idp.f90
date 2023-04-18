@@ -24,7 +24,7 @@
 #define barStates 1
 #endif /*NONCONS*/
 ! A switch to define if the output variable alpha_old contains a cumulative alpha (1), or the instant alpha before limiting (0). Must be changed in src/analyze/analyze.f90 as well!
-#define cumulativeAlphaOld 1
+#define cumulativeAlphaOld 0
 module MOD_IDP
 #if NFVSE_CORR
   implicit none
@@ -693,6 +693,9 @@ contains
     use MOD_IDP_Vars, only: maxdt_IDP
     use MOD_NFVSE_Vars    , only: sWGP
     use MOD_Mesh_Vars     , only: sJ
+#if (PP_NodeType==1)
+    use MOD_NFVSE_Vars    , only: U_master_FV, U_slave_FV
+#endif /*(PP_NodeType==1)*/
     implicit none
     !-arguments------------------------------------------------------------
     real, intent(in) :: U (PP_nVar,0:PP_N,0:PP_N,0:PP_N,nElems)
@@ -711,15 +714,22 @@ contains
 !   *********************************************
     if (IDPneedsUprev_ext) then
       ! Gather the external Uprev in the right location
+      ! We store the nodal (~mean) solution of the boundary subcell of the neighbor elements!
+      ! * For Gauss nodes, that means U_master_FV and U_slave_FV
+      ! * For LGL nodes, that means U_master and U_slave
+#if (PP_NodeType==1)
+      call Get_externalU(PP_nVar,Uprev_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master_FV,U_slave_FV,tIn)
+#else /*(PP_NodeType==2)*/
       call Get_externalU(PP_nVar,Uprev_ext,Uprev(:,0:PP_N,0:PP_N,0:PP_N,:),U_master,U_slave,tIn)
+#endif /*(PP_NodeType==1)*/
       ! FIll Uprev with info
       do eID=1, nElems
-        Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,5,eID)
-        Uprev(:,PP_N+1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,3,eID)
-        Uprev(:,0:PP_N,    -1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,2,eID)
-        Uprev(:,0:PP_N,PP_N+1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,4,eID)
-        Uprev(:,0:PP_N,0:PP_N,    -1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,1,eID)
-        Uprev(:,0:PP_N,0:PP_N,PP_N+1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,6,eID)
+        Uprev(:,    -1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,  XI_MINUS,eID)
+        Uprev(:,PP_N+1,0:PP_N,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N,  XI_PLUS ,eID)
+        Uprev(:,0:PP_N,    -1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N, ETA_MINUS,eID)
+        Uprev(:,0:PP_N,PP_N+1,0:PP_N,eID) = Uprev_ext(:,0:PP_N,0:PP_N, ETA_PLUS ,eID)
+        Uprev(:,0:PP_N,0:PP_N,    -1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,ZETA_MINUS,eID)
+        Uprev(:,0:PP_N,0:PP_N,PP_N+1,eID) = Uprev_ext(:,0:PP_N,0:PP_N,ZETA_PLUS ,eID)
       end do !eID
     end if !allocated(Uprev_ext)
     

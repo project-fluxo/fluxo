@@ -697,7 +697,7 @@ contains
         ! For Gauss shock capturing, add the surface contribution
         ! -------------------------------------------------------
 #if FV_BLENDSURFACE
-        ! If FV_BLENDSURFACE is active, use the FV surface contribution (temprary)
+        ! If FV_BLENDSURFACE is active, use the FV surface contribution (temporary)
         F_FV = F_FV + Ut_FVGauss(:,i,j,k,iElem)
         Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) - Ut_DGGauss(:,i,j,k,iElem) + Ut_FVGauss(:,i,j,k,iElem)
 #else
@@ -1707,7 +1707,7 @@ contains
 #endif /*MPI*/
     use MOD_IDP_Vars , only: IDPneedsUprev_ext
 #if (PP_NodeType==1)
-    use MOD_NFVSE_Vars         , only: Ut_DGGauss
+    use MOD_NFVSE_Vars         , only: Ut_DGGauss, U_master_FV
 #if FV_BLENDSURFACE
     use MOD_NFVSE_Vars         , only: Ut_FVGauss
 #endif /*FV_BLENDSURFACE*/
@@ -1726,6 +1726,18 @@ contains
 ! -------------------------------------------------------------------
 #if MPI
     if (ReconsBoundaries >= RECONS_NEIGHBOR .or. IDPneedsUprev_ext) then
+      ! We send and receive the nodal (~mean) solution of the boundary subcell of the neighbor elements!
+      ! * For Gauss nodes, that means U_master_FV and U_slave_FV
+      ! * For LGL nodes, that means U_master and U_slave
+#if (PP_NodeType==1)
+      ! receive the master
+      call StartReceiveMPIData(U_master_FV, DataSizeSide, 1, nSides, &
+                               MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
+      
+      ! Send the master
+      call StartSendMPIData   (U_master_FV, DataSizeSide, 1, nSides, &
+                               MPIRequest_Umaster(:,2),SendID=1) 
+#else /*(PP_NodeType==2)*/
       ! receive the master
       call StartReceiveMPIData(U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,1), SendID=1) ! Receive YOUR  (sendID=1) 
@@ -1733,6 +1745,7 @@ contains
       ! Send the master
       call StartSendMPIData   (U_master, DataSizeSide, 1, nSides, &
                                MPIRequest_Umaster(:,2),SendID=1) 
+#endif /*(PP_NodeType==1)*/
     end if
 #endif /*MPI*/
     

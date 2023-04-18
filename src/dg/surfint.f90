@@ -220,7 +220,11 @@ DO SideID=firstSideID,lastSideID
 #if FV_BLENDSURFACE
       Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),ElemID) &
                                               + Flux_master_FV(:,p,q,SideID)*sWGP(0)
-      ! TODO: Subtract the FV terms from the surface fluxes already!
+#if LOCAL_ALPHA
+      ! Subtract the FV terms from the surface fluxes already
+      ijk(:)=S2Vst(:,-1,p,q,flip,locSide) !0: flip=0
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = 0.0 !antidiff(:,ijk(1),ijk(2),ijk(3)) - Flux_master_FV(:,p,q,SideID) * (NormalSigns(locSide))
+#endif /*LOCAL_ALPHA*/
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
 #endif /*SHOCK_NFVSE*/  
@@ -245,17 +249,17 @@ DO SideID=firstSideID,lastSideID
 #if (PP_DiscType==2)
     ! Get the right metric terms
     select case(locSide)
-      case(XI_MINUS,XI_PLUS)     ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,ElemID)
-      case(ETA_MINUS,ETA_PLUS)   ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,ElemID)
-      case(ZETA_MINUS,ZETA_PLUS) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,ElemID)
+      case(XI_MINUS,XI_PLUS)     ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_ftilde(:,:,:,:,nbElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_gtilde(:,:,:,:,nbElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; metrics(1:3,0:PP_N,0:PP_N,0:PP_N) => metrics_htilde(:,:,:,:,nbElemID)
     end select
 #endif /*(PP_DiscType==2)*/
 #if LOCAL_ALPHA
     ! Get the right antidiffusive flux
     select case(locSide)
-      case(XI_MINUS,XI_PLUS)     ; antidiff(1:PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) => f_antidiff(:,:,:,:,ElemID)
-      case(ETA_MINUS,ETA_PLUS)   ; antidiff(1:PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) => g_antidiff(:,:,:,:,ElemID)
-      case(ZETA_MINUS,ZETA_PLUS) ; antidiff(1:PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) => h_antidiff(:,:,:,:,ElemID)
+      case(XI_MINUS,XI_PLUS)     ; antidiff(1:PP_nVar,-1:PP_N, 0:PP_N, 0:PP_N) => f_antidiff(:,:,:,:,nbElemID)
+      case(ETA_MINUS,ETA_PLUS)   ; antidiff(1:PP_nVar, 0:PP_N,-1:PP_N, 0:PP_N) => g_antidiff(:,:,:,:,nbElemID)
+      case(ZETA_MINUS,ZETA_PLUS) ; antidiff(1:PP_nVar, 0:PP_N, 0:PP_N,-1:PP_N) => h_antidiff(:,:,:,:,nbElemID)
     end select
 #endif /*LOCAL_ALPHA*/
     DO q=0,PP_N; DO p=0,PP_N
@@ -331,6 +335,11 @@ DO SideID=firstSideID,lastSideID
 #if FV_BLENDSURFACE
       Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)=Ut_FVGauss(:,ijk(1),ijk(2),ijk(3),nbElemID)  &
                                                 - Flux_slave_FV(:,p,q,SideID)*sWGP(0)
+#if LOCAL_ALPHA
+      ! Subtract the FV terms from the surface fluxes already
+      ijk(:)=S2Vst(:,-1,p,q,nbflip,nblocSide)
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = 0.0 !antidiff(:,ijk(1),ijk(2),ijk(3)) + Flux_slave_FV(:,p,q,SideID) * (NormalSigns(nblocSide))
+#endif /*LOCAL_ALPHA*/
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
 #endif /*SHOCK_NFVSE*/    
