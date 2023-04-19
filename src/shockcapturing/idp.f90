@@ -1048,10 +1048,10 @@ contains
 #else
         ! Simple element-wise limiter
         !****************************
-        if ( U(ivar,i,j,k) < state_min(ivar,i,j,k)) then
-          u_safe = state_min(ivar,i,j,k)
-        elseif (U(ivar,i,j,k) > state_max(ivar,i,j,k)) then
-          u_safe = state_max(ivar,i,j,k)
+        if ( U(ivar,i,j,k) < state_min(ivar,i,j,k,eID)) then
+          u_safe = state_min(ivar,i,j,k,eID)
+        elseif (U(ivar,i,j,k) > state_max(ivar,i,j,k,eID)) then
+          u_safe = state_max(ivar,i,j,k,eID)
         else
           cycle !nothing to do here!
         end if
@@ -1564,7 +1564,7 @@ contains
         dalpha(eID) = max(dalpha(eID),dalpha1)
         
 #else
-        a = (state_min(ivar,i,j,k) - U(ivar,i,j,k)) * sdt
+        a = (state_min(ivar,i,j,k,eID) - U(ivar,i,j,k)) * sdt
         if (a > 0.) then ! This DOF needs a correction
           if ( abs(FFV_m_FDG(ivar,i,j,k,eID)) == 0.0) cycle !nothing to do here!
           dalpha1 = a / FFV_m_FDG(ivar,i,j,k,eID)
