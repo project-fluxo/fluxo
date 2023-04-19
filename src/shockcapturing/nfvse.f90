@@ -722,7 +722,10 @@ contains
 #if FV_BLENDSURFACE
         ! If FV_BLENDSURFACE is active, use the FV surface contribution (temporary)
         F_FV = F_FV + Ut_FVGauss(:,i,j,k,iElem)
+#if !(LOCAL_ALPHA)
+        ! Impose FV flux at the border if not using LOCAL_ALPHA
         Ut(:,i,j,k,iElem) = Ut(:,i,j,k,iElem) - Ut_DGGauss(:,i,j,k,iElem) + Ut_FVGauss(:,i,j,k,iElem)
+#endif /*!(LOCAL_ALPHA)*/
 #else
         ! use the DG contribution for the FV method as well
         F_FV = F_FV + Ut_DGGauss(:,i,j,k,iElem)

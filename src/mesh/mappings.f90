@@ -153,9 +153,9 @@ IF(PRESENT(CV2S))THEN
   END DO; END DO; END DO
 END IF
 
-! SideToVol
-ALLOCATE(S2V_check(3,0:Nloc,0:Nloc,0:Nloc,0:4,1:6)) ! used for sanity check
-DO k=0,Nloc; DO j=0,Nloc; DO i=0,Nloc
+! SideToVol (extended to ghost-subcell range -1:N+1)
+ALLOCATE(S2V_check(3,-1:Nloc+1,0:Nloc,0:Nloc,0:4,1:6)) ! used for sanity check
+DO k=0,Nloc; DO j=0,Nloc; DO i=-1,Nloc+1
   DO f=0,4
     DO s=1,6
       S2V_check(:,i,j,k,f,s) = SideToVol(Nloc,i,j,k,f,s)
@@ -164,7 +164,7 @@ DO k=0,Nloc; DO j=0,Nloc; DO i=0,Nloc
 END DO; END DO; END DO
 
 IF(PRESENT(S2V))THEN
-  ALLOCATE(S2V(3,0:Nloc,0:Nloc,0:Nloc,0:4,1:6))
+  ALLOCATE(S2V(3,-1:Nloc+1,0:Nloc,0:Nloc,0:4,1:6))
   S2V = S2V_check
 END IF
 

@@ -223,7 +223,7 @@ DO SideID=firstSideID,lastSideID
 #if LOCAL_ALPHA
       ! Subtract the FV terms from the surface fluxes already
       ijk(:)=S2Vst(:,-1,p,q,flip,locSide) !0: flip=0
-      antidiff(:,ijk(1),ijk(2),ijk(3)) = 0.0 !antidiff(:,ijk(1),ijk(2),ijk(3)) - Flux_master_FV(:,p,q,SideID) * (NormalSigns(locSide))
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) - Flux_master_FV(:,p,q,SideID) * (NormalSigns(locSide))
 #endif /*LOCAL_ALPHA*/
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N
@@ -338,7 +338,7 @@ DO SideID=firstSideID,lastSideID
 #if LOCAL_ALPHA
       ! Subtract the FV terms from the surface fluxes already
       ijk(:)=S2Vst(:,-1,p,q,nbflip,nblocSide)
-      antidiff(:,ijk(1),ijk(2),ijk(3)) = 0.0 !antidiff(:,ijk(1),ijk(2),ijk(3)) + Flux_slave_FV(:,p,q,SideID) * (NormalSigns(nblocSide))
+      antidiff(:,ijk(1),ijk(2),ijk(3)) = antidiff(:,ijk(1),ijk(2),ijk(3)) + Flux_slave_FV(:,p,q,SideID) * (NormalSigns(nblocSide))
 #endif /*LOCAL_ALPHA*/
 #endif /*FV_BLENDSURFACE*/
     END DO; END DO !p,q=0,PP_N

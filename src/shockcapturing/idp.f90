@@ -506,6 +506,14 @@ contains
       end if
     end do
     
+#if (PP_NodeType==1) && LOCAL_ALPHA
+!   When using Gauss nodes, take the maximum alpha at element interfaces!
+!   ---------------------------------------------------------------------
+    call ComputeAlphaAtInterfaces (dalpha, &
+                                   dalpha_loc &
+                                   )
+#endif /*(PP_NodeType==1) && LOCAL ALPHA*/
+    
 !   Perform limiting!
 !   -----------------
     do eID=1, nElems
@@ -564,6 +572,67 @@ contains
 #endif /*cumulativeAlphaOld*/
     
   end subroutine Apply_IDP
+!===================================================================================================================================
+!> ComputeAlphaAtInterfaces
+!> Needed When using Gauss nodes and LOCAL_ALPHA, such that the maximum alpha at element interfaces is used
+! TODO: Add MPI
+!===================================================================================================================================
+#if (PP_NodeType==1) && LOCAL_ALPHA
+  subroutine ComputeAlphaAtInterfaces (dalpha, dalpha_loc)
+    use MOD_Preproc
+    use MOD_Mesh_Vars    , only: nElems,nSides,firstSlaveSide,LastSlaveSide,SideToElem,S2V
+    USE MOD_ProlongToFace, only: ProlongToFace_LGL
+    implicit none
+    !-arguments------------------------------------------------------------
+    real, intent(inout) :: dalpha(nElems)
+    real, intent(inout) :: dalpha_loc(-1:PP_N+1,-1:PP_N+1,-1:PP_N+1,nElems)
+    !-local-arguments------------------------------------------------------
+    real :: dalpha_loc_master(0:PP_N,0:PP_N,1:nSides)
+    real :: dalpha_loc_slave (0:PP_N,0:PP_N,firstSlaveSide:LastSlaveSide)
+    integer :: SideID
+    integer :: ElemID, locSide, flip
+    integer :: nbElemID, nblocSide, nbflip
+    integer :: ijk(3), p, q
+    !----------------------------------------------------------------------
+    
+    ! Prolong dalpha_loc to faces
+    ! ---------------------------
+    call ProlongToFace_LGL(1, dalpha_loc(0:PP_N,0:PP_N,0:PP_N,:), dalpha_loc_master, dalpha_loc_slave, doMPISides=.FALSE.)
+    
+    ! Save the maximum alpha in the "ghost" subcells
+    do sideID=firstSlaveSide, lastSlaveSide
+      
+      ElemID    = SideToElem(S2E_ELEM_ID,SideID) !element belonging to master side
+      
+      !master sides(ElemID,locSide and flip =-1 if not existing)
+      !ATTENTION: We copy dalpha_loc_slave because it is the outer (ghost) alpha
+      if(ElemID.NE.-1) then ! element belonging to master side is on this processor
+        locSide = SideToElem(S2E_LOC_SIDE_ID,SideID)
+        flip=0
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,-1,p,q,flip,locSide)
+          dalpha_loc(ijk(1),ijk(2),ijk(3),ElemID) = dalpha_loc_slave(p,q,SideID)
+          dalpha(ElemID) = max(dalpha(ElemID),dalpha_loc_slave(p,q,SideID))
+        END DO; END DO !p,q=0,PP_N
+      end if
+      
+      nbElemID  = SideToElem(S2E_NB_ELEM_ID,SideID) !element belonging to slave side
+      !slave side (nbElemID,nblocSide and flip =-1 if not existing)
+      !ATTENTION: We copy dalpha_loc_master because it is the outer (ghost) alpha
+      if(nbElemID.NE.-1) then! element belonging to slave side is on this processor
+        nblocSide = SideToElem(S2E_NB_LOC_SIDE_ID,SideID)
+        nbFlip    = SideToElem(S2E_FLIP,SideID)
+        DO q=0,PP_N; DO p=0,PP_N
+          ijk(:)=S2V(:,-1,p,q,nbflip,nblocSide)
+          dalpha_loc(ijk(1),ijk(2),ijk(3),nbElemID) = dalpha_loc_master(p,q,SideID)
+          dalpha(nbElemID) = max(dalpha(nbElemID), dalpha_loc_master(p,q,SideID))
+        END DO; END DO !p,q=0,PP_N
+      end if
+    end do
+    
+    
+  end subroutine ComputeAlphaAtInterfaces
+#endif /*(PP_NodeType==1) && LOCAL ALPHA*/
 !===================================================================================================================================
 !> Check that all bounds are met
 !===================================================================================================================================
