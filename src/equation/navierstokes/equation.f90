@@ -977,7 +977,7 @@ case(15) ! Sedov blast from Markert et al. (2021), "A Sub-element Adaptive Shock
   blast_energy = 1.0
 
   dens0       = 1.
-  pres0       = 1e-5
+  pres0       = IniAmplitude ! Original has 1e-5
 
   bell_mass_normalized  = bell_mass/SQRT((2*PP_Pi)**dim_)/bell_sigma**dim_
   blast_ener_normalized = blast_energy/SQRT((2*PP_Pi)**dim_)/blast_sigma**dim_

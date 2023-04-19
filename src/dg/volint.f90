@@ -202,7 +202,7 @@ USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D
 #if NONCONS
 USE MOD_Flux_Average,       ONLY: EvalAdvFluxAverage3D_separate
 use MOD_NFVSE_Vars,         only: f_antidiffR, g_antidiffR, h_antidiffR
-#endif NONCONS
+#endif /*NONCONS*/
 use MOD_NFVSE_Vars,         only: f_antidiff, g_antidiff, h_antidiff, sWGP
 use MOD_Interpolation_Vars, only: wGP
 #endif /*LOCAL_ALPHA*/

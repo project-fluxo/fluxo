@@ -26,7 +26,7 @@ USE MOD_Commandline_Arguments
 USE MOD_Restart,           ONLY:DefineParametersRestart,InitRestart,Restart,FinalizeRestart
 USE MOD_Interpolation,     ONLY:DefineParametersInterpolation,InitInterpolation,FinalizeInterpolation
 USE MOD_Mesh,              ONLY:DefineParametersMesh,InitMesh,FinalizeMesh
-USE MOD_Mortar,            ONLY:InitMortar,FinalizeMortar
+USE MOD_Mortar,            ONLY:DefineParametersMortar,InitMortarBase,InitMortar,FinalizeMortar
 USE MOD_Equation,          ONLY:DefineParametersEquation,InitEquation,FinalizeEquation
 USE MOD_IO_HDF5,           ONLY:DefineParametersIO_HDF5,InitIOHDF5
 USE MOD_Output,            ONLY:DefineParametersOutput,InitOutput,FinalizeOutput
@@ -41,6 +41,9 @@ USE MOD_TimeDisc,          ONLY:DefineParametersTimedisc,InitTimeDisc,FinalizeTi
 USE MOD_Testcase,          ONLY:DefineParametersTestcase,InitTestcase,FinalizeTestcase
 USE MOD_GetBoundaryFlux,   ONLY:InitBC,FinalizeBC
 USE MOD_DG,                ONLY:InitDG,FinalizeDG
+#if USE_AMR
+USE MOD_AMR,               ONLY:DefineParametersAMR,InitAMR,FinalizeAMR
+#endif /*USE_AMR*/
 #if PARABOLIC
 USE MOD_Lifting,           ONLY:DefineParametersLifting,InitLifting,FinalizeLifting
 #endif /*PARABOLIC*/
@@ -66,8 +69,12 @@ END IF
 CALL DefineParametersMPI()
 CALL DefineParametersIO_HDF5()
 CALL DefineParametersInterpolation()
+CALL DefineParametersMortar()
 CALL DefineParametersRestart()
 CALL DefineParametersOutput()
+#if USE_AMR
+CALL DefineParametersAMR()
+#endif
 CALL DefineParametersMesh()
 CALL DefineParametersEquation()
 CALL DefineParametersTestcase()
@@ -131,19 +138,26 @@ StartTime=FLUXOTIME()
 !
 ! Initialization
 CALL InitInterpolation()
-CALL InitMortar()
+CALL InitMortarBase()
 CALL InitRestart()
 CALL InitOutput()
 
 ProjectName="POST_"//TRIM(ProjectName)
 
+#if USE_AMR
+CALL InitAMR()
+#endif
 CALL InitMesh()
+CALL InitMortar()
 #if MPI
 CALL InitMPIvars()
 #endif
 CALL InitEquation()
 CALL InitBC()
 CALL InitDG()
+#if SHOCKCAPTURE
+CALL InitShockCapturing()
+#endif /*SHOCKCAPTURE*/
 #if PARABOLIC
 CALL InitLifting()
 #endif /*PARABOLIC*/
@@ -151,9 +165,6 @@ CALL InitTimeDisc()
 CALL Restart(doFlush_in=.FALSE.)
 CALL InitAnalyze()
 CALL InitTestcase()
-#if SHOCKCAPTURE
-CALL InitShockCapturing()
-#endif /*SHOCKCAPTURE*/
 #if POSITIVITYPRES
 CALL InitPositivityPreservation()
 #endif /*POSITIVITYPRES*/
@@ -183,6 +194,9 @@ CALL FinalizeTimeDisc()
 CALL FinalizeTestcase()
 CALL FinalizeRestart()
 CALL FinalizeMesh()
+#if USE_AMR
+CALL FinalizeAMR()
+#endif
 CALL FinalizeMortar()
 #if SHOCKCAPTURE
 CALL FinalizeShockCapturing()
